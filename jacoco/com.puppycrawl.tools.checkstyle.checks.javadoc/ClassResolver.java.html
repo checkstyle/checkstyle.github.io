@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClassResolver.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.javadoc</a> &gt; <span class="el_source">ClassResolver.java</span></div><h1>ClassResolver.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.javadoc;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Utility class to resolve a class name to an actual class. Note that loaded
+ * classes are not initialized.
+ * &lt;p&gt;Limitations: this does not handle inner classes very well.&lt;/p&gt;
+ *
+ * @author Oliver Burn
+ */
+public class ClassResolver {
+
+    /** Period literal. */
+    private static final String PERIOD = &quot;.&quot;;
+    /** Dollar sign literal. */
+    private static final String DOLLAR_SIGN = &quot;$&quot;;
+
+    /** Name of the package to check if the class belongs to. **/
+    private final String pkg;
+    /** Set of imports to check against. **/
+    private final Set&lt;String&gt; imports;
+    /** Use to load classes. **/
+    private final ClassLoader loader;
+
+    /**
+     * Creates a new {@code ClassResolver} instance.
+     *
+     * @param loader the ClassLoader to load classes with.
+     * @param pkg the name of the package the class may belong to
+     * @param imports set of imports to check if the class belongs to
+     */
+<span class="fc" id="L53">    public ClassResolver(ClassLoader loader, String pkg, Set&lt;String&gt; imports) {</span>
+<span class="fc" id="L54">        this.loader = loader;</span>
+<span class="fc" id="L55">        this.pkg = pkg;</span>
+<span class="fc" id="L56">        this.imports = new HashSet&lt;&gt;(imports);</span>
+<span class="fc" id="L57">        this.imports.add(&quot;java.lang.*&quot;);</span>
+<span class="fc" id="L58">    }</span>
+
+    /**
+     * Attempts to resolve the Class for a specified name. The algorithm is
+     * to check:
+     * - fully qualified name
+     * - explicit imports
+     * - enclosing package
+     * - star imports
+     * @param name name of the class to resolve
+     * @param currentClass name of current class (for inner classes).
+     * @return the resolved class
+     * @throws ClassNotFoundException if unable to resolve the class
+     */
+    // -@cs[ForbidWildcardAsReturnType] This method can return any type, so no way to avoid wildcard
+    public Class&lt;?&gt; resolve(String name, String currentClass)
+            throws ClassNotFoundException {
+        // See if the class is full qualified
+<span class="fc" id="L76">        Class&lt;?&gt; clazz = resolveQualifiedName(name);</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">        if (clazz == null) {</span>
+            // try matching explicit imports
+<span class="fc" id="L79">            clazz = resolveMatchingExplicitImport(name);</span>
+
+<span class="fc bfc" id="L81" title="All 2 branches covered.">            if (clazz == null) {</span>
+                // See if in the package
+<span class="fc" id="L83">                clazz = resolveInPackage(name);</span>
+
+<span class="fc bfc" id="L85" title="All 2 branches covered.">                if (clazz == null) {</span>
+                    // see if inner class of this class
+<span class="fc" id="L87">                    clazz = resolveInnerClass(name, currentClass);</span>
+
+<span class="fc bfc" id="L89" title="All 2 branches covered.">                    if (clazz == null) {</span>
+<span class="fc" id="L90">                        clazz = resolveByStarImports(name);</span>
+                        // -@cs[NestedIfDepth] it is better to have single return point from method
+<span class="fc bfc" id="L92" title="All 2 branches covered.">                        if (clazz == null) {</span>
+<span class="fc" id="L93">                            throw new ClassNotFoundException(name);</span>
+                        }
+                    }
+                }
+            }
+        }
+<span class="fc" id="L99">        return clazz;</span>
+    }
+
+    /**
+     * Try to find class by search in package.
+     * @param name class name
+     * @return class object
+     */
+    private Class&lt;?&gt; resolveInPackage(String name) {
+<span class="fc" id="L108">        Class&lt;?&gt; clazz = null;</span>
+<span class="fc bfc" id="L109" title="All 4 branches covered.">        if (pkg != null &amp;&amp; !pkg.isEmpty()) {</span>
+<span class="fc" id="L110">            final Class&lt;?&gt; classFromQualifiedName = resolveQualifiedName(pkg + PERIOD + name);</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">            if (classFromQualifiedName != null) {</span>
+<span class="fc" id="L112">                clazz = classFromQualifiedName;</span>
+            }
+        }
+<span class="fc" id="L115">        return clazz;</span>
+    }
+
+    /**
+     * Try to find class by matching explicit Import.
+     * @param name class name
+     * @return class object
+     */
+    private Class&lt;?&gt; resolveMatchingExplicitImport(String name) {
+<span class="fc" id="L124">        Class&lt;?&gt; clazz = null;</span>
+<span class="fc bfc" id="L125" title="All 2 branches covered.">        for (String imp : imports) {</span>
+            // Very important to add the &quot;.&quot; in the check below. Otherwise you
+            // when checking for &quot;DataException&quot;, it will match on
+            // &quot;SecurityDataException&quot;. This has been the cause of a very
+            // difficult bug to resolve!
+<span class="fc bfc" id="L130" title="All 2 branches covered.">            if (imp.endsWith(PERIOD + name)) {</span>
+<span class="fc" id="L131">                clazz = resolveQualifiedName(imp);</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">                if (clazz != null) {</span>
+<span class="fc" id="L133">                    break;</span>
+                }
+            }
+<span class="fc" id="L136">        }</span>
+<span class="fc" id="L137">        return clazz;</span>
+    }
+
+    /**
+     * See if inner class of this class.
+     * @param name name of the search Class to search
+     * @param currentClass class where search in
+     * @return class if found , or null if not resolved
+     * @throws ClassNotFoundException  if an error occurs
+     */
+    private Class&lt;?&gt; resolveInnerClass(String name, String currentClass)
+            throws ClassNotFoundException {
+<span class="fc" id="L149">        Class&lt;?&gt; clazz = null;</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">        if (!currentClass.isEmpty()) {</span>
+<span class="fc" id="L151">            String innerClass = currentClass + DOLLAR_SIGN + name;</span>
+
+<span class="fc bfc" id="L153" title="All 2 branches covered.">            if (!pkg.isEmpty()) {</span>
+<span class="fc" id="L154">                innerClass = pkg + PERIOD + innerClass;</span>
+            }
+
+<span class="fc bfc" id="L157" title="All 2 branches covered.">            if (isLoadable(innerClass)) {</span>
+<span class="fc" id="L158">                clazz = safeLoad(innerClass);</span>
+            }
+        }
+<span class="fc" id="L161">        return clazz;</span>
+    }
+
+    /**
+     * Try star imports.
+     * @param name name of the Class to search
+     * @return  class if found , or null if not resolved
+     */
+    private Class&lt;?&gt; resolveByStarImports(String name) {
+<span class="fc" id="L170">        Class&lt;?&gt; clazz = null;</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">        for (String imp : imports) {</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">            if (imp.endsWith(&quot;.*&quot;)) {</span>
+<span class="fc" id="L173">                final String fqn = imp.substring(0, imp.lastIndexOf('.') + 1) + name;</span>
+<span class="fc" id="L174">                clazz = resolveQualifiedName(fqn);</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">                if (clazz != null) {</span>
+<span class="fc" id="L176">                    break;</span>
+                }
+            }
+<span class="fc" id="L179">        }</span>
+<span class="fc" id="L180">        return clazz;</span>
+    }
+
+    /**
+     * Checks if the given class name can be loaded.
+     * @param name name of the class to check
+     * @return whether a specified class is loadable with safeLoad().
+     */
+    public boolean isLoadable(String name) {
+        boolean result;
+        try {
+<span class="fc" id="L191">            safeLoad(name);</span>
+<span class="fc" id="L192">            result = true;</span>
+        }
+<span class="fc" id="L194">        catch (final ClassNotFoundException | NoClassDefFoundError ignored) {</span>
+<span class="fc" id="L195">            result = false;</span>
+<span class="fc" id="L196">        }</span>
+<span class="fc" id="L197">        return result;</span>
+    }
+
+    /**
+     * Will load a specified class is such a way that it will NOT be
+     * initialised.
+     * @param name name of the class to load
+     * @return the {@code Class} for the specified class
+     * @throws ClassNotFoundException if an error occurs
+     * @throws NoClassDefFoundError if an error occurs
+     */
+    // -@cs[ForbidWildcardAsReturnType] The class is deprecated and will be removed soon.
+    private Class&lt;?&gt; safeLoad(String name) throws ClassNotFoundException, NoClassDefFoundError {
+        // The next line will load the class using the specified class
+        // loader. The magic is having the &quot;false&quot; parameter. This means the
+        // class will not be initialised. Very, very important.
+<span class="fc" id="L213">        return Class.forName(name, false, loader);</span>
+    }
+
+    /**
+     * Tries to resolve a class for fully-specified name.
+     * @param name a given name of class.
+     * @return Class object for the given name or null.
+     */
+    private Class&lt;?&gt; resolveQualifiedName(final String name) {
+<span class="fc" id="L222">        Class&lt;?&gt; classObj = null;</span>
+        try {
+<span class="fc bfc" id="L224" title="All 2 branches covered.">            if (isLoadable(name)) {</span>
+<span class="fc" id="L225">                classObj = safeLoad(name);</span>
+            }
+            else {
+                //Perhaps it's fully-qualified inner class
+<span class="fc" id="L229">                final int dot = name.lastIndexOf('.');</span>
+<span class="fc bfc" id="L230" title="All 2 branches covered.">                if (dot != -1) {</span>
+<span class="fc" id="L231">                    final String innerName =</span>
+<span class="fc" id="L232">                        name.substring(0, dot) + DOLLAR_SIGN + name.substring(dot + 1);</span>
+<span class="fc" id="L233">                    classObj = resolveQualifiedName(innerName);</span>
+                }
+            }
+        }
+<span class="fc" id="L237">        catch (final ClassNotFoundException ex) {</span>
+            // we shouldn't get this exception here,
+            // so this is unexpected runtime exception
+<span class="fc" id="L240">            throw new IllegalStateException(ex);</span>
+<span class="fc" id="L241">        }</span>
+<span class="fc" id="L242">        return classObj;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

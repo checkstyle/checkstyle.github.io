@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MultipleStringLiteralsCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">MultipleStringLiteralsCheck.java</span></div><h1>MultipleStringLiteralsCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtils;
+
+/**
+ * Checks for multiple occurrences of the same string literal within a
+ * single file.
+ *
+ * @author Daniel Grenner
+ */
+@FileStatefulCheck
+public class MultipleStringLiteralsCheck extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;multiple.string.literal&quot;;
+
+    /**
+     * The found strings and their positions.
+     * {@code &lt;String, ArrayList&gt;}, with the ArrayList containing StringInfo
+     * objects.
+     */
+<span class="fc" id="L55">    private final Map&lt;String, List&lt;StringInfo&gt;&gt; stringMap = new HashMap&lt;&gt;();</span>
+
+    /**
+     * Marks the TokenTypes where duplicate strings should be ignored.
+     */
+<span class="fc" id="L60">    private final BitSet ignoreOccurrenceContext = new BitSet();</span>
+
+    /**
+     * The allowed number of string duplicates in a file before an error is
+     * generated.
+     */
+<span class="fc" id="L66">    private int allowedDuplicates = 1;</span>
+
+    /**
+     * Pattern for matching ignored strings.
+     */
+    private Pattern ignoreStringsRegexp;
+
+    /**
+     * Construct an instance with default values.
+     */
+<span class="fc" id="L76">    public MultipleStringLiteralsCheck() {</span>
+<span class="fc" id="L77">        setIgnoreStringsRegexp(Pattern.compile(&quot;^\&quot;\&quot;$&quot;));</span>
+<span class="fc" id="L78">        ignoreOccurrenceContext.set(TokenTypes.ANNOTATION);</span>
+<span class="fc" id="L79">    }</span>
+
+    /**
+     * Sets the maximum allowed duplicates of a string.
+     * @param allowedDuplicates The maximum number of duplicates.
+     */
+    public void setAllowedDuplicates(int allowedDuplicates) {
+<span class="fc" id="L86">        this.allowedDuplicates = allowedDuplicates;</span>
+<span class="fc" id="L87">    }</span>
+
+    /**
+     * Sets regular expression pattern for ignored strings.
+     * @param ignoreStringsRegexp
+     *        regular expression pattern for ignored strings
+     * @noinspection WeakerAccess
+     */
+    public final void setIgnoreStringsRegexp(Pattern ignoreStringsRegexp) {
+<span class="fc bfc" id="L96" title="All 4 branches covered.">        if (ignoreStringsRegexp == null || ignoreStringsRegexp.pattern().isEmpty()) {</span>
+<span class="fc" id="L97">            this.ignoreStringsRegexp = null;</span>
+        }
+        else {
+<span class="fc" id="L100">            this.ignoreStringsRegexp = ignoreStringsRegexp;</span>
+        }
+<span class="fc" id="L102">    }</span>
+
+    /**
+     * Adds a set of tokens the check is interested in.
+     * @param strRep the string representation of the tokens interested in
+     */
+    public final void setIgnoreOccurrenceContext(String... strRep) {
+<span class="fc" id="L109">        ignoreOccurrenceContext.clear();</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        for (final String s : strRep) {</span>
+<span class="fc" id="L111">            final int type = TokenUtils.getTokenId(s);</span>
+<span class="fc" id="L112">            ignoreOccurrenceContext.set(type);</span>
+        }
+<span class="fc" id="L114">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L118">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L123">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L128">        return new int[] {TokenTypes.STRING_LITERAL};</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        if (!isInIgnoreOccurrenceContext(ast)) {</span>
+<span class="fc" id="L134">            final String currentString = ast.getText();</span>
+<span class="fc bfc" id="L135" title="All 4 branches covered.">            if (ignoreStringsRegexp == null || !ignoreStringsRegexp.matcher(currentString).find()) {</span>
+<span class="fc" id="L136">                List&lt;StringInfo&gt; hitList = stringMap.get(currentString);</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">                if (hitList == null) {</span>
+<span class="fc" id="L138">                    hitList = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L139">                    stringMap.put(currentString, hitList);</span>
+                }
+<span class="fc" id="L141">                final int line = ast.getLineNo();</span>
+<span class="fc" id="L142">                final int col = ast.getColumnNo();</span>
+<span class="fc" id="L143">                hitList.add(new StringInfo(line, col));</span>
+            }
+        }
+<span class="fc" id="L146">    }</span>
+
+    /**
+     * Analyses the path from the AST root to a given AST for occurrences
+     * of the token types in {@link #ignoreOccurrenceContext}.
+     *
+     * @param ast the node from where to start searching towards the root node
+     * @return whether the path from the root node to ast contains one of the
+     *     token type in {@link #ignoreOccurrenceContext}.
+     */
+    private boolean isInIgnoreOccurrenceContext(DetailAST ast) {
+<span class="fc" id="L157">        boolean isInIgnoreOccurrenceContext = false;</span>
+<span class="fc" id="L158">        for (DetailAST token = ast;</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">             token.getParent() != null;</span>
+<span class="fc" id="L160">             token = token.getParent()) {</span>
+<span class="fc" id="L161">            final int type = token.getType();</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">            if (ignoreOccurrenceContext.get(type)) {</span>
+<span class="fc" id="L163">                isInIgnoreOccurrenceContext = true;</span>
+<span class="fc" id="L164">                break;</span>
+            }
+        }
+<span class="fc" id="L167">        return isInIgnoreOccurrenceContext;</span>
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L172">        stringMap.clear();</span>
+<span class="fc" id="L173">    }</span>
+
+    @Override
+    public void finishTree(DetailAST rootAST) {
+<span class="fc bfc" id="L177" title="All 2 branches covered.">        for (Map.Entry&lt;String, List&lt;StringInfo&gt;&gt; stringListEntry : stringMap.entrySet()) {</span>
+<span class="fc" id="L178">            final List&lt;StringInfo&gt; hits = stringListEntry.getValue();</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">            if (hits.size() &gt; allowedDuplicates) {</span>
+<span class="fc" id="L180">                final StringInfo firstFinding = hits.get(0);</span>
+<span class="fc" id="L181">                final int line = firstFinding.getLine();</span>
+<span class="fc" id="L182">                final int col = firstFinding.getCol();</span>
+<span class="fc" id="L183">                log(line, col, MSG_KEY, stringListEntry.getKey(), hits.size());</span>
+            }
+<span class="fc" id="L185">        }</span>
+<span class="fc" id="L186">    }</span>
+
+    /**
+     * This class contains information about where a string was found.
+     */
+    private static final class StringInfo {
+
+        /**
+         * Line of finding.
+         */
+        private final int line;
+        /**
+         * Column of finding.
+         */
+        private final int col;
+
+        /**
+         * Creates information about a string position.
+         * @param line int
+         * @param col int
+         */
+<span class="fc" id="L207">        StringInfo(int line, int col) {</span>
+<span class="fc" id="L208">            this.line = line;</span>
+<span class="fc" id="L209">            this.col = col;</span>
+<span class="fc" id="L210">        }</span>
+
+        /**
+         * The line where a string was found.
+         * @return int Line of the string.
+         */
+        private int getLine() {
+<span class="fc" id="L217">            return line;</span>
+        }
+
+        /**
+         * The column where a string was found.
+         * @return int Column of the string.
+         */
+        private int getCol() {
+<span class="fc" id="L225">            return col;</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

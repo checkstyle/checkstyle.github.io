@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PackageDeclarationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">PackageDeclarationCheck.java</span></div><h1>PackageDeclarationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.io.File;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Ensures there is a package declaration.
+ * Optionally checks if directory structure matches package name.
+ * Rationale: Classes that live in the null package cannot be
+ * imported. Many novice developers are not aware of this.
+ * Packages provide logical namespace to classes and should be stored in
+ * the form of directory levels to provide physical grouping to your classes.
+ * These directories are added to the classpath so that your classes
+ * are visible to JVM when it runs the code.
+ *
+ * @author &lt;a href=&quot;mailto:simon@redhillconsulting.com.au&quot;&gt;Simon Harris&lt;/a&gt;
+ * @author Oliver Burn
+ * @author Vikramaditya Kukreja
+ */
+@FileStatefulCheck
+<span class="fc" id="L45">public final class PackageDeclarationCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_MISSING = &quot;missing.package.declaration&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_MISMATCH = &quot;mismatch.package.directory&quot;;
+
+    /** Line number used to log violation when no AST nodes are present in file. */
+    private static final int DEFAULT_LINE_NUMBER = 1;
+
+    /** Is package defined. */
+    private boolean defined;
+
+    /** Whether to check for directory and package name match. */
+<span class="fc" id="L66">    private boolean matchDirectoryStructure = true;</span>
+
+    /**
+     * Set whether to check for directory and package name match.
+     * @param matchDirectoryStructure the new value.
+     */
+    public void setMatchDirectoryStructure(boolean matchDirectoryStructure) {
+<span class="fc" id="L73">        this.matchDirectoryStructure = matchDirectoryStructure;</span>
+<span class="fc" id="L74">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L78">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L83">        return new int[] {TokenTypes.PACKAGE_DEF};</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L88">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public void beginTree(DetailAST ast) {
+<span class="fc" id="L93">        defined = false;</span>
+<span class="fc" id="L94">    }</span>
+
+    @Override
+    public void finishTree(DetailAST ast) {
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if (!defined) {</span>
+<span class="fc" id="L99">            int lineNumber = DEFAULT_LINE_NUMBER;</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">            if (ast != null) {</span>
+<span class="fc" id="L101">                lineNumber = ast.getLineNo();</span>
+            }
+<span class="fc" id="L103">            log(lineNumber, MSG_KEY_MISSING);</span>
+        }
+<span class="fc" id="L105">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc" id="L109">        defined = true;</span>
+
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        if (matchDirectoryStructure) {</span>
+<span class="fc" id="L112">            final DetailAST packageNameAst = ast.getLastChild().getPreviousSibling();</span>
+<span class="fc" id="L113">            final FullIdent fullIdent = FullIdent.createFullIdent(packageNameAst);</span>
+<span class="fc" id="L114">            final String packageName = fullIdent.getText().replace('.', File.separatorChar);</span>
+
+<span class="fc" id="L116">            final String directoryName = getDirectoryName();</span>
+
+<span class="fc bfc" id="L118" title="All 2 branches covered.">            if (!directoryName.endsWith(packageName)) {</span>
+<span class="fc" id="L119">                log(fullIdent.getLineNo(), MSG_KEY_MISMATCH, packageName);</span>
+            }
+        }
+<span class="fc" id="L122">    }</span>
+
+    /**
+     * Returns the directory name this file is in.
+     * @return Directory name.
+     */
+    private String getDirectoryName() {
+<span class="fc" id="L129">        final String fileName = getFileContents().getFileName();</span>
+<span class="fc" id="L130">        final int lastSeparatorPos = fileName.lastIndexOf(File.separatorChar);</span>
+<span class="fc" id="L131">        return fileName.substring(0, lastSeparatorPos);</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

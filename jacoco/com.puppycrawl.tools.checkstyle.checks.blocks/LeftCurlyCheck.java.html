@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LeftCurlyCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.blocks</a> &gt; <span class="el_source">LeftCurlyCheck.java</span></div><h1>LeftCurlyCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.blocks;
+
+import java.util.Locale;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * &lt;p&gt;
+ * Checks the placement of left curly braces on types, methods and
+ * other blocks:
+ *  {@link TokenTypes#LITERAL_CATCH LITERAL_CATCH},  {@link
+ * TokenTypes#LITERAL_DO LITERAL_DO},  {@link TokenTypes#LITERAL_ELSE
+ * LITERAL_ELSE},  {@link TokenTypes#LITERAL_FINALLY LITERAL_FINALLY},  {@link
+ * TokenTypes#LITERAL_FOR LITERAL_FOR},  {@link TokenTypes#LITERAL_IF
+ * LITERAL_IF},  {@link TokenTypes#LITERAL_SWITCH LITERAL_SWITCH},  {@link
+ * TokenTypes#LITERAL_SYNCHRONIZED LITERAL_SYNCHRONIZED},  {@link
+ * TokenTypes#LITERAL_TRY LITERAL_TRY},  {@link TokenTypes#LITERAL_WHILE
+ * LITERAL_WHILE},  {@link TokenTypes#STATIC_INIT STATIC_INIT},
+ * {@link TokenTypes#LAMBDA LAMBDA}.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * The policy to verify is specified using the {@link LeftCurlyOption} class and
+ * defaults to {@link LeftCurlyOption#EOL}.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;LeftCurly&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check with policy
+ * {@link LeftCurlyOption#NLOW} is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;LeftCurly&quot;&amp;gt;
+ *      &amp;lt;property name=&quot;option&quot; value=&quot;nlow&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check to validate enum definitions:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;LeftCurly&quot;&amp;gt;
+ *      &amp;lt;property name=&quot;ignoreEnums&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @author Oliver Burn
+ * @author lkuehne
+ * @author maxvetrenko
+ */
+@StatelessCheck
+<span class="fc" id="L78">public class LeftCurlyCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_LINE_NEW = &quot;line.new&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_LINE_PREVIOUS = &quot;line.previous&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_LINE_BREAK_AFTER = &quot;line.break.after&quot;;
+
+    /** Open curly brace literal. */
+    private static final String OPEN_CURLY_BRACE = &quot;{&quot;;
+
+    /** If true, Check will ignore enums. */
+<span class="fc" id="L103">    private boolean ignoreEnums = true;</span>
+
+    /** The policy to enforce. */
+<span class="fc" id="L106">    private LeftCurlyOption option = LeftCurlyOption.EOL;</span>
+
+    /**
+     * Set the option to enforce.
+     * @param optionStr string to decode option from
+     * @throws IllegalArgumentException if unable to decode
+     */
+    public void setOption(String optionStr) {
+        try {
+<span class="fc" id="L115">            option = LeftCurlyOption.valueOf(optionStr.trim().toUpperCase(Locale.ENGLISH));</span>
+        }
+<span class="fc" id="L117">        catch (IllegalArgumentException iae) {</span>
+<span class="fc" id="L118">            throw new IllegalArgumentException(&quot;unable to parse &quot; + optionStr, iae);</span>
+<span class="fc" id="L119">        }</span>
+<span class="fc" id="L120">    }</span>
+
+    /**
+     * Sets whether check should ignore enums when left curly brace policy is EOL.
+     * @param ignoreEnums check's option for ignoring enums.
+     */
+    public void setIgnoreEnums(boolean ignoreEnums) {
+<span class="fc" id="L127">        this.ignoreEnums = ignoreEnums;</span>
+<span class="fc" id="L128">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L132">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L137">        return new int[] {</span>
+            TokenTypes.INTERFACE_DEF,
+            TokenTypes.CLASS_DEF,
+            TokenTypes.ANNOTATION_DEF,
+            TokenTypes.ENUM_DEF,
+            TokenTypes.CTOR_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.ENUM_CONSTANT_DEF,
+            TokenTypes.LITERAL_WHILE,
+            TokenTypes.LITERAL_TRY,
+            TokenTypes.LITERAL_CATCH,
+            TokenTypes.LITERAL_FINALLY,
+            TokenTypes.LITERAL_SYNCHRONIZED,
+            TokenTypes.LITERAL_SWITCH,
+            TokenTypes.LITERAL_DO,
+            TokenTypes.LITERAL_IF,
+            TokenTypes.LITERAL_ELSE,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.OBJBLOCK,
+            TokenTypes.LAMBDA,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L163">        return CommonUtils.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+        final DetailAST startToken;
+        DetailAST brace;
+
+<span class="fc bfc" id="L171" title="All 5 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.CTOR_DEF:
+            case TokenTypes.METHOD_DEF:
+<span class="fc" id="L174">                startToken = skipAnnotationOnlyLines(ast);</span>
+<span class="fc" id="L175">                brace = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L176">                break;</span>
+            case TokenTypes.INTERFACE_DEF:
+            case TokenTypes.CLASS_DEF:
+            case TokenTypes.ANNOTATION_DEF:
+            case TokenTypes.ENUM_DEF:
+            case TokenTypes.ENUM_CONSTANT_DEF:
+<span class="fc" id="L182">                startToken = skipAnnotationOnlyLines(ast);</span>
+<span class="fc" id="L183">                final DetailAST objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);</span>
+<span class="fc" id="L184">                brace = objBlock;</span>
+
+<span class="fc bfc" id="L186" title="All 2 branches covered.">                if (objBlock != null) {</span>
+<span class="fc" id="L187">                    brace = objBlock.getFirstChild();</span>
+                }
+                break;
+            case TokenTypes.LITERAL_WHILE:
+            case TokenTypes.LITERAL_CATCH:
+            case TokenTypes.LITERAL_SYNCHRONIZED:
+            case TokenTypes.LITERAL_FOR:
+            case TokenTypes.LITERAL_TRY:
+            case TokenTypes.LITERAL_FINALLY:
+            case TokenTypes.LITERAL_DO:
+            case TokenTypes.LITERAL_IF:
+            case TokenTypes.STATIC_INIT:
+            case TokenTypes.LAMBDA:
+<span class="fc" id="L200">                startToken = ast;</span>
+<span class="fc" id="L201">                brace = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L202">                break;</span>
+            case TokenTypes.LITERAL_ELSE:
+<span class="fc" id="L204">                startToken = ast;</span>
+<span class="fc" id="L205">                final DetailAST candidate = ast.getFirstChild();</span>
+<span class="fc" id="L206">                brace = null;</span>
+
+<span class="fc bfc" id="L208" title="All 2 branches covered.">                if (candidate.getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L209">                    brace = candidate;</span>
+                }
+                break;
+            default:
+                // ATTENTION! We have default here, but we expect case TokenTypes.METHOD_DEF,
+                // TokenTypes.LITERAL_FOR, TokenTypes.LITERAL_WHILE, TokenTypes.LITERAL_DO only.
+                // It has been done to improve coverage to 100%. I couldn't replace it with
+                // if-else-if block because code was ugly and didn't pass pmd check.
+
+<span class="fc" id="L218">                startToken = ast;</span>
+<span class="fc" id="L219">                brace = ast.findFirstToken(TokenTypes.LCURLY);</span>
+                break;
+        }
+
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (brace != null) {</span>
+<span class="fc" id="L224">            verifyBrace(brace, startToken);</span>
+        }
+<span class="fc" id="L226">    }</span>
+
+    /**
+     * Skip lines that only contain {@code TokenTypes.ANNOTATION}s.
+     * If the received {@code DetailAST}
+     * has annotations within its modifiers then first token on the line
+     * of the first token after all annotations is return. This might be
+     * an annotation.
+     * Otherwise, the received {@code DetailAST} is returned.
+     * @param ast {@code DetailAST}.
+     * @return {@code DetailAST}.
+     */
+    private static DetailAST skipAnnotationOnlyLines(DetailAST ast) {
+<span class="fc" id="L239">        DetailAST resultNode = ast;</span>
+<span class="fc" id="L240">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+
+<span class="fc bfc" id="L242" title="All 2 branches covered.">        if (modifiers != null) {</span>
+<span class="fc" id="L243">            final DetailAST lastAnnotation = findLastAnnotation(modifiers);</span>
+
+<span class="fc bfc" id="L245" title="All 2 branches covered.">            if (lastAnnotation != null) {</span>
+                final DetailAST tokenAfterLast;
+
+<span class="fc bfc" id="L248" title="All 2 branches covered.">                if (lastAnnotation.getNextSibling() == null) {</span>
+<span class="fc" id="L249">                    tokenAfterLast = modifiers.getNextSibling();</span>
+                }
+                else {
+<span class="fc" id="L252">                    tokenAfterLast = lastAnnotation.getNextSibling();</span>
+                }
+
+<span class="fc bfc" id="L255" title="All 2 branches covered.">                if (tokenAfterLast.getLineNo() &gt; lastAnnotation.getLineNo()) {</span>
+<span class="fc" id="L256">                    resultNode = tokenAfterLast;</span>
+                }
+                else {
+<span class="fc" id="L259">                    resultNode = getFirstAnnotationOnSameLine(lastAnnotation);</span>
+                }
+            }
+        }
+<span class="fc" id="L263">        return resultNode;</span>
+    }
+
+    /**
+     * Returns first annotation on same line.
+     * @param annotation
+     *            last annotation on the line
+     * @return first annotation on same line.
+     */
+    private static DetailAST getFirstAnnotationOnSameLine(DetailAST annotation) {
+<span class="fc" id="L273">        DetailAST previousAnnotation = annotation;</span>
+<span class="fc" id="L274">        final int lastAnnotationLineNumber = previousAnnotation.getLineNo();</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">        while (previousAnnotation.getPreviousSibling() != null</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">                &amp;&amp; previousAnnotation.getPreviousSibling().getLineNo()</span>
+                    == lastAnnotationLineNumber) {
+<span class="fc" id="L278">            previousAnnotation = previousAnnotation.getPreviousSibling();</span>
+        }
+<span class="fc" id="L280">        return previousAnnotation;</span>
+    }
+
+    /**
+     * Find the last token of type {@code TokenTypes.ANNOTATION}
+     * under the given set of modifiers.
+     * @param modifiers {@code DetailAST}.
+     * @return {@code DetailAST} or null if there are no annotations.
+     */
+    private static DetailAST findLastAnnotation(DetailAST modifiers) {
+<span class="fc" id="L290">        DetailAST annotation = modifiers.findFirstToken(TokenTypes.ANNOTATION);</span>
+<span class="fc bfc" id="L291" title="All 4 branches covered.">        while (annotation != null &amp;&amp; annotation.getNextSibling() != null</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">               &amp;&amp; annotation.getNextSibling().getType() == TokenTypes.ANNOTATION) {</span>
+<span class="fc" id="L293">            annotation = annotation.getNextSibling();</span>
+        }
+<span class="fc" id="L295">        return annotation;</span>
+    }
+
+    /**
+     * Verifies that a specified left curly brace is placed correctly
+     * according to policy.
+     * @param brace token for left curly brace
+     * @param startToken token for start of expression
+     */
+    private void verifyBrace(final DetailAST brace,
+                             final DetailAST startToken) {
+<span class="fc" id="L306">        final String braceLine = getLine(brace.getLineNo() - 1);</span>
+
+        // Check for being told to ignore, or have '{}' which is a special case
+<span class="fc bfc" id="L309" title="All 2 branches covered.">        if (braceLine.length() &lt;= brace.getColumnNo() + 1</span>
+<span class="fc bfc" id="L310" title="All 2 branches covered.">                || braceLine.charAt(brace.getColumnNo() + 1) != '}') {</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">            if (option == LeftCurlyOption.NL) {</span>
+<span class="fc bfc" id="L312" title="All 2 branches covered.">                if (!CommonUtils.hasWhitespaceBefore(brace.getColumnNo(), braceLine)) {</span>
+<span class="fc" id="L313">                    log(brace, MSG_KEY_LINE_NEW, OPEN_CURLY_BRACE, brace.getColumnNo() + 1);</span>
+                }
+            }
+<span class="fc bfc" id="L316" title="All 2 branches covered.">            else if (option == LeftCurlyOption.EOL) {</span>
+<span class="fc" id="L317">                validateEol(brace, braceLine);</span>
+            }
+<span class="fc bfc" id="L319" title="All 2 branches covered.">            else if (startToken.getLineNo() != brace.getLineNo()) {</span>
+<span class="fc" id="L320">                validateNewLinePosition(brace, startToken, braceLine);</span>
+            }
+        }
+<span class="fc" id="L323">    }</span>
+
+    /**
+     * Validate EOL case.
+     * @param brace brace AST
+     * @param braceLine line content
+     */
+    private void validateEol(DetailAST brace, String braceLine) {
+<span class="fc bfc" id="L331" title="All 2 branches covered.">        if (CommonUtils.hasWhitespaceBefore(brace.getColumnNo(), braceLine)) {</span>
+<span class="fc" id="L332">            log(brace, MSG_KEY_LINE_PREVIOUS, OPEN_CURLY_BRACE, brace.getColumnNo() + 1);</span>
+        }
+<span class="fc bfc" id="L334" title="All 2 branches covered.">        if (!hasLineBreakAfter(brace)) {</span>
+<span class="fc" id="L335">            log(brace, MSG_KEY_LINE_BREAK_AFTER, OPEN_CURLY_BRACE, brace.getColumnNo() + 1);</span>
+        }
+<span class="fc" id="L337">    }</span>
+
+    /**
+     * Validate token on new Line position.
+     * @param brace brace AST
+     * @param startToken start Token
+     * @param braceLine content of line with Brace
+     */
+    private void validateNewLinePosition(DetailAST brace, DetailAST startToken, String braceLine) {
+        // not on the same line
+<span class="fc bfc" id="L347" title="All 2 branches covered.">        if (startToken.getLineNo() + 1 == brace.getLineNo()) {</span>
+<span class="fc bfc" id="L348" title="All 2 branches covered.">            if (CommonUtils.hasWhitespaceBefore(brace.getColumnNo(), braceLine)) {</span>
+<span class="fc" id="L349">                log(brace, MSG_KEY_LINE_PREVIOUS, OPEN_CURLY_BRACE, brace.getColumnNo() + 1);</span>
+            }
+            else {
+<span class="fc" id="L352">                log(brace, MSG_KEY_LINE_NEW, OPEN_CURLY_BRACE, brace.getColumnNo() + 1);</span>
+            }
+        }
+<span class="fc bfc" id="L355" title="All 2 branches covered.">        else if (!CommonUtils.hasWhitespaceBefore(brace.getColumnNo(), braceLine)) {</span>
+<span class="fc" id="L356">            log(brace, MSG_KEY_LINE_NEW, OPEN_CURLY_BRACE, brace.getColumnNo() + 1);</span>
+        }
+<span class="fc" id="L358">    }</span>
+
+    /**
+     * Checks if left curly has line break after.
+     * @param leftCurly
+     *        Left curly token.
+     * @return
+     *        True, left curly has line break after.
+     */
+    private boolean hasLineBreakAfter(DetailAST leftCurly) {
+<span class="fc" id="L368">        DetailAST nextToken = null;</span>
+<span class="fc bfc" id="L369" title="All 2 branches covered.">        if (leftCurly.getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L370">            nextToken = leftCurly.getFirstChild();</span>
+        }
+        else {
+<span class="fc bfc" id="L373" title="All 2 branches covered.">            if (!ignoreEnums</span>
+<span class="fc bfc" id="L374" title="All 2 branches covered.">                    &amp;&amp; leftCurly.getParent().getParent().getType() == TokenTypes.ENUM_DEF) {</span>
+<span class="fc" id="L375">                nextToken = leftCurly.getNextSibling();</span>
+            }
+        }
+<span class="fc bfc" id="L378" title="All 2 branches covered.">        return nextToken == null</span>
+<span class="fc bfc" id="L379" title="All 2 branches covered.">                || nextToken.getType() == TokenTypes.RCURLY</span>
+<span class="fc bfc" id="L380" title="All 2 branches covered.">                || leftCurly.getLineNo() != nextToken.getLineNo();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

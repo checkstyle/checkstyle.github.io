@@ -1,0 +1,581 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AbstractExpressionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.indentation</a> &gt; <span class="el_source">AbstractExpressionHandler.java</span></div><h1>AbstractExpressionHandler.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.indentation;
+
+import java.util.Arrays;
+
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * Abstract base class for all handlers.
+ *
+ * @author jrichard
+ */
+public abstract class AbstractExpressionHandler {
+
+    /**
+     * The instance of {@code IndentationCheck} using this handler.
+     */
+    private final IndentationCheck indentCheck;
+
+    /** The AST which is handled by this handler. */
+    private final DetailAST mainAst;
+
+    /** Name used during output to user. */
+    private final String typeName;
+
+    /** Containing AST handler. */
+    private final AbstractExpressionHandler parent;
+
+    /** Indentation amount for this handler. */
+    private IndentLevel indent;
+
+    /**
+     * Construct an instance of this handler with the given indentation check,
+     * name, abstract syntax tree, and parent handler.
+     *
+     * @param indentCheck   the indentation check
+     * @param typeName      the name of the handler
+     * @param expr          the abstract syntax tree
+     * @param parent        the parent handler
+     */
+    protected AbstractExpressionHandler(IndentationCheck indentCheck, String typeName,
+<span class="fc" id="L62">            DetailAST expr, AbstractExpressionHandler parent) {</span>
+<span class="fc" id="L63">        this.indentCheck = indentCheck;</span>
+<span class="fc" id="L64">        this.typeName = typeName;</span>
+<span class="fc" id="L65">        mainAst = expr;</span>
+<span class="fc" id="L66">        this.parent = parent;</span>
+<span class="fc" id="L67">    }</span>
+
+    /**
+     * Check the indentation of the expression we are handling.
+     */
+    public abstract void checkIndentation();
+
+    /**
+     * Get the indentation amount for this handler. For performance reasons,
+     * this value is cached. The first time this method is called, the
+     * indentation amount is computed and stored. On further calls, the stored
+     * value is returned.
+     *
+     * @return the expected indentation amount
+     * @noinspection WeakerAccess
+     */
+    public final IndentLevel getIndent() {
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        if (indent == null) {</span>
+<span class="fc" id="L85">            indent = getIndentImpl();</span>
+        }
+<span class="fc" id="L87">        return indent;</span>
+    }
+
+    /**
+     * Compute the indentation amount for this handler.
+     *
+     * @return the expected indentation amount
+     */
+    protected IndentLevel getIndentImpl() {
+<span class="fc" id="L96">        return parent.getSuggestedChildIndent(this);</span>
+    }
+
+    /**
+     * Indentation level suggested for a child element. Children don't have
+     * to respect this, but most do.
+     *
+     * @param child  child AST (so suggestion level can differ based on child
+     *                  type)
+     *
+     * @return suggested indentation for child
+     * @noinspection WeakerAccess
+     */
+    public IndentLevel getSuggestedChildIndent(AbstractExpressionHandler child) {
+<span class="fc" id="L110">        return new IndentLevel(getIndent(), getBasicOffset());</span>
+    }
+
+    /**
+     * Log an indentation error.
+     *
+     * @param ast           the expression that caused the error
+     * @param subtypeName   the type of the expression
+     * @param actualIndent  the actual indent level of the expression
+     */
+    protected final void logError(DetailAST ast, String subtypeName,
+                                  int actualIndent) {
+<span class="fc" id="L122">        logError(ast, subtypeName, actualIndent, getIndent());</span>
+<span class="fc" id="L123">    }</span>
+
+    /**
+     * Log an indentation error.
+     *
+     * @param ast            the expression that caused the error
+     * @param subtypeName    the type of the expression
+     * @param actualIndent   the actual indent level of the expression
+     * @param expectedIndent the expected indent level of the expression
+     */
+    protected final void logError(DetailAST ast, String subtypeName,
+                                  int actualIndent, IndentLevel expectedIndent) {
+        final String typeStr;
+
+<span class="fc bfc" id="L137" title="All 2 branches covered.">        if (subtypeName.isEmpty()) {</span>
+<span class="fc" id="L138">            typeStr = &quot;&quot;;</span>
+        }
+        else {
+<span class="fc" id="L141">            typeStr = &quot; &quot; + subtypeName;</span>
+        }
+<span class="fc" id="L143">        String messageKey = IndentationCheck.MSG_ERROR;</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">        if (expectedIndent.isMultiLevel()) {</span>
+<span class="fc" id="L145">            messageKey = IndentationCheck.MSG_ERROR_MULTI;</span>
+        }
+<span class="fc" id="L147">        indentCheck.indentationLog(ast.getLineNo(), messageKey,</span>
+<span class="fc" id="L148">            typeName + typeStr, actualIndent, expectedIndent);</span>
+<span class="fc" id="L149">    }</span>
+
+    /**
+     * Log child indentation error.
+     *
+     * @param line           the expression that caused the error
+     * @param actualIndent   the actual indent level of the expression
+     * @param expectedIndent the expected indent level of the expression
+     */
+    private void logChildError(int line,
+                               int actualIndent,
+                               IndentLevel expectedIndent) {
+<span class="fc" id="L161">        String messageKey = IndentationCheck.MSG_CHILD_ERROR;</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        if (expectedIndent.isMultiLevel()) {</span>
+<span class="fc" id="L163">            messageKey = IndentationCheck.MSG_CHILD_ERROR_MULTI;</span>
+        }
+<span class="fc" id="L165">        indentCheck.indentationLog(line, messageKey,</span>
+<span class="fc" id="L166">            typeName, actualIndent, expectedIndent);</span>
+<span class="fc" id="L167">    }</span>
+
+    /**
+     * Determines if the given expression is at the start of a line.
+     *
+     * @param ast   the expression to check
+     *
+     * @return true if it is, false otherwise
+     */
+    protected final boolean isOnStartOfLine(DetailAST ast) {
+<span class="fc bfc" id="L177" title="All 2 branches covered.">        return getLineStart(ast) == expandedTabsColumnNo(ast);</span>
+    }
+
+    /**
+     * Determines if two expressions are on the same line.
+     *
+     * @param ast1   the first expression
+     * @param ast2   the second expression
+     *
+     * @return true if they are, false otherwise
+     * @noinspection WeakerAccess
+     */
+    public static boolean areOnSameLine(DetailAST ast1, DetailAST ast2) {
+<span class="fc bfc" id="L190" title="All 2 branches covered.">        return ast1.getLineNo() == ast2.getLineNo();</span>
+    }
+
+    /**
+     * Searches in given sub-tree (including given node) for the token
+     * which represents first symbol for this sub-tree in file.
+     * @param ast a root of sub-tree in which the search should be performed.
+     * @return a token which occurs first in the file.
+     * @noinspection WeakerAccess
+     */
+    public static DetailAST getFirstToken(DetailAST ast) {
+<span class="fc" id="L201">        DetailAST first = ast;</span>
+<span class="fc" id="L202">        DetailAST child = ast.getFirstChild();</span>
+
+<span class="fc bfc" id="L204" title="All 2 branches covered.">        while (child != null) {</span>
+<span class="fc" id="L205">            final DetailAST toTest = getFirstToken(child);</span>
+<span class="fc bfc" id="L206" title="All 2 branches covered.">            if (toTest.getColumnNo() &lt; first.getColumnNo()) {</span>
+<span class="fc" id="L207">                first = toTest;</span>
+            }
+<span class="fc" id="L209">            child = child.getNextSibling();</span>
+<span class="fc" id="L210">        }</span>
+
+<span class="fc" id="L212">        return first;</span>
+    }
+
+    /**
+     * Get the start of the line for the given expression.
+     *
+     * @param ast   the expression to find the start of the line for
+     *
+     * @return the start of the line for the given expression
+     */
+    protected final int getLineStart(DetailAST ast) {
+<span class="fc" id="L223">        return getLineStart(ast.getLineNo());</span>
+    }
+
+    /**
+     * Get the start of the line for the given line number.
+     *
+     * @param lineNo   the line number to find the start for
+     *
+     * @return the start of the line for the given expression
+     */
+    protected final int getLineStart(int lineNo) {
+<span class="fc" id="L234">        return getLineStart(indentCheck.getLine(lineNo - 1));</span>
+    }
+
+    /**
+     * Get the start of the specified line.
+     *
+     * @param line   the specified line number
+     *
+     * @return the start of the specified line
+     */
+    private int getLineStart(String line) {
+<span class="fc" id="L245">        int index = 0;</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">        while (Character.isWhitespace(line.charAt(index))) {</span>
+<span class="fc" id="L247">            index++;</span>
+        }
+<span class="fc" id="L249">        return CommonUtils.lengthExpandedTabs(</span>
+<span class="fc" id="L250">            line, index, indentCheck.getIndentationTabWidth());</span>
+    }
+
+    /**
+     * Checks that indentation should be increased after first line in checkLinesIndent().
+     * @return true if indentation should be increased after
+     *              first line in checkLinesIndent()
+     *         false otherwise
+     */
+    protected boolean shouldIncreaseIndent() {
+<span class="fc" id="L260">        return true;</span>
+    }
+
+    /**
+     * Check the indentation for a set of lines.
+     *
+     * @param lines              the set of lines to check
+     * @param indentLevel        the indentation level
+     * @param firstLineMatches   whether or not the first line has to match
+     * @param firstLine          first line of whole expression
+     */
+    private void checkLinesIndent(LineSet lines,
+                                  IndentLevel indentLevel,
+                                  boolean firstLineMatches,
+                                  int firstLine) {
+<span class="fc bfc" id="L275" title="All 2 branches covered.">        if (!lines.isEmpty()) {</span>
+            // check first line
+<span class="fc" id="L277">            final int startLine = lines.firstLine();</span>
+<span class="fc" id="L278">            final int endLine = lines.lastLine();</span>
+<span class="fc" id="L279">            final int startCol = lines.firstLineCol();</span>
+
+<span class="fc" id="L281">            final int realStartCol =</span>
+<span class="fc" id="L282">                getLineStart(indentCheck.getLine(startLine - 1));</span>
+
+<span class="fc bfc" id="L284" title="All 2 branches covered.">            if (realStartCol == startCol) {</span>
+<span class="fc" id="L285">                checkLineIndent(startLine, startCol, indentLevel,</span>
+                    firstLineMatches);
+            }
+
+            // if first line starts the line, following lines are indented
+            // one level; but if the first line of this expression is
+            // nested with the previous expression (which is assumed if it
+            // doesn't start the line) then don't indent more, the first
+            // indentation is absorbed by the nesting
+
+<span class="fc" id="L295">            IndentLevel theLevel = indentLevel;</span>
+<span class="fc bfc" id="L296" title="All 2 branches covered.">            if (firstLineMatches</span>
+<span class="fc bfc" id="L297" title="All 4 branches covered.">                || firstLine &gt; mainAst.getLineNo() &amp;&amp; shouldIncreaseIndent()) {</span>
+<span class="fc" id="L298">                theLevel = new IndentLevel(indentLevel, getBasicOffset());</span>
+            }
+
+            // check following lines
+<span class="fc bfc" id="L302" title="All 2 branches covered.">            for (int i = startLine + 1; i &lt;= endLine; i++) {</span>
+<span class="fc" id="L303">                final Integer col = lines.getStartColumn(i);</span>
+                // startCol could be null if this line didn't have an
+                // expression that was required to be checked (it could be
+                // checked by a child expression)
+
+<span class="fc bfc" id="L308" title="All 2 branches covered.">                if (col != null) {</span>
+<span class="fc" id="L309">                    checkLineIndent(i, col, theLevel, false);</span>
+                }
+            }
+        }
+<span class="fc" id="L313">    }</span>
+
+    /**
+     * Check the indentation for a single line.
+     *
+     * @param lineNum       the number of the line to check
+     * @param colNum        the column number we are starting at
+     * @param indentLevel   the indentation level
+     * @param mustMatch     whether or not the indentation level must match
+     */
+    private void checkLineIndent(int lineNum, int colNum,
+        IndentLevel indentLevel, boolean mustMatch) {
+<span class="fc" id="L325">        final String line = indentCheck.getLine(lineNum - 1);</span>
+<span class="fc" id="L326">        final int start = getLineStart(line);</span>
+        // if must match is set, it is an error if the line start is not
+        // at the correct indention level; otherwise, it is an only an
+        // error if this statement starts the line and it is less than
+        // the correct indentation level
+<span class="fc bfc" id="L331" title="All 8 branches covered.">        if (mustMatch &amp;&amp; !indentLevel.isAcceptable(start)</span>
+<span class="fc bfc" id="L332" title="All 2 branches covered.">                || !mustMatch &amp;&amp; colNum == start &amp;&amp; indentLevel.isGreaterThan(start)) {</span>
+<span class="fc" id="L333">            logChildError(lineNum, start, indentLevel);</span>
+        }
+<span class="fc" id="L335">    }</span>
+
+    /**
+     * Checks indentation on wrapped lines between and including
+     * {@code firstNode} and {@code lastNode}.
+     *
+     * @param firstNode First node to start examining.
+     * @param lastNode Last node to examine inclusively.
+     */
+    protected void checkWrappingIndentation(DetailAST firstNode, DetailAST lastNode) {
+<span class="fc" id="L345">        indentCheck.getLineWrappingHandler().checkIndentation(firstNode, lastNode);</span>
+<span class="fc" id="L346">    }</span>
+
+    /**
+     * Checks indentation on wrapped lines between and including
+     * {@code firstNode} and {@code lastNode}.
+     *
+     * @param firstNode First node to start examining.
+     * @param lastNode Last node to examine inclusively.
+     * @param wrappedIndentLevel Indentation all wrapped lines should use.
+     * @param startIndent Indentation first line before wrapped lines used.
+     * @param ignoreFirstLine Test if first line's indentation should be checked or not.
+     */
+    protected void checkWrappingIndentation(DetailAST firstNode, DetailAST lastNode,
+            int wrappedIndentLevel, int startIndent, boolean ignoreFirstLine) {
+<span class="fc" id="L360">        indentCheck.getLineWrappingHandler().checkIndentation(firstNode, lastNode,</span>
+                wrappedIndentLevel, startIndent,
+<span class="fc" id="L362">                LineWrappingHandler.LineWrappingOptions.ofBoolean(ignoreFirstLine));</span>
+<span class="fc" id="L363">    }</span>
+
+    /**
+     * Check the indent level of the children of the specified parent
+     * expression.
+     *
+     * @param parentNode         the parent whose children we are checking
+     * @param tokenTypes         the token types to check
+     * @param startIndent        the starting indent level
+     * @param firstLineMatches   whether or not the first line needs to match
+     * @param allowNesting       whether or not nested children are allowed
+     */
+    protected final void checkChildren(DetailAST parentNode,
+                                       int[] tokenTypes,
+                                       IndentLevel startIndent,
+                                       boolean firstLineMatches,
+                                       boolean allowNesting) {
+<span class="fc" id="L380">        Arrays.sort(tokenTypes);</span>
+<span class="fc" id="L381">        for (DetailAST child = parentNode.getFirstChild();</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">                child != null;</span>
+<span class="fc" id="L383">                child = child.getNextSibling()) {</span>
+<span class="fc bfc" id="L384" title="All 2 branches covered.">            if (Arrays.binarySearch(tokenTypes, child.getType()) &gt;= 0) {</span>
+<span class="fc" id="L385">                checkExpressionSubtree(child, startIndent,</span>
+                    firstLineMatches, allowNesting);
+            }
+        }
+<span class="fc" id="L389">    }</span>
+
+    /**
+     * Check the indentation level for an expression subtree.
+     *
+     * @param tree               the expression subtree to check
+     * @param indentLevel        the indentation level
+     * @param firstLineMatches   whether or not the first line has to match
+     * @param allowNesting       whether or not subtree nesting is allowed
+     */
+    protected final void checkExpressionSubtree(
+        DetailAST tree,
+        IndentLevel indentLevel,
+        boolean firstLineMatches,
+        boolean allowNesting
+    ) {
+<span class="fc" id="L405">        final LineSet subtreeLines = new LineSet();</span>
+<span class="fc" id="L406">        final int firstLine = getFirstLine(Integer.MAX_VALUE, tree);</span>
+<span class="fc bfc" id="L407" title="All 4 branches covered.">        if (firstLineMatches &amp;&amp; !allowNesting) {</span>
+<span class="fc" id="L408">            subtreeLines.addLineAndCol(firstLine,</span>
+<span class="fc" id="L409">                getLineStart(indentCheck.getLine(firstLine - 1)));</span>
+        }
+<span class="fc" id="L411">        findSubtreeLines(subtreeLines, tree, allowNesting);</span>
+
+<span class="fc" id="L413">        checkLinesIndent(subtreeLines, indentLevel, firstLineMatches, firstLine);</span>
+<span class="fc" id="L414">    }</span>
+
+    /**
+     * Get the first line for a given expression.
+     *
+     * @param startLine   the line we are starting from
+     * @param tree        the expression to find the first line for
+     *
+     * @return the first line of the expression
+     */
+    protected static int getFirstLine(int startLine, DetailAST tree) {
+<span class="fc" id="L425">        int realStart = startLine;</span>
+<span class="fc" id="L426">        final int currLine = tree.getLineNo();</span>
+<span class="fc bfc" id="L427" title="All 2 branches covered.">        if (currLine &lt; realStart) {</span>
+<span class="fc" id="L428">            realStart = currLine;</span>
+        }
+
+        // check children
+<span class="fc" id="L432">        for (DetailAST node = tree.getFirstChild();</span>
+<span class="fc bfc" id="L433" title="All 2 branches covered.">            node != null;</span>
+<span class="fc" id="L434">            node = node.getNextSibling()) {</span>
+<span class="fc" id="L435">            realStart = getFirstLine(realStart, node);</span>
+        }
+
+<span class="fc" id="L438">        return realStart;</span>
+    }
+
+    /**
+     * Get the column number for the start of a given expression, expanding
+     * tabs out into spaces in the process.
+     *
+     * @param ast   the expression to find the start of
+     *
+     * @return the column number for the start of the expression
+     */
+    protected final int expandedTabsColumnNo(DetailAST ast) {
+<span class="fc" id="L450">        final String line =</span>
+<span class="fc" id="L451">            indentCheck.getLine(ast.getLineNo() - 1);</span>
+
+<span class="fc" id="L453">        return CommonUtils.lengthExpandedTabs(line, ast.getColumnNo(),</span>
+<span class="fc" id="L454">            indentCheck.getIndentationTabWidth());</span>
+    }
+
+    /**
+     * Find the set of lines for a given subtree.
+     *
+     * @param lines          the set of lines to add to
+     * @param tree           the subtree to examine
+     * @param allowNesting   whether or not to allow nested subtrees
+     */
+    protected final void findSubtreeLines(LineSet lines, DetailAST tree,
+        boolean allowNesting) {
+<span class="fc bfc" id="L466" title="All 2 branches covered.">        if (!indentCheck.getHandlerFactory().isHandledType(tree.getType())) {</span>
+<span class="fc" id="L467">            final int lineNum = tree.getLineNo();</span>
+<span class="fc" id="L468">            final Integer colNum = lines.getStartColumn(lineNum);</span>
+
+<span class="fc" id="L470">            final int thisLineColumn = expandedTabsColumnNo(tree);</span>
+<span class="fc bfc" id="L471" title="All 4 branches covered.">            if (colNum == null || thisLineColumn &lt; colNum) {</span>
+<span class="fc" id="L472">                lines.addLineAndCol(lineNum, thisLineColumn);</span>
+            }
+
+            // check children
+<span class="fc" id="L476">            for (DetailAST node = tree.getFirstChild();</span>
+<span class="fc bfc" id="L477" title="All 2 branches covered.">                node != null;</span>
+<span class="fc" id="L478">                node = node.getNextSibling()) {</span>
+<span class="fc" id="L479">                findSubtreeLines(lines, node, allowNesting);</span>
+            }
+        }
+<span class="fc" id="L482">    }</span>
+
+    /**
+     * Check the indentation level of modifiers.
+     */
+    protected void checkModifiers() {
+<span class="fc" id="L488">        final DetailAST modifiers =</span>
+<span class="fc" id="L489">            mainAst.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L490">        for (DetailAST modifier = modifiers.getFirstChild();</span>
+<span class="fc bfc" id="L491" title="All 2 branches covered.">             modifier != null;</span>
+<span class="fc" id="L492">             modifier = modifier.getNextSibling()) {</span>
+<span class="fc bfc" id="L493" title="All 2 branches covered.">            if (isOnStartOfLine(modifier)</span>
+<span class="fc bfc" id="L494" title="All 2 branches covered.">                &amp;&amp; !getIndent().isAcceptable(expandedTabsColumnNo(modifier))) {</span>
+<span class="fc" id="L495">                logError(modifier, &quot;modifier&quot;,</span>
+<span class="fc" id="L496">                    expandedTabsColumnNo(modifier));</span>
+            }
+        }
+<span class="fc" id="L499">    }</span>
+
+    /**
+     * Accessor for the IndentCheck attribute.
+     *
+     * @return the IndentCheck attribute
+     */
+    protected final IndentationCheck getIndentCheck() {
+<span class="fc" id="L507">        return indentCheck;</span>
+    }
+
+    /**
+     * Accessor for the MainAst attribute.
+     *
+     * @return the MainAst attribute
+     */
+    protected final DetailAST getMainAst() {
+<span class="fc" id="L516">        return mainAst;</span>
+    }
+
+    /**
+     * Accessor for the Parent attribute.
+     *
+     * @return the Parent attribute
+     */
+    protected final AbstractExpressionHandler getParent() {
+<span class="fc" id="L525">        return parent;</span>
+    }
+
+    /**
+     * A shortcut for {@code IndentationCheck} property.
+     * @return value of basicOffset property of {@code IndentationCheck}
+     */
+    protected final int getBasicOffset() {
+<span class="fc" id="L533">        return indentCheck.getBasicOffset();</span>
+    }
+
+    /**
+     * A shortcut for {@code IndentationCheck} property.
+     * @return value of braceAdjustment property
+     *         of {@code IndentationCheck}
+     */
+    protected final int getBraceAdjustment() {
+<span class="fc" id="L542">        return indentCheck.getBraceAdjustment();</span>
+    }
+
+    /**
+     * Check the indentation of the right parenthesis.
+     * @param rparen parenthesis to check
+     * @param lparen left parenthesis associated with aRparen
+     */
+    protected final void checkRightParen(DetailAST lparen, DetailAST rparen) {
+<span class="fc bfc" id="L551" title="All 2 branches covered.">        if (rparen != null) {</span>
+            // the rcurly can either be at the correct indentation,
+            // or not first on the line
+<span class="fc" id="L554">            final int rparenLevel = expandedTabsColumnNo(rparen);</span>
+            // or has &lt;lparen level&gt; + 1 indentation
+<span class="fc" id="L556">            final int lparenLevel = expandedTabsColumnNo(lparen);</span>
+
+<span class="fc bfc" id="L558" title="All 2 branches covered.">            if (rparenLevel != lparenLevel + 1</span>
+<span class="fc bfc" id="L559" title="All 2 branches covered.">                    &amp;&amp; !getIndent().isAcceptable(rparenLevel)</span>
+<span class="fc bfc" id="L560" title="All 2 branches covered.">                    &amp;&amp; isOnStartOfLine(rparen)) {</span>
+<span class="fc" id="L561">                logError(rparen, &quot;rparen&quot;, rparenLevel);</span>
+            }
+        }
+<span class="fc" id="L564">    }</span>
+
+    /**
+     * Check the indentation of the left parenthesis.
+     * @param lparen parenthesis to check
+     */
+    protected final void checkLeftParen(final DetailAST lparen) {
+        // the rcurly can either be at the correct indentation, or on the
+        // same line as the lcurly
+<span class="fc bfc" id="L573" title="All 2 branches covered.">        if (lparen != null</span>
+<span class="fc bfc" id="L574" title="All 2 branches covered.">                &amp;&amp; !getIndent().isAcceptable(expandedTabsColumnNo(lparen))</span>
+<span class="fc bfc" id="L575" title="All 2 branches covered.">                &amp;&amp; isOnStartOfLine(lparen)) {</span>
+<span class="fc" id="L576">            logError(lparen, &quot;lparen&quot;, expandedTabsColumnNo(lparen));</span>
+        }
+<span class="fc" id="L578">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

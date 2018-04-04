@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UniquePropertiesCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks</a> &gt; <span class="el_source">UniquePropertiesCheck.java</span></div><h1>UniquePropertiesCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.ImmutableMultiset;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Multiset.Entry;
+import com.google.common.io.Closeables;
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
+import com.puppycrawl.tools.checkstyle.api.FileText;
+
+/**
+ * Checks the uniqueness of property keys (left from equal sign) in the
+ * properties file.
+ *
+ * @author Pavel Baranchikov
+ */
+@StatelessCheck
+public class UniquePropertiesCheck extends AbstractFileSetCheck {
+
+    /**
+     * Localization key for check violation.
+     */
+    public static final String MSG_KEY = &quot;properties.duplicate.property&quot;;
+    /**
+     * Localization key for IO exception occurred on file open.
+     */
+    public static final String MSG_IO_EXCEPTION_KEY = &quot;unable.open.cause&quot;;
+
+    /**
+     * Pattern matching single space.
+     */
+<span class="fc" id="L59">    private static final Pattern SPACE_PATTERN = Pattern.compile(&quot; &quot;);</span>
+
+    /**
+     * Construct the check with default values.
+     */
+<span class="fc" id="L64">    public UniquePropertiesCheck() {</span>
+<span class="fc" id="L65">        setFileExtensions(&quot;properties&quot;);</span>
+<span class="fc" id="L66">    }</span>
+
+    @Override
+    protected void processFiltered(File file, FileText fileText) {
+<span class="fc" id="L70">        final UniqueProperties properties = new UniqueProperties();</span>
+<span class="fc" id="L71">        FileInputStream fileInputStream = null;</span>
+        try {
+<span class="fc" id="L73">            fileInputStream = new FileInputStream(file);</span>
+<span class="fc" id="L74">            properties.load(fileInputStream);</span>
+        }
+<span class="fc" id="L76">        catch (IOException ex) {</span>
+<span class="fc" id="L77">            log(0, MSG_IO_EXCEPTION_KEY, file.getPath(),</span>
+<span class="fc" id="L78">                    ex.getLocalizedMessage());</span>
+        }
+        finally {
+<span class="fc" id="L81">            Closeables.closeQuietly(fileInputStream);</span>
+        }
+
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        for (Entry&lt;String&gt; duplication : properties</span>
+<span class="fc" id="L85">                .getDuplicatedKeys().entrySet()) {</span>
+<span class="fc" id="L86">            final String keyName = duplication.getElement();</span>
+<span class="fc" id="L87">            final int lineNumber = getLineNumber(fileText, keyName);</span>
+            // Number of occurrences is number of duplications + 1
+<span class="fc" id="L89">            log(lineNumber, MSG_KEY, keyName, duplication.getCount() + 1);</span>
+<span class="fc" id="L90">        }</span>
+<span class="fc" id="L91">    }</span>
+
+    /**
+     * Method returns line number the key is detected in the checked properties
+     * files first.
+     *
+     * @param fileText
+     *            {@link FileText} object contains the lines to process
+     * @param keyName
+     *            key name to look for
+     * @return line number of first occurrence. If no key found in properties
+     *         file, 0 is returned
+     */
+    private static int getLineNumber(FileText fileText, String keyName) {
+<span class="fc" id="L105">        final Pattern keyPattern = getKeyPattern(keyName);</span>
+<span class="fc" id="L106">        int lineNumber = 1;</span>
+<span class="fc" id="L107">        final Matcher matcher = keyPattern.matcher(&quot;&quot;);</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        for (int index = 0; index &lt; fileText.size(); index++) {</span>
+<span class="fc" id="L109">            final String line = fileText.get(index);</span>
+<span class="fc" id="L110">            matcher.reset(line);</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">            if (matcher.matches()) {</span>
+<span class="fc" id="L112">                break;</span>
+            }
+<span class="fc" id="L114">            ++lineNumber;</span>
+        }
+        // -1 as check seeks for the first duplicate occurrence in file,
+        // so it cannot be the last line.
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        if (lineNumber &gt; fileText.size() - 1) {</span>
+<span class="fc" id="L119">            lineNumber = 0;</span>
+        }
+<span class="fc" id="L121">        return lineNumber;</span>
+    }
+
+    /**
+     * Method returns regular expression pattern given key name.
+     *
+     * @param keyName
+     *            key name to look for
+     * @return regular expression pattern given key name
+     */
+    private static Pattern getKeyPattern(String keyName) {
+<span class="fc" id="L132">        final String keyPatternString = &quot;^&quot; + SPACE_PATTERN.matcher(keyName)</span>
+<span class="fc" id="L133">                .replaceAll(Matcher.quoteReplacement(&quot;\\\\ &quot;)) + &quot;[\\s:=].*$&quot;;</span>
+<span class="fc" id="L134">        return Pattern.compile(keyPatternString);</span>
+    }
+
+    /**
+     * Properties subclass to store duplicated property keys in a separate map.
+     *
+     * @author Pavel Baranchikov
+     * @noinspection ClassExtendsConcreteCollection, SerializableHasSerializationMethods
+     */
+<span class="fc" id="L143">    private static class UniqueProperties extends Properties {</span>
+
+        private static final long serialVersionUID = 1L;
+        /**
+         * Multiset, holding duplicated keys. Keys are added here only if they
+         * already exist in Properties' inner map.
+         */
+<span class="fc" id="L150">        private final Multiset&lt;String&gt; duplicatedKeys = HashMultiset</span>
+<span class="fc" id="L151">                .create();</span>
+
+        /**
+         * Puts the value into properties by the key specified.
+         * @noinspection UseOfPropertiesAsHashtable
+         */
+        @Override
+        public synchronized Object put(Object key, Object value) {
+<span class="fc" id="L159">            final Object oldValue = super.put(key, value);</span>
+<span class="fc bfc" id="L160" title="All 4 branches covered.">            if (oldValue != null &amp;&amp; key instanceof String) {</span>
+<span class="fc" id="L161">                final String keyString = (String) key;</span>
+<span class="fc" id="L162">                duplicatedKeys.add(keyString);</span>
+            }
+<span class="fc" id="L164">            return oldValue;</span>
+        }
+
+        /**
+         * Retrieves a collections of duplicated properties keys.
+         *
+         * @return A collection of duplicated keys.
+         */
+        public Multiset&lt;String&gt; getDuplicatedKeys() {
+<span class="fc" id="L173">            return ImmutableMultiset.copyOf(duplicatedKeys);</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

@@ -1,0 +1,867 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VariableDeclarationUsageDistanceCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">VariableDeclarationUsageDistanceCheck.java</span></div><h1>VariableDeclarationUsageDistanceCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import antlr.collections.ASTEnumeration;
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * &lt;p&gt;
+ * Checks the distance between declaration of variable and its first usage.
+ * &lt;/p&gt;
+ * Example #1:
+ * &lt;pre&gt;
+ *      {@code int count;
+ *      a = a + b;
+ *      b = a + a;
+ *      count = b; // DECLARATION OF VARIABLE 'count'
+ *                 // SHOULD BE HERE (distance = 3)}
+ * &lt;/pre&gt;
+ * Example #2:
+ * &lt;pre&gt;
+ *     {@code int count;
+ *     {
+ *         a = a + b;
+ *         count = b; // DECLARATION OF VARIABLE 'count'
+ *                    // SHOULD BE HERE (distance = 2)
+ *     }}
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * Check can detect a block of initialization methods. If a variable is used in
+ * such a block and there is no other statements after this variable then distance=1.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;&lt;b&gt;Case #1:&lt;/b&gt;
+ * &lt;pre&gt;
+ * int &lt;b&gt;minutes&lt;/b&gt; = 5;
+ * Calendar cal = Calendar.getInstance();
+ * cal.setTimeInMillis(timeNow);
+ * cal.set(Calendar.SECOND, 0);
+ * cal.set(Calendar.MILLISECOND, 0);
+ * cal.set(Calendar.HOUR_OF_DAY, hh);
+ * cal.set(Calendar.MINUTE, &lt;b&gt;minutes&lt;/b&gt;);
+ *
+ * The distance for the variable &lt;b&gt;minutes&lt;/b&gt; is 1 even
+ * though this variable is used in the fifth method's call.
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;&lt;b&gt;Case #2:&lt;/b&gt;
+ * &lt;pre&gt;
+ * int &lt;b&gt;minutes&lt;/b&gt; = 5;
+ * Calendar cal = Calendar.getInstance();
+ * cal.setTimeInMillis(timeNow);
+ * cal.set(Calendar.SECOND, 0);
+ * cal.set(Calendar.MILLISECOND, 0);
+ * &lt;i&gt;System.out.println(cal);&lt;/i&gt;
+ * cal.set(Calendar.HOUR_OF_DAY, hh);
+ * cal.set(Calendar.MINUTE, &lt;b&gt;minutes&lt;/b&gt;);
+ *
+ * The distance for the variable &lt;b&gt;minutes&lt;/b&gt; is 6 because there is one more expression
+ * (except the initialization block) between the declaration of this variable and its usage.
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;There are several additional options to configure the check:
+ * &lt;pre&gt;
+ * 1. allowedDistance - allows to set a distance
+ * between declaration of variable and its first usage.
+ * 2. ignoreVariablePattern - allows to set a RegEx pattern for
+ * ignoring the distance calculation for variables listed in this pattern.
+ * 3. validateBetweenScopes - allows to calculate the distance between
+ * declaration of variable and its first usage in the different scopes.
+ * 4. ignoreFinal - allows to ignore variables with a 'final' modifier.
+ * &lt;/pre&gt;
+ * ATTENTION!! (Not supported cases)
+ * &lt;pre&gt;
+ * Case #1:
+ * {@code {
+ * int c;
+ * int a = 3;
+ * int b = 2;
+ *     {
+ *     a = a + b;
+ *     c = b;
+ *     }
+ * }}
+ *
+ * Distance for variable 'a' = 1;
+ * Distance for variable 'b' = 1;
+ * Distance for variable 'c' = 2.
+ * &lt;/pre&gt;
+ * As distance by default is 1 the Check doesn't raise warning for variables 'a'
+ * and 'b' to move them into the block.
+ * &lt;pre&gt;
+ * Case #2:
+ * {@code int sum = 0;
+ * for (int i = 0; i &amp;lt; 20; i++) {
+ *     a++;
+ *     b--;
+ *     sum++;
+ *     if (sum &amp;gt; 10) {
+ *         res = true;
+ *     }
+ * }}
+ * Distance for variable 'sum' = 3.
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * As the distance is more then the default one, the Check raises warning for variable
+ * 'sum' to move it into the 'for(...)' block. But there is situation when
+ * variable 'sum' hasn't to be 0 within each iteration. So, to avoid such
+ * warnings you can use Suppression Filter, provided by Checkstyle, for the
+ * whole class.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * An example how to configure this Check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;VariableDeclarationUsageDistance&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure this Check:
+ *  - to set the allowed distance to 4;
+ *  - to ignore variables with prefix '^temp';
+ *  - to force the validation between scopes;
+ *  - to check the final variables;
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;VariableDeclarationUsageDistance&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;allowedDistance&quot; value=&quot;4&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreVariablePattern&quot; value=&quot;^temp.*&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;validateBetweenScopes&quot; value=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreFinal&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @author &lt;a href=&quot;mailto:rd.ryly@gmail.com&quot;&gt;Ruslan Diachenko&lt;/a&gt;
+ * @author &lt;a href=&quot;mailto:barataliba@gmail.com&quot;&gt;Baratali Izmailov&lt;/a&gt;
+ */
+@StatelessCheck
+<span class="fc" id="L168">public class VariableDeclarationUsageDistanceCheck extends AbstractCheck {</span>
+
+    /**
+     * Warning message key.
+     */
+    public static final String MSG_KEY = &quot;variable.declaration.usage.distance&quot;;
+
+    /**
+     * Warning message key.
+     */
+    public static final String MSG_KEY_EXT = &quot;variable.declaration.usage.distance.extend&quot;;
+
+    /**
+     * Default value of distance between declaration of variable and its first
+     * usage.
+     */
+    private static final int DEFAULT_DISTANCE = 3;
+
+    /** Allowed distance between declaration of variable and its first usage. */
+<span class="fc" id="L187">    private int allowedDistance = DEFAULT_DISTANCE;</span>
+
+    /**
+     * RegExp pattern to ignore distance calculation for variables listed in
+     * this pattern.
+     */
+<span class="fc" id="L193">    private Pattern ignoreVariablePattern = Pattern.compile(&quot;&quot;);</span>
+
+    /**
+     * Allows to calculate distance between declaration of variable and its
+     * first usage in different scopes.
+     */
+    private boolean validateBetweenScopes;
+
+    /** Allows to ignore variables with 'final' modifier. */
+<span class="fc" id="L202">    private boolean ignoreFinal = true;</span>
+
+    /**
+     * Sets an allowed distance between declaration of variable and its first
+     * usage.
+     * @param allowedDistance
+     *        Allowed distance between declaration of variable and its first
+     *        usage.
+     */
+    public void setAllowedDistance(int allowedDistance) {
+<span class="fc" id="L212">        this.allowedDistance = allowedDistance;</span>
+<span class="fc" id="L213">    }</span>
+
+    /**
+     * Sets RegExp pattern to ignore distance calculation for variables listed in this pattern.
+     * @param pattern a pattern.
+     */
+    public void setIgnoreVariablePattern(Pattern pattern) {
+<span class="fc" id="L220">        ignoreVariablePattern = pattern;</span>
+<span class="fc" id="L221">    }</span>
+
+    /**
+     * Sets option which allows to calculate distance between declaration of
+     * variable and its first usage in different scopes.
+     * @param validateBetweenScopes
+     *        Defines if allow to calculate distance between declaration of
+     *        variable and its first usage in different scopes or not.
+     */
+    public void setValidateBetweenScopes(boolean validateBetweenScopes) {
+<span class="fc" id="L231">        this.validateBetweenScopes = validateBetweenScopes;</span>
+<span class="fc" id="L232">    }</span>
+
+    /**
+     * Sets ignore option for variables with 'final' modifier.
+     * @param ignoreFinal
+     *        Defines if ignore variables with 'final' modifier or not.
+     */
+    public void setIgnoreFinal(boolean ignoreFinal) {
+<span class="fc" id="L240">        this.ignoreFinal = ignoreFinal;</span>
+<span class="fc" id="L241">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L245">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L250">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L255">        return new int[] {TokenTypes.VARIABLE_DEF};</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc" id="L260">        final int parentType = ast.getParent().getType();</span>
+<span class="fc" id="L261">        final DetailAST modifiers = ast.getFirstChild();</span>
+
+<span class="fc bfc" id="L263" title="All 4 branches covered.">        if (parentType != TokenTypes.OBJBLOCK</span>
+<span class="fc bfc" id="L264" title="All 2 branches covered.">                &amp;&amp; (!ignoreFinal || modifiers.findFirstToken(TokenTypes.FINAL) == null)) {</span>
+<span class="fc" id="L265">            final DetailAST variable = ast.findFirstToken(TokenTypes.IDENT);</span>
+
+<span class="fc bfc" id="L267" title="All 2 branches covered.">            if (!isVariableMatchesIgnorePattern(variable.getText())) {</span>
+<span class="fc" id="L268">                final DetailAST semicolonAst = ast.getNextSibling();</span>
+                final Entry&lt;DetailAST, Integer&gt; entry;
+<span class="fc bfc" id="L270" title="All 2 branches covered.">                if (validateBetweenScopes) {</span>
+<span class="fc" id="L271">                    entry = calculateDistanceBetweenScopes(semicolonAst, variable);</span>
+                }
+                else {
+<span class="fc" id="L274">                    entry = calculateDistanceInSingleScope(semicolonAst, variable);</span>
+                }
+<span class="fc" id="L276">                final DetailAST variableUsageAst = entry.getKey();</span>
+<span class="fc" id="L277">                final int dist = entry.getValue();</span>
+<span class="fc bfc" id="L278" title="All 2 branches covered.">                if (dist &gt; allowedDistance</span>
+<span class="fc bfc" id="L279" title="All 2 branches covered.">                        &amp;&amp; !isInitializationSequence(variableUsageAst, variable.getText())) {</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">                    if (ignoreFinal) {</span>
+<span class="fc" id="L281">                        log(variable.getLineNo(),</span>
+<span class="fc" id="L282">                                MSG_KEY_EXT, variable.getText(), dist, allowedDistance);</span>
+                    }
+                    else {
+<span class="fc" id="L285">                        log(variable.getLineNo(),</span>
+<span class="fc" id="L286">                                MSG_KEY, variable.getText(), dist, allowedDistance);</span>
+                    }
+                }
+            }
+        }
+<span class="fc" id="L291">    }</span>
+
+    /**
+     * Get name of instance whose method is called.
+     * @param methodCallAst
+     *        DetailAST of METHOD_CALL.
+     * @return name of instance.
+     */
+    private static String getInstanceName(DetailAST methodCallAst) {
+<span class="fc" id="L300">        final String methodCallName =</span>
+<span class="fc" id="L301">                FullIdent.createFullIdentBelow(methodCallAst).getText();</span>
+<span class="fc" id="L302">        final int lastDotIndex = methodCallName.lastIndexOf('.');</span>
+<span class="fc" id="L303">        String instanceName = &quot;&quot;;</span>
+<span class="fc bfc" id="L304" title="All 2 branches covered.">        if (lastDotIndex != -1) {</span>
+<span class="fc" id="L305">            instanceName = methodCallName.substring(0, lastDotIndex);</span>
+        }
+<span class="fc" id="L307">        return instanceName;</span>
+    }
+
+    /**
+     * Processes statements until usage of variable to detect sequence of
+     * initialization methods.
+     * @param variableUsageAst
+     *        DetailAST of expression that uses variable named variableName.
+     * @param variableName
+     *        name of considered variable.
+     * @return true if statements between declaration and usage of variable are
+     *         initialization methods.
+     */
+    private static boolean isInitializationSequence(
+            DetailAST variableUsageAst, String variableName) {
+<span class="fc" id="L322">        boolean result = true;</span>
+<span class="fc" id="L323">        boolean isUsedVariableDeclarationFound = false;</span>
+<span class="fc" id="L324">        DetailAST currentSiblingAst = variableUsageAst;</span>
+<span class="fc" id="L325">        String initInstanceName = &quot;&quot;;</span>
+
+<span class="fc bfc" id="L327" title="All 6 branches covered.">        while (result</span>
+                &amp;&amp; !isUsedVariableDeclarationFound
+                &amp;&amp; currentSiblingAst != null) {
+<span class="fc bfc" id="L330" title="All 4 branches covered.">            switch (currentSiblingAst.getType()) {</span>
+                case TokenTypes.EXPR:
+<span class="fc" id="L332">                    final DetailAST methodCallAst = currentSiblingAst.getFirstChild();</span>
+
+<span class="fc bfc" id="L334" title="All 2 branches covered.">                    if (methodCallAst.getType() == TokenTypes.METHOD_CALL) {</span>
+<span class="fc" id="L335">                        final String instanceName =</span>
+<span class="fc" id="L336">                            getInstanceName(methodCallAst);</span>
+                        // method is called without instance
+<span class="fc bfc" id="L338" title="All 2 branches covered.">                        if (instanceName.isEmpty()) {</span>
+<span class="fc" id="L339">                            result = false;</span>
+                        }
+                        // differs from previous instance
+<span class="fc bfc" id="L342" title="All 2 branches covered.">                        else if (!instanceName.equals(initInstanceName)) {</span>
+<span class="fc bfc" id="L343" title="All 2 branches covered.">                            if (initInstanceName.isEmpty()) {</span>
+<span class="fc" id="L344">                                initInstanceName = instanceName;</span>
+                            }
+                            else {
+<span class="fc" id="L347">                                result = false;</span>
+                            }
+                        }
+<span class="fc" id="L350">                    }</span>
+                    else {
+                        // is not method call
+<span class="fc" id="L353">                        result = false;</span>
+                    }
+<span class="fc" id="L355">                    break;</span>
+
+                case TokenTypes.VARIABLE_DEF:
+<span class="fc" id="L358">                    final String currentVariableName = currentSiblingAst</span>
+<span class="fc" id="L359">                        .findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L360">                    isUsedVariableDeclarationFound = variableName.equals(currentVariableName);</span>
+<span class="fc" id="L361">                    break;</span>
+
+                case TokenTypes.SEMI:
+<span class="fc" id="L364">                    break;</span>
+
+                default:
+<span class="fc" id="L367">                    result = false;</span>
+            }
+
+<span class="fc" id="L370">            currentSiblingAst = currentSiblingAst.getPreviousSibling();</span>
+        }
+
+<span class="fc" id="L373">        return result;</span>
+    }
+
+    /**
+     * Calculates distance between declaration of variable and its first usage
+     * in single scope.
+     * @param semicolonAst
+     *        Regular node of Ast which is checked for content of checking
+     *        variable.
+     * @param variableIdentAst
+     *        Variable which distance is calculated for.
+     * @return entry which contains expression with variable usage and distance.
+     */
+    private static Entry&lt;DetailAST, Integer&gt; calculateDistanceInSingleScope(
+            DetailAST semicolonAst, DetailAST variableIdentAst) {
+<span class="fc" id="L388">        int dist = 0;</span>
+<span class="fc" id="L389">        boolean firstUsageFound = false;</span>
+<span class="fc" id="L390">        DetailAST currentAst = semicolonAst;</span>
+<span class="fc" id="L391">        DetailAST variableUsageAst = null;</span>
+
+<span class="fc bfc" id="L393" title="All 4 branches covered.">        while (!firstUsageFound &amp;&amp; currentAst != null</span>
+<span class="fc bfc" id="L394" title="All 2 branches covered.">                &amp;&amp; currentAst.getType() != TokenTypes.RCURLY) {</span>
+<span class="fc bfc" id="L395" title="All 2 branches covered.">            if (currentAst.getFirstChild() != null) {</span>
+<span class="fc bfc" id="L396" title="All 2 branches covered.">                if (isChild(currentAst, variableIdentAst)) {</span>
+<span class="fc" id="L397">                    dist = getDistToVariableUsageInChildNode(currentAst, variableIdentAst, dist);</span>
+<span class="fc" id="L398">                    variableUsageAst = currentAst;</span>
+<span class="fc" id="L399">                    firstUsageFound = true;</span>
+                }
+<span class="fc bfc" id="L401" title="All 2 branches covered.">                else if (currentAst.getType() != TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L402">                    dist++;</span>
+                }
+            }
+<span class="fc" id="L405">            currentAst = currentAst.getNextSibling();</span>
+        }
+
+        // If variable wasn't used after its declaration, distance is 0.
+<span class="fc bfc" id="L409" title="All 2 branches covered.">        if (!firstUsageFound) {</span>
+<span class="fc" id="L410">            dist = 0;</span>
+        }
+
+<span class="fc" id="L413">        return new SimpleEntry&lt;&gt;(variableUsageAst, dist);</span>
+    }
+
+    /**
+     * Returns the distance to variable usage for in the child node.
+     * @param childNode child node.
+     * @param varIdent variable variable identifier.
+     * @param currentDistToVarUsage current distance to the variable usage.
+     * @return the distance to variable usage for in the child node.
+     */
+    private static int getDistToVariableUsageInChildNode(DetailAST childNode, DetailAST varIdent,
+                                                         int currentDistToVarUsage) {
+<span class="fc" id="L425">        DetailAST examineNode = childNode;</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">        if (examineNode.getType() == TokenTypes.LABELED_STAT) {</span>
+<span class="fc" id="L427">            examineNode = examineNode.getFirstChild().getNextSibling();</span>
+        }
+
+<span class="fc" id="L430">        int resultDist = currentDistToVarUsage;</span>
+<span class="fc bfc" id="L431" title="All 4 branches covered.">        switch (examineNode.getType()) {</span>
+            case TokenTypes.VARIABLE_DEF:
+<span class="fc" id="L433">                resultDist++;</span>
+<span class="fc" id="L434">                break;</span>
+            case TokenTypes.SLIST:
+<span class="fc" id="L436">                resultDist = 0;</span>
+<span class="fc" id="L437">                break;</span>
+            case TokenTypes.LITERAL_FOR:
+            case TokenTypes.LITERAL_WHILE:
+            case TokenTypes.LITERAL_DO:
+            case TokenTypes.LITERAL_IF:
+            case TokenTypes.LITERAL_SWITCH:
+<span class="fc bfc" id="L443" title="All 2 branches covered.">                if (isVariableInOperatorExpr(examineNode, varIdent)) {</span>
+<span class="fc" id="L444">                    resultDist++;</span>
+                }
+                else {
+                    // variable usage is in inner scope
+                    // reset counters, because we can't determine distance
+<span class="fc" id="L449">                    resultDist = 0;</span>
+                }
+<span class="fc" id="L451">                break;</span>
+            default:
+<span class="fc bfc" id="L453" title="All 2 branches covered.">                if (examineNode.findFirstToken(TokenTypes.SLIST) == null) {</span>
+<span class="fc" id="L454">                    resultDist++;</span>
+                }
+                else {
+<span class="fc" id="L457">                    resultDist = 0;</span>
+                }
+        }
+<span class="fc" id="L460">        return resultDist;</span>
+    }
+
+    /**
+     * Calculates distance between declaration of variable and its first usage
+     * in multiple scopes.
+     * @param ast
+     *        Regular node of Ast which is checked for content of checking
+     *        variable.
+     * @param variable
+     *        Variable which distance is calculated for.
+     * @return entry which contains expression with variable usage and distance.
+     */
+    private static Entry&lt;DetailAST, Integer&gt; calculateDistanceBetweenScopes(
+            DetailAST ast, DetailAST variable) {
+<span class="fc" id="L475">        int dist = 0;</span>
+<span class="fc" id="L476">        DetailAST currentScopeAst = ast;</span>
+<span class="fc" id="L477">        DetailAST variableUsageAst = null;</span>
+<span class="fc bfc" id="L478" title="All 2 branches covered.">        while (currentScopeAst != null) {</span>
+<span class="fc" id="L479">            final Entry&lt;List&lt;DetailAST&gt;, Integer&gt; searchResult =</span>
+<span class="fc" id="L480">                    searchVariableUsageExpressions(variable, currentScopeAst);</span>
+
+<span class="fc" id="L482">            currentScopeAst = null;</span>
+
+<span class="fc" id="L484">            final List&lt;DetailAST&gt; variableUsageExpressions = searchResult.getKey();</span>
+<span class="fc" id="L485">            dist += searchResult.getValue();</span>
+
+            // If variable usage exists in a single scope, then look into
+            // this scope and count distance until variable usage.
+<span class="fc bfc" id="L489" title="All 2 branches covered.">            if (variableUsageExpressions.size() == 1) {</span>
+<span class="fc" id="L490">                final DetailAST blockWithVariableUsage = variableUsageExpressions</span>
+<span class="fc" id="L491">                        .get(0);</span>
+<span class="fc" id="L492">                DetailAST exprWithVariableUsage = null;</span>
+<span class="fc bfc" id="L493" title="All 6 branches covered.">                switch (blockWithVariableUsage.getType()) {</span>
+                    case TokenTypes.VARIABLE_DEF:
+                    case TokenTypes.EXPR:
+<span class="fc" id="L496">                        dist++;</span>
+<span class="fc" id="L497">                        break;</span>
+                    case TokenTypes.LITERAL_FOR:
+                    case TokenTypes.LITERAL_WHILE:
+                    case TokenTypes.LITERAL_DO:
+<span class="fc" id="L501">                        exprWithVariableUsage = getFirstNodeInsideForWhileDoWhileBlocks(</span>
+                            blockWithVariableUsage, variable);
+<span class="fc" id="L503">                        break;</span>
+                    case TokenTypes.LITERAL_IF:
+<span class="fc" id="L505">                        exprWithVariableUsage = getFirstNodeInsideIfBlock(</span>
+                            blockWithVariableUsage, variable);
+<span class="fc" id="L507">                        break;</span>
+                    case TokenTypes.LITERAL_SWITCH:
+<span class="fc" id="L509">                        exprWithVariableUsage = getFirstNodeInsideSwitchBlock(</span>
+                            blockWithVariableUsage, variable);
+<span class="fc" id="L511">                        break;</span>
+                    case TokenTypes.LITERAL_TRY:
+<span class="fc" id="L513">                        exprWithVariableUsage =</span>
+<span class="fc" id="L514">                            getFirstNodeInsideTryCatchFinallyBlocks(blockWithVariableUsage,</span>
+                                variable);
+<span class="fc" id="L516">                        break;</span>
+                    default:
+<span class="fc" id="L518">                        exprWithVariableUsage = blockWithVariableUsage.getFirstChild();</span>
+                }
+<span class="fc" id="L520">                currentScopeAst = exprWithVariableUsage;</span>
+<span class="fc bfc" id="L521" title="All 2 branches covered.">                if (exprWithVariableUsage == null) {</span>
+<span class="fc" id="L522">                    variableUsageAst = blockWithVariableUsage;</span>
+                }
+                else {
+<span class="fc" id="L525">                    variableUsageAst = exprWithVariableUsage;</span>
+                }
+<span class="fc" id="L527">            }</span>
+
+            // If there's no any variable usage, then distance = 0.
+<span class="fc bfc" id="L530" title="All 2 branches covered.">            else if (variableUsageExpressions.isEmpty()) {</span>
+<span class="fc" id="L531">                variableUsageAst = null;</span>
+            }
+            // If variable usage exists in different scopes, then distance =
+            // distance until variable first usage.
+            else {
+<span class="fc" id="L536">                dist++;</span>
+<span class="fc" id="L537">                variableUsageAst = variableUsageExpressions.get(0);</span>
+            }
+<span class="fc" id="L539">        }</span>
+<span class="fc" id="L540">        return new SimpleEntry&lt;&gt;(variableUsageAst, dist);</span>
+    }
+
+    /**
+     * Searches variable usages starting from specified statement.
+     * @param variableAst Variable that is used.
+     * @param statementAst DetailAST to start searching from.
+     * @return entry which contains list with found expressions that use the variable
+     *     and distance from specified statement to first found expression.
+     */
+    private static Entry&lt;List&lt;DetailAST&gt;, Integer&gt;
+        searchVariableUsageExpressions(final DetailAST variableAst, final DetailAST statementAst) {
+<span class="fc" id="L552">        final List&lt;DetailAST&gt; variableUsageExpressions = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L553">        int distance = 0;</span>
+<span class="fc" id="L554">        DetailAST currentStatementAst = statementAst;</span>
+<span class="fc bfc" id="L555" title="All 2 branches covered.">        while (currentStatementAst != null</span>
+<span class="fc bfc" id="L556" title="All 2 branches covered.">                &amp;&amp; currentStatementAst.getType() != TokenTypes.RCURLY) {</span>
+<span class="fc bfc" id="L557" title="All 2 branches covered.">            if (currentStatementAst.getFirstChild() != null) {</span>
+<span class="fc bfc" id="L558" title="All 2 branches covered.">                if (isChild(currentStatementAst, variableAst)) {</span>
+<span class="fc" id="L559">                    variableUsageExpressions.add(currentStatementAst);</span>
+                }
+                // If expression doesn't contain variable and this variable
+                // hasn't been met yet, than distance + 1.
+<span class="fc bfc" id="L563" title="All 2 branches covered.">                else if (variableUsageExpressions.isEmpty()</span>
+<span class="fc bfc" id="L564" title="All 2 branches covered.">                        &amp;&amp; currentStatementAst.getType() != TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L565">                    distance++;</span>
+                }
+            }
+<span class="fc" id="L568">            currentStatementAst = currentStatementAst.getNextSibling();</span>
+        }
+<span class="fc" id="L570">        return new SimpleEntry&lt;&gt;(variableUsageExpressions, distance);</span>
+    }
+
+    /**
+     * Gets first Ast node inside FOR, WHILE or DO-WHILE blocks if variable
+     * usage is met only inside the block (not in its declaration!).
+     * @param block
+     *        Ast node represents FOR, WHILE or DO-WHILE block.
+     * @param variable
+     *        Variable which is checked for content in block.
+     * @return If variable usage is met only inside the block
+     *         (not in its declaration!) than return the first Ast node
+     *         of this block, otherwise - null.
+     */
+    private static DetailAST getFirstNodeInsideForWhileDoWhileBlocks(
+            DetailAST block, DetailAST variable) {
+<span class="fc" id="L586">        DetailAST firstNodeInsideBlock = null;</span>
+
+<span class="fc bfc" id="L588" title="All 2 branches covered.">        if (!isVariableInOperatorExpr(block, variable)) {</span>
+            final DetailAST currentNode;
+
+            // Find currentNode for DO-WHILE block.
+<span class="fc bfc" id="L592" title="All 2 branches covered.">            if (block.getType() == TokenTypes.LITERAL_DO) {</span>
+<span class="fc" id="L593">                currentNode = block.getFirstChild();</span>
+            }
+            // Find currentNode for FOR or WHILE block.
+            else {
+                // Looking for RPAREN ( ')' ) token to mark the end of operator
+                // expression.
+<span class="fc" id="L599">                currentNode = block.findFirstToken(TokenTypes.RPAREN).getNextSibling();</span>
+            }
+
+<span class="fc" id="L602">            final int currentNodeType = currentNode.getType();</span>
+
+<span class="fc bfc" id="L604" title="All 2 branches covered.">            if (currentNodeType == TokenTypes.SLIST) {</span>
+<span class="fc" id="L605">                firstNodeInsideBlock = currentNode.getFirstChild();</span>
+            }
+<span class="fc bfc" id="L607" title="All 2 branches covered.">            else if (currentNodeType != TokenTypes.EXPR) {</span>
+<span class="fc" id="L608">                firstNodeInsideBlock = currentNode;</span>
+            }
+        }
+
+<span class="fc" id="L612">        return firstNodeInsideBlock;</span>
+    }
+
+    /**
+     * Gets first Ast node inside IF block if variable usage is met
+     * only inside the block (not in its declaration!).
+     * @param block
+     *        Ast node represents IF block.
+     * @param variable
+     *        Variable which is checked for content in block.
+     * @return If variable usage is met only inside the block
+     *         (not in its declaration!) than return the first Ast node
+     *         of this block, otherwise - null.
+     */
+    private static DetailAST getFirstNodeInsideIfBlock(
+            DetailAST block, DetailAST variable) {
+<span class="fc" id="L628">        DetailAST firstNodeInsideBlock = null;</span>
+
+<span class="fc bfc" id="L630" title="All 2 branches covered.">        if (!isVariableInOperatorExpr(block, variable)) {</span>
+<span class="fc" id="L631">            DetailAST currentNode = block.getLastChild();</span>
+<span class="fc" id="L632">            final List&lt;DetailAST&gt; variableUsageExpressions =</span>
+                    new ArrayList&lt;&gt;();
+
+<span class="fc bfc" id="L635" title="All 2 branches covered.">            while (currentNode != null</span>
+<span class="fc bfc" id="L636" title="All 2 branches covered.">                    &amp;&amp; currentNode.getType() == TokenTypes.LITERAL_ELSE) {</span>
+<span class="fc" id="L637">                final DetailAST previousNode =</span>
+<span class="fc" id="L638">                        currentNode.getPreviousSibling();</span>
+
+                // Checking variable usage inside IF block.
+<span class="fc bfc" id="L641" title="All 2 branches covered.">                if (isChild(previousNode, variable)) {</span>
+<span class="fc" id="L642">                    variableUsageExpressions.add(previousNode);</span>
+                }
+
+                // Looking into ELSE block, get its first child and analyze it.
+<span class="fc" id="L646">                currentNode = currentNode.getFirstChild();</span>
+
+<span class="fc bfc" id="L648" title="All 2 branches covered.">                if (currentNode.getType() == TokenTypes.LITERAL_IF) {</span>
+<span class="fc" id="L649">                    currentNode = currentNode.getLastChild();</span>
+                }
+<span class="fc bfc" id="L651" title="All 2 branches covered.">                else if (isChild(currentNode, variable)) {</span>
+<span class="fc" id="L652">                    variableUsageExpressions.add(currentNode);</span>
+<span class="fc" id="L653">                    currentNode = null;</span>
+                }
+<span class="fc" id="L655">            }</span>
+
+            // If IF block doesn't include ELSE than analyze variable usage
+            // only inside IF block.
+<span class="fc bfc" id="L659" title="All 2 branches covered.">            if (currentNode != null</span>
+<span class="fc bfc" id="L660" title="All 2 branches covered.">                    &amp;&amp; isChild(currentNode, variable)) {</span>
+<span class="fc" id="L661">                variableUsageExpressions.add(currentNode);</span>
+            }
+
+            // If variable usage exists in several related blocks, then
+            // firstNodeInsideBlock = null, otherwise if variable usage exists
+            // only inside one block, then get node from
+            // variableUsageExpressions.
+<span class="fc bfc" id="L668" title="All 2 branches covered.">            if (variableUsageExpressions.size() == 1) {</span>
+<span class="fc" id="L669">                firstNodeInsideBlock = variableUsageExpressions.get(0);</span>
+            }
+        }
+
+<span class="fc" id="L673">        return firstNodeInsideBlock;</span>
+    }
+
+    /**
+     * Gets first Ast node inside SWITCH block if variable usage is met
+     * only inside the block (not in its declaration!).
+     * @param block
+     *        Ast node represents SWITCH block.
+     * @param variable
+     *        Variable which is checked for content in block.
+     * @return If variable usage is met only inside the block
+     *         (not in its declaration!) than return the first Ast node
+     *         of this block, otherwise - null.
+     */
+    private static DetailAST getFirstNodeInsideSwitchBlock(
+            DetailAST block, DetailAST variable) {
+<span class="fc" id="L689">        DetailAST currentNode = block</span>
+<span class="fc" id="L690">                .findFirstToken(TokenTypes.CASE_GROUP);</span>
+<span class="fc" id="L691">        final List&lt;DetailAST&gt; variableUsageExpressions =</span>
+                new ArrayList&lt;&gt;();
+
+        // Checking variable usage inside all CASE blocks.
+<span class="fc bfc" id="L695" title="All 2 branches covered.">        while (currentNode.getType() == TokenTypes.CASE_GROUP) {</span>
+<span class="fc" id="L696">            final DetailAST lastNodeInCaseGroup =</span>
+<span class="fc" id="L697">                    currentNode.getLastChild();</span>
+
+<span class="fc bfc" id="L699" title="All 2 branches covered.">            if (isChild(lastNodeInCaseGroup, variable)) {</span>
+<span class="fc" id="L700">                variableUsageExpressions.add(lastNodeInCaseGroup);</span>
+            }
+<span class="fc" id="L702">            currentNode = currentNode.getNextSibling();</span>
+<span class="fc" id="L703">        }</span>
+
+        // If variable usage exists in several related blocks, then
+        // firstNodeInsideBlock = null, otherwise if variable usage exists
+        // only inside one block, then get node from
+        // variableUsageExpressions.
+<span class="fc" id="L709">        DetailAST firstNodeInsideBlock = null;</span>
+<span class="fc bfc" id="L710" title="All 2 branches covered.">        if (variableUsageExpressions.size() == 1) {</span>
+<span class="fc" id="L711">            firstNodeInsideBlock = variableUsageExpressions.get(0);</span>
+        }
+
+<span class="fc" id="L714">        return firstNodeInsideBlock;</span>
+    }
+
+    /**
+     * Gets first Ast node inside TRY-CATCH-FINALLY blocks if variable usage is
+     * met only inside the block (not in its declaration!).
+     * @param block
+     *        Ast node represents TRY-CATCH-FINALLY block.
+     * @param variable
+     *        Variable which is checked for content in block.
+     * @return If variable usage is met only inside the block
+     *         (not in its declaration!) than return the first Ast node
+     *         of this block, otherwise - null.
+     */
+    private static DetailAST getFirstNodeInsideTryCatchFinallyBlocks(
+            DetailAST block, DetailAST variable) {
+<span class="fc" id="L730">        DetailAST currentNode = block.getFirstChild();</span>
+<span class="fc" id="L731">        final List&lt;DetailAST&gt; variableUsageExpressions =</span>
+                new ArrayList&lt;&gt;();
+
+        // Checking variable usage inside TRY block.
+<span class="fc bfc" id="L735" title="All 2 branches covered.">        if (isChild(currentNode, variable)) {</span>
+<span class="fc" id="L736">            variableUsageExpressions.add(currentNode);</span>
+        }
+
+        // Switch on CATCH block.
+<span class="fc" id="L740">        currentNode = currentNode.getNextSibling();</span>
+
+        // Checking variable usage inside all CATCH blocks.
+<span class="fc bfc" id="L743" title="All 2 branches covered.">        while (currentNode != null</span>
+<span class="fc bfc" id="L744" title="All 2 branches covered.">                &amp;&amp; currentNode.getType() == TokenTypes.LITERAL_CATCH) {</span>
+<span class="fc" id="L745">            final DetailAST catchBlock = currentNode.getLastChild();</span>
+
+<span class="fc bfc" id="L747" title="All 2 branches covered.">            if (isChild(catchBlock, variable)) {</span>
+<span class="fc" id="L748">                variableUsageExpressions.add(catchBlock);</span>
+            }
+<span class="fc" id="L750">            currentNode = currentNode.getNextSibling();</span>
+<span class="fc" id="L751">        }</span>
+
+        // Checking variable usage inside FINALLY block.
+<span class="fc bfc" id="L754" title="All 2 branches covered.">        if (currentNode != null) {</span>
+<span class="fc" id="L755">            final DetailAST finalBlock = currentNode.getLastChild();</span>
+
+<span class="fc bfc" id="L757" title="All 2 branches covered.">            if (isChild(finalBlock, variable)) {</span>
+<span class="fc" id="L758">                variableUsageExpressions.add(finalBlock);</span>
+            }
+        }
+
+<span class="fc" id="L762">        DetailAST variableUsageNode = null;</span>
+
+        // If variable usage exists in several related blocks, then
+        // firstNodeInsideBlock = null, otherwise if variable usage exists
+        // only inside one block, then get node from
+        // variableUsageExpressions.
+<span class="fc bfc" id="L768" title="All 2 branches covered.">        if (variableUsageExpressions.size() == 1) {</span>
+<span class="fc" id="L769">            variableUsageNode = variableUsageExpressions.get(0).getFirstChild();</span>
+        }
+
+<span class="fc" id="L772">        return variableUsageNode;</span>
+    }
+
+    /**
+     * Checks if variable is in operator declaration. For instance:
+     * &lt;pre&gt;
+     * boolean b = true;
+     * if (b) {...}
+     * &lt;/pre&gt;
+     * Variable 'b' is in declaration of operator IF.
+     * @param operator
+     *        Ast node which represents operator.
+     * @param variable
+     *        Variable which is checked for content in operator.
+     * @return true if operator contains variable in its declaration, otherwise
+     *         - false.
+     */
+    private static boolean isVariableInOperatorExpr(
+            DetailAST operator, DetailAST variable) {
+<span class="fc" id="L791">        boolean isVarInOperatorDeclaration = false;</span>
+<span class="fc" id="L792">        final DetailAST openingBracket =</span>
+<span class="fc" id="L793">                operator.findFirstToken(TokenTypes.LPAREN);</span>
+
+        // Get EXPR between brackets
+<span class="fc" id="L796">        DetailAST exprBetweenBrackets = openingBracket.getNextSibling();</span>
+
+        // Look if variable is in operator expression
+<span class="fc bfc" id="L799" title="All 2 branches covered.">        while (exprBetweenBrackets.getType() != TokenTypes.RPAREN) {</span>
+<span class="fc bfc" id="L800" title="All 2 branches covered.">            if (isChild(exprBetweenBrackets, variable)) {</span>
+<span class="fc" id="L801">                isVarInOperatorDeclaration = true;</span>
+<span class="fc" id="L802">                break;</span>
+            }
+<span class="fc" id="L804">            exprBetweenBrackets = exprBetweenBrackets.getNextSibling();</span>
+        }
+
+        // Variable may be met in ELSE declaration
+        // So, check variable usage in these declarations.
+<span class="fc bfc" id="L809" title="All 4 branches covered.">        if (!isVarInOperatorDeclaration &amp;&amp; operator.getType() == TokenTypes.LITERAL_IF) {</span>
+<span class="fc" id="L810">            final DetailAST elseBlock = operator.getLastChild();</span>
+
+<span class="fc bfc" id="L812" title="All 2 branches covered.">            if (elseBlock.getType() == TokenTypes.LITERAL_ELSE) {</span>
+                // Get IF followed by ELSE
+<span class="fc" id="L814">                final DetailAST firstNodeInsideElseBlock = elseBlock.getFirstChild();</span>
+
+<span class="fc bfc" id="L816" title="All 2 branches covered.">                if (firstNodeInsideElseBlock.getType() == TokenTypes.LITERAL_IF) {</span>
+<span class="fc" id="L817">                    isVarInOperatorDeclaration =</span>
+<span class="fc" id="L818">                        isVariableInOperatorExpr(firstNodeInsideElseBlock, variable);</span>
+                }
+            }
+        }
+
+<span class="fc" id="L823">        return isVarInOperatorDeclaration;</span>
+    }
+
+    /**
+     * Checks if Ast node contains given element.
+     * @param parent
+     *        Node of AST.
+     * @param ast
+     *        Ast element which is checked for content in Ast node.
+     * @return true if Ast element was found in Ast node, otherwise - false.
+     */
+    private static boolean isChild(DetailAST parent, DetailAST ast) {
+<span class="fc" id="L835">        boolean isChild = false;</span>
+<span class="fc" id="L836">        final ASTEnumeration astList = parent.findAllPartial(ast);</span>
+
+<span class="fc bfc" id="L838" title="All 2 branches covered.">        while (astList.hasMoreNodes()) {</span>
+<span class="fc" id="L839">            final DetailAST astNode = (DetailAST) astList.nextNode();</span>
+<span class="fc" id="L840">            DetailAST astParent = astNode.getParent();</span>
+
+<span class="fc bfc" id="L842" title="All 2 branches covered.">            while (astParent != null) {</span>
+<span class="fc bfc" id="L843" title="All 2 branches covered.">                if (astParent.equals(parent)</span>
+<span class="fc bfc" id="L844" title="All 2 branches covered.">                        &amp;&amp; astParent.getLineNo() == parent.getLineNo()) {</span>
+<span class="fc" id="L845">                    isChild = true;</span>
+<span class="fc" id="L846">                    break;</span>
+                }
+<span class="fc" id="L848">                astParent = astParent.getParent();</span>
+            }
+<span class="fc" id="L850">        }</span>
+
+<span class="fc" id="L852">        return isChild;</span>
+    }
+
+    /**
+     * Checks if entrance variable is contained in ignored pattern.
+     * @param variable
+     *        Variable which is checked for content in ignored pattern.
+     * @return true if variable was found, otherwise - false.
+     */
+    private boolean isVariableMatchesIgnorePattern(String variable) {
+<span class="fc" id="L862">        final Matcher matcher = ignoreVariablePattern.matcher(variable);</span>
+<span class="fc" id="L863">        return matcher.matches();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

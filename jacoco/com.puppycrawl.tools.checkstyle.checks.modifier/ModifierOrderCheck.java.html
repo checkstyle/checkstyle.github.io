@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ModifierOrderCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.modifier</a> &gt; <span class="el_source">ModifierOrderCheck.java</span></div><h1>ModifierOrderCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.modifier;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * &lt;p&gt;
+ * Checks that the order of modifiers conforms to the suggestions in the
+ * &lt;a
+ * href=&quot;https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html&quot;&gt;
+ * Java Language specification, sections 8.1.1, 8.3.1 and 8.4.3&lt;/a&gt;.
+ * The correct order is:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;public&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;protected&lt;/span&gt;&lt;/li&gt;
+
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;private&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;abstract&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;default&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;static&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;final&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;transient&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;volatile&lt;/span&gt;&lt;/li&gt;
+
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;synchronized&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;native&lt;/span&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;span class=&quot;code&quot;&gt;strictfp&lt;/span&gt;&lt;/li&gt;
+&lt;/ol&gt;
+ * In additional, modifiers are checked to ensure all annotations
+ * are declared before all other modifiers.
+ * &lt;p&gt;
+ * Rationale: Code is easier to read if everybody follows
+ * a standard.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;ModifierOrder&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * @author Lars Kühne
+ */
+@StatelessCheck
+<span class="fc" id="L70">public class ModifierOrderCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_ANNOTATION_ORDER = &quot;annotation.order&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_MODIFIER_ORDER = &quot;mod.order&quot;;
+
+    /**
+     * The order of modifiers as suggested in sections 8.1.1,
+     * 8.3.1 and 8.4.3 of the JLS.
+     */
+<span class="fc" id="L89">    private static final String[] JLS_ORDER = {</span>
+        &quot;public&quot;, &quot;protected&quot;, &quot;private&quot;, &quot;abstract&quot;, &quot;default&quot;, &quot;static&quot;,
+        &quot;final&quot;, &quot;transient&quot;, &quot;volatile&quot;, &quot;synchronized&quot;, &quot;native&quot;, &quot;strictfp&quot;,
+    };
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L96">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L101">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L106">        return new int[] {TokenTypes.MODIFIERS};</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc" id="L111">        final List&lt;DetailAST&gt; mods = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L112">        DetailAST modifier = ast.getFirstChild();</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        while (modifier != null) {</span>
+<span class="fc" id="L114">            mods.add(modifier);</span>
+<span class="fc" id="L115">            modifier = modifier.getNextSibling();</span>
+        }
+
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        if (!mods.isEmpty()) {</span>
+<span class="fc" id="L119">            final DetailAST error = checkOrderSuggestedByJls(mods);</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">            if (error != null) {</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">                if (error.getType() == TokenTypes.ANNOTATION) {</span>
+<span class="fc" id="L122">                    log(error.getLineNo(), error.getColumnNo(),</span>
+                            MSG_ANNOTATION_ORDER,
+<span class="fc" id="L124">                             error.getFirstChild().getText()</span>
+<span class="fc" id="L125">                             + error.getFirstChild().getNextSibling()</span>
+<span class="fc" id="L126">                                .getText());</span>
+                }
+                else {
+<span class="fc" id="L129">                    log(error.getLineNo(), error.getColumnNo(),</span>
+<span class="fc" id="L130">                            MSG_MODIFIER_ORDER, error.getText());</span>
+                }
+            }
+        }
+<span class="fc" id="L134">    }</span>
+
+    /**
+     * Checks if the modifiers were added in the order suggested
+     * in the Java language specification.
+     *
+     * @param modifiers list of modifier AST tokens
+     * @return null if the order is correct, otherwise returns the offending
+     *     modifier AST.
+     */
+    private static DetailAST checkOrderSuggestedByJls(List&lt;DetailAST&gt; modifiers) {
+<span class="fc" id="L145">        final Iterator&lt;DetailAST&gt; iterator = modifiers.iterator();</span>
+
+        //Speed past all initial annotations
+<span class="fc" id="L148">        DetailAST modifier = skipAnnotations(iterator);</span>
+
+<span class="fc" id="L150">        DetailAST offendingModifier = null;</span>
+
+        //All modifiers are annotations, no problem
+<span class="fc bfc" id="L153" title="All 2 branches covered.">        if (modifier.getType() != TokenTypes.ANNOTATION) {</span>
+<span class="fc" id="L154">            int index = 0;</span>
+
+<span class="fc bfc" id="L156" title="All 4 branches covered.">            while (modifier != null</span>
+                    &amp;&amp; offendingModifier == null) {
+<span class="fc bfc" id="L158" title="All 2 branches covered.">                if (modifier.getType() == TokenTypes.ANNOTATION) {</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">                    if (!isAnnotationOnType(modifier)) {</span>
+                        //Annotation not at start of modifiers, bad
+<span class="fc" id="L161">                        offendingModifier = modifier;</span>
+                    }
+                    break;
+                }
+
+<span class="fc bfc" id="L166" title="All 2 branches covered.">                while (index &lt; JLS_ORDER.length</span>
+<span class="fc bfc" id="L167" title="All 2 branches covered.">                       &amp;&amp; !JLS_ORDER[index].equals(modifier.getText())) {</span>
+<span class="fc" id="L168">                    index++;</span>
+                }
+
+<span class="fc bfc" id="L171" title="All 2 branches covered.">                if (index == JLS_ORDER.length) {</span>
+                    //Current modifier is out of JLS order
+<span class="fc" id="L173">                    offendingModifier = modifier;</span>
+                }
+<span class="fc bfc" id="L175" title="All 2 branches covered.">                else if (iterator.hasNext()) {</span>
+<span class="fc" id="L176">                    modifier = iterator.next();</span>
+                }
+                else {
+                    //Reached end of modifiers without problem
+<span class="fc" id="L180">                    modifier = null;</span>
+                }
+            }
+        }
+<span class="fc" id="L184">        return offendingModifier;</span>
+    }
+
+    /**
+     * Skip all annotations in modifier block.
+     * @param modifierIterator iterator for collection of modifiers
+     * @return modifier next to last annotation
+     */
+    private static DetailAST skipAnnotations(Iterator&lt;DetailAST&gt; modifierIterator) {
+        DetailAST modifier;
+        do {
+<span class="fc" id="L195">            modifier = modifierIterator.next();</span>
+<span class="fc bfc" id="L196" title="All 4 branches covered.">        } while (modifierIterator.hasNext() &amp;&amp; modifier.getType() == TokenTypes.ANNOTATION);</span>
+<span class="fc" id="L197">        return modifier;</span>
+    }
+
+    /**
+     * Checks whether annotation on type takes place.
+     * @param modifier modifier token.
+     * @return true if annotation on type takes place.
+     */
+    private static boolean isAnnotationOnType(DetailAST modifier) {
+<span class="fc" id="L206">        boolean annotationOnType = false;</span>
+<span class="fc" id="L207">        final DetailAST modifiers = modifier.getParent();</span>
+<span class="fc" id="L208">        final DetailAST definition = modifiers.getParent();</span>
+<span class="fc" id="L209">        final int definitionType = definition.getType();</span>
+<span class="fc bfc" id="L210" title="All 6 branches covered.">        if (definitionType == TokenTypes.VARIABLE_DEF</span>
+                || definitionType == TokenTypes.PARAMETER_DEF
+                || definitionType == TokenTypes.CTOR_DEF) {
+<span class="fc" id="L213">            annotationOnType = true;</span>
+        }
+<span class="fc bfc" id="L215" title="All 2 branches covered.">        else if (definitionType == TokenTypes.METHOD_DEF) {</span>
+<span class="fc" id="L216">            final DetailAST typeToken = definition.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L217">            final int methodReturnType = typeToken.getLastChild().getType();</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">            if (methodReturnType != TokenTypes.LITERAL_VOID) {</span>
+<span class="fc" id="L219">                annotationOnType = true;</span>
+            }
+        }
+<span class="fc" id="L222">        return annotationOnType;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

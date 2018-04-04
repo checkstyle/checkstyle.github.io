@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AvoidStarImportCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.imports</a> &gt; <span class="el_source">AvoidStarImportCheck.java</span></div><h1>AvoidStarImportCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.imports;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * &lt;p&gt;
+ * Check that finds import statements that use the * notation.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Rationale: Importing all classes from a package or static
+ * members from a class leads to tight coupling between packages
+ * or classes and might lead to problems when a new version of a
+ * library introduces name clashes.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;AvoidStarImport&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;excludes&quot; value=&quot;java.io,java.net,java.lang.Math&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;allowClassImports&quot; value=&quot;false&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;allowStaticMemberImports&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * The optional &quot;excludes&quot; property allows for certain packages like
+ * java.io or java.net to be exempted from the rule. It also is used to
+ * allow certain classes like java.lang.Math or java.io.File to be
+ * excluded in order to support static member imports.
+ *
+ * &lt;p&gt;The optional &quot;allowClassImports&quot; when set to true, will allow starred
+ * class imports but will not affect static member imports.
+ *
+ * &lt;p&gt;The optional &quot;allowStaticMemberImports&quot; when set to true will allow
+ * starred static member imports but will not affect class imports.
+ *
+ * @author Oliver Burn
+ * @author &lt;a href=&quot;bschneider@vecna.com&quot;&gt;Bill Schneider&lt;/a&gt;
+ * @author Travis Schneeberger
+ */
+@StatelessCheck
+<span class="fc" id="L67">public class AvoidStarImportCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;import.avoidStar&quot;;
+
+    /** Suffix for the star import. */
+    private static final String STAR_IMPORT_SUFFIX = &quot;.*&quot;;
+
+    /** The packages/classes to exempt from this check. */
+<span class="fc" id="L80">    private final List&lt;String&gt; excludes = new ArrayList&lt;&gt;();</span>
+
+    /** Whether to allow all class imports. */
+    private boolean allowClassImports;
+
+    /** Whether to allow all static member imports. */
+    private boolean allowStaticMemberImports;
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L90">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L95">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+        // original implementation checks both IMPORT and STATIC_IMPORT tokens to avoid &quot;.*&quot; imports
+        // however user can allow using &quot;import&quot; or &quot;import static&quot;
+        // by configuring allowClassImports and allowStaticMemberImports
+        // To avoid potential confusion when user specifies conflicting options on configuration
+        // (see example below) we are adding both tokens to Required list
+        //   &lt;module name=&quot;AvoidStarImport&quot;&gt;
+        //      &lt;property name=&quot;tokens&quot; value=&quot;IMPORT&quot;/&gt;
+        //      &lt;property name=&quot;allowStaticMemberImports&quot; value=&quot;false&quot;/&gt;
+        //   &lt;/module&gt;
+<span class="fc" id="L109">        return new int[] {TokenTypes.IMPORT, TokenTypes.STATIC_IMPORT};</span>
+    }
+
+    /**
+     * Sets the list of packages or classes to be exempt from the check.
+     * The excludes can contain a .* or not.
+     * @param excludesParam a list of package names/fully-qualifies class names
+     *     where star imports are ok.
+     */
+    public void setExcludes(String... excludesParam) {
+<span class="fc bfc" id="L119" title="All 2 branches covered.">        for (final String exclude : excludesParam) {</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">            if (exclude.endsWith(STAR_IMPORT_SUFFIX)) {</span>
+<span class="fc" id="L121">                excludes.add(exclude);</span>
+            }
+            else {
+<span class="fc" id="L124">                excludes.add(exclude + STAR_IMPORT_SUFFIX);</span>
+            }
+        }
+<span class="fc" id="L127">    }</span>
+
+    /**
+     * Sets whether or not to allow all non-static class imports.
+     * @param allow true to allow false to disallow
+     */
+    public void setAllowClassImports(boolean allow) {
+<span class="fc" id="L134">        allowClassImports = allow;</span>
+<span class="fc" id="L135">    }</span>
+
+    /**
+     * Sets whether or not to allow all static member imports.
+     * @param allow true to allow false to disallow
+     */
+    public void setAllowStaticMemberImports(boolean allow) {
+<span class="fc" id="L142">        allowStaticMemberImports = allow;</span>
+<span class="fc" id="L143">    }</span>
+
+    @Override
+    public void visitToken(final DetailAST ast) {
+<span class="fc bfc" id="L147" title="All 4 branches covered.">        if (!allowClassImports &amp;&amp; ast.getType() == TokenTypes.IMPORT) {</span>
+<span class="fc" id="L148">            final DetailAST startingDot = ast.getFirstChild();</span>
+<span class="fc" id="L149">            logsStarredImportViolation(startingDot);</span>
+<span class="fc" id="L150">        }</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">        else if (!allowStaticMemberImports</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">            &amp;&amp; ast.getType() == TokenTypes.STATIC_IMPORT) {</span>
+            // must navigate past the static keyword
+<span class="fc" id="L154">            final DetailAST startingDot = ast.getFirstChild().getNextSibling();</span>
+<span class="fc" id="L155">            logsStarredImportViolation(startingDot);</span>
+        }
+<span class="fc" id="L157">    }</span>
+
+    /**
+     * Gets the full import identifier.  If the import is a starred import and
+     * it's not excluded then a violation is logged.
+     * @param startingDot the starting dot for the import statement
+     */
+    private void logsStarredImportViolation(DetailAST startingDot) {
+<span class="fc" id="L165">        final FullIdent name = FullIdent.createFullIdent(startingDot);</span>
+<span class="fc" id="L166">        final String importText = name.getText();</span>
+<span class="fc bfc" id="L167" title="All 4 branches covered.">        if (importText.endsWith(STAR_IMPORT_SUFFIX) &amp;&amp; !excludes.contains(importText)) {</span>
+<span class="fc" id="L168">            log(startingDot.getLineNo(), MSG_KEY, importText);</span>
+        }
+<span class="fc" id="L170">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

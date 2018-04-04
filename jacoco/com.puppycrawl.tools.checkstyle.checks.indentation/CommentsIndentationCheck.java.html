@@ -1,0 +1,960 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CommentsIndentationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.indentation</a> &gt; <span class="el_source">CommentsIndentationCheck.java</span></div><h1>CommentsIndentationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.indentation;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Locale;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * This Check controls the indentation between comments and surrounding code.
+ * Comments are indented at the same level as the surrounding code.
+ * Detailed info about such convention can be found
+ * &lt;a href=
+ * &quot;http://checkstyle.sourceforge.net/reports/google-java-style-20170228.html#s4.8.6.1-block-comment-style&quot;&gt;
+ * here&lt;/a&gt;
+ * &lt;p&gt;
+ * Examples:
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the Check:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * {@code
+ * &amp;lt;module name=&amp;quot;CommentsIndentation&amp;quot;/&amp;gt;
+ * }
+ * {@code
+ * /*
+ *  * comment
+ *  * some comment
+ *  *&amp;#47;
+ * boolean bool = true; - such comment indentation is ok
+ *    /*
+ *    * comment
+ *    * some comment
+ *     *&amp;#47;
+ * double d = 3.14; - Block Comment has incorrect indentation level 7, expected 4.
+ * // some comment - comment is ok
+ * String str = &quot;&quot;;
+ *     // some comment Comment has incorrect indentation level 8, expected 4.
+ * String str1 = &quot;&quot;;
+ * }
+ * &lt;/pre&gt;
+ *
+ * @author &lt;a href=&quot;mailto:nesterenko-aleksey@list.ru&quot;&gt;Aleksey Nesterenko&lt;/a&gt;
+ * @author &lt;a href=&quot;mailto:andreyselkin@gmail.com&quot;&gt;Andrei Selkin&lt;/a&gt;
+ */
+@StatelessCheck
+<span class="fc" id="L72">public class CommentsIndentationCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_KEY_SINGLE = &quot;comments.indentation.single&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_KEY_BLOCK = &quot;comments.indentation.block&quot;;
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L86">        return new int[] {</span>
+            TokenTypes.SINGLE_LINE_COMMENT,
+            TokenTypes.BLOCK_COMMENT_BEGIN,
+        };
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L94">        return new int[] {</span>
+            TokenTypes.SINGLE_LINE_COMMENT,
+            TokenTypes.BLOCK_COMMENT_BEGIN,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L102">        return CommonUtils.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public boolean isCommentNodesRequired() {
+<span class="fc" id="L107">        return true;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST commentAst) {
+<span class="fc bfc" id="L112" title="All 2 branches covered.">        switch (commentAst.getType()) {</span>
+            case TokenTypes.SINGLE_LINE_COMMENT:
+            case TokenTypes.BLOCK_COMMENT_BEGIN:
+<span class="fc" id="L115">                visitComment(commentAst);</span>
+<span class="fc" id="L116">                break;</span>
+            default:
+<span class="fc" id="L118">                final String exceptionMsg = &quot;Unexpected token type: &quot; + commentAst.getText();</span>
+<span class="fc" id="L119">                throw new IllegalArgumentException(exceptionMsg);</span>
+        }
+<span class="fc" id="L121">    }</span>
+
+    /**
+     * Checks comment indentations over surrounding code, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * // some comment - this is ok
+     * double d = 3.14;
+     *     // some comment - this is &lt;b&gt;not&lt;/b&gt; ok.
+     * double d1 = 5.0;
+     * }
+     * &lt;/p&gt;
+     * @param comment comment to check.
+     */
+    private void visitComment(DetailAST comment) {
+<span class="fc bfc" id="L136" title="All 2 branches covered.">        if (!isTrailingComment(comment)) {</span>
+<span class="fc" id="L137">            final DetailAST prevStmt = getPreviousStatement(comment);</span>
+<span class="fc" id="L138">            final DetailAST nextStmt = getNextStmt(comment);</span>
+
+<span class="fc bfc" id="L140" title="All 2 branches covered.">            if (isInEmptyCaseBlock(prevStmt, nextStmt)) {</span>
+<span class="fc" id="L141">                handleCommentInEmptyCaseBlock(prevStmt, comment, nextStmt);</span>
+            }
+<span class="fc bfc" id="L143" title="All 2 branches covered.">            else if (isFallThroughComment(prevStmt, nextStmt)) {</span>
+<span class="fc" id="L144">                handleFallThroughComment(prevStmt, comment, nextStmt);</span>
+            }
+<span class="fc bfc" id="L146" title="All 2 branches covered.">            else if (isInEmptyCodeBlock(prevStmt, nextStmt)) {</span>
+<span class="fc" id="L147">                handleCommentInEmptyCodeBlock(comment, nextStmt);</span>
+            }
+<span class="fc bfc" id="L149" title="All 2 branches covered.">            else if (isCommentAtTheEndOfTheCodeBlock(nextStmt)) {</span>
+<span class="fc" id="L150">                handleCommentAtTheEndOfTheCodeBlock(prevStmt, comment, nextStmt);</span>
+            }
+<span class="fc bfc" id="L152" title="All 4 branches covered.">            else if (nextStmt != null &amp;&amp; !areSameLevelIndented(comment, nextStmt, nextStmt)) {</span>
+<span class="fc" id="L153">                log(comment.getLineNo(), getMessageKey(comment), nextStmt.getLineNo(),</span>
+<span class="fc" id="L154">                    comment.getColumnNo(), nextStmt.getColumnNo());</span>
+            }
+        }
+<span class="fc" id="L157">    }</span>
+
+    /**
+     * Returns the next statement of a comment.
+     * @param comment comment.
+     * @return the next statement of a comment.
+     */
+    private static DetailAST getNextStmt(DetailAST comment) {
+<span class="fc" id="L165">        DetailAST nextStmt = comment.getNextSibling();</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        while (nextStmt != null</span>
+<span class="fc bfc" id="L167" title="All 2 branches covered.">                &amp;&amp; isComment(nextStmt)</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">                &amp;&amp; comment.getColumnNo() != nextStmt.getColumnNo()) {</span>
+<span class="fc" id="L169">            nextStmt = nextStmt.getNextSibling();</span>
+        }
+<span class="fc" id="L171">        return nextStmt;</span>
+    }
+
+    /**
+     * Returns the previous statement of a comment.
+     * @param comment comment.
+     * @return the previous statement of a comment.
+     */
+    private DetailAST getPreviousStatement(DetailAST comment) {
+        final DetailAST prevStatement;
+<span class="fc bfc" id="L181" title="All 2 branches covered.">        if (isDistributedPreviousStatement(comment)) {</span>
+<span class="fc" id="L182">            prevStatement = getDistributedPreviousStatement(comment);</span>
+        }
+        else {
+<span class="fc" id="L185">            prevStatement = getOneLinePreviousStatement(comment);</span>
+        }
+<span class="fc" id="L187">        return prevStatement;</span>
+    }
+
+    /**
+     * Checks whether the previous statement of a comment is distributed over two or more lines.
+     * @param comment comment to check.
+     * @return true if the previous statement of a comment is distributed over two or more lines.
+     */
+    private boolean isDistributedPreviousStatement(DetailAST comment) {
+<span class="fc" id="L196">        final DetailAST previousSibling = comment.getPreviousSibling();</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">        return isDistributedExpression(comment)</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">            || isDistributedReturnStatement(previousSibling)</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">            || isDistributedThrowStatement(previousSibling);</span>
+    }
+
+    /**
+     * Checks whether the previous statement of a comment is a method call chain or
+     * string concatenation statement distributed over two ore more lines.
+     * @param comment comment to check.
+     * @return true if the previous statement is a distributed expression.
+     */
+    private boolean isDistributedExpression(DetailAST comment) {
+<span class="fc" id="L209">        DetailAST previousSibling = comment.getPreviousSibling();</span>
+<span class="fc bfc" id="L210" title="All 4 branches covered.">        while (previousSibling != null &amp;&amp; isComment(previousSibling)) {</span>
+<span class="fc" id="L211">            previousSibling = previousSibling.getPreviousSibling();</span>
+        }
+<span class="fc" id="L213">        boolean isDistributed = false;</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">        if (previousSibling != null) {</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">            if (previousSibling.getType() == TokenTypes.SEMI</span>
+<span class="fc bfc" id="L216" title="All 2 branches covered.">                    &amp;&amp; isOnPreviousLineIgnoringComments(comment, previousSibling)) {</span>
+<span class="fc" id="L217">                DetailAST currentToken = previousSibling.getPreviousSibling();</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">                while (currentToken.getFirstChild() != null) {</span>
+<span class="fc" id="L219">                    currentToken = currentToken.getFirstChild();</span>
+                }
+<span class="fc bfc" id="L221" title="All 2 branches covered.">                if (currentToken.getType() == TokenTypes.COMMENT_CONTENT) {</span>
+<span class="fc" id="L222">                    currentToken = currentToken.getParent();</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">                    while (isComment(currentToken)) {</span>
+<span class="fc" id="L224">                        currentToken = currentToken.getNextSibling();</span>
+                    }
+                }
+<span class="fc bfc" id="L227" title="All 2 branches covered.">                if (previousSibling.getLineNo() != currentToken.getLineNo()) {</span>
+<span class="fc" id="L228">                    isDistributed = true;</span>
+                }
+<span class="fc" id="L230">            }</span>
+            else {
+<span class="fc" id="L232">                isDistributed = isStatementWithPossibleCurlies(previousSibling);</span>
+            }
+        }
+<span class="fc" id="L235">        return isDistributed;</span>
+    }
+
+    /**
+     * Whether the statement can have or always have curly brackets.
+     * @param previousSibling the statement to check.
+     * @return true if the statement can have or always have curly brackets.
+     */
+    private static boolean isStatementWithPossibleCurlies(DetailAST previousSibling) {
+<span class="fc bfc" id="L244" title="All 2 branches covered.">        return previousSibling.getType() == TokenTypes.LITERAL_IF</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.LITERAL_TRY</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.LITERAL_FOR</span>
+<span class="fc bfc" id="L247" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.LITERAL_DO</span>
+<span class="fc bfc" id="L248" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.LITERAL_WHILE</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.LITERAL_SWITCH</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">            || isDefinition(previousSibling);</span>
+    }
+
+    /**
+     * Whether the statement is a kind of definition (method, class etc.).
+     * @param previousSibling the statement to check.
+     * @return true if the statement is a kind of definition.
+     */
+    private static boolean isDefinition(DetailAST previousSibling) {
+<span class="fc bfc" id="L259" title="All 2 branches covered.">        return previousSibling.getType() == TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.CLASS_DEF</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.INTERFACE_DEF</span>
+<span class="fc bfc" id="L262" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.ENUM_DEF</span>
+<span class="fc bfc" id="L263" title="All 2 branches covered.">            || previousSibling.getType() == TokenTypes.ANNOTATION_DEF;</span>
+    }
+
+    /**
+     * Checks whether the previous statement of a comment is a distributed return statement.
+     * @param commentPreviousSibling previous sibling of the comment.
+     * @return true if the previous statement of a comment is a distributed return statement.
+     */
+    private static boolean isDistributedReturnStatement(DetailAST commentPreviousSibling) {
+<span class="fc" id="L272">        boolean isDistributed = false;</span>
+<span class="fc bfc" id="L273" title="All 2 branches covered.">        if (commentPreviousSibling != null</span>
+<span class="fc bfc" id="L274" title="All 2 branches covered.">                &amp;&amp; commentPreviousSibling.getType() == TokenTypes.LITERAL_RETURN) {</span>
+<span class="fc" id="L275">            final DetailAST firstChild = commentPreviousSibling.getFirstChild();</span>
+<span class="fc" id="L276">            final DetailAST nextSibling = firstChild.getNextSibling();</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">            if (nextSibling != null) {</span>
+<span class="fc" id="L278">                isDistributed = true;</span>
+            }
+        }
+<span class="fc" id="L281">        return isDistributed;</span>
+    }
+
+    /**
+     * Checks whether the previous statement of a comment is a distributed throw statement.
+     * @param commentPreviousSibling previous sibling of the comment.
+     * @return true if the previous statement of a comment is a distributed throw statement.
+     */
+    private static boolean isDistributedThrowStatement(DetailAST commentPreviousSibling) {
+<span class="fc" id="L290">        boolean isDistributed = false;</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">        if (commentPreviousSibling != null</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">                &amp;&amp; commentPreviousSibling.getType() == TokenTypes.LITERAL_THROW) {</span>
+<span class="fc" id="L293">            final DetailAST firstChild = commentPreviousSibling.getFirstChild();</span>
+<span class="fc" id="L294">            final DetailAST nextSibling = firstChild.getNextSibling();</span>
+<span class="fc bfc" id="L295" title="All 2 branches covered.">            if (nextSibling.getLineNo() != commentPreviousSibling.getLineNo()) {</span>
+<span class="fc" id="L296">                isDistributed = true;</span>
+            }
+        }
+<span class="fc" id="L299">        return isDistributed;</span>
+    }
+
+    /**
+     * Returns the first token of the distributed previous statement of comment.
+     * @param comment comment to check.
+     * @return the first token of the distributed previous statement of comment.
+     */
+    private static DetailAST getDistributedPreviousStatement(DetailAST comment) {
+<span class="fc" id="L308">        DetailAST currentToken = comment.getPreviousSibling();</span>
+<span class="fc bfc" id="L309" title="All 2 branches covered.">        while (isComment(currentToken)) {</span>
+<span class="fc" id="L310">            currentToken = currentToken.getPreviousSibling();</span>
+        }
+        final DetailAST previousStatement;
+<span class="fc bfc" id="L313" title="All 2 branches covered.">        if (currentToken.getType() == TokenTypes.SEMI) {</span>
+<span class="fc" id="L314">            currentToken = currentToken.getPreviousSibling();</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">            while (currentToken.getFirstChild() != null) {</span>
+<span class="fc" id="L316">                currentToken = currentToken.getFirstChild();</span>
+            }
+<span class="fc" id="L318">            previousStatement = currentToken;</span>
+        }
+        else {
+<span class="fc" id="L321">            previousStatement = currentToken;</span>
+        }
+<span class="fc" id="L323">        return previousStatement;</span>
+    }
+
+    /**
+     * Checks whether case block is empty.
+     * @param nextStmt previous statement.
+     * @param prevStmt next statement.
+     * @return true if case block is empty.
+     */
+    private static boolean isInEmptyCaseBlock(DetailAST prevStmt, DetailAST nextStmt) {
+<span class="fc bfc" id="L333" title="All 4 branches covered.">        return prevStmt != null</span>
+            &amp;&amp; nextStmt != null
+<span class="fc bfc" id="L335" title="All 2 branches covered.">            &amp;&amp; (prevStmt.getType() == TokenTypes.LITERAL_CASE</span>
+<span class="fc bfc" id="L336" title="All 2 branches covered.">                || prevStmt.getType() == TokenTypes.CASE_GROUP)</span>
+<span class="fc bfc" id="L337" title="All 2 branches covered.">            &amp;&amp; (nextStmt.getType() == TokenTypes.LITERAL_CASE</span>
+<span class="fc bfc" id="L338" title="All 2 branches covered.">                || nextStmt.getType() == TokenTypes.LITERAL_DEFAULT);</span>
+    }
+
+    /**
+     * Checks whether comment is a 'fall through' comment.
+     * For example:
+     * &lt;p&gt;
+     * {@code
+     *    ...
+     *    case OPTION_ONE:
+     *        int someVariable = 1;
+     *        // fall through
+     *    case OPTION_TWO:
+     *        int a = 5;
+     *        break;
+     *    ...
+     * }
+     * &lt;/p&gt;
+     * @param prevStmt previous statement.
+     * @param nextStmt next statement.
+     * @return true if a comment is a 'fall through' comment.
+     */
+    private static boolean isFallThroughComment(DetailAST prevStmt, DetailAST nextStmt) {
+<span class="fc bfc" id="L361" title="All 4 branches covered.">        return prevStmt != null</span>
+            &amp;&amp; nextStmt != null
+<span class="fc bfc" id="L363" title="All 2 branches covered.">            &amp;&amp; prevStmt.getType() != TokenTypes.LITERAL_CASE</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">            &amp;&amp; (nextStmt.getType() == TokenTypes.LITERAL_CASE</span>
+<span class="fc bfc" id="L365" title="All 2 branches covered.">                || nextStmt.getType() == TokenTypes.LITERAL_DEFAULT);</span>
+    }
+
+    /**
+     * Checks whether a comment is placed at the end of the code block.
+     * @param nextStmt next statement.
+     * @return true if a comment is placed at the end of the block.
+     */
+    private static boolean isCommentAtTheEndOfTheCodeBlock(DetailAST nextStmt) {
+<span class="fc bfc" id="L374" title="All 2 branches covered.">        return nextStmt != null</span>
+<span class="fc bfc" id="L375" title="All 2 branches covered.">            &amp;&amp; nextStmt.getType() == TokenTypes.RCURLY;</span>
+    }
+
+    /**
+     * Checks whether comment is placed in the empty code block.
+     * For example:
+     * &lt;p&gt;
+     * ...
+     * {@code
+     *  // empty code block
+     * }
+     * ...
+     * &lt;/p&gt;
+     * Note, the method does not treat empty case blocks.
+     * @param prevStmt previous statement.
+     * @param nextStmt next statement.
+     * @return true if comment is placed in the empty code block.
+     */
+    private static boolean isInEmptyCodeBlock(DetailAST prevStmt, DetailAST nextStmt) {
+<span class="fc bfc" id="L394" title="All 4 branches covered.">        return prevStmt != null</span>
+            &amp;&amp; nextStmt != null
+<span class="fc bfc" id="L396" title="All 2 branches covered.">            &amp;&amp; (prevStmt.getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L397" title="All 2 branches covered.">                || prevStmt.getType() == TokenTypes.LCURLY</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">                || prevStmt.getType() == TokenTypes.ARRAY_INIT</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">                || prevStmt.getType() == TokenTypes.OBJBLOCK)</span>
+<span class="fc bfc" id="L400" title="All 2 branches covered.">            &amp;&amp; nextStmt.getType() == TokenTypes.RCURLY;</span>
+    }
+
+    /**
+     * Handles a comment which is placed within empty case block.
+     * Note, if comment is placed at the end of the empty case block, we have Checkstyle's
+     * limitations to clearly detect user intention of explanation target - above or below. The
+     * only case we can assume as a violation is when a single line comment within the empty case
+     * block has indentation level that is lower than the indentation level of the next case
+     * token. For example:
+     * &lt;p&gt;
+     * {@code
+     *    ...
+     *    case OPTION_ONE:
+     * // violation
+     *    case OPTION_TWO:
+     *    ...
+     * }
+     * &lt;/p&gt;
+     * @param prevStmt previous statement.
+     * @param comment single line comment.
+     * @param nextStmt next statement.
+     */
+    private void handleCommentInEmptyCaseBlock(DetailAST prevStmt, DetailAST comment,
+                                               DetailAST nextStmt) {
+<span class="fc bfc" id="L425" title="All 2 branches covered.">        if (comment.getColumnNo() &lt; prevStmt.getColumnNo()</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">                || comment.getColumnNo() &lt; nextStmt.getColumnNo()) {</span>
+<span class="fc" id="L427">            logMultilineIndentation(prevStmt, comment, nextStmt);</span>
+        }
+<span class="fc" id="L429">    }</span>
+
+    /**
+     * Handles 'fall through' single line comment.
+     * Note, 'fall through' and similar comments can have indentation level as next or previous
+     * statement.
+     * For example:
+     * &lt;p&gt;
+     * {@code
+     *    ...
+     *    case OPTION_ONE:
+     *        int someVariable = 1;
+     *        // fall through - OK
+     *    case OPTION_TWO:
+     *        int a = 5;
+     *        break;
+     *    ...
+     * }
+     * &lt;/p&gt;
+     * &lt;p&gt;
+     * {@code
+     *    ...
+     *    case OPTION_ONE:
+     *        int someVariable = 1;
+     *    // than init variable a - OK
+     *    case OPTION_TWO:
+     *        int a = 5;
+     *        break;
+     *    ...
+     * }
+     * &lt;/p&gt;
+     * @param prevStmt previous statement.
+     * @param comment single line comment.
+     * @param nextStmt next statement.
+     */
+    private void handleFallThroughComment(DetailAST prevStmt, DetailAST comment,
+                                          DetailAST nextStmt) {
+<span class="fc bfc" id="L466" title="All 2 branches covered.">        if (!areSameLevelIndented(comment, prevStmt, nextStmt)) {</span>
+<span class="fc" id="L467">            logMultilineIndentation(prevStmt, comment, nextStmt);</span>
+        }
+<span class="fc" id="L469">    }</span>
+
+    /**
+     * Handles a comment which is placed at the end of non empty code block.
+     * Note, if single line comment is placed at the end of non empty block the comment should have
+     * the same indentation level as the previous statement. For example:
+     * &lt;p&gt;
+     * {@code
+     *    if (a == true) {
+     *        int b = 1;
+     *        // comment
+     *    }
+     * }
+     * &lt;/p&gt;
+     * @param prevStmt previous statement.
+     * @param comment comment to check.
+     * @param nextStmt next statement.
+     */
+    private void handleCommentAtTheEndOfTheCodeBlock(DetailAST prevStmt, DetailAST comment,
+                                                     DetailAST nextStmt) {
+<span class="fc bfc" id="L489" title="All 2 branches covered.">        if (prevStmt != null) {</span>
+<span class="fc bfc" id="L490" title="All 2 branches covered.">            if (prevStmt.getType() == TokenTypes.LITERAL_CASE</span>
+<span class="fc bfc" id="L491" title="All 2 branches covered.">                    || prevStmt.getType() == TokenTypes.CASE_GROUP</span>
+<span class="fc bfc" id="L492" title="All 2 branches covered.">                    || prevStmt.getType() == TokenTypes.LITERAL_DEFAULT) {</span>
+<span class="fc bfc" id="L493" title="All 2 branches covered.">                if (comment.getColumnNo() &lt; nextStmt.getColumnNo()) {</span>
+<span class="fc" id="L494">                    log(comment.getLineNo(), getMessageKey(comment), nextStmt.getLineNo(),</span>
+<span class="fc" id="L495">                        comment.getColumnNo(), nextStmt.getColumnNo());</span>
+                }
+            }
+<span class="fc bfc" id="L498" title="All 2 branches covered.">            else if (isCommentForMultiblock(nextStmt)) {</span>
+<span class="fc bfc" id="L499" title="All 2 branches covered.">                if (!areSameLevelIndented(comment, prevStmt, nextStmt)) {</span>
+<span class="fc" id="L500">                    logMultilineIndentation(prevStmt, comment, nextStmt);</span>
+                }
+            }
+<span class="fc bfc" id="L503" title="All 2 branches covered.">            else if (!areSameLevelIndented(comment, prevStmt, prevStmt)) {</span>
+<span class="fc" id="L504">                final int prevStmtLineNo = prevStmt.getLineNo();</span>
+<span class="fc" id="L505">                log(comment.getLineNo(), getMessageKey(comment), prevStmtLineNo,</span>
+<span class="fc" id="L506">                        comment.getColumnNo(), getLineStart(prevStmtLineNo));</span>
+            }
+        }
+<span class="fc" id="L509">    }</span>
+
+    /**
+     * Whether the comment might have been used for the next block in a multi-block structure.
+     * @param endBlockStmt the end of the current block.
+     * @return true, if the comment might have been used for the next
+     *     block in a multi-block structure.
+     */
+    private static boolean isCommentForMultiblock(DetailAST endBlockStmt) {
+<span class="fc" id="L518">        final DetailAST nextBlock = endBlockStmt.getParent().getNextSibling();</span>
+<span class="fc" id="L519">        final int endBlockLineNo = endBlockStmt.getLineNo();</span>
+<span class="fc" id="L520">        final DetailAST catchAst = endBlockStmt.getParent().getParent();</span>
+<span class="fc" id="L521">        final DetailAST finallyAst = catchAst.getNextSibling();</span>
+<span class="fc bfc" id="L522" title="All 6 branches covered.">        return nextBlock != null &amp;&amp; nextBlock.getLineNo() == endBlockLineNo</span>
+                || finallyAst != null
+<span class="fc bfc" id="L524" title="All 2 branches covered.">                    &amp;&amp; catchAst.getType() == TokenTypes.LITERAL_CATCH</span>
+<span class="fc bfc" id="L525" title="All 2 branches covered.">                    &amp;&amp; finallyAst.getLineNo() == endBlockLineNo;</span>
+    }
+
+    /**
+     * Handles a comment which is placed within the empty code block.
+     * Note, if comment is placed at the end of the empty code block, we have Checkstyle's
+     * limitations to clearly detect user intention of explanation target - above or below. The
+     * only case we can assume as a violation is when a single line comment within the empty
+     * code block has indentation level that is lower than the indentation level of the closing
+     * right curly brace. For example:
+     * &lt;p&gt;
+     * {@code
+     *    if (a == true) {
+     * // violation
+     *    }
+     * }
+     * &lt;/p&gt;
+     *
+     * @param comment comment to check.
+     * @param nextStmt next statement.
+     */
+    private void handleCommentInEmptyCodeBlock(DetailAST comment, DetailAST nextStmt) {
+<span class="fc bfc" id="L547" title="All 2 branches covered.">        if (comment.getColumnNo() &lt; nextStmt.getColumnNo()) {</span>
+<span class="fc" id="L548">            log(comment.getLineNo(), getMessageKey(comment), nextStmt.getLineNo(),</span>
+<span class="fc" id="L549">                comment.getColumnNo(), nextStmt.getColumnNo());</span>
+        }
+<span class="fc" id="L551">    }</span>
+
+    /**
+     * Does pre-order traverse of abstract syntax tree to find the previous statement of the
+     * comment. If previous statement of the comment is found, then the traverse will
+     * be finished.
+     * @param comment current statement.
+     * @return previous statement of the comment or null if the comment does not have previous
+     *         statement.
+     */
+    private DetailAST getOneLinePreviousStatement(DetailAST comment) {
+<span class="fc" id="L562">        DetailAST root = comment.getParent();</span>
+<span class="fc bfc" id="L563" title="All 4 branches covered.">        while (root != null &amp;&amp; !isBlockStart(root)) {</span>
+<span class="fc" id="L564">            root = root.getParent();</span>
+        }
+
+<span class="fc" id="L567">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L568">        DetailAST previousStatement = null;</span>
+<span class="fc bfc" id="L569" title="All 4 branches covered.">        while (root != null || !stack.isEmpty()) {</span>
+<span class="fc bfc" id="L570" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
+<span class="fc" id="L571">                root = stack.pop();</span>
+            }
+<span class="fc bfc" id="L573" title="All 2 branches covered.">            while (root != null) {</span>
+<span class="fc" id="L574">                previousStatement = findPreviousStatement(comment, root);</span>
+<span class="fc bfc" id="L575" title="All 2 branches covered.">                if (previousStatement != null) {</span>
+<span class="fc" id="L576">                    root = null;</span>
+<span class="fc" id="L577">                    stack.clear();</span>
+<span class="fc" id="L578">                    break;</span>
+                }
+<span class="fc bfc" id="L580" title="All 2 branches covered.">                if (root.getNextSibling() != null) {</span>
+<span class="fc" id="L581">                    stack.push(root.getNextSibling());</span>
+                }
+<span class="fc" id="L583">                root = root.getFirstChild();</span>
+            }
+        }
+<span class="fc" id="L586">        return previousStatement;</span>
+    }
+
+    /**
+     * Whether the ast is a comment.
+     * @param ast the ast to check.
+     * @return true if the ast is a comment.
+     */
+    private static boolean isComment(DetailAST ast) {
+<span class="fc" id="L595">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L596" title="All 8 branches covered.">        return astType == TokenTypes.SINGLE_LINE_COMMENT</span>
+            || astType == TokenTypes.BLOCK_COMMENT_BEGIN
+            || astType == TokenTypes.COMMENT_CONTENT
+            || astType == TokenTypes.BLOCK_COMMENT_END;
+    }
+
+    /**
+     * Whether the AST node starts a block.
+     * @param root the AST node to check.
+     * @return true if the AST node starts a block.
+     */
+    private static boolean isBlockStart(DetailAST root) {
+<span class="fc bfc" id="L608" title="All 2 branches covered.">        return root.getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L609" title="All 2 branches covered.">                || root.getType() == TokenTypes.OBJBLOCK</span>
+<span class="fc bfc" id="L610" title="All 2 branches covered.">                || root.getType() == TokenTypes.ARRAY_INIT</span>
+<span class="fc bfc" id="L611" title="All 2 branches covered.">                || root.getType() == TokenTypes.CASE_GROUP;</span>
+    }
+
+    /**
+     * Finds a previous statement of the comment.
+     * Uses root token of the line while searching.
+     * @param comment comment.
+     * @param root root token of the line.
+     * @return previous statement of the comment or null if previous statement was not found.
+     */
+    private DetailAST findPreviousStatement(DetailAST comment, DetailAST root) {
+<span class="fc" id="L622">        DetailAST previousStatement = null;</span>
+<span class="fc bfc" id="L623" title="All 2 branches covered.">        if (root.getLineNo() &gt;= comment.getLineNo()) {</span>
+            // ATTENTION: parent of the comment is below the comment in case block
+            // See https://github.com/checkstyle/checkstyle/issues/851
+<span class="fc" id="L626">            previousStatement = getPrevStatementFromSwitchBlock(comment);</span>
+        }
+        final DetailAST tokenWhichBeginsTheLine;
+<span class="fc bfc" id="L629" title="All 2 branches covered.">        if (root.getType() == TokenTypes.EXPR</span>
+<span class="fc bfc" id="L630" title="All 2 branches covered.">                &amp;&amp; root.getFirstChild().getFirstChild() != null) {</span>
+<span class="fc bfc" id="L631" title="All 2 branches covered.">            if (root.getFirstChild().getType() == TokenTypes.LITERAL_NEW) {</span>
+<span class="fc" id="L632">                tokenWhichBeginsTheLine = root.getFirstChild();</span>
+            }
+            else {
+<span class="fc" id="L635">                tokenWhichBeginsTheLine = findTokenWhichBeginsTheLine(root);</span>
+            }
+        }
+<span class="fc bfc" id="L638" title="All 2 branches covered.">        else if (root.getType() == TokenTypes.PLUS) {</span>
+<span class="fc" id="L639">            tokenWhichBeginsTheLine = root.getFirstChild();</span>
+        }
+        else {
+<span class="fc" id="L642">            tokenWhichBeginsTheLine = root;</span>
+        }
+<span class="fc bfc" id="L644" title="All 2 branches covered.">        if (tokenWhichBeginsTheLine != null</span>
+<span class="fc bfc" id="L645" title="All 2 branches covered.">                &amp;&amp; !isComment(tokenWhichBeginsTheLine)</span>
+<span class="fc bfc" id="L646" title="All 2 branches covered.">                &amp;&amp; isOnPreviousLineIgnoringComments(comment, tokenWhichBeginsTheLine)) {</span>
+<span class="fc" id="L647">            previousStatement = tokenWhichBeginsTheLine;</span>
+        }
+<span class="fc" id="L649">        return previousStatement;</span>
+    }
+
+    /**
+     * Finds a token which begins the line.
+     * @param root root token of the line.
+     * @return token which begins the line.
+     */
+    private static DetailAST findTokenWhichBeginsTheLine(DetailAST root) {
+        final DetailAST tokenWhichBeginsTheLine;
+<span class="fc bfc" id="L659" title="All 2 branches covered.">        if (isUsingOfObjectReferenceToInvokeMethod(root)) {</span>
+<span class="fc" id="L660">            tokenWhichBeginsTheLine = findStartTokenOfMethodCallChain(root);</span>
+        }
+        else {
+<span class="fc" id="L663">            tokenWhichBeginsTheLine = root.getFirstChild().findFirstToken(TokenTypes.IDENT);</span>
+        }
+<span class="fc" id="L665">        return tokenWhichBeginsTheLine;</span>
+    }
+
+    /**
+     * Checks whether there is a use of an object reference to invoke an object's method on line.
+     * @param root root token of the line.
+     * @return true if there is a use of an object reference to invoke an object's method on line.
+     */
+    private static boolean isUsingOfObjectReferenceToInvokeMethod(DetailAST root) {
+<span class="fc bfc" id="L674" title="All 2 branches covered.">        return root.getFirstChild().getFirstChild().getFirstChild() != null</span>
+<span class="fc bfc" id="L675" title="All 2 branches covered.">            &amp;&amp; root.getFirstChild().getFirstChild().getFirstChild().getNextSibling() != null;</span>
+    }
+
+    /**
+     * Finds the start token of method call chain.
+     * @param root root token of the line.
+     * @return the start token of method call chain.
+     */
+    private static DetailAST findStartTokenOfMethodCallChain(DetailAST root) {
+<span class="fc" id="L684">        DetailAST startOfMethodCallChain = root;</span>
+<span class="fc bfc" id="L685" title="All 2 branches covered.">        while (startOfMethodCallChain.getFirstChild() != null</span>
+<span class="fc bfc" id="L686" title="All 2 branches covered.">                &amp;&amp; startOfMethodCallChain.getFirstChild().getLineNo() == root.getLineNo()) {</span>
+<span class="fc" id="L687">            startOfMethodCallChain = startOfMethodCallChain.getFirstChild();</span>
+        }
+<span class="fc bfc" id="L689" title="All 2 branches covered.">        if (startOfMethodCallChain.getFirstChild() != null) {</span>
+<span class="fc" id="L690">            startOfMethodCallChain = startOfMethodCallChain.getFirstChild().getNextSibling();</span>
+        }
+<span class="fc" id="L692">        return startOfMethodCallChain;</span>
+    }
+
+    /**
+     * Checks whether the checked statement is on the previous line ignoring empty lines
+     * and lines which contain only comments.
+     * @param currentStatement current statement.
+     * @param checkedStatement checked statement.
+     * @return true if checked statement is on the line which is previous to current statement
+     *     ignoring empty lines and lines which contain only comments.
+     */
+    private boolean isOnPreviousLineIgnoringComments(DetailAST currentStatement,
+                                                     DetailAST checkedStatement) {
+<span class="fc" id="L705">        DetailAST nextToken = getNextToken(checkedStatement);</span>
+<span class="fc" id="L706">        int distanceAim = 1;</span>
+<span class="fc bfc" id="L707" title="All 4 branches covered.">        if (nextToken != null &amp;&amp; isComment(nextToken)) {</span>
+<span class="fc" id="L708">            distanceAim += countEmptyLines(checkedStatement, currentStatement);</span>
+        }
+
+<span class="fc bfc" id="L711" title="All 6 branches covered.">        while (nextToken != null &amp;&amp; nextToken != currentStatement &amp;&amp; isComment(nextToken)) {</span>
+<span class="fc bfc" id="L712" title="All 2 branches covered.">            if (nextToken.getType() == TokenTypes.BLOCK_COMMENT_BEGIN) {</span>
+<span class="fc" id="L713">                distanceAim += nextToken.getLastChild().getLineNo() - nextToken.getLineNo();</span>
+            }
+<span class="fc" id="L715">            distanceAim++;</span>
+<span class="fc" id="L716">            nextToken = nextToken.getNextSibling();</span>
+        }
+<span class="fc bfc" id="L718" title="All 2 branches covered.">        return currentStatement.getLineNo() - checkedStatement.getLineNo() == distanceAim;</span>
+    }
+
+    /**
+     * Get the token to start counting the number of lines to add to the distance aim from.
+     * @param checkedStatement the checked statement.
+     * @return the token to start counting the number of lines to add to the distance aim from.
+     */
+    private DetailAST getNextToken(DetailAST checkedStatement) {
+        DetailAST nextToken;
+<span class="fc bfc" id="L728" title="All 2 branches covered.">        if (checkedStatement.getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L729" title="All 2 branches covered.">                || checkedStatement.getType() == TokenTypes.ARRAY_INIT</span>
+<span class="fc bfc" id="L730" title="All 2 branches covered.">                || checkedStatement.getType() == TokenTypes.CASE_GROUP) {</span>
+<span class="fc" id="L731">            nextToken = checkedStatement.getFirstChild();</span>
+        }
+        else {
+<span class="fc" id="L734">            nextToken = checkedStatement.getNextSibling();</span>
+        }
+<span class="fc bfc" id="L736" title="All 6 branches covered.">        if (nextToken != null &amp;&amp; isComment(nextToken) &amp;&amp; isTrailingComment(nextToken)) {</span>
+<span class="fc" id="L737">            nextToken = nextToken.getNextSibling();</span>
+        }
+<span class="fc" id="L739">        return nextToken;</span>
+    }
+
+    /**
+     * Count the number of empty lines between statements.
+     * @param startStatement start statement.
+     * @param endStatement end statement.
+     * @return the number of empty lines between statements.
+     */
+    private int countEmptyLines(DetailAST startStatement, DetailAST endStatement) {
+<span class="fc" id="L749">        int emptyLinesNumber = 0;</span>
+<span class="fc" id="L750">        final String[] lines = getLines();</span>
+<span class="fc" id="L751">        final int endLineNo = endStatement.getLineNo();</span>
+<span class="fc bfc" id="L752" title="All 2 branches covered.">        for (int lineNo = startStatement.getLineNo(); lineNo &lt; endLineNo; lineNo++) {</span>
+<span class="fc bfc" id="L753" title="All 2 branches covered.">            if (CommonUtils.isBlank(lines[lineNo])) {</span>
+<span class="fc" id="L754">                emptyLinesNumber++;</span>
+            }
+        }
+<span class="fc" id="L757">        return emptyLinesNumber;</span>
+    }
+
+    /**
+     * Logs comment which can have the same indentation level as next or previous statement.
+     * @param comment comment.
+     * @param nextStmt next statement.
+     * @param prevStmt previous statement.
+     */
+    private void logMultilineIndentation(DetailAST prevStmt, DetailAST comment,
+                                         DetailAST nextStmt) {
+<span class="fc" id="L768">        final String multilineNoTemplate = &quot;%d, %d&quot;;</span>
+<span class="fc" id="L769">        log(comment.getLineNo(), getMessageKey(comment),</span>
+<span class="fc" id="L770">            String.format(Locale.getDefault(), multilineNoTemplate, prevStmt.getLineNo(),</span>
+<span class="fc" id="L771">                nextStmt.getLineNo()), comment.getColumnNo(),</span>
+<span class="fc" id="L772">            String.format(Locale.getDefault(), multilineNoTemplate,</span>
+<span class="fc" id="L773">                    getLineStart(prevStmt.getLineNo()), getLineStart(nextStmt.getLineNo())));</span>
+<span class="fc" id="L774">    }</span>
+
+    /**
+     * Get a message key depending on a comment type.
+     * @param comment the comment to process.
+     * @return a message key.
+     */
+    private static String getMessageKey(DetailAST comment) {
+        final String msgKey;
+<span class="fc bfc" id="L783" title="All 2 branches covered.">        if (comment.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</span>
+<span class="fc" id="L784">            msgKey = MSG_KEY_SINGLE;</span>
+        }
+        else {
+<span class="fc" id="L787">            msgKey = MSG_KEY_BLOCK;</span>
+        }
+<span class="fc" id="L789">        return msgKey;</span>
+    }
+
+    /**
+     * Gets comment's previous statement from switch block.
+     * @param comment {@link TokenTypes#SINGLE_LINE_COMMENT single-line comment}.
+     * @return comment's previous statement or null if previous statement is absent.
+     */
+    private static DetailAST getPrevStatementFromSwitchBlock(DetailAST comment) {
+        final DetailAST prevStmt;
+<span class="fc" id="L799">        final DetailAST parentStatement = comment.getParent();</span>
+<span class="fc bfc" id="L800" title="All 2 branches covered.">        if (parentStatement.getType() == TokenTypes.CASE_GROUP) {</span>
+<span class="fc" id="L801">            prevStmt = getPrevStatementWhenCommentIsUnderCase(parentStatement);</span>
+        }
+        else {
+<span class="fc" id="L804">            prevStmt = getPrevCaseToken(parentStatement);</span>
+        }
+<span class="fc" id="L806">        return prevStmt;</span>
+    }
+
+    /**
+     * Gets previous statement for comment which is placed immediately under case.
+     * @param parentStatement comment's parent statement.
+     * @return comment's previous statement or null if previous statement is absent.
+     */
+    private static DetailAST getPrevStatementWhenCommentIsUnderCase(DetailAST parentStatement) {
+<span class="fc" id="L815">        DetailAST prevStmt = null;</span>
+<span class="fc" id="L816">        final DetailAST prevBlock = parentStatement.getPreviousSibling();</span>
+<span class="fc bfc" id="L817" title="All 2 branches covered.">        if (prevBlock.getLastChild() != null) {</span>
+<span class="fc" id="L818">            DetailAST blockBody = prevBlock.getLastChild().getLastChild();</span>
+<span class="fc bfc" id="L819" title="All 2 branches covered.">            if (blockBody.getType() == TokenTypes.SEMI) {</span>
+<span class="fc" id="L820">                blockBody = blockBody.getPreviousSibling();</span>
+            }
+<span class="fc bfc" id="L822" title="All 2 branches covered.">            if (blockBody.getType() == TokenTypes.EXPR) {</span>
+<span class="fc bfc" id="L823" title="All 2 branches covered.">                if (isUsingOfObjectReferenceToInvokeMethod(blockBody)) {</span>
+<span class="fc" id="L824">                    prevStmt = findStartTokenOfMethodCallChain(blockBody);</span>
+                }
+                else {
+<span class="fc" id="L827">                    prevStmt = blockBody.getFirstChild().getFirstChild();</span>
+                }
+            }
+            else {
+<span class="fc bfc" id="L831" title="All 2 branches covered.">                if (blockBody.getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L832">                    prevStmt = blockBody.getParent().getParent();</span>
+                }
+                else {
+<span class="fc" id="L835">                    prevStmt = blockBody;</span>
+                }
+            }
+<span class="fc bfc" id="L838" title="All 2 branches covered.">            if (isComment(prevStmt)) {</span>
+<span class="fc" id="L839">                prevStmt = prevStmt.getNextSibling();</span>
+            }
+        }
+<span class="fc" id="L842">        return prevStmt;</span>
+    }
+
+    /**
+     * Gets previous case-token for comment.
+     * @param parentStatement comment's parent statement.
+     * @return previous case-token or null if previous case-token is absent.
+     */
+    private static DetailAST getPrevCaseToken(DetailAST parentStatement) {
+        final DetailAST prevCaseToken;
+<span class="fc" id="L852">        final DetailAST parentBlock = parentStatement.getParent();</span>
+<span class="fc bfc" id="L853" title="All 2 branches covered.">        if (parentBlock.getParent() != null</span>
+<span class="fc bfc" id="L854" title="All 2 branches covered.">                &amp;&amp; parentBlock.getParent().getPreviousSibling() != null</span>
+<span class="fc bfc" id="L855" title="All 2 branches covered.">                &amp;&amp; parentBlock.getParent().getPreviousSibling().getType()</span>
+                    == TokenTypes.LITERAL_CASE) {
+<span class="fc" id="L857">            prevCaseToken = parentBlock.getParent().getPreviousSibling();</span>
+        }
+        else {
+<span class="fc" id="L860">            prevCaseToken = null;</span>
+        }
+<span class="fc" id="L862">        return prevCaseToken;</span>
+    }
+
+    /**
+     * Checks if comment and next code statement
+     * (or previous code stmt like &lt;b&gt;case&lt;/b&gt; in switch block) are indented at the same level,
+     * e.g.:
+     * &lt;p&gt;
+     * &lt;pre&gt;
+     * {@code
+     * // some comment - same indentation level
+     * int x = 10;
+     *     // some comment - different indentation level
+     * int x1 = 5;
+     * /*
+     *  *
+     *  *&amp;#47;
+     *  boolean bool = true; - same indentation level
+     * }
+     * &lt;/pre&gt;
+     * &lt;/p&gt;
+     * @param comment {@link TokenTypes#SINGLE_LINE_COMMENT single line comment}.
+     * @param prevStmt previous code statement.
+     * @param nextStmt next code statement.
+     * @return true if comment and next code statement are indented at the same level.
+     */
+    private boolean areSameLevelIndented(DetailAST comment, DetailAST prevStmt,
+                                                DetailAST nextStmt) {
+<span class="fc bfc" id="L890" title="All 2 branches covered.">        return comment.getColumnNo() == getLineStart(nextStmt.getLineNo())</span>
+<span class="fc bfc" id="L891" title="All 2 branches covered.">            || comment.getColumnNo() == getLineStart(prevStmt.getLineNo());</span>
+    }
+
+    /**
+     * Get a column number where a code starts.
+     * @param lineNo the line number to get column number in.
+     * @return the column number where a code starts.
+     */
+    private int getLineStart(int lineNo) {
+<span class="fc" id="L900">        final char[] line = getLines()[lineNo - 1].toCharArray();</span>
+<span class="fc" id="L901">        int lineStart = 0;</span>
+<span class="fc bfc" id="L902" title="All 2 branches covered.">        while (Character.isWhitespace(line[lineStart])) {</span>
+<span class="fc" id="L903">            lineStart++;</span>
+        }
+<span class="fc" id="L905">        return lineStart;</span>
+    }
+
+    /**
+     * Checks if current comment is a trailing comment.
+     * @param comment comment to check.
+     * @return true if current comment is a trailing comment.
+     */
+    private boolean isTrailingComment(DetailAST comment) {
+        final boolean isTrailingComment;
+<span class="fc bfc" id="L915" title="All 2 branches covered.">        if (comment.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</span>
+<span class="fc" id="L916">            isTrailingComment = isTrailingSingleLineComment(comment);</span>
+        }
+        else {
+<span class="fc" id="L919">            isTrailingComment = isTrailingBlockComment(comment);</span>
+        }
+<span class="fc" id="L921">        return isTrailingComment;</span>
+    }
+
+    /**
+     * Checks if current single line comment is trailing comment, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * double d = 3.14; // some comment
+     * }
+     * &lt;/p&gt;
+     * @param singleLineComment {@link TokenTypes#SINGLE_LINE_COMMENT single line comment}.
+     * @return true if current single line comment is trailing comment.
+     */
+    private boolean isTrailingSingleLineComment(DetailAST singleLineComment) {
+<span class="fc" id="L935">        final String targetSourceLine = getLine(singleLineComment.getLineNo() - 1);</span>
+<span class="fc" id="L936">        final int commentColumnNo = singleLineComment.getColumnNo();</span>
+<span class="fc bfc" id="L937" title="All 2 branches covered.">        return !CommonUtils.hasWhitespaceBefore(commentColumnNo, targetSourceLine);</span>
+    }
+
+    /**
+     * Checks if current comment block is trailing comment, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * double d = 3.14; /* some comment *&amp;#47;
+     * /* some comment *&amp;#47; double d = 18.5;
+     * }
+     * &lt;/p&gt;
+     * @param blockComment {@link TokenTypes#BLOCK_COMMENT_BEGIN block comment begin}.
+     * @return true if current comment block is trailing comment.
+     */
+    private boolean isTrailingBlockComment(DetailAST blockComment) {
+<span class="fc" id="L952">        final String commentLine = getLine(blockComment.getLineNo() - 1);</span>
+<span class="fc" id="L953">        final int commentColumnNo = blockComment.getColumnNo();</span>
+<span class="fc" id="L954">        final DetailAST nextSibling = blockComment.getNextSibling();</span>
+<span class="fc bfc" id="L955" title="All 4 branches covered.">        return !CommonUtils.hasWhitespaceBefore(commentColumnNo, commentLine)</span>
+<span class="fc bfc" id="L956" title="All 2 branches covered.">            || nextSibling != null &amp;&amp; nextSibling.getLineNo() == blockComment.getLineNo();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

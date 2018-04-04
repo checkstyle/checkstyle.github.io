@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OneStatementPerLineCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">OneStatementPerLineCheck.java</span></div><h1>OneStatementPerLineCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Restricts the number of statements per line to one.
+ * &lt;p&gt;
+ *     Rationale: It's very difficult to read multiple statements on one line.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ *     In the Java programming language, statements are the fundamental unit of
+ *     execution. All statements except blocks are terminated by a semicolon.
+ *     Blocks are denoted by open and close curly braces.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ *     OneStatementPerLineCheck checks the following types of statements:
+ *     variable declaration statements, empty statements, assignment statements,
+ *     expression statements, increment statements, object creation statements,
+ *     'for loop' statements, 'break' statements, 'continue' statements,
+ *     'return' statements, import statements.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ *     The following examples will be flagged as a violation:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ *     //Each line causes violation:
+ *     int var1; int var2;
+ *     var1 = 1; var2 = 2;
+ *     int var1 = 1; int var2 = 2;
+ *     var1++; var2++;
+ *     Object obj1 = new Object(); Object obj2 = new Object();
+ *     import java.io.EOFException; import java.io.BufferedReader;
+ *     ;; //two empty statements on the same line.
+ *
+ *     //Multi-line statements:
+ *     int var1 = 1
+ *     ; var2 = 2; //violation here
+ *     int o = 1, p = 2,
+ *     r = 5; int t; //violation here
+ * &lt;/pre&gt;
+ *
+ * @author Alexander Jesse
+ * @author Oliver Burn
+ * @author Andrei Selkin
+ */
+@FileStatefulCheck
+<span class="fc" id="L72">public final class OneStatementPerLineCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;multiple.statements.line&quot;;
+
+    /**
+     * Counts number of semicolons in nested lambdas.
+     */
+<span class="fc" id="L83">    private final Deque&lt;Integer&gt; countOfSemiInLambda = new ArrayDeque&lt;&gt;();</span>
+
+    /**
+     * Hold the line-number where the last statement ended.
+     */
+<span class="fc" id="L88">    private int lastStatementEnd = -1;</span>
+
+    /**
+     * Hold the line-number where the last 'for-loop' statement ended.
+     */
+<span class="fc" id="L93">    private int forStatementEnd = -1;</span>
+
+    /**
+     * The for-header usually has 3 statements on one line, but THIS IS OK.
+     */
+    private boolean inForHeader;
+
+    /**
+     * Holds if current token is inside lambda.
+     */
+    private boolean isInLambda;
+
+    /**
+     * Hold the line-number where the last lambda statement ended.
+     */
+<span class="fc" id="L108">    private int lambdaStatementEnd = -1;</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L112">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L117">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L122">        return new int[] {</span>
+            TokenTypes.SEMI,
+            TokenTypes.FOR_INIT,
+            TokenTypes.FOR_ITERATOR,
+            TokenTypes.LAMBDA,
+        };
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L132">        inForHeader = false;</span>
+<span class="fc" id="L133">        lastStatementEnd = -1;</span>
+<span class="fc" id="L134">        forStatementEnd = -1;</span>
+<span class="fc" id="L135">        isInLambda = false;</span>
+<span class="fc" id="L136">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L140" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.SEMI:
+<span class="fc" id="L142">                checkIfSemicolonIsInDifferentLineThanPrevious(ast);</span>
+<span class="fc" id="L143">                break;</span>
+            case TokenTypes.FOR_ITERATOR:
+<span class="fc" id="L145">                forStatementEnd = ast.getLineNo();</span>
+<span class="fc" id="L146">                break;</span>
+            case TokenTypes.LAMBDA:
+<span class="fc" id="L148">                isInLambda = true;</span>
+<span class="fc" id="L149">                countOfSemiInLambda.push(0);</span>
+<span class="fc" id="L150">                break;</span>
+            default:
+<span class="fc" id="L152">                inForHeader = true;</span>
+                break;
+        }
+<span class="fc" id="L155">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc bfc" id="L159" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.SEMI:
+<span class="fc" id="L161">                lastStatementEnd = ast.getLineNo();</span>
+<span class="fc" id="L162">                forStatementEnd = -1;</span>
+<span class="fc" id="L163">                lambdaStatementEnd = -1;</span>
+<span class="fc" id="L164">                break;</span>
+            case TokenTypes.FOR_ITERATOR:
+<span class="fc" id="L166">                inForHeader = false;</span>
+<span class="fc" id="L167">                break;</span>
+            case TokenTypes.LAMBDA:
+<span class="fc" id="L169">                countOfSemiInLambda.pop();</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">                if (countOfSemiInLambda.isEmpty()) {</span>
+<span class="fc" id="L171">                    isInLambda = false;</span>
+                }
+<span class="fc" id="L173">                lambdaStatementEnd = ast.getLineNo();</span>
+<span class="fc" id="L174">                break;</span>
+            default:
+                break;
+        }
+<span class="fc" id="L178">    }</span>
+
+    /**
+     * Checks if given semicolon is in different line than previous.
+     * @param ast semicolon to check
+     */
+    private void checkIfSemicolonIsInDifferentLineThanPrevious(DetailAST ast) {
+<span class="fc" id="L185">        DetailAST currentStatement = ast;</span>
+<span class="fc" id="L186">        final boolean hasResourcesPrevSibling =</span>
+<span class="fc bfc" id="L187" title="All 2 branches covered.">                currentStatement.getPreviousSibling() != null</span>
+<span class="fc bfc" id="L188" title="All 2 branches covered.">                        &amp;&amp; currentStatement.getPreviousSibling().getType() == TokenTypes.RESOURCES;</span>
+<span class="fc bfc" id="L189" title="All 4 branches covered.">        if (!hasResourcesPrevSibling &amp;&amp; isMultilineStatement(currentStatement)) {</span>
+<span class="fc" id="L190">            currentStatement = ast.getPreviousSibling();</span>
+        }
+<span class="fc bfc" id="L192" title="All 2 branches covered.">        if (isInLambda) {</span>
+<span class="fc" id="L193">            int countOfSemiInCurrentLambda = countOfSemiInLambda.pop();</span>
+<span class="fc" id="L194">            countOfSemiInCurrentLambda++;</span>
+<span class="fc" id="L195">            countOfSemiInLambda.push(countOfSemiInCurrentLambda);</span>
+<span class="fc bfc" id="L196" title="All 4 branches covered.">            if (!inForHeader &amp;&amp; countOfSemiInCurrentLambda &gt; 1</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">                    &amp;&amp; isOnTheSameLine(currentStatement,</span>
+                    lastStatementEnd, forStatementEnd,
+                    lambdaStatementEnd)) {
+<span class="fc" id="L200">                log(ast, MSG_KEY);</span>
+            }
+<span class="fc" id="L202">        }</span>
+<span class="fc bfc" id="L203" title="All 4 branches covered.">        else if (!inForHeader &amp;&amp; isOnTheSameLine(currentStatement, lastStatementEnd,</span>
+                forStatementEnd, lambdaStatementEnd)) {
+<span class="fc" id="L205">            log(ast, MSG_KEY);</span>
+        }
+<span class="fc" id="L207">    }</span>
+
+    /**
+     * Checks whether two statements are on the same line.
+     * @param ast token for the current statement.
+     * @param lastStatementEnd the line-number where the last statement ended.
+     * @param forStatementEnd the line-number where the last 'for-loop'
+     *                        statement ended.
+     * @param lambdaStatementEnd the line-number where the last lambda
+     *                        statement ended.
+     * @return true if two statements are on the same line.
+     */
+    private static boolean isOnTheSameLine(DetailAST ast, int lastStatementEnd,
+                                           int forStatementEnd, int lambdaStatementEnd) {
+<span class="fc bfc" id="L221" title="All 4 branches covered.">        return lastStatementEnd == ast.getLineNo() &amp;&amp; forStatementEnd != ast.getLineNo()</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">                &amp;&amp; lambdaStatementEnd != ast.getLineNo();</span>
+    }
+
+    /**
+     * Checks whether statement is multiline.
+     * @param ast token for the current statement.
+     * @return true if one statement is distributed over two or more lines.
+     */
+    private static boolean isMultilineStatement(DetailAST ast) {
+        final boolean multiline;
+<span class="fc bfc" id="L232" title="All 2 branches covered.">        if (ast.getPreviousSibling() == null) {</span>
+<span class="fc" id="L233">            multiline = false;</span>
+        }
+        else {
+<span class="fc" id="L236">            final DetailAST prevSibling = ast.getPreviousSibling();</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">            multiline = prevSibling.getLineNo() != ast.getLineNo()</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">                    &amp;&amp; ast.getParent() != null;</span>
+        }
+<span class="fc" id="L240">        return multiline;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

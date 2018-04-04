@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SuppressWarningsCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.annotation</a> &gt; <span class="el_source">SuppressWarningsCheck.java</span></div><h1>SuppressWarningsCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.annotation;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.AnnotationUtility;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * &lt;p&gt;
+ * This check allows you to specify what warnings that
+ * {@link SuppressWarnings SuppressWarnings} is not
+ * allowed to suppress.  You can also specify a list
+ * of TokenTypes that the configured warning(s) cannot
+ * be suppressed on.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * The {@link #setFormat warnings} property is a
+ * regex pattern.  Any warning being suppressed matching
+ * this pattern will be flagged.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * By default, any warning specified will be disallowed on
+ * all legal TokenTypes unless otherwise specified via
+ * the
+ * {@link AbstractCheck#setTokens(String[]) tokens}
+ * property.
+ *
+ * Also, by default warnings that are empty strings or all
+ * whitespace (regex: ^$|^\s+$) are flagged.  By specifying,
+ * the format property these defaults no longer apply.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;Limitations:  This check does not consider conditionals
+ * inside the SuppressWarnings annotation. &lt;br&gt;
+ * For example:
+ * {@code @SuppressWarnings((false) ? (true) ? &quot;unchecked&quot; : &quot;foo&quot; : &quot;unused&quot;)}.
+ * According to the above example, the &quot;unused&quot; warning is being suppressed
+ * not the &quot;unchecked&quot; or &quot;foo&quot; warnings.  All of these warnings will be
+ * considered and matched against regardless of what the conditional
+ * evaluates to.
+ * &lt;br&gt;
+ * The check also does not support code like {@code @SuppressWarnings(&quot;un&quot; + &quot;used&quot;)},
+ * {@code @SuppressWarnings((String) &quot;unused&quot;)} or
+ * {@code @SuppressWarnings({('u' + (char)'n') + (&quot;&quot;+(&quot;used&quot; + (String)&quot;&quot;)),})}.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;This check can be configured so that the &quot;unchecked&quot;
+ * and &quot;unused&quot; warnings cannot be suppressed on
+ * anything but variable and parameter declarations.
+ * See below of an example.
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;SuppressWarnings&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;format&amp;quot;
+ *        value=&amp;quot;^unchecked$|^unused$&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;tokens&amp;quot;
+ *        value=&amp;quot;
+ *        CLASS_DEF,INTERFACE_DEF,ENUM_DEF,
+ *        ANNOTATION_DEF,ANNOTATION_FIELD_DEF,
+ *        ENUM_CONSTANT_DEF,METHOD_DEF,CTOR_DEF
+ *        &amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * @author Travis Schneeberger
+ */
+@StatelessCheck
+<span class="fc" id="L94">public class SuppressWarningsCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_SUPPRESSED_WARNING_NOT_ALLOWED =
+        &quot;suppressed.warning.not.allowed&quot;;
+
+    /** {@link SuppressWarnings SuppressWarnings} annotation name. */
+    private static final String SUPPRESS_WARNINGS = &quot;SuppressWarnings&quot;;
+
+    /**
+     * Fully-qualified {@link SuppressWarnings SuppressWarnings}
+     * annotation name.
+     */
+    private static final String FQ_SUPPRESS_WARNINGS =
+        &quot;java.lang.&quot; + SUPPRESS_WARNINGS;
+
+    /** The regexp to match against. */
+<span class="fc" id="L114">    private Pattern format = Pattern.compile(&quot;^$|^\\s+$&quot;);</span>
+
+    /**
+     * Set the format for the specified regular expression.
+     * @param pattern the new pattern
+     */
+    public final void setFormat(Pattern pattern) {
+<span class="fc" id="L121">        format = pattern;</span>
+<span class="fc" id="L122">    }</span>
+
+    @Override
+    public final int[] getDefaultTokens() {
+<span class="fc" id="L126">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public final int[] getAcceptableTokens() {
+<span class="fc" id="L131">        return new int[] {</span>
+            TokenTypes.CLASS_DEF,
+            TokenTypes.INTERFACE_DEF,
+            TokenTypes.ENUM_DEF,
+            TokenTypes.ANNOTATION_DEF,
+            TokenTypes.ANNOTATION_FIELD_DEF,
+            TokenTypes.ENUM_CONSTANT_DEF,
+            TokenTypes.PARAMETER_DEF,
+            TokenTypes.VARIABLE_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.CTOR_DEF,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L147">        return CommonUtils.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void visitToken(final DetailAST ast) {
+<span class="fc" id="L152">        final DetailAST annotation = getSuppressWarnings(ast);</span>
+
+<span class="fc bfc" id="L154" title="All 2 branches covered.">        if (annotation != null) {</span>
+<span class="fc" id="L155">            final DetailAST warningHolder =</span>
+<span class="fc" id="L156">                findWarningsHolder(annotation);</span>
+
+<span class="fc" id="L158">            final DetailAST token =</span>
+<span class="fc" id="L159">                    warningHolder.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+            DetailAST warning;
+
+<span class="fc bfc" id="L162" title="All 2 branches covered.">            if (token == null) {</span>
+<span class="fc" id="L163">                warning = warningHolder.findFirstToken(TokenTypes.EXPR);</span>
+            }
+            else {
+                // case like '@SuppressWarnings(value = UNUSED)'
+<span class="fc" id="L167">                warning = token.findFirstToken(TokenTypes.EXPR);</span>
+            }
+
+            //rare case with empty array ex: @SuppressWarnings({})
+<span class="fc bfc" id="L171" title="All 2 branches covered.">            if (warning == null) {</span>
+                //check to see if empty warnings are forbidden -- are by default
+<span class="fc" id="L173">                logMatch(warningHolder.getLineNo(),</span>
+<span class="fc" id="L174">                    warningHolder.getColumnNo(), &quot;&quot;);</span>
+            }
+            else {
+<span class="fc bfc" id="L177" title="All 2 branches covered.">                while (warning != null) {</span>
+<span class="fc bfc" id="L178" title="All 2 branches covered.">                    if (warning.getType() == TokenTypes.EXPR) {</span>
+<span class="fc" id="L179">                        final DetailAST fChild = warning.getFirstChild();</span>
+<span class="fc bfc" id="L180" title="All 4 branches covered.">                        switch (fChild.getType()) {</span>
+                            //typical case
+                            case TokenTypes.STRING_LITERAL:
+<span class="fc" id="L183">                                final String warningText =</span>
+<span class="fc" id="L184">                                    removeQuotes(warning.getFirstChild().getText());</span>
+<span class="fc" id="L185">                                logMatch(warning.getLineNo(),</span>
+<span class="fc" id="L186">                                        warning.getColumnNo(), warningText);</span>
+<span class="fc" id="L187">                                break;</span>
+                            // conditional case
+                            // ex:
+                            // @SuppressWarnings((false) ? (true) ? &quot;unchecked&quot; : &quot;foo&quot; : &quot;unused&quot;)
+                            case TokenTypes.QUESTION:
+<span class="fc" id="L192">                                walkConditional(fChild);</span>
+<span class="fc" id="L193">                                break;</span>
+                            // param in constant case
+                            // ex: public static final String UNCHECKED = &quot;unchecked&quot;;
+                            // @SuppressWarnings(UNCHECKED)
+                            // or
+                            // @SuppressWarnings(SomeClass.UNCHECKED)
+                            case TokenTypes.IDENT:
+                            case TokenTypes.DOT:
+<span class="fc" id="L201">                                break;</span>
+                            default:
+                                // Known limitation: cases like @SuppressWarnings(&quot;un&quot; + &quot;used&quot;) or
+                                // @SuppressWarnings((String) &quot;unused&quot;) are not properly supported,
+                                // but they should not cause exceptions.
+                        }
+                    }
+<span class="fc" id="L208">                    warning = warning.getNextSibling();</span>
+                }
+            }
+        }
+<span class="fc" id="L212">    }</span>
+
+    /**
+     * Gets the {@link SuppressWarnings SuppressWarnings} annotation
+     * that is annotating the AST.  If the annotation does not exist
+     * this method will return {@code null}.
+     *
+     * @param ast the AST
+     * @return the {@link SuppressWarnings SuppressWarnings} annotation
+     */
+    private static DetailAST getSuppressWarnings(DetailAST ast) {
+<span class="fc" id="L223">        DetailAST annotation = AnnotationUtility.getAnnotation(ast, SUPPRESS_WARNINGS);</span>
+
+<span class="fc bfc" id="L225" title="All 2 branches covered.">        if (annotation == null) {</span>
+<span class="fc" id="L226">            annotation = AnnotationUtility.getAnnotation(ast, FQ_SUPPRESS_WARNINGS);</span>
+        }
+<span class="fc" id="L228">        return annotation;</span>
+    }
+
+    /**
+     * This method looks for a warning that matches a configured expression.
+     * If found it logs a violation at the given line and column number.
+     *
+     * @param lineNo the line number
+     * @param colNum the column number
+     * @param warningText the warning.
+     */
+    private void logMatch(final int lineNo,
+        final int colNum, final String warningText) {
+<span class="fc" id="L241">        final Matcher matcher = format.matcher(warningText);</span>
+<span class="fc bfc" id="L242" title="All 2 branches covered.">        if (matcher.matches()) {</span>
+<span class="fc" id="L243">            log(lineNo, colNum,</span>
+                    MSG_KEY_SUPPRESSED_WARNING_NOT_ALLOWED, warningText);
+        }
+<span class="fc" id="L246">    }</span>
+
+    /**
+     * Find the parent (holder) of the of the warnings (Expr).
+     *
+     * @param annotation the annotation
+     * @return a Token representing the expr.
+     */
+    private static DetailAST findWarningsHolder(final DetailAST annotation) {
+<span class="fc" id="L255">        final DetailAST annValuePair =</span>
+<span class="fc" id="L256">            annotation.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+        final DetailAST annArrayInit;
+
+<span class="fc bfc" id="L259" title="All 2 branches covered.">        if (annValuePair == null) {</span>
+<span class="fc" id="L260">            annArrayInit =</span>
+<span class="fc" id="L261">                    annotation.findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
+        }
+        else {
+<span class="fc" id="L264">            annArrayInit =</span>
+<span class="fc" id="L265">                    annValuePair.findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
+        }
+
+<span class="fc" id="L268">        DetailAST warningsHolder = annotation;</span>
+<span class="fc bfc" id="L269" title="All 2 branches covered.">        if (annArrayInit != null) {</span>
+<span class="fc" id="L270">            warningsHolder = annArrayInit;</span>
+        }
+
+<span class="fc" id="L273">        return warningsHolder;</span>
+    }
+
+    /**
+     * Strips a single double quote from the front and back of a string.
+     *
+     * &lt;p&gt;For example:
+     * &lt;br/&gt;
+     * Input String = &quot;unchecked&quot;
+     * &lt;br/&gt;
+     * Output String = unchecked
+     *
+     * @param warning the warning string
+     * @return the string without two quotes
+     */
+    private static String removeQuotes(final String warning) {
+<span class="fc" id="L289">        return warning.substring(1, warning.length() - 1);</span>
+    }
+
+    /**
+     * Recursively walks a conditional expression checking the left
+     * and right sides, checking for matches and
+     * logging violations.
+     *
+     * @param cond a Conditional type
+     * {@link TokenTypes#QUESTION QUESTION}
+     */
+    private void walkConditional(final DetailAST cond) {
+<span class="fc bfc" id="L301" title="All 2 branches covered.">        if (cond.getType() == TokenTypes.QUESTION) {</span>
+<span class="fc" id="L302">            walkConditional(getCondLeft(cond));</span>
+<span class="fc" id="L303">            walkConditional(getCondRight(cond));</span>
+        }
+        else {
+<span class="fc" id="L306">            final String warningText =</span>
+<span class="fc" id="L307">                    removeQuotes(cond.getText());</span>
+<span class="fc" id="L308">            logMatch(cond.getLineNo(), cond.getColumnNo(), warningText);</span>
+        }
+<span class="fc" id="L310">    }</span>
+
+    /**
+     * Retrieves the left side of a conditional.
+     *
+     * @param cond cond a conditional type
+     * {@link TokenTypes#QUESTION QUESTION}
+     * @return either the value
+     *     or another conditional
+     */
+    private static DetailAST getCondLeft(final DetailAST cond) {
+<span class="fc" id="L321">        final DetailAST colon = cond.findFirstToken(TokenTypes.COLON);</span>
+<span class="fc" id="L322">        return colon.getPreviousSibling();</span>
+    }
+
+    /**
+     * Retrieves the right side of a conditional.
+     *
+     * @param cond a conditional type
+     * {@link TokenTypes#QUESTION QUESTION}
+     * @return either the value
+     *     or another conditional
+     */
+    private static DetailAST getCondRight(final DetailAST cond) {
+<span class="fc" id="L334">        final DetailAST colon = cond.findFirstToken(TokenTypes.COLON);</span>
+<span class="fc" id="L335">        return colon.getNextSibling();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

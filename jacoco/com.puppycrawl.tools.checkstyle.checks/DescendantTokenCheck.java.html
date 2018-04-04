@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DescendantTokenCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks</a> &gt; <span class="el_source">DescendantTokenCheck.java</span></div><h1>DescendantTokenCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks;
+
+import java.util.Arrays;
+import java.util.Set;
+
+import antlr.collections.AST;
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtils;
+
+/**
+ * &lt;p&gt;
+ * Checks for restricted tokens beneath other tokens.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Examples of how to configure the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;!-- String literal equality check --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;EQUAL,NOT_EQUAL&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;STRING_LITERAL&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;1&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Switch with no default --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_SWITCH&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;2&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;LITERAL_DEFAULT&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;minimumNumber&quot; value=&quot;1&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Assert statement may have side effects --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_ASSERT&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;ASSIGN,DEC,INC,POST_DEC,
+ *     POST_INC,PLUS_ASSIGN,MINUS_ASSIGN,STAR_ASSIGN,DIV_ASSIGN,MOD_ASSIGN,
+ *     BSR_ASSIGN,SR_ASSIGN,SL_ASSIGN,BAND_ASSIGN,BXOR_ASSIGN,BOR_ASSIGN,
+ *     METHOD_CALL&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Initializer in for performs no setup - use while instead? --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;FOR_INIT&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;EXPR&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;minimumNumber&quot; value=&quot;1&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Condition in for performs no check --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;FOR_CONDITION&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;EXPR&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;minimumNumber&quot; value=&quot;1&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Switch within switch --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_SWITCH&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;LITERAL_SWITCH&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;minimumDepth&quot; value=&quot;1&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Return from within a catch or finally block --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_FINALLY,LITERAL_CATCH&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;LITERAL_RETURN&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Try within catch or finally block --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_CATCH,LITERAL_FINALLY&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;LITERAL_TRY&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Too many cases within a switch --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_SWITCH&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;LITERAL_CASE&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;2&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;10&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Too many local variables within a method --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;METHOD_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;2&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;10&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Too many returns from within a method --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;METHOD_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;LITERAL_RETURN&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;3&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Too many fields within an interface --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;INTERFACE_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;2&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Limit the number of exceptions a method can throw --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_THROWS&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;IDENT&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;1&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Limit the number of expressions in a method --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;METHOD_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;EXPR&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;200&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Disallow empty statements --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;EMPTY_STAT&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;EMPTY_STAT&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;0&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;0&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumMessage&quot;
+ *         value=&quot;Empty statement is not allowed.&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ *
+ * &amp;lt;!-- Too many fields within a class --&amp;gt;
+ * &amp;lt;module name=&quot;DescendantToken&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;CLASS_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;limitedTokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumDepth&quot; value=&quot;2&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximumNumber&quot; value=&quot;10&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @author Tim Tyler &amp;lt;tim@tt1.org&amp;gt;
+ * @author Rick Giles
+ */
+@FileStatefulCheck
+<span class="fc" id="L170">public class DescendantTokenCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_MIN = &quot;descendant.token.min&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_MAX = &quot;descendant.token.max&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_SUM_MIN = &quot;descendant.token.sum.min&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_SUM_MAX = &quot;descendant.token.sum.max&quot;;
+
+    /** Minimum depth. */
+    private int minimumDepth;
+    /** Maximum depth. */
+<span class="fc" id="L199">    private int maximumDepth = Integer.MAX_VALUE;</span>
+    /** Minimum number. */
+    private int minimumNumber;
+    /** Maximum number. */
+<span class="fc" id="L203">    private int maximumNumber = Integer.MAX_VALUE;</span>
+    /** Whether to sum the number of tokens found. */
+    private boolean sumTokenCounts;
+    /** Limited tokens. */
+<span class="fc" id="L207">    private int[] limitedTokens = CommonUtils.EMPTY_INT_ARRAY;</span>
+    /** Error message when minimum count not reached. */
+    private String minimumMessage;
+    /** Error message when maximum count exceeded. */
+    private String maximumMessage;
+
+    /**
+     * Counts of descendant tokens.
+     * Indexed by (token ID - 1) for performance.
+     */
+<span class="fc" id="L217">    private int[] counts = CommonUtils.EMPTY_INT_ARRAY;</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L221">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L226">        return CommonUtils.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+        //reset counts
+<span class="fc" id="L232">        Arrays.fill(counts, 0);</span>
+<span class="fc" id="L233">        countTokens(ast, 0);</span>
+
+<span class="fc bfc" id="L235" title="All 2 branches covered.">        if (sumTokenCounts) {</span>
+<span class="fc" id="L236">            logAsTotal(ast);</span>
+        }
+        else {
+<span class="fc" id="L239">            logAsSeparated(ast);</span>
+        }
+<span class="fc" id="L241">    }</span>
+
+    /**
+     * Log violations for each Token.
+     * @param ast token
+     */
+    private void logAsSeparated(DetailAST ast) {
+        // name of this token
+<span class="fc" id="L249">        final String name = TokenUtils.getTokenName(ast.getType());</span>
+
+<span class="fc bfc" id="L251" title="All 2 branches covered.">        for (int element : limitedTokens) {</span>
+<span class="fc" id="L252">            final int tokenCount = counts[element - 1];</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">            if (tokenCount &lt; minimumNumber) {</span>
+<span class="fc" id="L254">                final String descendantName = TokenUtils.getTokenName(element);</span>
+
+<span class="fc bfc" id="L256" title="All 2 branches covered.">                if (minimumMessage == null) {</span>
+<span class="fc" id="L257">                    minimumMessage = MSG_KEY_MIN;</span>
+                }
+<span class="fc" id="L259">                log(ast.getLineNo(), ast.getColumnNo(),</span>
+                        minimumMessage,
+<span class="fc" id="L261">                        String.valueOf(tokenCount),</span>
+<span class="fc" id="L262">                        String.valueOf(minimumNumber),</span>
+                        name,
+                        descendantName);
+            }
+<span class="fc bfc" id="L266" title="All 2 branches covered.">            if (tokenCount &gt; maximumNumber) {</span>
+<span class="fc" id="L267">                final String descendantName = TokenUtils.getTokenName(element);</span>
+
+<span class="fc bfc" id="L269" title="All 2 branches covered.">                if (maximumMessage == null) {</span>
+<span class="fc" id="L270">                    maximumMessage = MSG_KEY_MAX;</span>
+                }
+<span class="fc" id="L272">                log(ast.getLineNo(), ast.getColumnNo(),</span>
+                        maximumMessage,
+<span class="fc" id="L274">                        String.valueOf(tokenCount),</span>
+<span class="fc" id="L275">                        String.valueOf(maximumNumber),</span>
+                        name,
+                        descendantName);
+            }
+        }
+<span class="fc" id="L280">    }</span>
+
+    /**
+     * Log validation as one violation.
+     * @param ast current token
+     */
+    private void logAsTotal(DetailAST ast) {
+        // name of this token
+<span class="fc" id="L288">        final String name = TokenUtils.getTokenName(ast.getType());</span>
+
+<span class="fc" id="L290">        int total = 0;</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">        for (int element : limitedTokens) {</span>
+<span class="fc" id="L292">            total += counts[element - 1];</span>
+        }
+<span class="fc bfc" id="L294" title="All 2 branches covered.">        if (total &lt; minimumNumber) {</span>
+<span class="fc bfc" id="L295" title="All 2 branches covered.">            if (minimumMessage == null) {</span>
+<span class="fc" id="L296">                minimumMessage = MSG_KEY_SUM_MIN;</span>
+            }
+<span class="fc" id="L298">            log(ast.getLineNo(), ast.getColumnNo(),</span>
+                    minimumMessage,
+<span class="fc" id="L300">                    String.valueOf(total),</span>
+<span class="fc" id="L301">                    String.valueOf(minimumNumber), name);</span>
+        }
+<span class="fc bfc" id="L303" title="All 2 branches covered.">        if (total &gt; maximumNumber) {</span>
+<span class="fc bfc" id="L304" title="All 2 branches covered.">            if (maximumMessage == null) {</span>
+<span class="fc" id="L305">                maximumMessage = MSG_KEY_SUM_MAX;</span>
+            }
+<span class="fc" id="L307">            log(ast.getLineNo(), ast.getColumnNo(),</span>
+                    maximumMessage,
+<span class="fc" id="L309">                    String.valueOf(total),</span>
+<span class="fc" id="L310">                    String.valueOf(maximumNumber), name);</span>
+        }
+<span class="fc" id="L312">    }</span>
+
+    /**
+     * Counts the number of occurrences of descendant tokens.
+     * @param ast the root token for descendants.
+     * @param depth the maximum depth of the counted descendants.
+     */
+    private void countTokens(AST ast, int depth) {
+<span class="fc bfc" id="L320" title="All 2 branches covered.">        if (depth &lt;= maximumDepth) {</span>
+            //update count
+<span class="fc bfc" id="L322" title="All 2 branches covered.">            if (depth &gt;= minimumDepth) {</span>
+<span class="fc" id="L323">                final int type = ast.getType();</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">                if (type &lt;= counts.length) {</span>
+<span class="fc" id="L325">                    counts[type - 1]++;</span>
+                }
+            }
+<span class="fc" id="L328">            AST child = ast.getFirstChild();</span>
+<span class="fc" id="L329">            final int nextDepth = depth + 1;</span>
+<span class="fc bfc" id="L330" title="All 2 branches covered.">            while (child != null) {</span>
+<span class="fc" id="L331">                countTokens(child, nextDepth);</span>
+<span class="fc" id="L332">                child = child.getNextSibling();</span>
+            }
+        }
+<span class="fc" id="L335">    }</span>
+
+    @Override
+    public int[] getAcceptableTokens() {
+        // Any tokens set by property 'tokens' are acceptable
+<span class="fc" id="L340">        final Set&lt;String&gt; tokenNames = getTokenNames();</span>
+<span class="fc" id="L341">        final int[] result = new int[tokenNames.size()];</span>
+<span class="fc" id="L342">        int index = 0;</span>
+<span class="fc bfc" id="L343" title="All 2 branches covered.">        for (String name : tokenNames) {</span>
+<span class="fc" id="L344">            result[index] = TokenUtils.getTokenId(name);</span>
+<span class="fc" id="L345">            index++;</span>
+<span class="fc" id="L346">        }</span>
+<span class="fc" id="L347">        return result;</span>
+    }
+
+    /**
+     * Sets the tokens which occurrence as descendant is limited.
+     * @param limitedTokensParam - list of tokens to ignore.
+     */
+    public void setLimitedTokens(String... limitedTokensParam) {
+<span class="fc" id="L355">        limitedTokens = new int[limitedTokensParam.length];</span>
+
+<span class="fc" id="L357">        int maxToken = 0;</span>
+<span class="fc bfc" id="L358" title="All 2 branches covered.">        for (int i = 0; i &lt; limitedTokensParam.length; i++) {</span>
+<span class="fc" id="L359">            limitedTokens[i] = TokenUtils.getTokenId(limitedTokensParam[i]);</span>
+<span class="fc bfc" id="L360" title="All 2 branches covered.">            if (limitedTokens[i] &gt;= maxToken + 1) {</span>
+<span class="fc" id="L361">                maxToken = limitedTokens[i];</span>
+            }
+        }
+<span class="fc" id="L364">        counts = new int[maxToken];</span>
+<span class="fc" id="L365">    }</span>
+
+    /**
+     * Sets the minimum depth for descendant counts.
+     * @param minimumDepth the minimum depth for descendant counts.
+     */
+    public void setMinimumDepth(int minimumDepth) {
+<span class="fc" id="L372">        this.minimumDepth = minimumDepth;</span>
+<span class="fc" id="L373">    }</span>
+
+    /**
+     * Sets the maximum depth for descendant counts.
+     * @param maximumDepth the maximum depth for descendant counts.
+     */
+    public void setMaximumDepth(int maximumDepth) {
+<span class="fc" id="L380">        this.maximumDepth = maximumDepth;</span>
+<span class="fc" id="L381">    }</span>
+
+    /**
+     * Sets a minimum count for descendants.
+     * @param minimumNumber the minimum count for descendants.
+     */
+    public void setMinimumNumber(int minimumNumber) {
+<span class="fc" id="L388">        this.minimumNumber = minimumNumber;</span>
+<span class="fc" id="L389">    }</span>
+
+    /**
+      * Sets a maximum count for descendants.
+      * @param maximumNumber the maximum count for descendants.
+      */
+    public void setMaximumNumber(int maximumNumber) {
+<span class="fc" id="L396">        this.maximumNumber = maximumNumber;</span>
+<span class="fc" id="L397">    }</span>
+
+    /**
+     * Sets the error message for minimum count not reached.
+     * @param message the error message for minimum count not reached.
+     *     Used as a {@code MessageFormat} pattern with arguments
+     *     &lt;ul&gt;
+     *     &lt;li&gt;{0} - token count&lt;/li&gt;
+     *     &lt;li&gt;{1} - minimum number&lt;/li&gt;
+     *     &lt;li&gt;{2} - name of token&lt;/li&gt;
+     *     &lt;li&gt;{3} - name of limited token&lt;/li&gt;
+     *     &lt;/ul&gt;
+     */
+    public void setMinimumMessage(String message) {
+<span class="fc" id="L411">        minimumMessage = message;</span>
+<span class="fc" id="L412">    }</span>
+
+    /**
+     * Sets the error message for maximum count exceeded.
+     * @param message the error message for maximum count exceeded.
+     *     Used as a {@code MessageFormat} pattern with arguments
+     * &lt;ul&gt;
+     * &lt;li&gt;{0} - token count&lt;/li&gt;
+     * &lt;li&gt;{1} - maximum number&lt;/li&gt;
+     * &lt;li&gt;{2} - name of token&lt;/li&gt;
+     * &lt;li&gt;{3} - name of limited token&lt;/li&gt;
+     * &lt;/ul&gt;
+     */
+
+    public void setMaximumMessage(String message) {
+<span class="fc" id="L427">        maximumMessage = message;</span>
+<span class="fc" id="L428">    }</span>
+
+    /**
+     * Sets whether to use the sum of the tokens found, rather than the
+     * individual counts.
+     * @param sum whether to use the sum.
+     */
+    public void setSumTokenCounts(boolean sum) {
+<span class="fc" id="L436">        sumTokenCounts = sum;</span>
+<span class="fc" id="L437">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

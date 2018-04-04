@@ -1,0 +1,565 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SuppressWarningsHolder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks</a> &gt; <span class="el_source">SuppressWarningsHolder.java</span></div><h1>SuppressWarningsHolder.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.AuditEvent;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Maintains a set of check suppressions from {@link SuppressWarnings}
+ * annotations.
+ * @author Trevor Robinson
+ * @author St&amp;eacute;phane Galland
+ */
+@StatelessCheck
+<span class="fc" id="L42">public class SuppressWarningsHolder</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;suppress.warnings.invalid.target&quot;;
+
+    /**
+     * Optional prefix for warning suppressions that are only intended to be
+     * recognized by checkstyle. For instance, to suppress {@code
+     * FallThroughCheck} only in checkstyle (and not in javac), use the
+     * suppression {@code &quot;checkstyle:fallthrough&quot;} or {@code &quot;checkstyle:FallThrough&quot;}.
+     * To suppress the warning in both tools, just use {@code &quot;fallthrough&quot;}.
+     */
+    private static final String CHECKSTYLE_PREFIX = &quot;checkstyle:&quot;;
+
+    /** Java.lang namespace prefix, which is stripped from SuppressWarnings */
+    private static final String JAVA_LANG_PREFIX = &quot;java.lang.&quot;;
+
+    /** Suffix to be removed from subclasses of Check. */
+    private static final String CHECK_SUFFIX = &quot;Check&quot;;
+
+    /** Special warning id for matching all the warnings. */
+    private static final String ALL_WARNING_MATCHING_ID = &quot;all&quot;;
+
+    /** A map from check source names to suppression aliases. */
+<span class="fc" id="L70">    private static final Map&lt;String, String&gt; CHECK_ALIAS_MAP = new HashMap&lt;&gt;();</span>
+
+    /**
+     * A thread-local holder for the list of suppression entries for the last
+     * file parsed.
+     */
+<span class="fc" id="L76">    private static final ThreadLocal&lt;List&lt;Entry&gt;&gt; ENTRIES =</span>
+<span class="fc" id="L77">            ThreadLocal.withInitial(LinkedList::new);</span>
+
+    /**
+     * Returns the default alias for the source name of a check, which is the
+     * source name in lower case with any dotted prefix or &quot;Check&quot; suffix
+     * removed.
+     * @param sourceName the source name of the check (generally the class
+     *        name)
+     * @return the default alias for the given check
+     */
+    public static String getDefaultAlias(String sourceName) {
+<span class="fc" id="L88">        int endIndex = sourceName.length();</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (sourceName.endsWith(CHECK_SUFFIX)) {</span>
+<span class="fc" id="L90">            endIndex -= CHECK_SUFFIX.length();</span>
+        }
+<span class="fc" id="L92">        final int startIndex = sourceName.lastIndexOf('.') + 1;</span>
+<span class="fc" id="L93">        return sourceName.substring(startIndex, endIndex).toLowerCase(Locale.ENGLISH);</span>
+    }
+
+    /**
+     * Returns the alias for the source name of a check. If an alias has been
+     * explicitly registered via {@link #registerAlias(String, String)}, that
+     * alias is returned; otherwise, the default alias is used.
+     * @param sourceName the source name of the check (generally the class
+     *        name)
+     * @return the current alias for the given check
+     */
+    public static String getAlias(String sourceName) {
+<span class="fc" id="L105">        String checkAlias = CHECK_ALIAS_MAP.get(sourceName);</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        if (checkAlias == null) {</span>
+<span class="fc" id="L107">            checkAlias = getDefaultAlias(sourceName);</span>
+        }
+<span class="fc" id="L109">        return checkAlias;</span>
+    }
+
+    /**
+     * Registers an alias for the source name of a check.
+     * @param sourceName the source name of the check (generally the class
+     *        name)
+     * @param checkAlias the alias used in {@link SuppressWarnings} annotations
+     */
+    private static void registerAlias(String sourceName, String checkAlias) {
+<span class="fc" id="L119">        CHECK_ALIAS_MAP.put(sourceName, checkAlias);</span>
+<span class="fc" id="L120">    }</span>
+
+    /**
+     * Registers a list of source name aliases based on a comma-separated list
+     * of {@code source=alias} items, such as {@code
+     * com.puppycrawl.tools.checkstyle.checks.sizes.ParameterNumberCheck=
+     * paramnum}.
+     * @param aliasList the list of comma-separated alias assignments
+     */
+    public void setAliasList(String... aliasList) {
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        for (String sourceAlias : aliasList) {</span>
+<span class="fc" id="L131">            final int index = sourceAlias.indexOf('=');</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">            if (index &gt; 0) {</span>
+<span class="fc" id="L133">                registerAlias(sourceAlias.substring(0, index), sourceAlias</span>
+<span class="fc" id="L134">                    .substring(index + 1));</span>
+            }
+<span class="fc bfc" id="L136" title="All 2 branches covered.">            else if (!sourceAlias.isEmpty()) {</span>
+<span class="fc" id="L137">                throw new IllegalArgumentException(</span>
+                    &quot;'=' expected in alias list item: &quot; + sourceAlias);
+            }
+        }
+<span class="fc" id="L141">    }</span>
+
+    /**
+     * Checks for a suppression of a check with the given source name and
+     * location in the last file processed.
+     * @param event audit event.
+     * @return whether the check with the given name is suppressed at the given
+     *         source location
+     */
+    public static boolean isSuppressed(AuditEvent event) {
+<span class="fc" id="L151">        final List&lt;Entry&gt; entries = ENTRIES.get();</span>
+<span class="fc" id="L152">        final String sourceName = event.getSourceName();</span>
+<span class="fc" id="L153">        final String checkAlias = getAlias(sourceName);</span>
+<span class="fc" id="L154">        final int line = event.getLine();</span>
+<span class="fc" id="L155">        final int column = event.getColumn();</span>
+<span class="fc" id="L156">        boolean suppressed = false;</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        for (Entry entry : entries) {</span>
+<span class="fc" id="L158">            final boolean afterStart = isSuppressedAfterEventStart(line, column, entry);</span>
+<span class="fc" id="L159">            final boolean beforeEnd = isSuppressedBeforeEventEnd(line, column, entry);</span>
+<span class="fc" id="L160">            final boolean nameMatches =</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">                ALL_WARNING_MATCHING_ID.equals(entry.getCheckName())</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">                    || entry.getCheckName().equalsIgnoreCase(checkAlias);</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">            final boolean idMatches = event.getModuleId() != null</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">                &amp;&amp; event.getModuleId().equals(entry.getCheckName());</span>
+<span class="fc bfc" id="L165" title="All 8 branches covered.">            if (afterStart &amp;&amp; beforeEnd &amp;&amp; (nameMatches || idMatches)) {</span>
+<span class="fc" id="L166">                suppressed = true;</span>
+<span class="fc" id="L167">                break;</span>
+            }
+<span class="fc" id="L169">        }</span>
+<span class="fc" id="L170">        return suppressed;</span>
+    }
+
+    /**
+     * Checks whether suppression entry position is after the audit event occurrence position
+     * in the source file.
+     * @param line the line number in the source file where the event occurred.
+     * @param column the column number in the source file where the event occurred.
+     * @param entry suppression entry.
+     * @return true if suppression entry position is after the audit event occurrence position
+     *         in the source file.
+     */
+    private static boolean isSuppressedAfterEventStart(int line, int column, Entry entry) {
+<span class="fc bfc" id="L183" title="All 2 branches covered.">        return entry.getFirstLine() &lt; line</span>
+<span class="fc bfc" id="L184" title="All 4 branches covered.">            || entry.getFirstLine() == line</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">            &amp;&amp; (column == 0 || entry.getFirstColumn() &lt;= column);</span>
+    }
+
+    /**
+     * Checks whether suppression entry position is before the audit event occurrence position
+     * in the source file.
+     * @param line the line number in the source file where the event occurred.
+     * @param column the column number in the source file where the event occurred.
+     * @param entry suppression entry.
+     * @return true if suppression entry position is before the audit event occurrence position
+     *         in the source file.
+     */
+    private static boolean isSuppressedBeforeEventEnd(int line, int column, Entry entry) {
+<span class="fc bfc" id="L198" title="All 2 branches covered.">        return entry.getLastLine() &gt; line</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">            || entry.getLastLine() == line &amp;&amp; entry</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">                .getLastColumn() &gt;= column;</span>
+    }
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L205">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L210">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L215">        return new int[] {TokenTypes.ANNOTATION};</span>
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L220">        ENTRIES.get().clear();</span>
+<span class="fc" id="L221">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+        // check whether annotation is SuppressWarnings
+        // expected children: AT ( IDENT | DOT ) LPAREN &lt;values&gt; RPAREN
+<span class="fc" id="L227">        String identifier = getIdentifier(getNthChild(ast, 1));</span>
+<span class="fc bfc" id="L228" title="All 2 branches covered.">        if (identifier.startsWith(JAVA_LANG_PREFIX)) {</span>
+<span class="fc" id="L229">            identifier = identifier.substring(JAVA_LANG_PREFIX.length());</span>
+        }
+<span class="fc bfc" id="L231" title="All 2 branches covered.">        if (&quot;SuppressWarnings&quot;.equals(identifier)) {</span>
+<span class="fc" id="L232">            final List&lt;String&gt; values = getAllAnnotationValues(ast);</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">            if (!isAnnotationEmpty(values)) {</span>
+<span class="fc" id="L234">                final DetailAST targetAST = getAnnotationTarget(ast);</span>
+
+<span class="fc bfc" id="L236" title="All 2 branches covered.">                if (targetAST == null) {</span>
+<span class="fc" id="L237">                    log(ast.getLineNo(), MSG_KEY);</span>
+                }
+                else {
+                    // get text range of target
+<span class="fc" id="L241">                    final int firstLine = targetAST.getLineNo();</span>
+<span class="fc" id="L242">                    final int firstColumn = targetAST.getColumnNo();</span>
+<span class="fc" id="L243">                    final DetailAST nextAST = targetAST.getNextSibling();</span>
+                    final int lastLine;
+                    final int lastColumn;
+<span class="fc bfc" id="L246" title="All 2 branches covered.">                    if (nextAST == null) {</span>
+<span class="fc" id="L247">                        lastLine = Integer.MAX_VALUE;</span>
+<span class="fc" id="L248">                        lastColumn = Integer.MAX_VALUE;</span>
+                    }
+                    else {
+<span class="fc" id="L251">                        lastLine = nextAST.getLineNo();</span>
+<span class="fc" id="L252">                        lastColumn = nextAST.getColumnNo() - 1;</span>
+                    }
+
+                    // add suppression entries for listed checks
+<span class="fc" id="L256">                    final List&lt;Entry&gt; entries = ENTRIES.get();</span>
+<span class="fc bfc" id="L257" title="All 2 branches covered.">                    for (String value : values) {</span>
+<span class="fc" id="L258">                        String checkName = value;</span>
+                        // strip off the checkstyle-only prefix if present
+<span class="fc" id="L260">                        checkName = removeCheckstylePrefixIfExists(checkName);</span>
+<span class="fc" id="L261">                        entries.add(new Entry(checkName, firstLine, firstColumn,</span>
+                                lastLine, lastColumn));
+<span class="fc" id="L263">                    }</span>
+                }
+            }
+        }
+<span class="fc" id="L267">    }</span>
+
+    /**
+     * Method removes checkstyle prefix (checkstyle:) from check name if exists.
+     *
+     * @param checkName
+     *            - name of the check
+     * @return check name without prefix
+     */
+    private static String removeCheckstylePrefixIfExists(String checkName) {
+<span class="fc" id="L277">        String result = checkName;</span>
+<span class="fc bfc" id="L278" title="All 2 branches covered.">        if (checkName.startsWith(CHECKSTYLE_PREFIX)) {</span>
+<span class="fc" id="L279">            result = checkName.substring(CHECKSTYLE_PREFIX.length());</span>
+        }
+<span class="fc" id="L281">        return result;</span>
+    }
+
+    /**
+     * Get all annotation values.
+     * @param ast annotation token
+     * @return list values
+     */
+    private static List&lt;String&gt; getAllAnnotationValues(DetailAST ast) {
+        // get values of annotation
+<span class="fc" id="L291">        List&lt;String&gt; values = null;</span>
+<span class="fc" id="L292">        final DetailAST lparenAST = ast.findFirstToken(TokenTypes.LPAREN);</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">        if (lparenAST != null) {</span>
+<span class="fc" id="L294">            final DetailAST nextAST = lparenAST.getNextSibling();</span>
+<span class="fc" id="L295">            final int nextType = nextAST.getType();</span>
+<span class="fc bfc" id="L296" title="All 4 branches covered.">            switch (nextType) {</span>
+                case TokenTypes.EXPR:
+                case TokenTypes.ANNOTATION_ARRAY_INIT:
+<span class="fc" id="L299">                    values = getAnnotationValues(nextAST);</span>
+<span class="fc" id="L300">                    break;</span>
+
+                case TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR:
+                    // expected children: IDENT ASSIGN ( EXPR |
+                    // ANNOTATION_ARRAY_INIT )
+<span class="fc" id="L305">                    values = getAnnotationValues(getNthChild(nextAST, 2));</span>
+<span class="fc" id="L306">                    break;</span>
+
+                case TokenTypes.RPAREN:
+                    // no value present (not valid Java)
+<span class="fc" id="L310">                    break;</span>
+
+                default:
+                    // unknown annotation value type (new syntax?)
+<span class="fc" id="L314">                    throw new IllegalArgumentException(&quot;Unexpected AST: &quot; + nextAST);</span>
+            }
+        }
+<span class="fc" id="L317">        return values;</span>
+    }
+
+    /**
+     * Checks that annotation is empty.
+     * @param values list of values in the annotation
+     * @return whether annotation is empty or contains some values
+     */
+    private static boolean isAnnotationEmpty(List&lt;String&gt; values) {
+<span class="fc bfc" id="L326" title="All 2 branches covered.">        return values == null;</span>
+    }
+
+    /**
+     * Get target of annotation.
+     * @param ast the AST node to get the child of
+     * @return get target of annotation
+     */
+    private static DetailAST getAnnotationTarget(DetailAST ast) {
+        final DetailAST targetAST;
+<span class="fc" id="L336">        final DetailAST parentAST = ast.getParent();</span>
+<span class="fc bfc" id="L337" title="All 2 branches covered.">        switch (parentAST.getType()) {</span>
+            case TokenTypes.MODIFIERS:
+            case TokenTypes.ANNOTATIONS:
+<span class="fc" id="L340">                targetAST = getAcceptableParent(parentAST);</span>
+<span class="fc" id="L341">                break;</span>
+            default:
+                // unexpected container type
+<span class="fc" id="L344">                throw new IllegalArgumentException(&quot;Unexpected container AST: &quot; + parentAST);</span>
+        }
+<span class="fc" id="L346">        return targetAST;</span>
+    }
+
+    /**
+     * Returns parent of given ast if parent has one of the following types:
+     * ANNOTATION_DEF, PACKAGE_DEF, CLASS_DEF, ENUM_DEF, ENUM_CONSTANT_DEF, CTOR_DEF,
+     * METHOD_DEF, PARAMETER_DEF, VARIABLE_DEF, ANNOTATION_FIELD_DEF, TYPE, LITERAL_NEW,
+     * LITERAL_THROWS, TYPE_ARGUMENT, IMPLEMENTS_CLAUSE, DOT.
+     * @param child an ast
+     * @return returns ast - parent of given
+     */
+    private static DetailAST getAcceptableParent(DetailAST child) {
+        final DetailAST result;
+<span class="fc" id="L359">        final DetailAST parent = child.getParent();</span>
+<span class="fc bfc" id="L360" title="All 2 branches covered.">        switch (parent.getType()) {</span>
+            case TokenTypes.ANNOTATION_DEF:
+            case TokenTypes.PACKAGE_DEF:
+            case TokenTypes.CLASS_DEF:
+            case TokenTypes.INTERFACE_DEF:
+            case TokenTypes.ENUM_DEF:
+            case TokenTypes.ENUM_CONSTANT_DEF:
+            case TokenTypes.CTOR_DEF:
+            case TokenTypes.METHOD_DEF:
+            case TokenTypes.PARAMETER_DEF:
+            case TokenTypes.VARIABLE_DEF:
+            case TokenTypes.ANNOTATION_FIELD_DEF:
+            case TokenTypes.TYPE:
+            case TokenTypes.LITERAL_NEW:
+            case TokenTypes.LITERAL_THROWS:
+            case TokenTypes.TYPE_ARGUMENT:
+            case TokenTypes.IMPLEMENTS_CLAUSE:
+            case TokenTypes.DOT:
+<span class="fc" id="L378">                result = parent;</span>
+<span class="fc" id="L379">                break;</span>
+            default:
+                // it's possible case, but shouldn't be processed here
+<span class="fc" id="L382">                result = null;</span>
+        }
+<span class="fc" id="L384">        return result;</span>
+    }
+
+    /**
+     * Returns the n'th child of an AST node.
+     * @param ast the AST node to get the child of
+     * @param index the index of the child to get
+     * @return the n'th child of the given AST node, or {@code null} if none
+     */
+    private static DetailAST getNthChild(DetailAST ast, int index) {
+<span class="fc" id="L394">        DetailAST child = ast.getFirstChild();</span>
+<span class="fc bfc" id="L395" title="All 4 branches covered.">        for (int i = 0; i &lt; index &amp;&amp; child != null; ++i) {</span>
+<span class="fc" id="L396">            child = child.getNextSibling();</span>
+        }
+<span class="fc" id="L398">        return child;</span>
+    }
+
+    /**
+     * Returns the Java identifier represented by an AST.
+     * @param ast an AST node for an IDENT or DOT
+     * @return the Java identifier represented by the given AST subtree
+     * @throws IllegalArgumentException if the AST is invalid
+     */
+    private static String getIdentifier(DetailAST ast) {
+<span class="fc bfc" id="L408" title="All 2 branches covered.">        if (ast == null) {</span>
+<span class="fc" id="L409">            throw new IllegalArgumentException(&quot;Identifier AST expected, but get null.&quot;);</span>
+        }
+        final String identifier;
+<span class="fc bfc" id="L412" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IDENT) {</span>
+<span class="fc" id="L413">            identifier = ast.getText();</span>
+        }
+        else {
+<span class="fc" id="L416">            identifier = getIdentifier(ast.getFirstChild()) + &quot;.&quot;</span>
+<span class="fc" id="L417">                + getIdentifier(ast.getLastChild());</span>
+        }
+<span class="fc" id="L419">        return identifier;</span>
+    }
+
+    /**
+     * Returns the literal string expression represented by an AST.
+     * @param ast an AST node for an EXPR
+     * @return the Java string represented by the given AST expression
+     *         or empty string if expression is too complex
+     * @throws IllegalArgumentException if the AST is invalid
+     */
+    private static String getStringExpr(DetailAST ast) {
+<span class="fc" id="L430">        final DetailAST firstChild = ast.getFirstChild();</span>
+<span class="fc" id="L431">        String expr = &quot;&quot;;</span>
+
+<span class="fc bfc" id="L433" title="All 4 branches covered.">        switch (firstChild.getType()) {</span>
+            case TokenTypes.STRING_LITERAL:
+                // NOTE: escaped characters are not unescaped
+<span class="fc" id="L436">                final String quotedText = firstChild.getText();</span>
+<span class="fc" id="L437">                expr = quotedText.substring(1, quotedText.length() - 1);</span>
+<span class="fc" id="L438">                break;</span>
+            case TokenTypes.IDENT:
+<span class="fc" id="L440">                expr = firstChild.getText();</span>
+<span class="fc" id="L441">                break;</span>
+            case TokenTypes.DOT:
+<span class="fc" id="L443">                expr = firstChild.getLastChild().getText();</span>
+<span class="fc" id="L444">                break;</span>
+            default:
+                // annotations with complex expressions cannot suppress warnings
+        }
+<span class="fc" id="L448">        return expr;</span>
+    }
+
+    /**
+     * Returns the annotation values represented by an AST.
+     * @param ast an AST node for an EXPR or ANNOTATION_ARRAY_INIT
+     * @return the list of Java string represented by the given AST for an
+     *         expression or annotation array initializer
+     * @throws IllegalArgumentException if the AST is invalid
+     */
+    private static List&lt;String&gt; getAnnotationValues(DetailAST ast) {
+        final List&lt;String&gt; annotationValues;
+<span class="fc bfc" id="L460" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.EXPR:
+<span class="fc" id="L462">                annotationValues = Collections.singletonList(getStringExpr(ast));</span>
+<span class="fc" id="L463">                break;</span>
+            case TokenTypes.ANNOTATION_ARRAY_INIT:
+<span class="fc" id="L465">                annotationValues = findAllExpressionsInChildren(ast);</span>
+<span class="fc" id="L466">                break;</span>
+            default:
+<span class="fc" id="L468">                throw new IllegalArgumentException(</span>
+                        &quot;Expression or annotation array initializer AST expected: &quot; + ast);
+        }
+<span class="fc" id="L471">        return annotationValues;</span>
+    }
+
+    /**
+     * Method looks at children and returns list of expressions in strings.
+     * @param parent ast, that contains children
+     * @return list of expressions in strings
+     */
+    private static List&lt;String&gt; findAllExpressionsInChildren(DetailAST parent) {
+<span class="fc" id="L480">        final List&lt;String&gt; valueList = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L481">        DetailAST childAST = parent.getFirstChild();</span>
+<span class="fc bfc" id="L482" title="All 2 branches covered.">        while (childAST != null) {</span>
+<span class="fc bfc" id="L483" title="All 2 branches covered.">            if (childAST.getType() == TokenTypes.EXPR) {</span>
+<span class="fc" id="L484">                valueList.add(getStringExpr(childAST));</span>
+            }
+<span class="fc" id="L486">            childAST = childAST.getNextSibling();</span>
+        }
+<span class="fc" id="L488">        return valueList;</span>
+    }
+
+    /** Records a particular suppression for a region of a file. */
+    private static class Entry {
+
+        /** The source name of the suppressed check. */
+        private final String checkName;
+        /** The suppression region for the check - first line. */
+        private final int firstLine;
+        /** The suppression region for the check - first column. */
+        private final int firstColumn;
+        /** The suppression region for the check - last line. */
+        private final int lastLine;
+        /** The suppression region for the check - last column. */
+        private final int lastColumn;
+
+        /**
+         * Constructs a new suppression region entry.
+         * @param checkName the source name of the suppressed check
+         * @param firstLine the first line of the suppression region
+         * @param firstColumn the first column of the suppression region
+         * @param lastLine the last line of the suppression region
+         * @param lastColumn the last column of the suppression region
+         */
+        Entry(String checkName, int firstLine, int firstColumn,
+<span class="fc" id="L514">            int lastLine, int lastColumn) {</span>
+<span class="fc" id="L515">            this.checkName = checkName;</span>
+<span class="fc" id="L516">            this.firstLine = firstLine;</span>
+<span class="fc" id="L517">            this.firstColumn = firstColumn;</span>
+<span class="fc" id="L518">            this.lastLine = lastLine;</span>
+<span class="fc" id="L519">            this.lastColumn = lastColumn;</span>
+<span class="fc" id="L520">        }</span>
+
+        /**
+         * Gets he source name of the suppressed check.
+         * @return the source name of the suppressed check
+         */
+        public String getCheckName() {
+<span class="fc" id="L527">            return checkName;</span>
+        }
+
+        /**
+         * Gets the first line of the suppression region.
+         * @return the first line of the suppression region
+         */
+        public int getFirstLine() {
+<span class="fc" id="L535">            return firstLine;</span>
+        }
+
+        /**
+         * Gets the first column of the suppression region.
+         * @return the first column of the suppression region
+         */
+        public int getFirstColumn() {
+<span class="fc" id="L543">            return firstColumn;</span>
+        }
+
+        /**
+         * Gets the last line of the suppression region.
+         * @return the last line of the suppression region
+         */
+        public int getLastLine() {
+<span class="fc" id="L551">            return lastLine;</span>
+        }
+
+        /**
+         * Gets the last column of the suppression region.
+         * @return the last column of the suppression region
+         */
+        public int getLastColumn() {
+<span class="fc" id="L559">            return lastColumn;</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

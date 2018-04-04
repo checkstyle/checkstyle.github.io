@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AtclauseOrderCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.javadoc</a> &gt; <span class="el_source">AtclauseOrderCheck.java</span></div><h1>AtclauseOrderCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.javadoc;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.DetailNode;
+import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.JavadocUtils;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtils;
+
+/**
+ * &lt;p&gt;
+ * Checks the order of
+ * &lt;a href=&quot;https://docs.oracle.com/javase/8/docs/technotes/tools/windows/javadoc.html#CHDBEFIF&quot;&gt;
+ * javadoc block-tags or javadoc tags&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Note: Google used term &quot;at-clauses&quot; for block tags in his guide till 2017-02-28.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * The check allows to configure itself by using the following properties:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * target - allows to specify targets to check at-clauses.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * tagOrder - allows to specify the order by tags.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * Default configuration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;AtclauseOrderCheck&amp;quot;&amp;gt;
+ *     &amp;lt;property name=&amp;quot;tagOrder&amp;quot; value=&amp;quot;&amp;#64;author, &amp;#64;version, &amp;#64;param,
+ *     &amp;#64;return, &amp;#64;throws, &amp;#64;exception, &amp;#64;see, &amp;#64;since, &amp;#64;serial,
+ *     &amp;#64;serialField, &amp;#64;serialData, &amp;#64;deprecated&amp;quot;/&amp;gt;
+ *     &amp;lt;property name=&amp;quot;target&amp;quot; value=&amp;quot;CLASS_DEF, INTERFACE_DEF, ENUM_DEF,
+ *     METHOD_DEF, CTOR_DEF, VARIABLE_DEF&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @author max
+ *
+ */
+<span class="fc" id="L70">public class AtclauseOrderCheck extends AbstractJavadocCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;at.clause.order&quot;;
+
+    /**
+     * Default order of atclauses.
+     */
+<span class="fc" id="L81">    private static final String[] DEFAULT_ORDER = {</span>
+        &quot;@author&quot;, &quot;@version&quot;,
+        &quot;@param&quot;, &quot;@return&quot;,
+        &quot;@throws&quot;, &quot;@exception&quot;,
+        &quot;@see&quot;, &quot;@since&quot;,
+        &quot;@serial&quot;, &quot;@serialField&quot;,
+        &quot;@serialData&quot;, &quot;@deprecated&quot;,
+    };
+
+    /**
+     * Default target of checking atclauses.
+     */
+<span class="fc" id="L93">    private List&lt;Integer&gt; target = Arrays.asList(</span>
+<span class="fc" id="L94">        TokenTypes.CLASS_DEF,</span>
+<span class="fc" id="L95">        TokenTypes.INTERFACE_DEF,</span>
+<span class="fc" id="L96">        TokenTypes.ENUM_DEF,</span>
+<span class="fc" id="L97">        TokenTypes.METHOD_DEF,</span>
+<span class="fc" id="L98">        TokenTypes.CTOR_DEF,</span>
+<span class="fc" id="L99">        TokenTypes.VARIABLE_DEF</span>
+    );
+
+    /**
+     * Order of atclauses.
+     */
+<span class="fc" id="L105">    private List&lt;String&gt; tagOrder = Arrays.asList(DEFAULT_ORDER);</span>
+
+    /**
+     * Sets custom targets.
+     * @param targets user's targets.
+     */
+    public void setTarget(String... targets) {
+<span class="fc" id="L112">        final List&lt;Integer&gt; customTarget = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        for (String temp : targets) {</span>
+<span class="fc" id="L114">            customTarget.add(TokenUtils.getTokenId(temp.trim()));</span>
+        }
+<span class="fc" id="L116">        target = customTarget;</span>
+<span class="fc" id="L117">    }</span>
+
+    /**
+     * Sets custom order of atclauses.
+     * @param orders user's orders.
+     */
+    public void setTagOrder(String... orders) {
+<span class="fc" id="L124">        final List&lt;String&gt; customOrder = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L125" title="All 2 branches covered.">        for (String order : orders) {</span>
+<span class="fc" id="L126">            customOrder.add(order.trim());</span>
+        }
+<span class="fc" id="L128">        tagOrder = customOrder;</span>
+<span class="fc" id="L129">    }</span>
+
+    @Override
+    public int[] getDefaultJavadocTokens() {
+<span class="fc" id="L133">        return new int[] {</span>
+            JavadocTokenTypes.JAVADOC,
+        };
+    }
+
+    @Override
+    public int[] getRequiredJavadocTokens() {
+<span class="fc" id="L140">        return getAcceptableJavadocTokens();</span>
+    }
+
+    @Override
+    public void visitJavadocToken(DetailNode ast) {
+<span class="fc" id="L145">        final int parentType = getParentType(getBlockCommentAst());</span>
+
+<span class="fc bfc" id="L147" title="All 2 branches covered.">        if (target.contains(parentType)) {</span>
+<span class="fc" id="L148">            checkOrderInTagSection(ast);</span>
+        }
+<span class="fc" id="L150">    }</span>
+
+    /**
+     * Checks order of atclauses in tag section node.
+     * @param javadoc Javadoc root node.
+     */
+    private void checkOrderInTagSection(DetailNode javadoc) {
+<span class="fc" id="L157">        int maxIndexOfPreviousTag = 0;</span>
+
+<span class="fc bfc" id="L159" title="All 2 branches covered.">        for (DetailNode node : javadoc.getChildren()) {</span>
+<span class="fc bfc" id="L160" title="All 2 branches covered.">            if (node.getType() == JavadocTokenTypes.JAVADOC_TAG) {</span>
+<span class="fc" id="L161">                final String tagText = JavadocUtils.getFirstChild(node).getText();</span>
+<span class="fc" id="L162">                final int indexOfCurrentTag = tagOrder.indexOf(tagText);</span>
+
+<span class="fc bfc" id="L164" title="All 2 branches covered.">                if (indexOfCurrentTag != -1) {</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">                    if (indexOfCurrentTag &lt; maxIndexOfPreviousTag) {</span>
+<span class="fc" id="L166">                        log(node.getLineNumber(), MSG_KEY, tagOrder.toString());</span>
+                    }
+                    else {
+<span class="fc" id="L169">                        maxIndexOfPreviousTag = indexOfCurrentTag;</span>
+                    }
+                }
+            }
+        }
+<span class="fc" id="L174">    }</span>
+
+    /**
+     * Returns type of parent node.
+     * @param commentBlock child node.
+     * @return parent type.
+     */
+    private static int getParentType(DetailAST commentBlock) {
+<span class="fc" id="L182">        final DetailAST parentNode = commentBlock.getParent();</span>
+<span class="fc" id="L183">        int type = parentNode.getType();</span>
+<span class="fc bfc" id="L184" title="All 4 branches covered.">        if (type == TokenTypes.TYPE || type == TokenTypes.MODIFIERS) {</span>
+<span class="fc" id="L185">            type = parentNode.getParent().getType();</span>
+        }
+<span class="fc" id="L187">        return type;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

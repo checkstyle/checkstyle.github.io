@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MagicNumberCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">MagicNumberCheck.java</span></div><h1>MagicNumberCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.Arrays;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CheckUtils;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+import com.puppycrawl.tools.checkstyle.utils.ScopeUtils;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtils;
+
+/**
+ * &lt;p&gt;
+ * Checks that there are no &lt;a href=&quot;https://en.wikipedia.org/wiki/Magic_number_%28programming%29&quot;&gt;
+ * &amp;quot;magic numbers&amp;quot;&lt;/a&gt; where a magic
+ * number is a numeric literal that is not defined as a constant.
+ * By default, -1, 0, 1, and 2 are not considered to be magic numbers.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;Constant definition is any variable/field that has 'final' modifier.
+ * It is fine to have one constant defining multiple numeric literals within one expression:
+ * &lt;pre&gt;
+ * {@code static final int SECONDS_PER_DAY = 24 * 60 * 60;
+ * static final double SPECIAL_RATIO = 4.0 / 3.0;
+ * static final double SPECIAL_SUM = 1 + Math.E;
+ * static final double SPECIAL_DIFFERENCE = 4 - Math.PI;
+ * static final Border STANDARD_BORDER = BorderFactory.createEmptyBorder(3, 3, 3, 3);
+ * static final Integer ANSWER_TO_THE_ULTIMATE_QUESTION_OF_LIFE = new Integer(42);}
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;Check have following options:
+ * ignoreHashCodeMethod - ignore magic numbers in hashCode methods;
+ * ignoreAnnotation - ignore magic numbers in annotation declarations;
+ * ignoreFieldDeclaration - ignore magic numbers in field declarations.
+ * &lt;p&gt;
+ * To configure the check with default configuration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;MagicNumber&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * results is following violations:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * {@code
+ *   {@literal @}MyAnnotation(6) // violation
+ *   class MyClass {
+ *       private field = 7; // violation
+ *
+ *       void foo() {
+ *          int i = i + 1; // no violation
+ *          int j = j + 8; // violation
+ *       }
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check so that it checks floating-point numbers
+ * that are not 0, 0.5, or 1:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ *   &amp;lt;module name=&amp;quot;MagicNumber&amp;quot;&amp;gt;
+ *       &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;NUM_DOUBLE, NUM_FLOAT&amp;quot;/&amp;gt;
+ *       &amp;lt;property name=&amp;quot;ignoreNumbers&amp;quot; value=&amp;quot;0, 0.5, 1&amp;quot;/&amp;gt;
+ *       &amp;lt;property name=&amp;quot;ignoreFieldDeclaration&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ *       &amp;lt;property name=&amp;quot;ignoreAnnotation&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ *   &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * results is following violations:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * {@code
+ *   {@literal @}MyAnnotation(6) // no violation
+ *   class MyClass {
+ *       private field = 7; // no violation
+ *
+ *       void foo() {
+ *          int i = i + 1; // no violation
+ *          int j = j + (int)0.5; // no violation
+ *       }
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Config example of constantWaiverParentToken option:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ *   &amp;lt;module name=&amp;quot;MagicNumber&amp;quot;&amp;gt;
+ *       &amp;lt;property name=&amp;quot;constantWaiverParentToken&amp;quot; value=&amp;quot;ASSIGN,ARRAY_INIT,EXPR,
+ *       UNARY_PLUS, UNARY_MINUS, TYPECAST, ELIST, DIV, PLUS &amp;quot;/&amp;gt;
+ *   &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * result is following violation:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * {@code
+ * class TestMethodCall {
+ *     public void method2() {
+ *         final TestMethodCall dummyObject = new TestMethodCall(62);    //violation
+ *         final int a = 3;        // ok as waiver is ASSIGN
+ *         final int [] b = {4, 5} // ok as waiver is ARRAY_INIT
+ *         final int c = -3;       // ok as waiver is UNARY_MINUS
+ *         final int d = +4;       // ok as waiver is UNARY_PLUS
+ *         final int e = method(1, 2) // ELIST is there but violation due to METHOD_CALL
+ *         final int x = 3 * 4;    // violation
+ *         final int y = 3 / 4;    // ok as waiver is DIV
+ *         final int z = 3 + 4;    // ok as waiver is PLUS
+ *         final int w = 3 - 4;    // violation
+ *         final int x = (int)(3.4);    //ok as waiver is TYPECAST
+ *     }
+ * }
+ * }
+ * &lt;/pre&gt;
+ * @author Rick Giles
+ * @author Lars Kühne
+ * @author Daniel Solano Gómez
+ */
+@StatelessCheck
+public class MagicNumberCheck extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;magic.number&quot;;
+
+    /**
+     * The token types that are allowed in the AST path from the
+     * number literal to the enclosing constant definition.
+     */
+<span class="fc" id="L154">    private int[] constantWaiverParentToken = {</span>
+        TokenTypes.ASSIGN,
+        TokenTypes.ARRAY_INIT,
+        TokenTypes.EXPR,
+        TokenTypes.UNARY_PLUS,
+        TokenTypes.UNARY_MINUS,
+        TokenTypes.TYPECAST,
+        TokenTypes.ELIST,
+        TokenTypes.LITERAL_NEW,
+        TokenTypes.METHOD_CALL,
+        TokenTypes.STAR,
+        TokenTypes.DIV,
+        TokenTypes.PLUS,
+        TokenTypes.MINUS,
+    };
+
+    /** The numbers to ignore in the check, sorted. */
+<span class="fc" id="L171">    private double[] ignoreNumbers = {-1, 0, 1, 2};</span>
+
+    /** Whether to ignore magic numbers in a hash code method. */
+    private boolean ignoreHashCodeMethod;
+
+    /** Whether to ignore magic numbers in annotation. */
+    private boolean ignoreAnnotation;
+
+    /** Whether to ignore magic numbers in field declaration. */
+    private boolean ignoreFieldDeclaration;
+
+    /**
+     * Constructor for MagicNumber Check.
+     * Sort the allowedTokensBetweenMagicNumberAndConstDef array for binary search.
+     */
+<span class="fc" id="L186">    public MagicNumberCheck() {</span>
+<span class="fc" id="L187">        Arrays.sort(constantWaiverParentToken);</span>
+<span class="fc" id="L188">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L192">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L197">        return new int[] {</span>
+            TokenTypes.NUM_DOUBLE,
+            TokenTypes.NUM_FLOAT,
+            TokenTypes.NUM_INT,
+            TokenTypes.NUM_LONG,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L207">        return CommonUtils.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L212" title="All 4 branches covered.">        if ((!ignoreAnnotation || !isChildOf(ast, TokenTypes.ANNOTATION))</span>
+<span class="fc bfc" id="L213" title="All 4 branches covered.">                &amp;&amp; !isInIgnoreList(ast)</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">                &amp;&amp; (!ignoreHashCodeMethod || !isInHashCodeMethod(ast))) {</span>
+<span class="fc" id="L215">            final DetailAST constantDefAST = findContainingConstantDef(ast);</span>
+
+<span class="fc bfc" id="L217" title="All 2 branches covered.">            if (constantDefAST == null) {</span>
+<span class="fc bfc" id="L218" title="All 4 branches covered.">                if (!ignoreFieldDeclaration || !isFieldDeclaration(ast)) {</span>
+<span class="fc" id="L219">                    reportMagicNumber(ast);</span>
+                }
+            }
+            else {
+<span class="fc" id="L223">                final boolean found = isMagicNumberExists(ast, constantDefAST);</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">                if (found) {</span>
+<span class="fc" id="L225">                    reportMagicNumber(ast);</span>
+                }
+            }
+        }
+<span class="fc" id="L229">    }</span>
+
+    /**
+     * Is magic number some where at ast tree.
+     * @param ast ast token
+     * @param constantDefAST constant ast
+     * @return true if magic number is present
+     */
+    private boolean isMagicNumberExists(DetailAST ast, DetailAST constantDefAST) {
+<span class="fc" id="L238">        boolean found = false;</span>
+<span class="fc" id="L239">        DetailAST astNode = ast.getParent();</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">        while (astNode != constantDefAST) {</span>
+<span class="fc" id="L241">            final int type = astNode.getType();</span>
+<span class="fc bfc" id="L242" title="All 2 branches covered.">            if (Arrays.binarySearch(constantWaiverParentToken, type) &lt; 0) {</span>
+<span class="fc" id="L243">                found = true;</span>
+<span class="fc" id="L244">                break;</span>
+            }
+<span class="fc" id="L246">            astNode = astNode.getParent();</span>
+<span class="fc" id="L247">        }</span>
+<span class="fc" id="L248">        return found;</span>
+    }
+
+    /**
+     * Finds the constant definition that contains aAST.
+     * @param ast the AST
+     * @return the constant def or null if ast is not contained in a constant definition.
+     */
+    private static DetailAST findContainingConstantDef(DetailAST ast) {
+<span class="fc" id="L257">        DetailAST varDefAST = ast;</span>
+<span class="fc bfc" id="L258" title="All 2 branches covered.">        while (varDefAST != null</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">                &amp;&amp; varDefAST.getType() != TokenTypes.VARIABLE_DEF</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">                &amp;&amp; varDefAST.getType() != TokenTypes.ENUM_CONSTANT_DEF) {</span>
+<span class="fc" id="L261">            varDefAST = varDefAST.getParent();</span>
+        }
+<span class="fc" id="L263">        DetailAST constantDef = null;</span>
+
+        // no containing variable definition?
+<span class="fc bfc" id="L266" title="All 2 branches covered.">        if (varDefAST != null) {</span>
+            // implicit constant?
+<span class="fc bfc" id="L268" title="All 2 branches covered.">            if (ScopeUtils.isInInterfaceOrAnnotationBlock(varDefAST)</span>
+<span class="fc bfc" id="L269" title="All 2 branches covered.">                    || varDefAST.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
+<span class="fc" id="L270">                constantDef = varDefAST;</span>
+            }
+            else {
+                // explicit constant
+<span class="fc" id="L274">                final DetailAST modifiersAST = varDefAST.findFirstToken(TokenTypes.MODIFIERS);</span>
+
+<span class="fc bfc" id="L276" title="All 2 branches covered.">                if (modifiersAST.findFirstToken(TokenTypes.FINAL) != null) {</span>
+<span class="fc" id="L277">                    constantDef = varDefAST;</span>
+                }
+            }
+        }
+<span class="fc" id="L281">        return constantDef;</span>
+    }
+
+    /**
+     * Reports aAST as a magic number, includes unary operators as needed.
+     * @param ast the AST node that contains the number to report
+     */
+    private void reportMagicNumber(DetailAST ast) {
+<span class="fc" id="L289">        String text = ast.getText();</span>
+<span class="fc" id="L290">        final DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L291">        DetailAST reportAST = ast;</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">        if (parent.getType() == TokenTypes.UNARY_MINUS) {</span>
+<span class="fc" id="L293">            reportAST = parent;</span>
+<span class="fc" id="L294">            text = &quot;-&quot; + text;</span>
+        }
+<span class="fc bfc" id="L296" title="All 2 branches covered.">        else if (parent.getType() == TokenTypes.UNARY_PLUS) {</span>
+<span class="fc" id="L297">            reportAST = parent;</span>
+<span class="fc" id="L298">            text = &quot;+&quot; + text;</span>
+        }
+<span class="fc" id="L300">        log(reportAST.getLineNo(),</span>
+<span class="fc" id="L301">                reportAST.getColumnNo(),</span>
+                MSG_KEY,
+                text);
+<span class="fc" id="L304">    }</span>
+
+    /**
+     * Determines whether or not the given AST is in a valid hash code method.
+     * A valid hash code method is considered to be a method of the signature
+     * {@code public int hashCode()}.
+     *
+     * @param ast the AST from which to search for an enclosing hash code
+     *     method definition
+     *
+     * @return {@code true} if {@code ast} is in the scope of a valid hash code method.
+     */
+    private static boolean isInHashCodeMethod(DetailAST ast) {
+<span class="fc" id="L317">        boolean inHashCodeMethod = false;</span>
+
+        // if not in a code block, can't be in hashCode()
+<span class="fc bfc" id="L320" title="All 2 branches covered.">        if (ScopeUtils.isInCodeBlock(ast)) {</span>
+            // find the method definition AST
+<span class="fc" id="L322">            DetailAST methodDefAST = ast.getParent();</span>
+<span class="fc bfc" id="L323" title="All 2 branches covered.">            while (methodDefAST != null</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">                    &amp;&amp; methodDefAST.getType() != TokenTypes.METHOD_DEF) {</span>
+<span class="fc" id="L325">                methodDefAST = methodDefAST.getParent();</span>
+            }
+
+<span class="fc bfc" id="L328" title="All 2 branches covered.">            if (methodDefAST != null) {</span>
+                // Check for 'hashCode' name.
+<span class="fc" id="L330">                final DetailAST identAST = methodDefAST.findFirstToken(TokenTypes.IDENT);</span>
+
+<span class="fc bfc" id="L332" title="All 2 branches covered.">                if (&quot;hashCode&quot;.equals(identAST.getText())) {</span>
+                    // Check for no arguments.
+<span class="fc" id="L334">                    final DetailAST paramAST = methodDefAST.findFirstToken(TokenTypes.PARAMETERS);</span>
+                    // we are in a 'public int hashCode()' method! The compiler will ensure
+                    // the method returns an 'int' and is public.
+<span class="fc bfc" id="L337" title="All 2 branches covered.">                    inHashCodeMethod = paramAST.getChildCount() == 0;</span>
+                }
+            }
+        }
+<span class="fc" id="L341">        return inHashCodeMethod;</span>
+    }
+
+    /**
+     * Decides whether the number of an AST is in the ignore list of this
+     * check.
+     * @param ast the AST to check
+     * @return true if the number of ast is in the ignore list of this check.
+     */
+    private boolean isInIgnoreList(DetailAST ast) {
+<span class="fc" id="L351">        double value = CheckUtils.parseDouble(ast.getText(), ast.getType());</span>
+<span class="fc" id="L352">        final DetailAST parent = ast.getParent();</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">        if (parent.getType() == TokenTypes.UNARY_MINUS) {</span>
+<span class="fc" id="L354">            value = -1 * value;</span>
+        }
+<span class="fc bfc" id="L356" title="All 2 branches covered.">        return Arrays.binarySearch(ignoreNumbers, value) &gt;= 0;</span>
+    }
+
+    /**
+     * Determines whether or not the given AST is field declaration.
+     *
+     * @param ast AST from which to search for an enclosing field declaration
+     *
+     * @return {@code true} if {@code ast} is in the scope of field declaration
+     */
+    private static boolean isFieldDeclaration(DetailAST ast) {
+<span class="fc" id="L367">        DetailAST varDefAST = ast;</span>
+<span class="fc bfc" id="L368" title="All 2 branches covered.">        while (varDefAST != null</span>
+<span class="fc bfc" id="L369" title="All 2 branches covered.">                &amp;&amp; varDefAST.getType() != TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L370">            varDefAST = varDefAST.getParent();</span>
+        }
+
+        // contains variable declaration
+        // and it is directly inside class declaration
+<span class="fc bfc" id="L375" title="All 2 branches covered.">        return varDefAST != null</span>
+<span class="fc bfc" id="L376" title="All 2 branches covered.">                &amp;&amp; varDefAST.getParent().getParent().getType() == TokenTypes.CLASS_DEF;</span>
+    }
+
+    /**
+     * Sets the tokens which are allowed between Magic Number and defined Object.
+     * @param tokens The string representation of the tokens interested in
+     */
+    public void setConstantWaiverParentToken(String... tokens) {
+<span class="fc" id="L384">        constantWaiverParentToken = new int[tokens.length];</span>
+<span class="fc bfc" id="L385" title="All 2 branches covered.">        for (int i = 0; i &lt; tokens.length; i++) {</span>
+<span class="fc" id="L386">            constantWaiverParentToken[i] = TokenUtils.getTokenId(tokens[i]);</span>
+        }
+<span class="fc" id="L388">        Arrays.sort(constantWaiverParentToken);</span>
+<span class="fc" id="L389">    }</span>
+
+    /**
+     * Sets the numbers to ignore in the check.
+     * BeanUtils converts numeric token list to double array automatically.
+     * @param list list of numbers to ignore.
+     */
+    public void setIgnoreNumbers(double... list) {
+<span class="fc bfc" id="L397" title="All 2 branches covered.">        if (list.length == 0) {</span>
+<span class="fc" id="L398">            ignoreNumbers = CommonUtils.EMPTY_DOUBLE_ARRAY;</span>
+        }
+        else {
+<span class="fc" id="L401">            ignoreNumbers = new double[list.length];</span>
+<span class="fc" id="L402">            System.arraycopy(list, 0, ignoreNumbers, 0, list.length);</span>
+<span class="fc" id="L403">            Arrays.sort(ignoreNumbers);</span>
+        }
+<span class="fc" id="L405">    }</span>
+
+    /**
+     * Set whether to ignore hashCode methods.
+     * @param ignoreHashCodeMethod decide whether to ignore
+     *     hash code methods
+     */
+    public void setIgnoreHashCodeMethod(boolean ignoreHashCodeMethod) {
+<span class="fc" id="L413">        this.ignoreHashCodeMethod = ignoreHashCodeMethod;</span>
+<span class="fc" id="L414">    }</span>
+
+    /**
+     * Set whether to ignore Annotations.
+     * @param ignoreAnnotation decide whether to ignore annotations
+     */
+    public void setIgnoreAnnotation(boolean ignoreAnnotation) {
+<span class="fc" id="L421">        this.ignoreAnnotation = ignoreAnnotation;</span>
+<span class="fc" id="L422">    }</span>
+
+    /**
+     * Set whether to ignore magic numbers in field declaration.
+     * @param ignoreFieldDeclaration decide whether to ignore magic numbers
+     *     in field declaration
+     */
+    public void setIgnoreFieldDeclaration(boolean ignoreFieldDeclaration) {
+<span class="fc" id="L430">        this.ignoreFieldDeclaration = ignoreFieldDeclaration;</span>
+<span class="fc" id="L431">    }</span>
+
+    /**
+     * Determines if the given AST node has a parent node with given token type code.
+     *
+     * @param ast the AST from which to search for annotations
+     * @param type the type code of parent token
+     *
+     * @return {@code true} if the AST node has a parent with given token type.
+     */
+    private static boolean isChildOf(DetailAST ast, int type) {
+<span class="fc" id="L442">        boolean result = false;</span>
+<span class="fc" id="L443">        DetailAST node = ast;</span>
+        do {
+<span class="fc bfc" id="L445" title="All 2 branches covered.">            if (node.getType() == type) {</span>
+<span class="fc" id="L446">                result = true;</span>
+<span class="fc" id="L447">                break;</span>
+            }
+<span class="fc" id="L449">            node = node.getParent();</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">        } while (node != null);</span>
+
+<span class="fc" id="L452">        return result;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

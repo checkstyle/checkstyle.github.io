@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmptyLineSeparatorCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.whitespace</a> &gt; <span class="el_source">EmptyLineSeparatorCheck.java</span></div><h1>EmptyLineSeparatorCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.whitespace;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FileContents;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+import com.puppycrawl.tools.checkstyle.utils.JavadocUtils;
+
+/**
+ * Checks for empty line separators after header, package, all import declarations,
+ * fields, constructors, methods, nested classes,
+ * static initializers and instance initializers.
+ *
+ * &lt;p&gt; By default the check will check the following statements:
+ *  {@link TokenTypes#PACKAGE_DEF PACKAGE_DEF},
+ *  {@link TokenTypes#IMPORT IMPORT},
+ *  {@link TokenTypes#CLASS_DEF CLASS_DEF},
+ *  {@link TokenTypes#INTERFACE_DEF INTERFACE_DEF},
+ *  {@link TokenTypes#STATIC_INIT STATIC_INIT},
+ *  {@link TokenTypes#INSTANCE_INIT INSTANCE_INIT},
+ *  {@link TokenTypes#METHOD_DEF METHOD_DEF},
+ *  {@link TokenTypes#CTOR_DEF CTOR_DEF},
+ *  {@link TokenTypes#VARIABLE_DEF VARIABLE_DEF}.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * Example of declarations without empty line separator:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * ///////////////////////////////////////////////////
+ * //HEADER
+ * ///////////////////////////////////////////////////
+ * package com.puppycrawl.tools.checkstyle.whitespace;
+ * import java.io.Serializable;
+ * class Foo
+ * {
+ *     public static final int FOO_CONST = 1;
+ *     public void foo() {} //should be separated from previous statement.
+ * }
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt; An example of how to configure the check with default parameters is:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;EmptyLineSeparator&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * Example of declarations with empty line separator
+ * that is expected by the Check by default:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * ///////////////////////////////////////////////////
+ * //HEADER
+ * ///////////////////////////////////////////////////
+ *
+ * package com.puppycrawl.tools.checkstyle.whitespace;
+ *
+ * import java.io.Serializable;
+ *
+ * class Foo
+ * {
+ *     public static final int FOO_CONST = 1;
+ *
+ *     public void foo() {}
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt; An example how to check empty line after
+ * {@link TokenTypes#VARIABLE_DEF VARIABLE_DEF} and
+ * {@link TokenTypes#METHOD_DEF METHOD_DEF}:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;EmptyLineSeparator&quot;&amp;gt;
+ *    &amp;lt;property name=&quot;tokens&quot; value=&quot;VARIABLE_DEF, METHOD_DEF&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * An example how to allow no empty line between fields:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;EmptyLineSeparator&quot;&amp;gt;
+ *    &amp;lt;property name=&quot;allowNoEmptyLineBetweenFields&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * Example of declarations with multiple empty lines between class members (allowed by default):
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * ///////////////////////////////////////////////////
+ * //HEADER
+ * ///////////////////////////////////////////////////
+ *
+ *
+ * package com.puppycrawl.tools.checkstyle.whitespace;
+ *
+ *
+ *
+ * import java.io.Serializable;
+ *
+ *
+ * class Foo
+ * {
+ *     public static final int FOO_CONST = 1;
+ *
+ *
+ *
+ *     public void foo() {}
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example how to disallow multiple empty lines between class members:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;EmptyLineSeparator&quot;&amp;gt;
+ *    &amp;lt;property name=&quot;allowMultipleEmptyLines&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * An example how to disallow multiple empty line inside methods, constructors, etc.:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;EmptyLineSeparator&quot;&amp;gt;
+ *    &amp;lt;property name=&quot;allowMultipleEmptyLinesInsideClassMembers&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt; The check is valid only for statements that have body:
+ * {@link TokenTypes#CLASS_DEF},
+ * {@link TokenTypes#INTERFACE_DEF},
+ * {@link TokenTypes#ENUM_DEF},
+ * {@link TokenTypes#STATIC_INIT},
+ * {@link TokenTypes#INSTANCE_INIT},
+ * {@link TokenTypes#METHOD_DEF},
+ * {@link TokenTypes#CTOR_DEF}
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Example of declarations with multiple empty lines inside method:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * ///////////////////////////////////////////////////
+ * //HEADER
+ * ///////////////////////////////////////////////////
+ *
+ * package com.puppycrawl.tools.checkstyle.whitespace;
+ *
+ * class Foo
+ * {
+ *
+ *     public void foo() {
+ *
+ *
+ *          System.out.println(1); // violation since method has 2 empty lines subsequently
+ *     }
+ * }
+ * &lt;/pre&gt;
+ * @author maxvetrenko
+ * @author &lt;a href=&quot;mailto:nesterenko-aleksey@list.ru&quot;&gt;Aleksey Nesterenko&lt;/a&gt;
+ */
+@StatelessCheck
+<span class="fc" id="L193">public class EmptyLineSeparatorCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message empty.line.separator in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_SHOULD_BE_SEPARATED = &quot;empty.line.separator&quot;;
+
+    /**
+     * A key is pointing to the warning message empty.line.separator.multiple.lines
+     *  in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_MULTIPLE_LINES = &quot;empty.line.separator.multiple.lines&quot;;
+
+    /**
+     * A key is pointing to the warning message empty.line.separator.lines.after
+     * in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_MULTIPLE_LINES_AFTER =
+            &quot;empty.line.separator.multiple.lines.after&quot;;
+
+    /**
+     * A key is pointing to the warning message empty.line.separator.multiple.lines.inside
+     * in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_MULTIPLE_LINES_INSIDE =
+            &quot;empty.line.separator.multiple.lines.inside&quot;;
+
+    /** Allows no empty line between fields. */
+    private boolean allowNoEmptyLineBetweenFields;
+
+    /** Allows multiple empty lines between class members. */
+<span class="fc" id="L226">    private boolean allowMultipleEmptyLines = true;</span>
+
+    /** Allows multiple empty lines inside class members. */
+<span class="fc" id="L229">    private boolean allowMultipleEmptyLinesInsideClassMembers = true;</span>
+
+    /**
+     * Allow no empty line between fields.
+     * @param allow
+     *        User's value.
+     */
+    public final void setAllowNoEmptyLineBetweenFields(boolean allow) {
+<span class="fc" id="L237">        allowNoEmptyLineBetweenFields = allow;</span>
+<span class="fc" id="L238">    }</span>
+
+    /**
+     * Allow multiple empty lines between class members.
+     * @param allow User's value.
+     */
+    public void setAllowMultipleEmptyLines(boolean allow) {
+<span class="fc" id="L245">        allowMultipleEmptyLines = allow;</span>
+<span class="fc" id="L246">    }</span>
+
+    /**
+     * Allow multiple empty lines inside class members.
+     * @param allow User's value.
+     */
+    public void setAllowMultipleEmptyLinesInsideClassMembers(boolean allow) {
+<span class="fc" id="L253">        allowMultipleEmptyLinesInsideClassMembers = allow;</span>
+<span class="fc" id="L254">    }</span>
+
+    @Override
+    public boolean isCommentNodesRequired() {
+<span class="fc" id="L258">        return true;</span>
+    }
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L263">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L268">        return new int[] {</span>
+            TokenTypes.PACKAGE_DEF,
+            TokenTypes.IMPORT,
+            TokenTypes.CLASS_DEF,
+            TokenTypes.INTERFACE_DEF,
+            TokenTypes.ENUM_DEF,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.CTOR_DEF,
+            TokenTypes.VARIABLE_DEF,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L284">        return CommonUtils.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L289" title="All 2 branches covered.">        if (hasMultipleLinesBefore(ast)) {</span>
+<span class="fc" id="L290">            log(ast.getLineNo(), MSG_MULTIPLE_LINES, ast.getText());</span>
+        }
+<span class="fc bfc" id="L292" title="All 2 branches covered.">        if (!allowMultipleEmptyLinesInsideClassMembers) {</span>
+<span class="fc" id="L293">            processMultipleLinesInside(ast);</span>
+        }
+
+<span class="fc" id="L296">        DetailAST nextToken = ast.getNextSibling();</span>
+<span class="fc bfc" id="L297" title="All 4 branches covered.">        while (nextToken != null &amp;&amp; isComment(nextToken)) {</span>
+<span class="fc" id="L298">            nextToken = nextToken.getNextSibling();</span>
+        }
+<span class="fc bfc" id="L300" title="All 2 branches covered.">        if (nextToken != null) {</span>
+<span class="fc" id="L301">            final int astType = ast.getType();</span>
+<span class="fc bfc" id="L302" title="All 4 branches covered.">            switch (astType) {</span>
+                case TokenTypes.VARIABLE_DEF:
+<span class="fc" id="L304">                    processVariableDef(ast, nextToken);</span>
+<span class="fc" id="L305">                    break;</span>
+                case TokenTypes.IMPORT:
+<span class="fc" id="L307">                    processImport(ast, nextToken, astType);</span>
+<span class="fc" id="L308">                    break;</span>
+                case TokenTypes.PACKAGE_DEF:
+<span class="fc" id="L310">                    processPackage(ast, nextToken);</span>
+<span class="fc" id="L311">                    break;</span>
+                default:
+<span class="fc bfc" id="L313" title="All 2 branches covered.">                    if (nextToken.getType() == TokenTypes.RCURLY) {</span>
+<span class="fc bfc" id="L314" title="All 2 branches covered.">                        if (hasNotAllowedTwoEmptyLinesBefore(nextToken)) {</span>
+<span class="fc" id="L315">                            log(ast.getLineNo(), MSG_MULTIPLE_LINES_AFTER, ast.getText());</span>
+                        }
+                    }
+<span class="fc bfc" id="L318" title="All 2 branches covered.">                    else if (!hasEmptyLineAfter(ast)) {</span>
+<span class="fc" id="L319">                        log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED,</span>
+<span class="fc" id="L320">                            nextToken.getText());</span>
+                    }
+            }
+        }
+<span class="fc" id="L324">    }</span>
+
+    /**
+     * Log violation in case there are multiple empty lines inside constructor,
+     * initialization block or method.
+     * @param ast the ast to check.
+     */
+    private void processMultipleLinesInside(DetailAST ast) {
+<span class="fc" id="L332">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L333" title="All 4 branches covered.">        if (astType != TokenTypes.CLASS_DEF &amp;&amp; isClassMemberBlock(astType)) {</span>
+<span class="fc" id="L334">            final List&lt;Integer&gt; emptyLines = getEmptyLines(ast);</span>
+<span class="fc" id="L335">            final List&lt;Integer&gt; emptyLinesToLog = getEmptyLinesToLog(emptyLines);</span>
+
+<span class="fc bfc" id="L337" title="All 2 branches covered.">            for (Integer lineNo : emptyLinesToLog) {</span>
+                // Checkstyle counts line numbers from 0 but IDE from 1
+<span class="fc" id="L339">                log(lineNo + 1, MSG_MULTIPLE_LINES_INSIDE);</span>
+<span class="fc" id="L340">            }</span>
+        }
+<span class="fc" id="L342">    }</span>
+
+    /**
+     * Whether the AST is a class member block.
+     * @param astType the AST to check.
+     * @return true if the AST is a class member block.
+     */
+    private static boolean isClassMemberBlock(int astType) {
+<span class="fc bfc" id="L350" title="All 8 branches covered.">        return astType == TokenTypes.STATIC_INIT</span>
+                || astType == TokenTypes.INSTANCE_INIT
+                || astType == TokenTypes.METHOD_DEF
+                || astType == TokenTypes.CTOR_DEF;
+    }
+
+    /**
+     * Get list of empty lines.
+     * @param ast the ast to check.
+     * @return list of line numbers for empty lines.
+     */
+    private List&lt;Integer&gt; getEmptyLines(DetailAST ast) {
+<span class="fc" id="L362">        final DetailAST lastToken = ast.getLastChild().getLastChild();</span>
+<span class="fc" id="L363">        int lastTokenLineNo = 0;</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">        if (lastToken != null) {</span>
+            // -1 as count starts from 0
+            // -2 as last token line cannot be empty, because it is a RCURLY
+<span class="fc" id="L367">            lastTokenLineNo = lastToken.getLineNo() - 2;</span>
+        }
+<span class="fc" id="L369">        final List&lt;Integer&gt; emptyLines = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L370">        final FileContents fileContents = getFileContents();</span>
+
+<span class="fc bfc" id="L372" title="All 2 branches covered.">        for (int lineNo = ast.getLineNo(); lineNo &lt;= lastTokenLineNo; lineNo++) {</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">            if (fileContents.lineIsBlank(lineNo)) {</span>
+<span class="fc" id="L374">                emptyLines.add(lineNo);</span>
+            }
+        }
+<span class="fc" id="L377">        return emptyLines;</span>
+    }
+
+    /**
+     * Get list of empty lines to log.
+     * @param emptyLines list of empty lines.
+     * @return list of empty lines to log.
+     */
+    private static List&lt;Integer&gt; getEmptyLinesToLog(List&lt;Integer&gt; emptyLines) {
+<span class="fc" id="L386">        final List&lt;Integer&gt; emptyLinesToLog = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">        if (emptyLines.size() &gt;= 2) {</span>
+<span class="fc" id="L388">            int previousEmptyLineNo = emptyLines.get(0);</span>
+<span class="fc bfc" id="L389" title="All 2 branches covered.">            for (int emptyLineNo : emptyLines) {</span>
+<span class="fc bfc" id="L390" title="All 2 branches covered.">                if (previousEmptyLineNo + 1 == emptyLineNo) {</span>
+<span class="fc" id="L391">                    emptyLinesToLog.add(emptyLineNo);</span>
+                }
+<span class="fc" id="L393">                previousEmptyLineNo = emptyLineNo;</span>
+<span class="fc" id="L394">            }</span>
+        }
+<span class="fc" id="L396">        return emptyLinesToLog;</span>
+    }
+
+    /**
+     * Whether the token has not allowed multiple empty lines before.
+     * @param ast the ast to check.
+     * @return true if the token has not allowed multiple empty lines before.
+     */
+    private boolean hasMultipleLinesBefore(DetailAST ast) {
+<span class="fc" id="L405">        boolean result = false;</span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">        if ((ast.getType() != TokenTypes.VARIABLE_DEF</span>
+<span class="fc bfc" id="L407" title="All 2 branches covered.">            || isTypeField(ast))</span>
+<span class="fc bfc" id="L408" title="All 2 branches covered.">                &amp;&amp; hasNotAllowedTwoEmptyLinesBefore(ast)) {</span>
+<span class="fc" id="L409">            result = true;</span>
+        }
+<span class="fc" id="L411">        return result;</span>
+    }
+
+    /**
+     * Process Package.
+     * @param ast token
+     * @param nextToken next token
+     */
+    private void processPackage(DetailAST ast, DetailAST nextToken) {
+<span class="fc bfc" id="L420" title="All 4 branches covered.">        if (ast.getLineNo() &gt; 1 &amp;&amp; !hasEmptyLineBefore(ast)) {</span>
+<span class="fc bfc" id="L421" title="All 2 branches covered.">            if (getFileContents().getFileName().endsWith(&quot;package-info.java&quot;)) {</span>
+<span class="fc bfc" id="L422" title="All 4 branches covered.">                if (ast.getFirstChild().getChildCount() == 0 &amp;&amp; !isPrecededByJavadoc(ast)) {</span>
+<span class="fc" id="L423">                    log(ast.getLineNo(), MSG_SHOULD_BE_SEPARATED, ast.getText());</span>
+                }
+            }
+            else {
+<span class="fc" id="L427">                log(ast.getLineNo(), MSG_SHOULD_BE_SEPARATED, ast.getText());</span>
+            }
+        }
+<span class="fc bfc" id="L430" title="All 2 branches covered.">        if (!hasEmptyLineAfter(ast)) {</span>
+<span class="fc" id="L431">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED, nextToken.getText());</span>
+        }
+<span class="fc" id="L433">    }</span>
+
+    /**
+     * Process Import.
+     * @param ast token
+     * @param nextToken next token
+     * @param astType token Type
+     */
+    private void processImport(DetailAST ast, DetailAST nextToken, int astType) {
+<span class="fc bfc" id="L442" title="All 4 branches covered.">        if (astType != nextToken.getType() &amp;&amp; !hasEmptyLineAfter(ast)) {</span>
+<span class="fc" id="L443">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED, nextToken.getText());</span>
+        }
+<span class="fc" id="L445">    }</span>
+
+    /**
+     * Process Variable.
+     * @param ast token
+     * @param nextToken next Token
+     */
+    private void processVariableDef(DetailAST ast, DetailAST nextToken) {
+<span class="fc bfc" id="L453" title="All 4 branches covered.">        if (isTypeField(ast) &amp;&amp; !hasEmptyLineAfter(ast)</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">                &amp;&amp; isViolatingEmptyLineBetweenFieldsPolicy(nextToken)) {</span>
+<span class="fc" id="L455">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED,</span>
+<span class="fc" id="L456">                    nextToken.getText());</span>
+        }
+<span class="fc" id="L458">    }</span>
+
+    /**
+     * Checks whether token placement violates policy of empty line between fields.
+     * @param detailAST token to be analyzed
+     * @return true if policy is violated and warning should be raised; false otherwise
+     */
+    private boolean isViolatingEmptyLineBetweenFieldsPolicy(DetailAST detailAST) {
+<span class="fc bfc" id="L466" title="All 2 branches covered.">        return allowNoEmptyLineBetweenFields</span>
+<span class="fc bfc" id="L467" title="All 2 branches covered.">                    &amp;&amp; detailAST.getType() != TokenTypes.VARIABLE_DEF</span>
+<span class="fc bfc" id="L468" title="All 4 branches covered.">                    &amp;&amp; detailAST.getType() != TokenTypes.RCURLY</span>
+                || !allowNoEmptyLineBetweenFields
+<span class="fc bfc" id="L470" title="All 2 branches covered.">                    &amp;&amp; detailAST.getType() != TokenTypes.RCURLY;</span>
+    }
+
+    /**
+     * Checks if a token has empty two previous lines and multiple empty lines is not allowed.
+     * @param token DetailAST token
+     * @return true, if token has empty two lines before and allowMultipleEmptyLines is false
+     */
+    private boolean hasNotAllowedTwoEmptyLinesBefore(DetailAST token) {
+<span class="fc bfc" id="L479" title="All 4 branches covered.">        return !allowMultipleEmptyLines &amp;&amp; hasEmptyLineBefore(token)</span>
+<span class="fc bfc" id="L480" title="All 2 branches covered.">                &amp;&amp; isPrePreviousLineEmpty(token);</span>
+    }
+
+    /**
+     * Checks if a token has empty pre-previous line.
+     * @param token DetailAST token.
+     * @return true, if token has empty lines before.
+     */
+    private boolean isPrePreviousLineEmpty(DetailAST token) {
+<span class="fc" id="L489">        boolean result = false;</span>
+<span class="fc" id="L490">        final int lineNo = token.getLineNo();</span>
+        // 3 is the number of the pre-previous line because the numbering starts from zero.
+<span class="fc" id="L492">        final int number = 3;</span>
+<span class="fc bfc" id="L493" title="All 2 branches covered.">        if (lineNo &gt;= number) {</span>
+<span class="fc" id="L494">            final String prePreviousLine = getLines()[lineNo - number];</span>
+<span class="fc" id="L495">            result = CommonUtils.isBlank(prePreviousLine);</span>
+        }
+<span class="fc" id="L497">        return result;</span>
+    }
+
+    /**
+     * Checks if token have empty line after.
+     * @param token token.
+     * @return true if token have empty line after.
+     */
+    private boolean hasEmptyLineAfter(DetailAST token) {
+<span class="fc" id="L506">        DetailAST lastToken = token.getLastChild().getLastChild();</span>
+<span class="fc bfc" id="L507" title="All 2 branches covered.">        if (lastToken == null) {</span>
+<span class="fc" id="L508">            lastToken = token.getLastChild();</span>
+        }
+<span class="fc" id="L510">        DetailAST nextToken = token.getNextSibling();</span>
+<span class="fc bfc" id="L511" title="All 2 branches covered.">        if (isComment(nextToken)) {</span>
+<span class="fc" id="L512">            nextToken = nextToken.getNextSibling();</span>
+        }
+        // Start of the next token
+<span class="fc" id="L515">        final int nextBegin = nextToken.getLineNo();</span>
+        // End of current token.
+<span class="fc" id="L517">        final int currentEnd = lastToken.getLineNo();</span>
+<span class="fc" id="L518">        return hasEmptyLine(currentEnd + 1, nextBegin - 1);</span>
+    }
+
+    /**
+     * Checks, whether there are empty lines within the specified line range. Line numbering is
+     * started from 1 for parameter values
+     * @param startLine number of the first line in the range
+     * @param endLine number of the second line in the range
+     * @return {@code true} if found any blank line within the range, {@code false}
+     *         otherwise
+     */
+    private boolean hasEmptyLine(int startLine, int endLine) {
+        // Initial value is false - blank line not found
+<span class="fc" id="L531">        boolean result = false;</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">        if (startLine &lt;= endLine) {</span>
+<span class="fc" id="L533">            final FileContents fileContents = getFileContents();</span>
+<span class="fc bfc" id="L534" title="All 2 branches covered.">            for (int line = startLine; line &lt;= endLine; line++) {</span>
+                // Check, if the line is blank. Lines are numbered from 0, so subtract 1
+<span class="fc bfc" id="L536" title="All 2 branches covered.">                if (fileContents.lineIsBlank(line - 1)) {</span>
+<span class="fc" id="L537">                    result = true;</span>
+<span class="fc" id="L538">                    break;</span>
+                }
+            }
+        }
+<span class="fc" id="L542">        return result;</span>
+    }
+
+    /**
+     * Checks if a token has a empty line before.
+     * @param token token.
+     * @return true, if token have empty line before.
+     */
+    private boolean hasEmptyLineBefore(DetailAST token) {
+<span class="fc" id="L551">        boolean result = false;</span>
+<span class="fc" id="L552">        final int lineNo = token.getLineNo();</span>
+<span class="fc bfc" id="L553" title="All 2 branches covered.">        if (lineNo != 1) {</span>
+            // [lineNo - 2] is the number of the previous line as the numbering starts from zero.
+<span class="fc" id="L555">            final String lineBefore = getLines()[lineNo - 2];</span>
+<span class="fc" id="L556">            result = CommonUtils.isBlank(lineBefore);</span>
+        }
+<span class="fc" id="L558">        return result;</span>
+    }
+
+    /**
+     * Check if token is preceded by javadoc comment.
+     * @param token token for check.
+     * @return true, if token is preceded by javadoc comment.
+     */
+    private static boolean isPrecededByJavadoc(DetailAST token) {
+<span class="fc" id="L567">        boolean result = false;</span>
+<span class="fc" id="L568">        final DetailAST previous = token.getPreviousSibling();</span>
+<span class="fc bfc" id="L569" title="All 2 branches covered.">        if (previous.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
+<span class="fc bfc" id="L570" title="All 2 branches covered.">                &amp;&amp; JavadocUtils.isJavadocComment(previous.getFirstChild().getText())) {</span>
+<span class="fc" id="L571">            result = true;</span>
+        }
+<span class="fc" id="L573">        return result;</span>
+    }
+
+    /**
+     * Check if token is a comment.
+     * @param ast ast node
+     * @return true, if given ast is comment.
+     */
+    private static boolean isComment(DetailAST ast) {
+<span class="fc bfc" id="L582" title="All 2 branches covered.">        return ast.getType() == TokenTypes.SINGLE_LINE_COMMENT</span>
+<span class="fc bfc" id="L583" title="All 2 branches covered.">                   || ast.getType() == TokenTypes.BLOCK_COMMENT_BEGIN;</span>
+    }
+
+    /**
+     * If variable definition is a type field.
+     * @param variableDef variable definition.
+     * @return true variable definition is a type field.
+     */
+    private static boolean isTypeField(DetailAST variableDef) {
+<span class="fc" id="L592">        final int parentType = variableDef.getParent().getParent().getType();</span>
+<span class="fc bfc" id="L593" title="All 2 branches covered.">        return parentType == TokenTypes.CLASS_DEF;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

@@ -1,0 +1,628 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Checker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">Checker.java</span></div><h1>Checker.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.puppycrawl.tools.checkstyle.api.AuditEvent;
+import com.puppycrawl.tools.checkstyle.api.AuditListener;
+import com.puppycrawl.tools.checkstyle.api.AutomaticBean;
+import com.puppycrawl.tools.checkstyle.api.BeforeExecutionFileFilter;
+import com.puppycrawl.tools.checkstyle.api.BeforeExecutionFileFilterSet;
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.Configuration;
+import com.puppycrawl.tools.checkstyle.api.Context;
+import com.puppycrawl.tools.checkstyle.api.ExternalResourceHolder;
+import com.puppycrawl.tools.checkstyle.api.FileSetCheck;
+import com.puppycrawl.tools.checkstyle.api.FileText;
+import com.puppycrawl.tools.checkstyle.api.Filter;
+import com.puppycrawl.tools.checkstyle.api.FilterSet;
+import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
+import com.puppycrawl.tools.checkstyle.api.MessageDispatcher;
+import com.puppycrawl.tools.checkstyle.api.RootModule;
+import com.puppycrawl.tools.checkstyle.api.SeverityLevel;
+import com.puppycrawl.tools.checkstyle.api.SeverityLevelCounter;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * This class provides the functionality to check a set of files.
+ * @author Oliver Burn
+ * @author &lt;a href=&quot;mailto:stephane.bailliez@wanadoo.fr&quot;&gt;Stephane Bailliez&lt;/a&gt;
+ * @author lkuehne
+ * @author Andrei Selkin
+ */
+public class Checker extends AutomaticBean implements MessageDispatcher, RootModule {
+
+    /** Message to use when an exception occurs and should be printed as a violation. */
+    public static final String EXCEPTION_MSG = &quot;general.exception&quot;;
+
+    /** Logger for Checker. */
+    private final Log log;
+
+    /** Maintains error count. */
+<span class="fc" id="L76">    private final SeverityLevelCounter counter = new SeverityLevelCounter(</span>
+            SeverityLevel.ERROR);
+
+    /** Vector of listeners. */
+<span class="fc" id="L80">    private final List&lt;AuditListener&gt; listeners = new ArrayList&lt;&gt;();</span>
+
+    /** Vector of fileset checks. */
+<span class="fc" id="L83">    private final List&lt;FileSetCheck&gt; fileSetChecks = new ArrayList&lt;&gt;();</span>
+
+    /** The audit event before execution file filters. */
+<span class="fc" id="L86">    private final BeforeExecutionFileFilterSet beforeExecutionFileFilters =</span>
+            new BeforeExecutionFileFilterSet();
+
+    /** The audit event filters. */
+<span class="fc" id="L90">    private final FilterSet filters = new FilterSet();</span>
+
+    /** Class loader to resolve classes with. **/
+<span class="fc" id="L93">    private ClassLoader classLoader = Thread.currentThread()</span>
+<span class="fc" id="L94">            .getContextClassLoader();</span>
+
+    /** The basedir to strip off in file names. */
+    private String basedir;
+
+    /** Locale country to report messages . **/
+<span class="fc" id="L100">    private String localeCountry = Locale.getDefault().getCountry();</span>
+    /** Locale language to report messages . **/
+<span class="fc" id="L102">    private String localeLanguage = Locale.getDefault().getLanguage();</span>
+
+    /** The factory for instantiating submodules. */
+    private ModuleFactory moduleFactory;
+
+    /** The classloader used for loading Checkstyle module classes. */
+    private ClassLoader moduleClassLoader;
+
+    /** The context of all child components. */
+    private Context childContext;
+
+    /** The file extensions that are accepted. */
+<span class="fc" id="L114">    private String[] fileExtensions = CommonUtils.EMPTY_STRING_ARRAY;</span>
+
+    /**
+     * The severity level of any violations found by submodules.
+     * The value of this property is passed to submodules via
+     * contextualize().
+     *
+     * &lt;p&gt;Note: Since the Checker is merely a container for modules
+     * it does not make sense to implement logging functionality
+     * here. Consequently Checker does not extend AbstractViolationReporter,
+     * leading to a bit of duplicated code for severity level setting.
+     */
+<span class="fc" id="L126">    private SeverityLevel severity = SeverityLevel.ERROR;</span>
+
+    /** Name of a charset. */
+<span class="fc" id="L129">    private String charset = System.getProperty(&quot;file.encoding&quot;, StandardCharsets.UTF_8.name());</span>
+
+    /** Cache file. **/
+    private PropertyCacheFile cacheFile;
+
+    /** Controls whether exceptions should halt execution or not. */
+<span class="fc" id="L135">    private boolean haltOnException = true;</span>
+
+    /**
+     * Creates a new {@code Checker} instance.
+     * The instance needs to be contextualized and configured.
+     */
+<span class="fc" id="L141">    public Checker() {</span>
+<span class="fc" id="L142">        addListener(counter);</span>
+<span class="fc" id="L143">        log = LogFactory.getLog(Checker.class);</span>
+<span class="fc" id="L144">    }</span>
+
+    /**
+     * Sets cache file.
+     * @param fileName the cache file.
+     * @throws IOException if there are some problems with file loading.
+     */
+    public void setCacheFile(String fileName) throws IOException {
+<span class="fc" id="L152">        final Configuration configuration = getConfiguration();</span>
+<span class="fc" id="L153">        cacheFile = new PropertyCacheFile(configuration, fileName);</span>
+<span class="fc" id="L154">        cacheFile.load();</span>
+<span class="fc" id="L155">    }</span>
+
+    /**
+     * Removes before execution file filter.
+     * @param filter before execution file filter to remove.
+     */
+    public void removeBeforeExecutionFileFilter(BeforeExecutionFileFilter filter) {
+<span class="fc" id="L162">        beforeExecutionFileFilters.removeBeforeExecutionFileFilter(filter);</span>
+<span class="fc" id="L163">    }</span>
+
+    /**
+     * Removes filter.
+     * @param filter filter to remove.
+     */
+    public void removeFilter(Filter filter) {
+<span class="fc" id="L170">        filters.removeFilter(filter);</span>
+<span class="fc" id="L171">    }</span>
+
+    @Override
+    public void destroy() {
+<span class="fc" id="L175">        listeners.clear();</span>
+<span class="fc" id="L176">        fileSetChecks.clear();</span>
+<span class="fc" id="L177">        beforeExecutionFileFilters.clear();</span>
+<span class="fc" id="L178">        filters.clear();</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">        if (cacheFile != null) {</span>
+            try {
+<span class="fc" id="L181">                cacheFile.persist();</span>
+            }
+<span class="fc" id="L183">            catch (IOException ex) {</span>
+<span class="fc" id="L184">                throw new IllegalStateException(&quot;Unable to persist cache file.&quot;, ex);</span>
+<span class="fc" id="L185">            }</span>
+        }
+<span class="fc" id="L187">    }</span>
+
+    /**
+     * Removes a given listener.
+     * @param listener a listener to remove
+     */
+    public void removeListener(AuditListener listener) {
+<span class="fc" id="L194">        listeners.remove(listener);</span>
+<span class="fc" id="L195">    }</span>
+
+    /**
+     * Sets base directory.
+     * @param basedir the base directory to strip off in file names
+     */
+    public void setBasedir(String basedir) {
+<span class="fc" id="L202">        this.basedir = basedir;</span>
+<span class="fc" id="L203">    }</span>
+
+    @Override
+    public int process(List&lt;File&gt; files) throws CheckstyleException {
+<span class="fc bfc" id="L207" title="All 2 branches covered.">        if (cacheFile != null) {</span>
+<span class="fc" id="L208">            cacheFile.putExternalResources(getExternalResourceLocations());</span>
+        }
+
+        // Prepare to start
+<span class="fc" id="L212">        fireAuditStarted();</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">        for (final FileSetCheck fsc : fileSetChecks) {</span>
+<span class="fc" id="L214">            fsc.beginProcessing(charset);</span>
+<span class="fc" id="L215">        }</span>
+
+<span class="fc" id="L217">        processFiles(files);</span>
+
+        // Finish up
+        // It may also log!!!
+<span class="fc" id="L221">        fileSetChecks.forEach(FileSetCheck::finishProcessing);</span>
+
+        // It may also log!!!
+<span class="fc" id="L224">        fileSetChecks.forEach(FileSetCheck::destroy);</span>
+
+<span class="fc" id="L226">        final int errorCount = counter.getCount();</span>
+<span class="fc" id="L227">        fireAuditFinished();</span>
+<span class="fc" id="L228">        return errorCount;</span>
+    }
+
+    /**
+     * Returns a set of external configuration resource locations which are used by all file set
+     * checks and filters.
+     * @return a set of external configuration resource locations which are used by all file set
+     *         checks and filters.
+     */
+    private Set&lt;String&gt; getExternalResourceLocations() {
+<span class="fc" id="L238">        final Set&lt;String&gt; externalResources = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L239">        fileSetChecks.stream().filter(check -&gt; check instanceof ExternalResourceHolder)</span>
+<span class="fc" id="L240">            .forEach(check -&gt; {</span>
+<span class="fc" id="L241">                final Set&lt;String&gt; locations =</span>
+<span class="fc" id="L242">                    ((ExternalResourceHolder) check).getExternalResourceLocations();</span>
+<span class="fc" id="L243">                externalResources.addAll(locations);</span>
+<span class="fc" id="L244">            });</span>
+<span class="fc" id="L245">        filters.getFilters().stream().filter(filter -&gt; filter instanceof ExternalResourceHolder)</span>
+<span class="fc" id="L246">            .forEach(filter -&gt; {</span>
+<span class="fc" id="L247">                final Set&lt;String&gt; locations =</span>
+<span class="fc" id="L248">                    ((ExternalResourceHolder) filter).getExternalResourceLocations();</span>
+<span class="fc" id="L249">                externalResources.addAll(locations);</span>
+<span class="fc" id="L250">            });</span>
+<span class="fc" id="L251">        return externalResources;</span>
+    }
+
+    /** Notify all listeners about the audit start. */
+    private void fireAuditStarted() {
+<span class="fc" id="L256">        final AuditEvent event = new AuditEvent(this);</span>
+<span class="fc bfc" id="L257" title="All 2 branches covered.">        for (final AuditListener listener : listeners) {</span>
+<span class="fc" id="L258">            listener.auditStarted(event);</span>
+<span class="fc" id="L259">        }</span>
+<span class="fc" id="L260">    }</span>
+
+    /** Notify all listeners about the audit end. */
+    private void fireAuditFinished() {
+<span class="fc" id="L264">        final AuditEvent event = new AuditEvent(this);</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        for (final AuditListener listener : listeners) {</span>
+<span class="fc" id="L266">            listener.auditFinished(event);</span>
+<span class="fc" id="L267">        }</span>
+<span class="fc" id="L268">    }</span>
+
+    /**
+     * Processes a list of files with all FileSetChecks.
+     * @param files a list of files to process.
+     * @throws CheckstyleException if error condition within Checkstyle occurs.
+     * @noinspection ProhibitedExceptionThrown
+     */
+    private void processFiles(List&lt;File&gt; files) throws CheckstyleException {
+<span class="fc bfc" id="L277" title="All 2 branches covered.">        for (final File file : files) {</span>
+            try {
+<span class="fc" id="L279">                final String fileName = file.getAbsolutePath();</span>
+<span class="fc" id="L280">                final long timestamp = file.lastModified();</span>
+<span class="fc bfc" id="L281" title="All 4 branches covered.">                if (cacheFile != null &amp;&amp; cacheFile.isInCache(fileName, timestamp)</span>
+<span class="fc bfc" id="L282" title="All 2 branches covered.">                        || !CommonUtils.matchesFileExtension(file, fileExtensions)</span>
+<span class="fc bfc" id="L283" title="All 2 branches covered.">                        || !acceptFileStarted(fileName)) {</span>
+<span class="fc" id="L284">                    continue;</span>
+                }
+<span class="fc bfc" id="L286" title="All 2 branches covered.">                if (cacheFile != null) {</span>
+<span class="fc" id="L287">                    cacheFile.put(fileName, timestamp);</span>
+                }
+<span class="fc" id="L289">                fireFileStarted(fileName);</span>
+<span class="fc" id="L290">                final SortedSet&lt;LocalizedMessage&gt; fileMessages = processFile(file);</span>
+<span class="fc" id="L291">                fireErrors(fileName, fileMessages);</span>
+<span class="fc" id="L292">                fireFileFinished(fileName);</span>
+            }
+            // -@cs[IllegalCatch] There is no other way to deliver filename that was under
+            // processing. See https://github.com/checkstyle/checkstyle/issues/2285
+<span class="fc" id="L296">            catch (Exception ex) {</span>
+                // We need to catch all exceptions to put a reason failure (file name) in exception
+<span class="fc" id="L298">                throw new CheckstyleException(&quot;Exception was thrown while processing &quot;</span>
+<span class="fc" id="L299">                        + file.getPath(), ex);</span>
+            }
+<span class="fc" id="L301">            catch (Error error) {</span>
+                // We need to catch all errors to put a reason failure (file name) in error
+<span class="fc" id="L303">                throw new Error(&quot;Error was thrown while processing &quot; + file.getPath(), error);</span>
+<span class="fc" id="L304">            }</span>
+<span class="fc" id="L305">        }</span>
+<span class="fc" id="L306">    }</span>
+
+    /**
+     * Processes a file with all FileSetChecks.
+     * @param file a file to process.
+     * @return a sorted set of messages to be logged.
+     * @throws CheckstyleException if error condition within Checkstyle occurs.
+     * @noinspection ProhibitedExceptionThrown
+     */
+    private SortedSet&lt;LocalizedMessage&gt; processFile(File file) throws CheckstyleException {
+<span class="fc" id="L316">        final SortedSet&lt;LocalizedMessage&gt; fileMessages = new TreeSet&lt;&gt;();</span>
+        try {
+<span class="fc" id="L318">            final FileText theText = new FileText(file.getAbsoluteFile(), charset);</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">            for (final FileSetCheck fsc : fileSetChecks) {</span>
+<span class="fc" id="L320">                fileMessages.addAll(fsc.process(file, theText));</span>
+<span class="fc" id="L321">            }</span>
+        }
+<span class="fc" id="L323">        catch (final IOException ioe) {</span>
+<span class="fc" id="L324">            log.debug(&quot;IOException occurred.&quot;, ioe);</span>
+<span class="fc" id="L325">            fileMessages.add(new LocalizedMessage(0,</span>
+                    Definitions.CHECKSTYLE_BUNDLE, EXCEPTION_MSG,
+<span class="fc" id="L327">                    new String[] {ioe.getMessage()}, null, getClass(), null));</span>
+        }
+        // -@cs[IllegalCatch] There is no other way to obey haltOnException field
+<span class="fc" id="L330">        catch (Exception ex) {</span>
+<span class="fc bfc" id="L331" title="All 2 branches covered.">            if (haltOnException) {</span>
+<span class="fc" id="L332">                throw ex;</span>
+            }
+
+<span class="fc" id="L335">            log.debug(&quot;Exception occurred.&quot;, ex);</span>
+
+<span class="fc" id="L337">            final StringWriter sw = new StringWriter();</span>
+<span class="fc" id="L338">            final PrintWriter pw = new PrintWriter(sw, true);</span>
+
+<span class="fc" id="L340">            ex.printStackTrace(pw);</span>
+
+<span class="fc" id="L342">            fileMessages.add(new LocalizedMessage(0,</span>
+                    Definitions.CHECKSTYLE_BUNDLE, EXCEPTION_MSG,
+<span class="fc" id="L344">                    new String[] {sw.getBuffer().toString()},</span>
+<span class="fc" id="L345">                    null, getClass(), null));</span>
+<span class="fc" id="L346">        }</span>
+<span class="fc" id="L347">        return fileMessages;</span>
+    }
+
+    /**
+     * Check if all before execution file filters accept starting the file.
+     *
+     * @param fileName
+     *            the file to be audited
+     * @return {@code true} if the file is accepted.
+     */
+    private boolean acceptFileStarted(String fileName) {
+<span class="fc" id="L358">        final String stripped = CommonUtils.relativizeAndNormalizePath(basedir, fileName);</span>
+<span class="fc" id="L359">        return beforeExecutionFileFilters.accept(stripped);</span>
+    }
+
+    /**
+     * Notify all listeners about the beginning of a file audit.
+     *
+     * @param fileName
+     *            the file to be audited
+     */
+    @Override
+    public void fireFileStarted(String fileName) {
+<span class="fc" id="L370">        final String stripped = CommonUtils.relativizeAndNormalizePath(basedir, fileName);</span>
+<span class="fc" id="L371">        final AuditEvent event = new AuditEvent(this, stripped);</span>
+<span class="fc bfc" id="L372" title="All 2 branches covered.">        for (final AuditListener listener : listeners) {</span>
+<span class="fc" id="L373">            listener.fileStarted(event);</span>
+<span class="fc" id="L374">        }</span>
+<span class="fc" id="L375">    }</span>
+
+    /**
+     * Notify all listeners about the errors in a file.
+     *
+     * @param fileName the audited file
+     * @param errors the audit errors from the file
+     */
+    @Override
+    public void fireErrors(String fileName, SortedSet&lt;LocalizedMessage&gt; errors) {
+<span class="fc" id="L385">        final String stripped = CommonUtils.relativizeAndNormalizePath(basedir, fileName);</span>
+<span class="fc" id="L386">        boolean hasNonFilteredViolations = false;</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">        for (final LocalizedMessage element : errors) {</span>
+<span class="fc" id="L388">            final AuditEvent event = new AuditEvent(this, stripped, element);</span>
+<span class="fc bfc" id="L389" title="All 2 branches covered.">            if (filters.accept(event)) {</span>
+<span class="fc" id="L390">                hasNonFilteredViolations = true;</span>
+<span class="fc bfc" id="L391" title="All 2 branches covered.">                for (final AuditListener listener : listeners) {</span>
+<span class="fc" id="L392">                    listener.addError(event);</span>
+<span class="fc" id="L393">                }</span>
+            }
+<span class="fc" id="L395">        }</span>
+<span class="fc bfc" id="L396" title="All 4 branches covered.">        if (hasNonFilteredViolations &amp;&amp; cacheFile != null) {</span>
+<span class="fc" id="L397">            cacheFile.remove(fileName);</span>
+        }
+<span class="fc" id="L399">    }</span>
+
+    /**
+     * Notify all listeners about the end of a file audit.
+     *
+     * @param fileName
+     *            the audited file
+     */
+    @Override
+    public void fireFileFinished(String fileName) {
+<span class="fc" id="L409">        final String stripped = CommonUtils.relativizeAndNormalizePath(basedir, fileName);</span>
+<span class="fc" id="L410">        final AuditEvent event = new AuditEvent(this, stripped);</span>
+<span class="fc bfc" id="L411" title="All 2 branches covered.">        for (final AuditListener listener : listeners) {</span>
+<span class="fc" id="L412">            listener.fileFinished(event);</span>
+<span class="fc" id="L413">        }</span>
+<span class="fc" id="L414">    }</span>
+
+    @Override
+    protected void finishLocalSetup() throws CheckstyleException {
+<span class="fc" id="L418">        final Locale locale = new Locale(localeLanguage, localeCountry);</span>
+<span class="fc" id="L419">        LocalizedMessage.setLocale(locale);</span>
+
+<span class="fc bfc" id="L421" title="All 2 branches covered.">        if (moduleFactory == null) {</span>
+<span class="fc bfc" id="L422" title="All 2 branches covered.">            if (moduleClassLoader == null) {</span>
+<span class="fc" id="L423">                throw new CheckstyleException(</span>
+                        &quot;if no custom moduleFactory is set, &quot;
+                                + &quot;moduleClassLoader must be specified&quot;);
+            }
+
+<span class="fc" id="L428">            final Set&lt;String&gt; packageNames = PackageNamesLoader</span>
+<span class="fc" id="L429">                    .getPackageNames(moduleClassLoader);</span>
+<span class="fc" id="L430">            moduleFactory = new PackageObjectFactory(packageNames,</span>
+                    moduleClassLoader);
+        }
+
+<span class="fc" id="L434">        final DefaultContext context = new DefaultContext();</span>
+<span class="fc" id="L435">        context.add(&quot;charset&quot;, charset);</span>
+<span class="fc" id="L436">        context.add(&quot;classLoader&quot;, classLoader);</span>
+<span class="fc" id="L437">        context.add(&quot;moduleFactory&quot;, moduleFactory);</span>
+<span class="fc" id="L438">        context.add(&quot;severity&quot;, severity.getName());</span>
+<span class="fc" id="L439">        context.add(&quot;basedir&quot;, basedir);</span>
+<span class="fc" id="L440">        childContext = context;</span>
+<span class="fc" id="L441">    }</span>
+
+    /**
+     * {@inheritDoc} Creates child module.
+     * @noinspection ChainOfInstanceofChecks
+     */
+    @Override
+    protected void setupChild(Configuration childConf)
+            throws CheckstyleException {
+<span class="fc" id="L450">        final String name = childConf.getName();</span>
+        final Object child;
+
+        try {
+<span class="fc" id="L454">            child = moduleFactory.createModule(name);</span>
+
+<span class="fc bfc" id="L456" title="All 2 branches covered.">            if (child instanceof AutomaticBean) {</span>
+<span class="fc" id="L457">                final AutomaticBean bean = (AutomaticBean) child;</span>
+<span class="fc" id="L458">                bean.contextualize(childContext);</span>
+<span class="fc" id="L459">                bean.configure(childConf);</span>
+            }
+        }
+<span class="fc" id="L462">        catch (final CheckstyleException ex) {</span>
+<span class="fc" id="L463">            throw new CheckstyleException(&quot;cannot initialize module &quot; + name</span>
+<span class="fc" id="L464">                    + &quot; - &quot; + ex.getMessage(), ex);</span>
+<span class="fc" id="L465">        }</span>
+<span class="fc bfc" id="L466" title="All 2 branches covered.">        if (child instanceof FileSetCheck) {</span>
+<span class="fc" id="L467">            final FileSetCheck fsc = (FileSetCheck) child;</span>
+<span class="fc" id="L468">            fsc.init();</span>
+<span class="fc" id="L469">            addFileSetCheck(fsc);</span>
+<span class="fc" id="L470">        }</span>
+<span class="fc bfc" id="L471" title="All 2 branches covered.">        else if (child instanceof BeforeExecutionFileFilter) {</span>
+<span class="fc" id="L472">            final BeforeExecutionFileFilter filter = (BeforeExecutionFileFilter) child;</span>
+<span class="fc" id="L473">            addBeforeExecutionFileFilter(filter);</span>
+<span class="fc" id="L474">        }</span>
+<span class="fc bfc" id="L475" title="All 2 branches covered.">        else if (child instanceof Filter) {</span>
+<span class="fc" id="L476">            final Filter filter = (Filter) child;</span>
+<span class="fc" id="L477">            addFilter(filter);</span>
+<span class="fc" id="L478">        }</span>
+<span class="fc bfc" id="L479" title="All 2 branches covered.">        else if (child instanceof AuditListener) {</span>
+<span class="fc" id="L480">            final AuditListener listener = (AuditListener) child;</span>
+<span class="fc" id="L481">            addListener(listener);</span>
+<span class="fc" id="L482">        }</span>
+        else {
+<span class="fc" id="L484">            throw new CheckstyleException(name</span>
+                    + &quot; is not allowed as a child in Checker&quot;);
+        }
+<span class="fc" id="L487">    }</span>
+
+    /**
+     * Adds a FileSetCheck to the list of FileSetChecks
+     * that is executed in process().
+     * @param fileSetCheck the additional FileSetCheck
+     */
+    public void addFileSetCheck(FileSetCheck fileSetCheck) {
+<span class="fc" id="L495">        fileSetCheck.setMessageDispatcher(this);</span>
+<span class="fc" id="L496">        fileSetChecks.add(fileSetCheck);</span>
+<span class="fc" id="L497">    }</span>
+
+    /**
+     * Adds a before execution file filter to the end of the event chain.
+     * @param filter the additional filter
+     */
+    public void addBeforeExecutionFileFilter(BeforeExecutionFileFilter filter) {
+<span class="fc" id="L504">        beforeExecutionFileFilters.addBeforeExecutionFileFilter(filter);</span>
+<span class="fc" id="L505">    }</span>
+
+    /**
+     * Adds a filter to the end of the audit event filter chain.
+     * @param filter the additional filter
+     */
+    public void addFilter(Filter filter) {
+<span class="fc" id="L512">        filters.addFilter(filter);</span>
+<span class="fc" id="L513">    }</span>
+
+    @Override
+    public final void addListener(AuditListener listener) {
+<span class="fc" id="L517">        listeners.add(listener);</span>
+<span class="fc" id="L518">    }</span>
+
+    /**
+     * Sets the file extensions that identify the files that pass the
+     * filter of this FileSetCheck.
+     * @param extensions the set of file extensions. A missing
+     *     initial '.' character of an extension is automatically added.
+     */
+    public final void setFileExtensions(String... extensions) {
+<span class="fc bfc" id="L527" title="All 2 branches covered.">        if (extensions == null) {</span>
+<span class="fc" id="L528">            fileExtensions = null;</span>
+        }
+        else {
+<span class="fc" id="L531">            fileExtensions = new String[extensions.length];</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">            for (int i = 0; i &lt; extensions.length; i++) {</span>
+<span class="fc" id="L533">                final String extension = extensions[i];</span>
+<span class="fc bfc" id="L534" title="All 2 branches covered.">                if (CommonUtils.startsWithChar(extension, '.')) {</span>
+<span class="fc" id="L535">                    fileExtensions[i] = extension;</span>
+                }
+                else {
+<span class="fc" id="L538">                    fileExtensions[i] = &quot;.&quot; + extension;</span>
+                }
+            }
+        }
+<span class="fc" id="L542">    }</span>
+
+    /**
+     * Sets the factory for creating submodules.
+     *
+     * @param moduleFactory the factory for creating FileSetChecks
+     */
+    public void setModuleFactory(ModuleFactory moduleFactory) {
+<span class="fc" id="L550">        this.moduleFactory = moduleFactory;</span>
+<span class="fc" id="L551">    }</span>
+
+    /**
+     * Sets locale country.
+     * @param localeCountry the country to report messages
+     */
+    public void setLocaleCountry(String localeCountry) {
+<span class="fc" id="L558">        this.localeCountry = localeCountry;</span>
+<span class="fc" id="L559">    }</span>
+
+    /**
+     * Sets locale language.
+     * @param localeLanguage the language to report messages
+     */
+    public void setLocaleLanguage(String localeLanguage) {
+<span class="fc" id="L566">        this.localeLanguage = localeLanguage;</span>
+<span class="fc" id="L567">    }</span>
+
+    /**
+     * Sets the severity level.  The string should be one of the names
+     * defined in the {@code SeverityLevel} class.
+     *
+     * @param severity  The new severity level
+     * @see SeverityLevel
+     */
+    public final void setSeverity(String severity) {
+<span class="fc" id="L577">        this.severity = SeverityLevel.getInstance(severity);</span>
+<span class="fc" id="L578">    }</span>
+
+    /**
+     * Sets the classloader that is used to contextualize fileset checks.
+     * Some Check implementations will use that classloader to improve the
+     * quality of their reports, e.g. to load a class and then analyze it via
+     * reflection.
+     * @param classLoader the new classloader
+     */
+    public final void setClassLoader(ClassLoader classLoader) {
+<span class="fc" id="L588">        this.classLoader = classLoader;</span>
+<span class="fc" id="L589">    }</span>
+
+    @Override
+    public final void setModuleClassLoader(ClassLoader moduleClassLoader) {
+<span class="fc" id="L593">        this.moduleClassLoader = moduleClassLoader;</span>
+<span class="fc" id="L594">    }</span>
+
+    /**
+     * Sets a named charset.
+     * @param charset the name of a charset
+     * @throws UnsupportedEncodingException if charset is unsupported.
+     */
+    public void setCharset(String charset)
+            throws UnsupportedEncodingException {
+<span class="fc bfc" id="L603" title="All 2 branches covered.">        if (!Charset.isSupported(charset)) {</span>
+<span class="fc" id="L604">            final String message = &quot;unsupported charset: '&quot; + charset + &quot;'&quot;;</span>
+<span class="fc" id="L605">            throw new UnsupportedEncodingException(message);</span>
+        }
+<span class="fc" id="L607">        this.charset = charset;</span>
+<span class="fc" id="L608">    }</span>
+
+    /**
+     * Sets the field haltOnException.
+     * @param haltOnException the new value.
+     */
+    public void setHaltOnException(boolean haltOnException) {
+<span class="fc" id="L615">        this.haltOnException = haltOnException;</span>
+<span class="fc" id="L616">    }</span>
+
+    /**
+     * Clears the cache.
+     */
+    public void clearCache() {
+<span class="fc bfc" id="L622" title="All 2 branches covered.">        if (cacheFile != null) {</span>
+<span class="fc" id="L623">            cacheFile.reset();</span>
+        }
+<span class="fc" id="L625">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

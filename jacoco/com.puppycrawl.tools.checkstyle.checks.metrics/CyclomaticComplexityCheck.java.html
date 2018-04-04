@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CyclomaticComplexityCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.metrics</a> &gt; <span class="el_source">CyclomaticComplexityCheck.java</span></div><h1>CyclomaticComplexityCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.metrics;
+
+import java.math.BigInteger;
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Checks cyclomatic complexity against a specified limit. The complexity is
+ * measured by the number of &quot;if&quot;, &quot;while&quot;, &quot;do&quot;, &quot;for&quot;, &quot;?:&quot;, &quot;catch&quot;,
+ * &quot;switch&quot;, &quot;case&quot;, &quot;&amp;amp;&amp;amp;&quot; and &quot;||&quot; statements (plus one) in the body of
+ * the member. It is a measure of the minimum number of possible paths through
+ * the source and therefore the number of required tests. Generally 1-4 is
+ * considered good, 5-7 ok, 8-10 consider re-factoring, and 11+ re-factor now!
+ *
+ * &lt;p&gt;Check has following properties:
+ *
+ * &lt;p&gt;&lt;b&gt;switchBlockAsSingleDecisionPoint&lt;/b&gt; - controls whether to treat the whole switch
+ * block as a single decision point. Default value is &lt;b&gt;false&lt;/b&gt;
+ *
+ *
+ * @author &lt;a href=&quot;mailto:simon@redhillconsulting.com.au&quot;&gt;Simon Harris&lt;/a&gt;
+ * @author Oliver Burn
+ * @author &lt;a href=&quot;mailto:andreyselkin@gmail.com&quot;&gt;Andrei Selkin&lt;/a&gt;
+ */
+@FileStatefulCheck
+<span class="fc" id="L50">public class CyclomaticComplexityCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;cyclomaticComplexity&quot;;
+
+    /** The initial current value. */
+<span class="fc" id="L60">    private static final BigInteger INITIAL_VALUE = BigInteger.ONE;</span>
+
+    /** Default allowed complexity. */
+    private static final int DEFAULT_COMPLEXITY_VALUE = 10;
+
+    /** Stack of values - all but the current value. */
+<span class="fc" id="L66">    private final Deque&lt;BigInteger&gt; valueStack = new ArrayDeque&lt;&gt;();</span>
+
+    /** Whether to treat the whole switch block as a single decision point.*/
+    private boolean switchBlockAsSingleDecisionPoint;
+
+    /** The current value. */
+<span class="fc" id="L72">    private BigInteger currentValue = INITIAL_VALUE;</span>
+
+    /** Threshold to report error for. */
+<span class="fc" id="L75">    private int max = DEFAULT_COMPLEXITY_VALUE;</span>
+
+    /**
+     * Sets whether to treat the whole switch block as a single decision point.
+     * @param switchBlockAsSingleDecisionPoint whether to treat the whole switch
+     *                                          block as a single decision point.
+     */
+    public void setSwitchBlockAsSingleDecisionPoint(boolean switchBlockAsSingleDecisionPoint) {
+<span class="fc" id="L83">        this.switchBlockAsSingleDecisionPoint = switchBlockAsSingleDecisionPoint;</span>
+<span class="fc" id="L84">    }</span>
+
+    /**
+     * Set the maximum threshold allowed.
+     *
+     * @param max the maximum threshold
+     */
+    public final void setMax(int max) {
+<span class="fc" id="L92">        this.max = max;</span>
+<span class="fc" id="L93">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L97">        return new int[] {</span>
+            TokenTypes.CTOR_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.LITERAL_WHILE,
+            TokenTypes.LITERAL_DO,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.LITERAL_IF,
+            TokenTypes.LITERAL_SWITCH,
+            TokenTypes.LITERAL_CASE,
+            TokenTypes.LITERAL_CATCH,
+            TokenTypes.QUESTION,
+            TokenTypes.LAND,
+            TokenTypes.LOR,
+        };
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L117">        return new int[] {</span>
+            TokenTypes.CTOR_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.LITERAL_WHILE,
+            TokenTypes.LITERAL_DO,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.LITERAL_IF,
+            TokenTypes.LITERAL_SWITCH,
+            TokenTypes.LITERAL_CASE,
+            TokenTypes.LITERAL_CATCH,
+            TokenTypes.QUESTION,
+            TokenTypes.LAND,
+            TokenTypes.LOR,
+        };
+    }
+
+    @Override
+    public final int[] getRequiredTokens() {
+<span class="fc" id="L137">        return new int[] {</span>
+            TokenTypes.CTOR_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.STATIC_INIT,
+        };
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L147" title="All 2 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.CTOR_DEF:
+            case TokenTypes.METHOD_DEF:
+            case TokenTypes.INSTANCE_INIT:
+            case TokenTypes.STATIC_INIT:
+<span class="fc" id="L152">                visitMethodDef();</span>
+<span class="fc" id="L153">                break;</span>
+            default:
+<span class="fc" id="L155">                visitTokenHook(ast);</span>
+        }
+<span class="fc" id="L157">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.CTOR_DEF:
+            case TokenTypes.METHOD_DEF:
+            case TokenTypes.INSTANCE_INIT:
+            case TokenTypes.STATIC_INIT:
+<span class="fc" id="L166">                leaveMethodDef(ast);</span>
+<span class="fc" id="L167">                break;</span>
+            default:
+                break;
+        }
+<span class="fc" id="L171">    }</span>
+
+    /**
+     * Hook called when visiting a token. Will not be called the method
+     * definition tokens.
+     *
+     * @param ast the token being visited
+     */
+    private void visitTokenHook(DetailAST ast) {
+<span class="fc bfc" id="L180" title="All 2 branches covered.">        if (switchBlockAsSingleDecisionPoint) {</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">            if (ast.getType() != TokenTypes.LITERAL_CASE) {</span>
+<span class="fc" id="L182">                incrementCurrentValue(BigInteger.ONE);</span>
+            }
+        }
+<span class="fc bfc" id="L185" title="All 2 branches covered.">        else if (ast.getType() != TokenTypes.LITERAL_SWITCH) {</span>
+<span class="fc" id="L186">            incrementCurrentValue(BigInteger.ONE);</span>
+        }
+<span class="fc" id="L188">    }</span>
+
+    /**
+     * Process the end of a method definition.
+     *
+     * @param ast the token representing the method definition
+     */
+    private void leaveMethodDef(DetailAST ast) {
+<span class="fc" id="L196">        final BigInteger bigIntegerMax = BigInteger.valueOf(max);</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">        if (currentValue.compareTo(bigIntegerMax) &gt; 0) {</span>
+<span class="fc" id="L198">            log(ast, MSG_KEY, currentValue, bigIntegerMax);</span>
+        }
+<span class="fc" id="L200">        popValue();</span>
+<span class="fc" id="L201">    }</span>
+
+    /**
+     * Increments the current value by a specified amount.
+     *
+     * @param amount the amount to increment by
+     */
+    private void incrementCurrentValue(BigInteger amount) {
+<span class="fc" id="L209">        currentValue = currentValue.add(amount);</span>
+<span class="fc" id="L210">    }</span>
+
+    /** Push the current value on the stack. */
+    private void pushValue() {
+<span class="fc" id="L214">        valueStack.push(currentValue);</span>
+<span class="fc" id="L215">        currentValue = INITIAL_VALUE;</span>
+<span class="fc" id="L216">    }</span>
+
+    /**
+     * Pops a value off the stack and makes it the current value.
+     */
+    private void popValue() {
+<span class="fc" id="L222">        currentValue = valueStack.pop();</span>
+<span class="fc" id="L223">    }</span>
+
+    /** Process the start of the method definition. */
+    private void visitMethodDef() {
+<span class="fc" id="L227">        pushValue();</span>
+<span class="fc" id="L228">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

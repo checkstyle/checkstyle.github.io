@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AutomaticBean.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.api</a> &gt; <span class="el_source">AutomaticBean.java</span></div><h1>AutomaticBean.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.api;
+
+import java.beans.PropertyDescriptor;
+import java.lang.reflect.InvocationTargetException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
+import java.util.StringTokenizer;
+import java.util.regex.Pattern;
+
+import org.apache.commons.beanutils.BeanUtilsBean;
+import org.apache.commons.beanutils.ConversionException;
+import org.apache.commons.beanutils.ConvertUtilsBean;
+import org.apache.commons.beanutils.Converter;
+import org.apache.commons.beanutils.PropertyUtils;
+import org.apache.commons.beanutils.PropertyUtilsBean;
+import org.apache.commons.beanutils.converters.ArrayConverter;
+import org.apache.commons.beanutils.converters.BooleanConverter;
+import org.apache.commons.beanutils.converters.ByteConverter;
+import org.apache.commons.beanutils.converters.CharacterConverter;
+import org.apache.commons.beanutils.converters.DoubleConverter;
+import org.apache.commons.beanutils.converters.FloatConverter;
+import org.apache.commons.beanutils.converters.IntegerConverter;
+import org.apache.commons.beanutils.converters.LongConverter;
+import org.apache.commons.beanutils.converters.ShortConverter;
+
+import com.puppycrawl.tools.checkstyle.checks.naming.AccessModifier;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * A Java Bean that implements the component lifecycle interfaces by
+ * calling the bean's setters for all configuration attributes.
+ * @author lkuehne
+ */
+// -@cs[AbstractClassName] We can not brake compatibility with previous versions.
+<span class="fc" id="L57">public abstract class AutomaticBean</span>
+    implements Configurable, Contextualizable {
+
+    /**
+     * Enum to specify behaviour regarding ignored modules.
+     */
+<span class="fc" id="L63">    public enum OutputStreamOptions {</span>
+
+        /**
+         * Close stream in the end.
+         */
+<span class="fc" id="L68">        CLOSE,</span>
+
+        /**
+         * Do nothing in the end.
+         */
+<span class="fc" id="L73">        NONE</span>
+
+    }
+
+    /** Comma separator for StringTokenizer. */
+    private static final String COMMA_SEPARATOR = &quot;,&quot;;
+
+    /** The configuration of this bean. */
+    private Configuration configuration;
+
+    /**
+     * Provides a hook to finish the part of this component's setup that
+     * was not handled by the bean introspection.
+     * &lt;p&gt;
+     * The default implementation does nothing.
+     * &lt;/p&gt;
+     * @throws CheckstyleException if there is a configuration error.
+     */
+    protected abstract void finishLocalSetup() throws CheckstyleException;
+
+    /**
+     * Creates a BeanUtilsBean that is configured to use
+     * type converters that throw a ConversionException
+     * instead of using the default value when something
+     * goes wrong.
+     *
+     * @return a configured BeanUtilsBean
+     */
+    private static BeanUtilsBean createBeanUtilsBean() {
+<span class="fc" id="L102">        final ConvertUtilsBean cub = new ConvertUtilsBean();</span>
+
+<span class="fc" id="L104">        registerIntegralTypes(cub);</span>
+<span class="fc" id="L105">        registerCustomTypes(cub);</span>
+
+<span class="fc" id="L107">        return new BeanUtilsBean(cub, new PropertyUtilsBean());</span>
+    }
+
+    /**
+     * Register basic types of JDK like boolean, int, and String to use with BeanUtils. All these
+     * types are found in the {@code java.lang} package.
+     * @param cub
+     *            Instance of {@link ConvertUtilsBean} to register types with.
+     */
+    private static void registerIntegralTypes(ConvertUtilsBean cub) {
+<span class="fc" id="L117">        cub.register(new BooleanConverter(), Boolean.TYPE);</span>
+<span class="fc" id="L118">        cub.register(new BooleanConverter(), Boolean.class);</span>
+<span class="fc" id="L119">        cub.register(new ArrayConverter(</span>
+            boolean[].class, new BooleanConverter()), boolean[].class);
+<span class="fc" id="L121">        cub.register(new ByteConverter(), Byte.TYPE);</span>
+<span class="fc" id="L122">        cub.register(new ByteConverter(), Byte.class);</span>
+<span class="fc" id="L123">        cub.register(new ArrayConverter(byte[].class, new ByteConverter()),</span>
+            byte[].class);
+<span class="fc" id="L125">        cub.register(new CharacterConverter(), Character.TYPE);</span>
+<span class="fc" id="L126">        cub.register(new CharacterConverter(), Character.class);</span>
+<span class="fc" id="L127">        cub.register(new ArrayConverter(char[].class, new CharacterConverter()),</span>
+            char[].class);
+<span class="fc" id="L129">        cub.register(new DoubleConverter(), Double.TYPE);</span>
+<span class="fc" id="L130">        cub.register(new DoubleConverter(), Double.class);</span>
+<span class="fc" id="L131">        cub.register(new ArrayConverter(double[].class, new DoubleConverter()),</span>
+            double[].class);
+<span class="fc" id="L133">        cub.register(new FloatConverter(), Float.TYPE);</span>
+<span class="fc" id="L134">        cub.register(new FloatConverter(), Float.class);</span>
+<span class="fc" id="L135">        cub.register(new ArrayConverter(float[].class, new FloatConverter()),</span>
+            float[].class);
+<span class="fc" id="L137">        cub.register(new IntegerConverter(), Integer.TYPE);</span>
+<span class="fc" id="L138">        cub.register(new IntegerConverter(), Integer.class);</span>
+<span class="fc" id="L139">        cub.register(new ArrayConverter(int[].class, new IntegerConverter()),</span>
+            int[].class);
+<span class="fc" id="L141">        cub.register(new LongConverter(), Long.TYPE);</span>
+<span class="fc" id="L142">        cub.register(new LongConverter(), Long.class);</span>
+<span class="fc" id="L143">        cub.register(new ArrayConverter(long[].class, new LongConverter()),</span>
+            long[].class);
+<span class="fc" id="L145">        cub.register(new ShortConverter(), Short.TYPE);</span>
+<span class="fc" id="L146">        cub.register(new ShortConverter(), Short.class);</span>
+<span class="fc" id="L147">        cub.register(new ArrayConverter(short[].class, new ShortConverter()),</span>
+            short[].class);
+<span class="fc" id="L149">        cub.register(new RelaxedStringArrayConverter(), String[].class);</span>
+
+        // BigDecimal, BigInteger, Class, Date, String, Time, TimeStamp
+        // do not use defaults in the default configuration of ConvertUtilsBean
+<span class="fc" id="L153">    }</span>
+
+    /**
+     * Register custom types of JDK like URI and Checkstyle specific classes to use with BeanUtils.
+     * None of these types should be found in the {@code java.lang} package.
+     * @param cub
+     *            Instance of {@link ConvertUtilsBean} to register types with.
+     */
+    private static void registerCustomTypes(ConvertUtilsBean cub) {
+<span class="fc" id="L162">        cub.register(new PatternConverter(), Pattern.class);</span>
+<span class="fc" id="L163">        cub.register(new SeverityLevelConverter(), SeverityLevel.class);</span>
+<span class="fc" id="L164">        cub.register(new ScopeConverter(), Scope.class);</span>
+<span class="fc" id="L165">        cub.register(new UriConverter(), URI.class);</span>
+<span class="fc" id="L166">        cub.register(new RelaxedAccessModifierArrayConverter(), AccessModifier[].class);</span>
+<span class="fc" id="L167">    }</span>
+
+    /**
+     * Implements the Configurable interface using bean introspection.
+     *
+     * &lt;p&gt;Subclasses are allowed to add behaviour. After the bean
+     * based setup has completed first the method
+     * {@link #finishLocalSetup finishLocalSetup}
+     * is called to allow completion of the bean's local setup,
+     * after that the method {@link #setupChild setupChild}
+     * is called for each {@link Configuration#getChildren child Configuration}
+     * of {@code configuration}.
+     *
+     * @see Configurable
+     */
+    @Override
+    public final void configure(Configuration config)
+            throws CheckstyleException {
+<span class="fc" id="L185">        configuration = config;</span>
+
+<span class="fc" id="L187">        final String[] attributes = config.getAttributeNames();</span>
+
+<span class="fc bfc" id="L189" title="All 2 branches covered.">        for (final String key : attributes) {</span>
+<span class="fc" id="L190">            final String value = config.getAttribute(key);</span>
+
+<span class="fc" id="L192">            tryCopyProperty(config.getName(), key, value, true);</span>
+        }
+
+<span class="fc" id="L195">        finishLocalSetup();</span>
+
+<span class="fc" id="L197">        final Configuration[] childConfigs = config.getChildren();</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">        for (final Configuration childConfig : childConfigs) {</span>
+<span class="fc" id="L199">            setupChild(childConfig);</span>
+        }
+<span class="fc" id="L201">    }</span>
+
+    /**
+     * Recheck property and try to copy it.
+     * @param moduleName name of the module/class
+     * @param key key of value
+     * @param value value
+     * @param recheck whether to check for property existence before copy
+     * @throws CheckstyleException then property defined incorrectly
+     */
+    private void tryCopyProperty(String moduleName, String key, Object value, boolean recheck)
+            throws CheckstyleException {
+<span class="fc" id="L213">        final BeanUtilsBean beanUtils = createBeanUtilsBean();</span>
+
+        try {
+<span class="fc bfc" id="L216" title="All 2 branches covered.">            if (recheck) {</span>
+                // BeanUtilsBean.copyProperties silently ignores missing setters
+                // for key, so we have to go through great lengths here to
+                // figure out if the bean property really exists.
+<span class="fc" id="L220">                final PropertyDescriptor descriptor =</span>
+<span class="fc" id="L221">                        PropertyUtils.getPropertyDescriptor(this, key);</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">                if (descriptor == null) {</span>
+<span class="fc" id="L223">                    final String message = String.format(Locale.ROOT, &quot;Property '%s' in module %s &quot;</span>
+                            + &quot;does not exist, please check the documentation&quot;, key, moduleName);
+<span class="fc" id="L225">                    throw new CheckstyleException(message);</span>
+                }
+            }
+            // finally we can set the bean property
+<span class="fc" id="L229">            beanUtils.copyProperty(this, key, value);</span>
+        }
+<span class="fc" id="L231">        catch (final InvocationTargetException | IllegalAccessException</span>
+                | NoSuchMethodException ex) {
+            // There is no way to catch IllegalAccessException | NoSuchMethodException
+            // as we do PropertyUtils.getPropertyDescriptor before beanUtils.copyProperty
+            // so we have to join these exceptions with InvocationTargetException
+            // to satisfy UTs coverage
+<span class="fc" id="L237">            final String message = String.format(Locale.ROOT,</span>
+                    &quot;Cannot set property '%s' to '%s' in module %s&quot;, key, value, moduleName);
+<span class="fc" id="L239">            throw new CheckstyleException(message, ex);</span>
+        }
+<span class="fc" id="L241">        catch (final IllegalArgumentException | ConversionException ex) {</span>
+<span class="fc" id="L242">            final String message = String.format(Locale.ROOT, &quot;illegal value '%s' for property &quot;</span>
+                    + &quot;'%s' of module %s&quot;, value, key, moduleName);
+<span class="fc" id="L244">            throw new CheckstyleException(message, ex);</span>
+<span class="fc" id="L245">        }</span>
+<span class="fc" id="L246">    }</span>
+
+    /**
+     * Implements the Contextualizable interface using bean introspection.
+     * @see Contextualizable
+     */
+    @Override
+    public final void contextualize(Context context)
+            throws CheckstyleException {
+<span class="fc" id="L255">        final Collection&lt;String&gt; attributes = context.getAttributeNames();</span>
+
+<span class="fc bfc" id="L257" title="All 2 branches covered.">        for (final String key : attributes) {</span>
+<span class="fc" id="L258">            final Object value = context.get(key);</span>
+
+<span class="fc" id="L260">            tryCopyProperty(getClass().getName(), key, value, false);</span>
+<span class="fc" id="L261">        }</span>
+<span class="fc" id="L262">    }</span>
+
+    /**
+     * Returns the configuration that was used to configure this component.
+     * @return the configuration that was used to configure this component.
+     */
+    protected final Configuration getConfiguration() {
+<span class="fc" id="L269">        return configuration;</span>
+    }
+
+    /**
+     * Called by configure() for every child of this component's Configuration.
+     * &lt;p&gt;
+     * The default implementation throws {@link CheckstyleException} if
+     * {@code childConf} is {@code null} because it doesn't support children. It
+     * must be overridden to validate and support children that are wanted.
+     * &lt;/p&gt;
+     *
+     * @param childConf a child of this component's Configuration
+     * @throws CheckstyleException if there is a configuration error.
+     * @see Configuration#getChildren
+     */
+    protected void setupChild(Configuration childConf)
+            throws CheckstyleException {
+<span class="fc bfc" id="L286" title="All 2 branches covered.">        if (childConf != null) {</span>
+<span class="fc" id="L287">            throw new CheckstyleException(childConf.getName() + &quot; is not allowed as a child in &quot;</span>
+<span class="fc" id="L288">                    + configuration.getName() + &quot;. Please review 'Parent Module' section &quot;</span>
+                    + &quot;for this Check in web documentation if Check is standard.&quot;);
+        }
+<span class="fc" id="L291">    }</span>
+
+    /** A converter that converts strings to patterns. */
+    private static class PatternConverter implements Converter {
+
+        @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+        @Override
+        public Object convert(Class type, Object value) {
+<span class="fc" id="L299">            return CommonUtils.createPattern(value.toString());</span>
+        }
+
+    }
+
+    /** A converter that converts strings to severity level. */
+    private static class SeverityLevelConverter implements Converter {
+
+        @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+        @Override
+        public Object convert(Class type, Object value) {
+<span class="fc" id="L310">            return SeverityLevel.getInstance(value.toString());</span>
+        }
+
+    }
+
+    /** A converter that converts strings to scope. */
+    private static class ScopeConverter implements Converter {
+
+        @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+        @Override
+        public Object convert(Class type, Object value) {
+<span class="fc" id="L321">            return Scope.getInstance(value.toString());</span>
+        }
+
+    }
+
+    /** A converter that converts strings to uri. */
+    private static class UriConverter implements Converter {
+
+        @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+        @Override
+        public Object convert(Class type, Object value) {
+<span class="fc" id="L332">            final String url = value.toString();</span>
+<span class="fc" id="L333">            URI result = null;</span>
+
+<span class="fc bfc" id="L335" title="All 2 branches covered.">            if (!CommonUtils.isBlank(url)) {</span>
+                try {
+<span class="fc" id="L337">                    result = CommonUtils.getUriByFilename(url);</span>
+                }
+<span class="fc" id="L339">                catch (CheckstyleException ex) {</span>
+<span class="fc" id="L340">                    throw new IllegalArgumentException(ex);</span>
+<span class="fc" id="L341">                }</span>
+            }
+
+<span class="fc" id="L344">            return result;</span>
+        }
+
+    }
+
+    /**
+     * A converter that does not care whether the array elements contain String
+     * characters like '*' or '_'. The normal ArrayConverter class has problems
+     * with this characters.
+     */
+    private static class RelaxedStringArrayConverter implements Converter {
+
+        @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+        @Override
+        public Object convert(Class type, Object value) {
+            // Convert to a String and trim it for the tokenizer.
+<span class="fc" id="L360">            final StringTokenizer tokenizer = new StringTokenizer(</span>
+<span class="fc" id="L361">                value.toString().trim(), COMMA_SEPARATOR);</span>
+<span class="fc" id="L362">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L364" title="All 2 branches covered.">            while (tokenizer.hasMoreTokens()) {</span>
+<span class="fc" id="L365">                final String token = tokenizer.nextToken();</span>
+<span class="fc" id="L366">                result.add(token.trim());</span>
+<span class="fc" id="L367">            }</span>
+
+<span class="fc" id="L369">            return result.toArray(new String[result.size()]);</span>
+        }
+
+    }
+
+    /**
+     * A converter that converts strings to {@link AccessModifier}.
+     * This implementation does not care whether the array elements contain characters like '_'.
+     * The normal {@link ArrayConverter} class has problems with this character.
+     */
+    private static class RelaxedAccessModifierArrayConverter implements Converter {
+
+        @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+        @Override
+        public Object convert(Class type, Object value) {
+            // Converts to a String and trims it for the tokenizer.
+<span class="fc" id="L385">            final StringTokenizer tokenizer = new StringTokenizer(</span>
+<span class="fc" id="L386">                value.toString().trim(), COMMA_SEPARATOR);</span>
+<span class="fc" id="L387">            final List&lt;AccessModifier&gt; result = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L389" title="All 2 branches covered.">            while (tokenizer.hasMoreTokens()) {</span>
+<span class="fc" id="L390">                final String token = tokenizer.nextToken();</span>
+<span class="fc" id="L391">                result.add(AccessModifier.getInstance(token.trim()));</span>
+<span class="fc" id="L392">            }</span>
+
+<span class="fc" id="L394">            return result.toArray(new AccessModifier[result.size()]);</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

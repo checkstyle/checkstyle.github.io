@@ -1,0 +1,468 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CheckUtils.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.utils</a> &gt; <span class="el_source">CheckUtils.java</span></div><h1>CheckUtils.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.utils;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import antlr.collections.AST;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.checks.naming.AccessModifier;
+
+/**
+ * Contains utility methods for the checks.
+ *
+ * @author Oliver Burn
+ * @author &lt;a href=&quot;mailto:simon@redhillconsulting.com.au&quot;&gt;Simon Harris&lt;/a&gt;
+ * @author o_sukhodolsky
+ */
+public final class CheckUtils {
+
+    // constants for parseDouble()
+    /** Octal radix. */
+    private static final int BASE_8 = 8;
+
+    /** Decimal radix. */
+    private static final int BASE_10 = 10;
+
+    /** Hex radix. */
+    private static final int BASE_16 = 16;
+
+    /** Maximum children allowed in setter/getter. */
+    private static final int SETTER_GETTER_MAX_CHILDREN = 7;
+
+    /** Maximum nodes allowed in a body of setter. */
+    private static final int SETTER_BODY_SIZE = 3;
+
+    /** Maximum nodes allowed in a body of getter. */
+    private static final int GETTER_BODY_SIZE = 2;
+
+    /** Pattern matching underscore characters ('_'). */
+<span class="fc" id="L63">    private static final Pattern UNDERSCORE_PATTERN = Pattern.compile(&quot;_&quot;);</span>
+
+    /** Pattern matching names of setter methods. */
+<span class="fc" id="L66">    private static final Pattern SETTER_PATTERN = Pattern.compile(&quot;^set[A-Z].*&quot;);</span>
+
+    /** Pattern matching names of getter methods. */
+<span class="fc" id="L69">    private static final Pattern GETTER_PATTERN = Pattern.compile(&quot;^(is|get)[A-Z].*&quot;);</span>
+
+    /** Prevent instances. */
+    private CheckUtils() {
+    }
+
+    /**
+     * Creates {@code FullIdent} for given type node.
+     * @param typeAST a type node.
+     * @return {@code FullIdent} for given type.
+     */
+    public static FullIdent createFullType(final DetailAST typeAST) {
+<span class="fc" id="L81">        DetailAST ast = typeAST;</span>
+
+        // ignore array part of type
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        while (ast.findFirstToken(TokenTypes.ARRAY_DECLARATOR) != null) {</span>
+<span class="fc" id="L85">            ast = ast.findFirstToken(TokenTypes.ARRAY_DECLARATOR);</span>
+        }
+
+<span class="fc" id="L88">        return FullIdent.createFullIdent(ast.getFirstChild());</span>
+    }
+
+    /**
+     * Tests whether a method definition AST defines an equals covariant.
+     * @param ast the method definition AST to test.
+     *     Precondition: ast is a TokenTypes.METHOD_DEF node.
+     * @return true if ast defines an equals covariant.
+     */
+    public static boolean isEqualsMethod(DetailAST ast) {
+<span class="fc" id="L98">        boolean equalsMethod = false;</span>
+
+<span class="fc bfc" id="L100" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="fc" id="L101">            final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L102">            final boolean staticOrAbstract =</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">                    modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">                    || modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</span>
+
+<span class="fc bfc" id="L106" title="All 2 branches covered.">            if (!staticOrAbstract) {</span>
+<span class="fc" id="L107">                final DetailAST nameNode = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L108">                final String name = nameNode.getText();</span>
+
+<span class="fc bfc" id="L110" title="All 2 branches covered.">                if (&quot;equals&quot;.equals(name)) {</span>
+                    // one parameter?
+<span class="fc" id="L112">                    final DetailAST paramsNode = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">                    equalsMethod = paramsNode.getChildCount() == 1;</span>
+                }
+            }
+        }
+<span class="fc" id="L117">        return equalsMethod;</span>
+    }
+
+    /**
+     * Returns whether a token represents an ELSE as part of an ELSE / IF set.
+     * @param ast the token to check
+     * @return whether it is
+     */
+    public static boolean isElseIf(DetailAST ast) {
+<span class="fc" id="L126">        final DetailAST parentAST = ast.getParent();</span>
+
+<span class="fc bfc" id="L128" title="All 2 branches covered.">        return ast.getType() == TokenTypes.LITERAL_IF</span>
+<span class="fc bfc" id="L129" title="All 4 branches covered.">            &amp;&amp; (isElse(parentAST) || isElseWithCurlyBraces(parentAST));</span>
+    }
+
+    /**
+     * Returns whether a token represents an ELSE.
+     * @param ast the token to check
+     * @return whether the token represents an ELSE
+     */
+    private static boolean isElse(DetailAST ast) {
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        return ast.getType() == TokenTypes.LITERAL_ELSE;</span>
+    }
+
+    /**
+     * Returns whether a token represents an SLIST as part of an ELSE
+     * statement.
+     * @param ast the token to check
+     * @return whether the toke does represent an SLIST as part of an ELSE
+     */
+    private static boolean isElseWithCurlyBraces(DetailAST ast) {
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        return ast.getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">            &amp;&amp; ast.getChildCount() == 2</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">            &amp;&amp; isElse(ast.getParent());</span>
+    }
+
+    /**
+     * Returns the value represented by the specified string of the specified
+     * type. Returns 0 for types other than float, double, int, and long.
+     * @param text the string to be parsed.
+     * @param type the token type of the text. Should be a constant of
+     * {@link TokenTypes}.
+     * @return the double value represented by the string argument.
+     */
+    public static double parseDouble(String text, int type) {
+<span class="fc" id="L162">        String txt = UNDERSCORE_PATTERN.matcher(text).replaceAll(&quot;&quot;);</span>
+<span class="fc" id="L163">        double result = 0;</span>
+<span class="fc bfc" id="L164" title="All 3 branches covered.">        switch (type) {</span>
+            case TokenTypes.NUM_FLOAT:
+            case TokenTypes.NUM_DOUBLE:
+<span class="fc" id="L167">                result = Double.parseDouble(txt);</span>
+<span class="fc" id="L168">                break;</span>
+            case TokenTypes.NUM_INT:
+            case TokenTypes.NUM_LONG:
+<span class="fc" id="L171">                int radix = BASE_10;</span>
+<span class="fc bfc" id="L172" title="All 4 branches covered.">                if (txt.startsWith(&quot;0x&quot;) || txt.startsWith(&quot;0X&quot;)) {</span>
+<span class="fc" id="L173">                    radix = BASE_16;</span>
+<span class="fc" id="L174">                    txt = txt.substring(2);</span>
+                }
+<span class="fc bfc" id="L176" title="All 2 branches covered.">                else if (txt.charAt(0) == '0') {</span>
+<span class="fc" id="L177">                    radix = BASE_8;</span>
+<span class="fc" id="L178">                    txt = txt.substring(1);</span>
+                }
+<span class="fc bfc" id="L180" title="All 4 branches covered.">                if (CommonUtils.endsWithChar(txt, 'L') || CommonUtils.endsWithChar(txt, 'l')) {</span>
+<span class="fc" id="L181">                    txt = txt.substring(0, txt.length() - 1);</span>
+                }
+<span class="fc bfc" id="L183" title="All 2 branches covered.">                if (!txt.isEmpty()) {</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">                    if (type == TokenTypes.NUM_INT) {</span>
+<span class="fc" id="L185">                        result = parseInt(txt, radix);</span>
+                    }
+                    else {
+<span class="fc" id="L188">                        result = parseLong(txt, radix);</span>
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+<span class="fc" id="L195">        return result;</span>
+    }
+
+    /**
+     * Parses the string argument as a signed integer in the radix specified by
+     * the second argument. The characters in the string must all be digits of
+     * the specified radix. Handles negative values, which method
+     * java.lang.Integer.parseInt(String, int) does not.
+     * @param text the String containing the integer representation to be
+     *     parsed. Precondition: text contains a parsable int.
+     * @param radix the radix to be used while parsing text.
+     * @return the integer represented by the string argument in the specified radix.
+     */
+    private static int parseInt(String text, int radix) {
+<span class="fc" id="L209">        int result = 0;</span>
+<span class="fc" id="L210">        final int max = text.length();</span>
+<span class="fc bfc" id="L211" title="All 2 branches covered.">        for (int i = 0; i &lt; max; i++) {</span>
+<span class="fc" id="L212">            final int digit = Character.digit(text.charAt(i), radix);</span>
+<span class="fc" id="L213">            result *= radix;</span>
+<span class="fc" id="L214">            result += digit;</span>
+        }
+<span class="fc" id="L216">        return result;</span>
+    }
+
+    /**
+     * Parses the string argument as a signed long in the radix specified by
+     * the second argument. The characters in the string must all be digits of
+     * the specified radix. Handles negative values, which method
+     * java.lang.Integer.parseInt(String, int) does not.
+     * @param text the String containing the integer representation to be
+     *     parsed. Precondition: text contains a parsable int.
+     * @param radix the radix to be used while parsing text.
+     * @return the long represented by the string argument in the specified radix.
+     */
+    private static long parseLong(String text, int radix) {
+<span class="fc" id="L230">        long result = 0;</span>
+<span class="fc" id="L231">        final int max = text.length();</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">        for (int i = 0; i &lt; max; i++) {</span>
+<span class="fc" id="L233">            final int digit = Character.digit(text.charAt(i), radix);</span>
+<span class="fc" id="L234">            result *= radix;</span>
+<span class="fc" id="L235">            result += digit;</span>
+        }
+<span class="fc" id="L237">        return result;</span>
+    }
+
+    /**
+     * Finds sub-node for given node minimal (line, column) pair.
+     * @param node the root of tree for search.
+     * @return sub-node with minimal (line, column) pair.
+     */
+    public static DetailAST getFirstNode(final DetailAST node) {
+<span class="fc" id="L246">        DetailAST currentNode = node;</span>
+<span class="fc" id="L247">        DetailAST child = node.getFirstChild();</span>
+<span class="fc bfc" id="L248" title="All 2 branches covered.">        while (child != null) {</span>
+<span class="fc" id="L249">            final DetailAST newNode = getFirstNode(child);</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">            if (newNode.getLineNo() &lt; currentNode.getLineNo()</span>
+<span class="fc bfc" id="L251" title="All 2 branches covered.">                || newNode.getLineNo() == currentNode.getLineNo()</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">                    &amp;&amp; newNode.getColumnNo() &lt; currentNode.getColumnNo()) {</span>
+<span class="fc" id="L253">                currentNode = newNode;</span>
+            }
+<span class="fc" id="L255">            child = child.getNextSibling();</span>
+<span class="fc" id="L256">        }</span>
+
+<span class="fc" id="L258">        return currentNode;</span>
+    }
+
+    /**
+     * Retrieves the names of the type parameters to the node.
+     * @param node the parameterized AST node
+     * @return a list of type parameter names
+     */
+    public static List&lt;String&gt; getTypeParameterNames(final DetailAST node) {
+<span class="fc" id="L267">        final DetailAST typeParameters =</span>
+<span class="fc" id="L268">            node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
+
+<span class="fc" id="L270">        final List&lt;String&gt; typeParameterNames = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L271" title="All 2 branches covered.">        if (typeParameters != null) {</span>
+<span class="fc" id="L272">            final DetailAST typeParam =</span>
+<span class="fc" id="L273">                typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
+<span class="fc" id="L274">            typeParameterNames.add(</span>
+<span class="fc" id="L275">                    typeParam.findFirstToken(TokenTypes.IDENT).getText());</span>
+
+<span class="fc" id="L277">            DetailAST sibling = typeParam.getNextSibling();</span>
+<span class="fc bfc" id="L278" title="All 2 branches covered.">            while (sibling != null) {</span>
+<span class="fc bfc" id="L279" title="All 2 branches covered.">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
+<span class="fc" id="L280">                    typeParameterNames.add(</span>
+<span class="fc" id="L281">                            sibling.findFirstToken(TokenTypes.IDENT).getText());</span>
+                }
+<span class="fc" id="L283">                sibling = sibling.getNextSibling();</span>
+            }
+        }
+
+<span class="fc" id="L287">        return typeParameterNames;</span>
+    }
+
+    /**
+     * Retrieves the type parameters to the node.
+     * @param node the parameterized AST node
+     * @return a list of type parameter names
+     */
+    public static List&lt;DetailAST&gt; getTypeParameters(final DetailAST node) {
+<span class="fc" id="L296">        final DetailAST typeParameters =</span>
+<span class="fc" id="L297">            node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
+
+<span class="fc" id="L299">        final List&lt;DetailAST&gt; typeParams = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L300" title="All 2 branches covered.">        if (typeParameters != null) {</span>
+<span class="fc" id="L301">            final DetailAST typeParam =</span>
+<span class="fc" id="L302">                typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
+<span class="fc" id="L303">            typeParams.add(typeParam);</span>
+
+<span class="fc" id="L305">            DetailAST sibling = typeParam.getNextSibling();</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">            while (sibling != null) {</span>
+<span class="fc bfc" id="L307" title="All 2 branches covered.">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
+<span class="fc" id="L308">                    typeParams.add(sibling);</span>
+                }
+<span class="fc" id="L310">                sibling = sibling.getNextSibling();</span>
+            }
+        }
+
+<span class="fc" id="L314">        return typeParams;</span>
+    }
+
+    /**
+     * Returns whether an AST represents a setter method.
+     * @param ast the AST to check with
+     * @return whether the AST represents a setter method
+     */
+    public static boolean isSetterMethod(final DetailAST ast) {
+<span class="fc" id="L323">        boolean setterMethod = false;</span>
+
+        // Check have a method with exactly 7 children which are all that
+        // is allowed in a proper setter method which does not throw any
+        // exceptions.
+<span class="fc bfc" id="L328" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L329" title="All 2 branches covered.">                &amp;&amp; ast.getChildCount() == SETTER_GETTER_MAX_CHILDREN) {</span>
+<span class="fc" id="L330">            final DetailAST type = ast.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L331">            final String name = type.getNextSibling().getText();</span>
+<span class="fc" id="L332">            final boolean matchesSetterFormat = SETTER_PATTERN.matcher(name).matches();</span>
+<span class="fc bfc" id="L333" title="All 2 branches covered.">            final boolean voidReturnType = type.findFirstToken(TokenTypes.LITERAL_VOID) != null;</span>
+
+<span class="fc" id="L335">            final DetailAST params = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc bfc" id="L336" title="All 2 branches covered.">            final boolean singleParam = params.getChildCount(TokenTypes.PARAMETER_DEF) == 1;</span>
+
+<span class="fc bfc" id="L338" title="All 6 branches covered.">            if (matchesSetterFormat &amp;&amp; voidReturnType &amp;&amp; singleParam) {</span>
+                // Now verify that the body consists of:
+                // SLIST -&gt; EXPR -&gt; ASSIGN
+                // SEMI
+                // RCURLY
+<span class="fc" id="L343">                final DetailAST slist = ast.findFirstToken(TokenTypes.SLIST);</span>
+
+<span class="fc bfc" id="L345" title="All 4 branches covered.">                if (slist != null &amp;&amp; slist.getChildCount() == SETTER_BODY_SIZE) {</span>
+<span class="fc" id="L346">                    final DetailAST expr = slist.getFirstChild();</span>
+<span class="fc bfc" id="L347" title="All 2 branches covered.">                    setterMethod = expr.getFirstChild().getType() == TokenTypes.ASSIGN;</span>
+                }
+            }
+        }
+<span class="fc" id="L351">        return setterMethod;</span>
+    }
+
+    /**
+     * Returns whether an AST represents a getter method.
+     * @param ast the AST to check with
+     * @return whether the AST represents a getter method
+     */
+    public static boolean isGetterMethod(final DetailAST ast) {
+<span class="fc" id="L360">        boolean getterMethod = false;</span>
+
+        // Check have a method with exactly 7 children which are all that
+        // is allowed in a proper getter method which does not throw any
+        // exceptions.
+<span class="fc bfc" id="L365" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L366" title="All 2 branches covered.">                &amp;&amp; ast.getChildCount() == SETTER_GETTER_MAX_CHILDREN) {</span>
+<span class="fc" id="L367">            final DetailAST type = ast.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L368">            final String name = type.getNextSibling().getText();</span>
+<span class="fc" id="L369">            final boolean matchesGetterFormat = GETTER_PATTERN.matcher(name).matches();</span>
+<span class="fc bfc" id="L370" title="All 2 branches covered.">            final boolean noVoidReturnType = type.findFirstToken(TokenTypes.LITERAL_VOID) == null;</span>
+
+<span class="fc" id="L372">            final DetailAST params = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">            final boolean noParams = params.getChildCount(TokenTypes.PARAMETER_DEF) == 0;</span>
+
+<span class="fc bfc" id="L375" title="All 6 branches covered.">            if (matchesGetterFormat &amp;&amp; noVoidReturnType &amp;&amp; noParams) {</span>
+                // Now verify that the body consists of:
+                // SLIST -&gt; RETURN
+                // RCURLY
+<span class="fc" id="L379">                final DetailAST slist = ast.findFirstToken(TokenTypes.SLIST);</span>
+
+<span class="fc bfc" id="L381" title="All 4 branches covered.">                if (slist != null &amp;&amp; slist.getChildCount() == GETTER_BODY_SIZE) {</span>
+<span class="fc" id="L382">                    final DetailAST expr = slist.getFirstChild();</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">                    getterMethod = expr.getType() == TokenTypes.LITERAL_RETURN;</span>
+                }
+            }
+        }
+<span class="fc" id="L387">        return getterMethod;</span>
+    }
+
+    /**
+     * Checks whether a method is a not void one.
+     *
+     * @param methodDefAst the method node.
+     * @return true if method is a not void one.
+     */
+    public static boolean isNonVoidMethod(DetailAST methodDefAst) {
+<span class="fc" id="L397">        boolean returnValue = false;</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">        if (methodDefAst.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="fc" id="L399">            final DetailAST typeAST = methodDefAst.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc bfc" id="L400" title="All 2 branches covered.">            if (typeAST.findFirstToken(TokenTypes.LITERAL_VOID) == null) {</span>
+<span class="fc" id="L401">                returnValue = true;</span>
+            }
+        }
+<span class="fc" id="L404">        return returnValue;</span>
+    }
+
+    /**
+     * Checks whether a parameter is a receiver.
+     *
+     * @param parameterDefAst the parameter node.
+     * @return true if the parameter is a receiver.
+     */
+    public static boolean isReceiverParameter(DetailAST parameterDefAst) {
+<span class="fc bfc" id="L414" title="All 2 branches covered.">        return parameterDefAst.getType() == TokenTypes.PARAMETER_DEF</span>
+<span class="fc bfc" id="L415" title="All 2 branches covered.">                &amp;&amp; parameterDefAst.findFirstToken(TokenTypes.IDENT) == null;</span>
+    }
+
+    /**
+     * Returns {@link AccessModifier} based on the information about access modifier
+     * taken from the given token of type {@link TokenTypes#MODIFIERS}.
+     * @param modifiersToken token of type {@link TokenTypes#MODIFIERS}.
+     * @return {@link AccessModifier}.
+     */
+    public static AccessModifier getAccessModifierFromModifiersToken(DetailAST modifiersToken) {
+<span class="fc bfc" id="L425" title="All 4 branches covered.">        if (modifiersToken == null || modifiersToken.getType() != TokenTypes.MODIFIERS) {</span>
+<span class="fc" id="L426">            throw new IllegalArgumentException(&quot;expected non-null AST-token with type 'MODIFIERS'&quot;);</span>
+        }
+
+        // default access modifier
+<span class="fc" id="L430">        AccessModifier accessModifier = AccessModifier.PACKAGE;</span>
+<span class="fc bfc" id="L431" title="All 2 branches covered.">        for (AST token = modifiersToken.getFirstChild(); token != null;</span>
+<span class="fc" id="L432">             token = token.getNextSibling()) {</span>
+<span class="fc" id="L433">            final int tokenType = token.getType();</span>
+<span class="fc bfc" id="L434" title="All 2 branches covered.">            if (tokenType == TokenTypes.LITERAL_PUBLIC) {</span>
+<span class="fc" id="L435">                accessModifier = AccessModifier.PUBLIC;</span>
+            }
+<span class="fc bfc" id="L437" title="All 2 branches covered.">            else if (tokenType == TokenTypes.LITERAL_PROTECTED) {</span>
+<span class="fc" id="L438">                accessModifier = AccessModifier.PROTECTED;</span>
+            }
+<span class="fc bfc" id="L440" title="All 2 branches covered.">            else if (tokenType == TokenTypes.LITERAL_PRIVATE) {</span>
+<span class="fc" id="L441">                accessModifier = AccessModifier.PRIVATE;</span>
+            }
+        }
+<span class="fc" id="L444">        return accessModifier;</span>
+    }
+
+    /**
+     * Create set of class names and short class names.
+     *
+     * @param classNames array of class names.
+     * @return set of class names and short class names.
+     */
+    public static Set&lt;String&gt; parseClassNames(String... classNames) {
+<span class="fc" id="L454">        final Set&lt;String&gt; illegalClassNames = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L455" title="All 2 branches covered.">        for (final String name : classNames) {</span>
+<span class="fc" id="L456">            illegalClassNames.add(name);</span>
+<span class="fc" id="L457">            final int lastDot = name.lastIndexOf('.');</span>
+<span class="fc bfc" id="L458" title="All 4 branches covered.">            if (lastDot != -1 &amp;&amp; lastDot &lt; name.length() - 1) {</span>
+<span class="fc" id="L459">                final String shortName = name</span>
+<span class="fc" id="L460">                        .substring(name.lastIndexOf('.') + 1);</span>
+<span class="fc" id="L461">                illegalClassNames.add(shortName);</span>
+            }
+        }
+<span class="fc" id="L464">        return illegalClassNames;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

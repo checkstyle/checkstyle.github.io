@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FileText.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.api</a> &gt; <span class="el_source">FileText.java</span></div><h1>FileText.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.api;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.UnsupportedCharsetException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
+
+/**
+ * Represents the text contents of a file of arbitrary plain text type.
+ * &lt;p&gt;
+ * This class will be passed to instances of class FileSetCheck by
+ * Checker.
+ * &lt;/p&gt;
+ *
+ * @author Martin von Gagern
+ */
+public final class FileText {
+
+    /**
+     * The number of characters to read in one go.
+     */
+    private static final int READ_BUFFER_SIZE = 1024;
+
+    /**
+     * Regular expression pattern matching all line terminators.
+     */
+<span class="fc" id="L61">    private static final Pattern LINE_TERMINATOR = Pattern.compile(&quot;\\n|\\r\\n?&quot;);</span>
+
+    // For now, we always keep both full text and lines array.
+    // In the long run, however, the one passed at initialization might be
+    // enough, while the other could be lazily created when requested.
+    // This would save memory but cost CPU cycles.
+
+    /**
+     * The name of the file.
+     * {@code null} if no file name is available for whatever reason.
+     */
+    private final File file;
+
+    /**
+     * The charset used to read the file.
+     * {@code null} if the file was reconstructed from a list of lines.
+     */
+    private final Charset charset;
+
+    /**
+     * The full text contents of the file.
+     */
+    private final String fullText;
+
+    /**
+     * The lines of the file, without terminators.
+     */
+    private final String[] lines;
+
+    /**
+     * The first position of each line within the full text.
+     */
+    private int[] lineBreaks;
+
+    /**
+     * Creates a new file text representation.
+     *
+     * &lt;p&gt;The file will be read using the specified encoding, replacing
+     * malformed input and unmappable characters with the default
+     * replacement character.
+     *
+     * @param file the name of the file
+     * @param charsetName the encoding to use when reading the file
+     * @throws NullPointerException if the text is null
+     * @throws IOException if the file could not be read
+     */
+<span class="fc" id="L107">    public FileText(File file, String charsetName) throws IOException {</span>
+<span class="fc" id="L108">        this.file = file;</span>
+
+        // We use our own decoder, to be sure we have complete control
+        // about replacements.
+        final CharsetDecoder decoder;
+        try {
+<span class="fc" id="L114">            charset = Charset.forName(charsetName);</span>
+<span class="fc" id="L115">            decoder = charset.newDecoder();</span>
+<span class="fc" id="L116">            decoder.onMalformedInput(CodingErrorAction.REPLACE);</span>
+<span class="fc" id="L117">            decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);</span>
+        }
+<span class="fc" id="L119">        catch (final UnsupportedCharsetException ex) {</span>
+<span class="fc" id="L120">            final String message = &quot;Unsupported charset: &quot; + charsetName;</span>
+<span class="fc" id="L121">            throw new IllegalStateException(message, ex);</span>
+<span class="fc" id="L122">        }</span>
+
+<span class="fc" id="L124">        fullText = readFile(file, decoder);</span>
+
+        // Use the BufferedReader to break down the lines as this
+        // is about 30% faster than using the
+        // LINE_TERMINATOR.split(fullText, -1) method
+<span class="fc" id="L129">        final BufferedReader reader = new BufferedReader(new StringReader(fullText));</span>
+        try {
+<span class="fc" id="L131">            final ArrayList&lt;String&gt; textLines = new ArrayList&lt;&gt;();</span>
+            while (true) {
+<span class="fc" id="L133">                final String line = reader.readLine();</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">                if (line == null) {</span>
+<span class="fc" id="L135">                    break;</span>
+                }
+<span class="fc" id="L137">                textLines.add(line);</span>
+<span class="fc" id="L138">            }</span>
+<span class="fc" id="L139">            lines = textLines.toArray(new String[textLines.size()]);</span>
+        }
+        finally {
+<span class="fc" id="L142">            CommonUtils.close(reader);</span>
+        }
+<span class="fc" id="L144">    }</span>
+
+    /**
+     * Copy constructor.
+     * @param fileText to make copy of
+     */
+<span class="fc" id="L150">    public FileText(FileText fileText) {</span>
+<span class="fc" id="L151">        file = fileText.file;</span>
+<span class="fc" id="L152">        charset = fileText.charset;</span>
+<span class="fc" id="L153">        fullText = fileText.fullText;</span>
+<span class="fc" id="L154">        lines = fileText.lines.clone();</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        if (fileText.lineBreaks == null) {</span>
+<span class="fc" id="L156">            lineBreaks = null;</span>
+        }
+        else {
+<span class="fc" id="L159">            lineBreaks = fileText.lineBreaks.clone();</span>
+        }
+<span class="fc" id="L161">    }</span>
+
+    /**
+     * Compatibility constructor.
+     *
+     * &lt;p&gt;This constructor reconstructs the text of the file by joining
+     * lines with linefeed characters. This process does not restore
+     * the original line terminators and should therefore be avoided.
+     *
+     * @param file the name of the file
+     * @param lines the lines of the text, without terminators
+     * @throws NullPointerException if the lines array is null
+     */
+<span class="fc" id="L174">    public FileText(File file, List&lt;String&gt; lines) {</span>
+<span class="fc" id="L175">        final StringBuilder buf = new StringBuilder(1024);</span>
+<span class="fc bfc" id="L176" title="All 2 branches covered.">        for (final String line : lines) {</span>
+<span class="fc" id="L177">            buf.append(line).append('\n');</span>
+<span class="fc" id="L178">        }</span>
+
+<span class="fc" id="L180">        this.file = file;</span>
+<span class="fc" id="L181">        charset = null;</span>
+<span class="fc" id="L182">        fullText = buf.toString();</span>
+<span class="fc" id="L183">        this.lines = lines.toArray(new String[lines.size()]);</span>
+<span class="fc" id="L184">    }</span>
+
+    /**
+     * Reads file using specific decoder and returns all its content as a String.
+     * @param inputFile File to read
+     * @param decoder Charset decoder
+     * @return File's text
+     * @throws IOException Unable to open or read the file
+     */
+    private static String readFile(final File inputFile, final CharsetDecoder decoder)
+            throws IOException {
+<span class="fc bfc" id="L195" title="All 2 branches covered.">        if (!inputFile.exists()) {</span>
+<span class="fc" id="L196">            throw new FileNotFoundException(inputFile.getPath() + &quot; (No such file or directory)&quot;);</span>
+        }
+<span class="fc" id="L198">        final StringBuilder buf = new StringBuilder(1024);</span>
+<span class="fc" id="L199">        final FileInputStream stream = new FileInputStream(inputFile);</span>
+<span class="fc" id="L200">        final Reader reader = new InputStreamReader(stream, decoder);</span>
+        try {
+<span class="fc" id="L202">            final char[] chars = new char[READ_BUFFER_SIZE];</span>
+            while (true) {
+<span class="fc" id="L204">                final int len = reader.read(chars);</span>
+<span class="fc bfc" id="L205" title="All 2 branches covered.">                if (len == -1) {</span>
+<span class="fc" id="L206">                    break;</span>
+                }
+<span class="fc" id="L208">                buf.append(chars, 0, len);</span>
+<span class="fc" id="L209">            }</span>
+        }
+        finally {
+<span class="fc" id="L212">            CommonUtils.close(reader);</span>
+        }
+<span class="fc" id="L214">        return buf.toString();</span>
+    }
+
+    /**
+     * Get the name of the file.
+     * @return an object containing the name of the file
+     */
+    public File getFile() {
+<span class="fc" id="L222">        return file;</span>
+    }
+
+    /**
+     * Get the character set which was used to read the file.
+     * Will be {@code null} for a file reconstructed from its lines.
+     * @return the charset used when the file was read
+     */
+    public Charset getCharset() {
+<span class="fc" id="L231">        return charset;</span>
+    }
+
+    /**
+     * Retrieve the full text of the file.
+     * @return the full text of the file
+     */
+    public CharSequence getFullText() {
+<span class="fc" id="L239">        return fullText;</span>
+    }
+
+    /**
+     * Returns an array of all lines.
+     * {@code text.toLinesArray()} is equivalent to
+     * {@code text.toArray(new String[text.size()])}.
+     * @return an array of all lines of the text
+     */
+    public String[] toLinesArray() {
+<span class="fc" id="L249">        return lines.clone();</span>
+    }
+
+    /**
+     * Find positions of line breaks in the full text.
+     * @return an array giving the first positions of each line.
+     */
+    private int[] findLineBreaks() {
+<span class="fc bfc" id="L257" title="All 2 branches covered.">        if (lineBreaks == null) {</span>
+<span class="fc" id="L258">            final int[] lineBreakPositions = new int[size() + 1];</span>
+<span class="fc" id="L259">            lineBreakPositions[0] = 0;</span>
+<span class="fc" id="L260">            int lineNo = 1;</span>
+<span class="fc" id="L261">            final Matcher matcher = LINE_TERMINATOR.matcher(fullText);</span>
+<span class="fc bfc" id="L262" title="All 2 branches covered.">            while (matcher.find()) {</span>
+<span class="fc" id="L263">                lineBreakPositions[lineNo] = matcher.end();</span>
+<span class="fc" id="L264">                lineNo++;</span>
+            }
+<span class="fc bfc" id="L266" title="All 2 branches covered.">            if (lineNo &lt; lineBreakPositions.length) {</span>
+<span class="fc" id="L267">                lineBreakPositions[lineNo] = fullText.length();</span>
+            }
+<span class="fc" id="L269">            lineBreaks = lineBreakPositions;</span>
+        }
+<span class="fc" id="L271">        return lineBreaks;</span>
+    }
+
+    /**
+     * Determine line and column numbers in full text.
+     * @param pos the character position in the full text
+     * @return the line and column numbers of this character
+     */
+    public LineColumn lineColumn(int pos) {
+<span class="fc" id="L280">        final int[] lineBreakPositions = findLineBreaks();</span>
+<span class="fc" id="L281">        int lineNo = Arrays.binarySearch(lineBreakPositions, pos);</span>
+<span class="fc bfc" id="L282" title="All 2 branches covered.">        if (lineNo &lt; 0) {</span>
+            // we have: lineNo = -(insertion point) - 1
+            // we want: lineNo =  (insertion point) - 1
+<span class="fc" id="L285">            lineNo = -lineNo - 2;</span>
+        }
+<span class="fc" id="L287">        final int startOfLine = lineBreakPositions[lineNo];</span>
+<span class="fc" id="L288">        final int columnNo = pos - startOfLine;</span>
+        // now we have lineNo and columnNo, both starting at zero.
+<span class="fc" id="L290">        return new LineColumn(lineNo + 1, columnNo);</span>
+    }
+
+    /**
+     * Retrieves a line of the text by its number.
+     * The returned line will not contain a trailing terminator.
+     * @param lineNo the number of the line to get, starting at zero
+     * @return the line with the given number
+     */
+    public String get(final int lineNo) {
+<span class="fc" id="L300">        return lines[lineNo];</span>
+    }
+
+    /**
+     * Counts the lines of the text.
+     * @return the number of lines in the text
+     */
+    public int size() {
+<span class="fc" id="L308">        return lines.length;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>

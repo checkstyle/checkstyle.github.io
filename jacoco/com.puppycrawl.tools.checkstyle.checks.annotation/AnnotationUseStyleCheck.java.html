@@ -1,0 +1,509 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AnnotationUseStyleCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.annotation</a> &gt; <span class="el_source">AnnotationUseStyleCheck.java</span></div><h1>AnnotationUseStyleCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.annotation;
+
+import java.util.Locale;
+
+import org.apache.commons.beanutils.ConversionException;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * This check controls the style with the usage of annotations.
+ *
+ * &lt;p&gt;Annotations have three element styles starting with the least verbose.
+ * &lt;ul&gt;
+ * &lt;li&gt;{@link ElementStyle#COMPACT_NO_ARRAY COMPACT_NO_ARRAY}&lt;/li&gt;
+ * &lt;li&gt;{@link ElementStyle#COMPACT COMPACT}&lt;/li&gt;
+ * &lt;li&gt;{@link ElementStyle#EXPANDED EXPANDED}&lt;/li&gt;
+ * &lt;/ul&gt;
+ * To not enforce an element style
+ * a {@link ElementStyle#IGNORE IGNORE} type is provided.  The desired style
+ * can be set through the {@code elementStyle} property.
+ *
+ * &lt;p&gt;Using the EXPANDED style is more verbose. The expanded version
+ * is sometimes referred to as &quot;named parameters&quot; in other languages.
+ *
+ * &lt;p&gt;Using the COMPACT style is less verbose. This style can only
+ * be used when there is an element called 'value' which is either
+ * the sole element or all other elements have default values.
+ *
+ * &lt;p&gt;Using the COMPACT_NO_ARRAY style is less verbose. It is similar
+ * to the COMPACT style but single value arrays are flagged. With
+ * annotations a single value array does not need to be placed in an
+ * array initializer. This style can only be used when there is an
+ * element called 'value' which is either the sole element or all other
+ * elements have default values.
+ *
+ * &lt;p&gt;The ending parenthesis are optional when using annotations with no elements.
+ * To always require ending parenthesis use the
+ * {@link ClosingParens#ALWAYS ALWAYS} type.  To never have ending parenthesis
+ * use the {@link ClosingParens#NEVER NEVER} type. To not enforce a
+ * closing parenthesis preference a {@link ClosingParens#IGNORE IGNORE} type is
+ * provided. Set this through the {@code closingParens} property.
+ *
+ * &lt;p&gt;Annotations also allow you to specify arrays of elements in a standard
+ * format.  As with normal arrays, a trailing comma is optional. To always
+ * require a trailing comma use the {@link TrailingArrayComma#ALWAYS ALWAYS}
+ * type. To never have a trailing comma use the
+ * {@link TrailingArrayComma#NEVER NEVER} type. To not enforce a trailing
+ * array comma preference a {@link TrailingArrayComma#IGNORE IGNORE} type
+ * is provided.  Set this through the {@code trailingArrayComma} property.
+ *
+ * &lt;p&gt;By default the ElementStyle is set to COMPACT_NO_ARRAY, the
+ * TrailingArrayComma is set to NEVER, and the ClosingParens is set to NEVER.
+ *
+ * &lt;p&gt;According to the JLS, it is legal to include a trailing comma
+ * in arrays used in annotations but Sun's Java 5 &amp;amp; 6 compilers will not
+ * compile with this syntax. This may in be a bug in Sun's compilers
+ * since eclipse 3.4's built-in compiler does allow this syntax as
+ * defined in the JLS. Note: this was tested with compilers included with
+ * JDK versions 1.5.0.17 and 1.6.0.11 and the compiler included with eclipse
+ * 3.4.1.
+ *
+ * &lt;p&gt;See &lt;a
+ * href=&quot;https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.7&quot;&gt;
+ * Java Language specification, &amp;sect;9.7&lt;/a&gt;.
+ *
+ * &lt;p&gt;An example shown below is set to enforce an EXPANDED style, with a
+ * trailing array comma set to NEVER and always including the closing
+ * parenthesis.
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;AnnotationUseStyle&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;ElementStyle&amp;quot;
+ *        value=&amp;quot;EXPANDED&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;TrailingArrayComma&amp;quot;
+ *        value=&amp;quot;NEVER&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;ClosingParens&amp;quot;
+ *        value=&amp;quot;ALWAYS&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @author Travis Schneeberger
+ */
+@StatelessCheck
+<span class="fc" id="L106">public final class AnnotationUseStyleCheck extends AbstractCheck {</span>
+
+    /**
+     * Defines the styles for defining elements in an annotation.
+     * @author Travis Schneeberger
+     */
+<span class="fc" id="L112">    public enum ElementStyle {</span>
+
+        /**
+         * Expanded example
+         *
+         * &lt;pre&gt;@SuppressWarnings(value={&quot;unchecked&quot;,&quot;unused&quot;,})&lt;/pre&gt;.
+         */
+<span class="fc" id="L119">        EXPANDED,</span>
+
+        /**
+         * Compact example
+         *
+         * &lt;pre&gt;@SuppressWarnings({&quot;unchecked&quot;,&quot;unused&quot;,})&lt;/pre&gt;
+         * &lt;br&gt;or&lt;br&gt;
+         * &lt;pre&gt;@SuppressWarnings(&quot;unchecked&quot;)&lt;/pre&gt;.
+         */
+<span class="fc" id="L128">        COMPACT,</span>
+
+        /**
+         * Compact example.]
+         *
+         * &lt;pre&gt;@SuppressWarnings(&quot;unchecked&quot;)&lt;/pre&gt;.
+         */
+<span class="fc" id="L135">        COMPACT_NO_ARRAY,</span>
+
+        /**
+         * Mixed styles.
+         */
+<span class="fc" id="L140">        IGNORE,</span>
+
+    }
+
+    /**
+     * Defines the two styles for defining
+     * elements in an annotation.
+     *
+     * @author Travis Schneeberger
+     */
+<span class="fc" id="L150">    public enum TrailingArrayComma {</span>
+
+        /**
+         * With comma example
+         *
+         * &lt;pre&gt;@SuppressWarnings(value={&quot;unchecked&quot;,&quot;unused&quot;,})&lt;/pre&gt;.
+         */
+<span class="fc" id="L157">        ALWAYS,</span>
+
+        /**
+         * Without comma example
+         *
+         * &lt;pre&gt;@SuppressWarnings(value={&quot;unchecked&quot;,&quot;unused&quot;})&lt;/pre&gt;.
+         */
+<span class="fc" id="L164">        NEVER,</span>
+
+        /**
+         * Mixed styles.
+         */
+<span class="fc" id="L169">        IGNORE,</span>
+
+    }
+
+    /**
+     * Defines the two styles for defining
+     * elements in an annotation.
+     *
+     * @author Travis Schneeberger
+     */
+<span class="fc" id="L179">    public enum ClosingParens {</span>
+
+        /**
+         * With parens example
+         *
+         * &lt;pre&gt;@Deprecated()&lt;/pre&gt;.
+         */
+<span class="fc" id="L186">        ALWAYS,</span>
+
+        /**
+         * Without parens example
+         *
+         * &lt;pre&gt;@Deprecated&lt;/pre&gt;.
+         */
+<span class="fc" id="L193">        NEVER,</span>
+
+        /**
+         * Mixed styles.
+         */
+<span class="fc" id="L198">        IGNORE,</span>
+
+    }
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_ANNOTATION_INCORRECT_STYLE =
+        &quot;annotation.incorrect.style&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_ANNOTATION_PARENS_MISSING =
+        &quot;annotation.parens.missing&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_ANNOTATION_PARENS_PRESENT =
+        &quot;annotation.parens.present&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_ANNOTATION_TRAILING_COMMA_MISSING =
+        &quot;annotation.trailing.comma.missing&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_ANNOTATION_TRAILING_COMMA_PRESENT =
+        &quot;annotation.trailing.comma.present&quot;;
+
+    /**
+     * The element name used to receive special linguistic support
+     * for annotation use.
+     */
+    private static final String ANNOTATION_ELEMENT_SINGLE_NAME =
+            &quot;value&quot;;
+
+    /**
+     * ElementStyle option.
+     * @see #setElementStyle(String)
+     */
+<span class="fc" id="L248">    private ElementStyle elementStyle = ElementStyle.COMPACT_NO_ARRAY;</span>
+
+    //defaulting to NEVER because of the strange compiler behavior
+    /**
+     * Trailing array comma option.
+     * @see #setTrailingArrayComma(String)
+     */
+<span class="fc" id="L255">    private TrailingArrayComma trailingArrayComma = TrailingArrayComma.NEVER;</span>
+
+    /**
+     * Closing parens option.
+     * @see #setClosingParens(String)
+     */
+<span class="fc" id="L261">    private ClosingParens closingParens = ClosingParens.NEVER;</span>
+
+    /**
+     * Sets the ElementStyle from a string.
+     *
+     * @param style string representation
+     * @throws ConversionException if cannot convert string.
+     */
+    public void setElementStyle(final String style) {
+<span class="fc" id="L270">        elementStyle = getOption(ElementStyle.class, style);</span>
+<span class="fc" id="L271">    }</span>
+
+    /**
+     * Sets the TrailingArrayComma from a string.
+     *
+     * @param comma string representation
+     * @throws ConversionException if cannot convert string.
+     */
+    public void setTrailingArrayComma(final String comma) {
+<span class="fc" id="L280">        trailingArrayComma = getOption(TrailingArrayComma.class, comma);</span>
+<span class="fc" id="L281">    }</span>
+
+    /**
+     * Sets the ClosingParens from a string.
+     *
+     * @param parens string representation
+     * @throws ConversionException if cannot convert string.
+     */
+    public void setClosingParens(final String parens) {
+<span class="fc" id="L290">        closingParens = getOption(ClosingParens.class, parens);</span>
+<span class="fc" id="L291">    }</span>
+
+    /**
+     * Retrieves an {@link Enum Enum} type from a @{link String String}.
+     * @param &lt;T&gt; the enum type
+     * @param enumClass the enum class
+     * @param value the string representing the enum
+     * @return the enum type
+     */
+    private static &lt;T extends Enum&lt;T&gt;&gt; T getOption(final Class&lt;T&gt; enumClass,
+        final String value) {
+        try {
+<span class="fc" id="L303">            return Enum.valueOf(enumClass, value.trim().toUpperCase(Locale.ENGLISH));</span>
+        }
+<span class="fc" id="L305">        catch (final IllegalArgumentException iae) {</span>
+<span class="fc" id="L306">            throw new IllegalArgumentException(&quot;unable to parse &quot; + value, iae);</span>
+        }
+    }
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L312">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L317">        return new int[] {</span>
+            TokenTypes.ANNOTATION,
+        };
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L324">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public void visitToken(final DetailAST ast) {
+<span class="fc" id="L329">        checkStyleType(ast);</span>
+<span class="fc" id="L330">        checkCheckClosingParens(ast);</span>
+<span class="fc" id="L331">        checkTrailingComma(ast);</span>
+<span class="fc" id="L332">    }</span>
+
+    /**
+     * Checks to see if the
+     * {@link ElementStyle AnnotationElementStyle}
+     * is correct.
+     *
+     * @param annotation the annotation token
+     */
+    private void checkStyleType(final DetailAST annotation) {
+<span class="fc bfc" id="L342" title="All 4 branches covered.">        switch (elementStyle) {</span>
+            case COMPACT_NO_ARRAY:
+<span class="fc" id="L344">                checkCompactNoArrayStyle(annotation);</span>
+<span class="fc" id="L345">                break;</span>
+            case COMPACT:
+<span class="fc" id="L347">                checkCompactStyle(annotation);</span>
+<span class="fc" id="L348">                break;</span>
+            case EXPANDED:
+<span class="fc" id="L350">                checkExpandedStyle(annotation);</span>
+<span class="fc" id="L351">                break;</span>
+            case IGNORE:
+            default:
+                break;
+        }
+<span class="fc" id="L356">    }</span>
+
+    /**
+     * Checks for expanded style type violations.
+     *
+     * @param annotation the annotation token
+     */
+    private void checkExpandedStyle(final DetailAST annotation) {
+<span class="fc" id="L364">        final int valuePairCount =</span>
+<span class="fc" id="L365">            annotation.getChildCount(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+
+<span class="fc bfc" id="L367" title="All 2 branches covered.">        if (valuePairCount == 0</span>
+<span class="fc bfc" id="L368" title="All 2 branches covered.">            &amp;&amp; annotation.branchContains(TokenTypes.EXPR)) {</span>
+<span class="fc" id="L369">            log(annotation.getLineNo(), MSG_KEY_ANNOTATION_INCORRECT_STYLE,</span>
+                ElementStyle.EXPANDED);
+        }
+<span class="fc" id="L372">    }</span>
+
+    /**
+     * Checks for compact style type violations.
+     *
+     * @param annotation the annotation token
+     */
+    private void checkCompactStyle(final DetailAST annotation) {
+<span class="fc" id="L380">        final int valuePairCount =</span>
+<span class="fc" id="L381">            annotation.getChildCount(</span>
+                TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);
+
+<span class="fc" id="L384">        final DetailAST valuePair =</span>
+<span class="fc" id="L385">            annotation.findFirstToken(</span>
+                TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);
+
+<span class="fc bfc" id="L388" title="All 2 branches covered.">        if (valuePairCount == 1</span>
+<span class="fc bfc" id="L389" title="All 2 branches covered.">            &amp;&amp; ANNOTATION_ELEMENT_SINGLE_NAME.equals(</span>
+<span class="fc" id="L390">                valuePair.getFirstChild().getText())) {</span>
+<span class="fc" id="L391">            log(annotation.getLineNo(), MSG_KEY_ANNOTATION_INCORRECT_STYLE,</span>
+                ElementStyle.COMPACT);
+        }
+<span class="fc" id="L394">    }</span>
+
+    /**
+     * Checks for compact no array style type violations.
+     *
+     * @param annotation the annotation token
+     */
+    private void checkCompactNoArrayStyle(final DetailAST annotation) {
+<span class="fc" id="L402">        final DetailAST arrayInit =</span>
+<span class="fc" id="L403">            annotation.findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
+
+<span class="fc" id="L405">        final int valuePairCount =</span>
+<span class="fc" id="L406">            annotation.getChildCount(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+
+        //in compact style with one value
+<span class="fc bfc" id="L409" title="All 2 branches covered.">        if (arrayInit != null</span>
+<span class="fc bfc" id="L410" title="All 2 branches covered.">            &amp;&amp; arrayInit.getChildCount(TokenTypes.EXPR) == 1) {</span>
+<span class="fc" id="L411">            log(annotation.getLineNo(), MSG_KEY_ANNOTATION_INCORRECT_STYLE,</span>
+                ElementStyle.COMPACT_NO_ARRAY);
+        }
+        //in expanded style with one value and the correct element name
+<span class="fc bfc" id="L415" title="All 2 branches covered.">        else if (valuePairCount == 1) {</span>
+<span class="fc" id="L416">            final DetailAST valuePair =</span>
+<span class="fc" id="L417">                    annotation.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+<span class="fc" id="L418">            final DetailAST nestedArrayInit =</span>
+<span class="fc" id="L419">                valuePair.findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
+
+<span class="fc bfc" id="L421" title="All 2 branches covered.">            if (nestedArrayInit != null</span>
+<span class="fc bfc" id="L422" title="All 2 branches covered.">                &amp;&amp; ANNOTATION_ELEMENT_SINGLE_NAME.equals(</span>
+<span class="fc" id="L423">                    valuePair.getFirstChild().getText())</span>
+<span class="fc bfc" id="L424" title="All 2 branches covered.">                    &amp;&amp; nestedArrayInit.getChildCount(TokenTypes.EXPR) == 1) {</span>
+<span class="fc" id="L425">                log(annotation.getLineNo(), MSG_KEY_ANNOTATION_INCORRECT_STYLE,</span>
+                    ElementStyle.COMPACT_NO_ARRAY);
+            }
+        }
+<span class="fc" id="L429">    }</span>
+
+    /**
+     * Checks to see if the trailing comma is present if required or
+     * prohibited.
+     *
+     * @param annotation the annotation token
+     */
+    private void checkTrailingComma(final DetailAST annotation) {
+<span class="fc bfc" id="L438" title="All 2 branches covered.">        if (trailingArrayComma != TrailingArrayComma.IGNORE) {</span>
+<span class="fc" id="L439">            DetailAST child = annotation.getFirstChild();</span>
+
+<span class="fc bfc" id="L441" title="All 2 branches covered.">            while (child != null) {</span>
+<span class="fc" id="L442">                DetailAST arrayInit = null;</span>
+
+<span class="fc bfc" id="L444" title="All 2 branches covered.">                if (child.getType() == TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</span>
+<span class="fc" id="L445">                    arrayInit = child.findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
+                }
+<span class="fc bfc" id="L447" title="All 2 branches covered.">                else if (child.getType() == TokenTypes.ANNOTATION_ARRAY_INIT) {</span>
+<span class="fc" id="L448">                    arrayInit = child;</span>
+                }
+
+<span class="fc bfc" id="L451" title="All 2 branches covered.">                if (arrayInit != null) {</span>
+<span class="fc" id="L452">                    logCommaViolation(arrayInit);</span>
+                }
+<span class="fc" id="L454">                child = child.getNextSibling();</span>
+<span class="fc" id="L455">            }</span>
+        }
+<span class="fc" id="L457">    }</span>
+
+    /**
+     * Logs a trailing array comma violation if one exists.
+     *
+     * @param ast the array init
+     * {@link TokenTypes#ANNOTATION_ARRAY_INIT ANNOTATION_ARRAY_INIT}.
+     */
+    private void logCommaViolation(final DetailAST ast) {
+<span class="fc" id="L466">        final DetailAST rCurly = ast.findFirstToken(TokenTypes.RCURLY);</span>
+
+        //comma can be null if array is empty
+<span class="fc" id="L469">        final DetailAST comma = rCurly.getPreviousSibling();</span>
+
+<span class="fc bfc" id="L471" title="All 4 branches covered.">        if (trailingArrayComma == TrailingArrayComma.ALWAYS</span>
+<span class="fc bfc" id="L472" title="All 2 branches covered.">            &amp;&amp; (comma == null || comma.getType() != TokenTypes.COMMA)) {</span>
+<span class="fc" id="L473">            log(rCurly.getLineNo(),</span>
+<span class="fc" id="L474">                rCurly.getColumnNo(), MSG_KEY_ANNOTATION_TRAILING_COMMA_MISSING);</span>
+        }
+<span class="fc bfc" id="L476" title="All 4 branches covered.">        else if (trailingArrayComma == TrailingArrayComma.NEVER</span>
+<span class="fc bfc" id="L477" title="All 2 branches covered.">            &amp;&amp; comma != null &amp;&amp; comma.getType() == TokenTypes.COMMA) {</span>
+<span class="fc" id="L478">            log(comma.getLineNo(),</span>
+<span class="fc" id="L479">                comma.getColumnNo(), MSG_KEY_ANNOTATION_TRAILING_COMMA_PRESENT);</span>
+        }
+<span class="fc" id="L481">    }</span>
+
+    /**
+     * Checks to see if the closing parenthesis are present if required or
+     * prohibited.
+     *
+     * @param ast the annotation token
+     */
+    private void checkCheckClosingParens(final DetailAST ast) {
+<span class="fc bfc" id="L490" title="All 2 branches covered.">        if (closingParens != ClosingParens.IGNORE) {</span>
+<span class="fc" id="L491">            final DetailAST paren = ast.getLastChild();</span>
+<span class="fc bfc" id="L492" title="All 2 branches covered.">            final boolean parenExists = paren.getType() == TokenTypes.RPAREN;</span>
+
+<span class="fc bfc" id="L494" title="All 4 branches covered.">            if (closingParens == ClosingParens.ALWAYS</span>
+                &amp;&amp; !parenExists) {
+<span class="fc" id="L496">                log(ast.getLineNo(), MSG_KEY_ANNOTATION_PARENS_MISSING);</span>
+            }
+<span class="fc bfc" id="L498" title="All 4 branches covered.">            else if (closingParens == ClosingParens.NEVER</span>
+                     &amp;&amp; parenExists
+<span class="fc bfc" id="L500" title="All 2 branches covered.">                     &amp;&amp; !ast.branchContains(TokenTypes.EXPR)</span>
+<span class="fc bfc" id="L501" title="All 2 branches covered.">                     &amp;&amp; !ast.branchContains(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR)</span>
+<span class="fc bfc" id="L502" title="All 2 branches covered.">                     &amp;&amp; !ast.branchContains(TokenTypes.ANNOTATION_ARRAY_INIT)) {</span>
+<span class="fc" id="L503">                log(ast.getLineNo(), MSG_KEY_ANNOTATION_PARENS_PRESENT);</span>
+            }
+        }
+<span class="fc" id="L506">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>
