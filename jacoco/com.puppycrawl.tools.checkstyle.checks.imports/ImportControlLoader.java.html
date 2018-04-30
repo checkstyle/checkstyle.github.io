@@ -39,7 +39,6 @@ import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
 
 /**
  * Responsible for loading the contents of an import control configuration file.
- * @author Oliver Burn
  */
 final class ImportControlLoader extends XmlLoader {
 
@@ -59,6 +58,10 @@ final class ImportControlLoader extends XmlLoader {
     private static final String DTD_PUBLIC_ID_1_3 =
             &quot;-//Puppy Crawl//DTD Import Control 1.3//EN&quot;;
 
+    /** The public ID for the configuration dtd. */
+    private static final String DTD_PUBLIC_ID_1_4 =
+        &quot;-//Puppy Crawl//DTD Import Control 1.4//EN&quot;;
+
     /** The resource for the configuration dtd. */
     private static final String DTD_RESOURCE_NAME_1_0 =
         &quot;com/puppycrawl/tools/checkstyle/checks/imports/import_control_1_0.dtd&quot;;
@@ -75,11 +78,18 @@ final class ImportControlLoader extends XmlLoader {
     private static final String DTD_RESOURCE_NAME_1_3 =
             &quot;com/puppycrawl/tools/checkstyle/checks/imports/import_control_1_3.dtd&quot;;
 
+    /** The resource for the configuration dtd. */
+    private static final String DTD_RESOURCE_NAME_1_4 =
+        &quot;com/puppycrawl/tools/checkstyle/checks/imports/import_control_1_4.dtd&quot;;
+
     /** The map to lookup the resource name by the id. */
-<span class="fc" id="L79">    private static final Map&lt;String, String&gt; DTD_RESOURCE_BY_ID = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L86">    private static final Map&lt;String, String&gt; DTD_RESOURCE_BY_ID = new HashMap&lt;&gt;();</span>
 
     /** Name for attribute 'pkg'. */
     private static final String PKG_ATTRIBUTE_NAME = &quot;pkg&quot;;
+
+    /** Name for attribute 'name'. */
+    private static final String NAME_ATTRIBUTE_NAME = &quot;name&quot;;
 
     /** Name for attribute 'strategyOnMismatch'. */
     private static final String STRATEGY_ON_MISMATCH_ATTRIBUTE_NAME = &quot;strategyOnMismatch&quot;;
@@ -93,18 +103,22 @@ final class ImportControlLoader extends XmlLoader {
     /** Qualified name for element 'subpackage'. */
     private static final String SUBPACKAGE_ELEMENT_NAME = &quot;subpackage&quot;;
 
+    /** Qualified name for element 'file'. */
+    private static final String FILE_ELEMENT_NAME = &quot;file&quot;;
+
     /** Qualified name for element 'allow'. */
     private static final String ALLOW_ELEMENT_NAME = &quot;allow&quot;;
 
-    /** Used to hold the {@link ImportControl} objects. */
-<span class="fc" id="L100">    private final Deque&lt;ImportControl&gt; stack = new ArrayDeque&lt;&gt;();</span>
+    /** Used to hold the {@link AbstractImportControl} objects. */
+<span class="fc" id="L113">    private final Deque&lt;AbstractImportControl&gt; stack = new ArrayDeque&lt;&gt;();</span>
 
     static {
-<span class="fc" id="L103">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_0, DTD_RESOURCE_NAME_1_0);</span>
-<span class="fc" id="L104">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_1, DTD_RESOURCE_NAME_1_1);</span>
-<span class="fc" id="L105">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_2, DTD_RESOURCE_NAME_1_2);</span>
-<span class="fc" id="L106">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_3, DTD_RESOURCE_NAME_1_3);</span>
-<span class="fc" id="L107">    }</span>
+<span class="fc" id="L116">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_0, DTD_RESOURCE_NAME_1_0);</span>
+<span class="fc" id="L117">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_1, DTD_RESOURCE_NAME_1_1);</span>
+<span class="fc" id="L118">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_2, DTD_RESOURCE_NAME_1_2);</span>
+<span class="fc" id="L119">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_3, DTD_RESOURCE_NAME_1_3);</span>
+<span class="fc" id="L120">        DTD_RESOURCE_BY_ID.put(DTD_PUBLIC_ID_1_4, DTD_RESOURCE_NAME_1_4);</span>
+<span class="fc" id="L121">    }</span>
 
     /**
      * Constructs an instance.
@@ -113,8 +127,8 @@ final class ImportControlLoader extends XmlLoader {
      */
     private ImportControlLoader() throws ParserConfigurationException,
             SAXException {
-<span class="fc" id="L116">        super(DTD_RESOURCE_BY_ID);</span>
-<span class="fc" id="L117">    }</span>
+<span class="fc" id="L130">        super(DTD_RESOURCE_BY_ID);</span>
+<span class="fc" id="L131">    }</span>
 
     @Override
     public void startElement(String namespaceUri,
@@ -122,45 +136,68 @@ final class ImportControlLoader extends XmlLoader {
                              String qName,
                              Attributes attributes)
             throws SAXException {
-<span class="fc bfc" id="L125" title="All 2 branches covered.">        if (&quot;import-control&quot;.equals(qName)) {</span>
-<span class="fc" id="L126">            final String pkg = safeGet(attributes, PKG_ATTRIBUTE_NAME);</span>
-<span class="fc" id="L127">            final MismatchStrategy strategyOnMismatch = getStrategyForImportControl(attributes);</span>
-<span class="fc" id="L128">            final boolean regex = containsRegexAttribute(attributes);</span>
-<span class="fc" id="L129">            stack.push(new ImportControl(pkg, regex, strategyOnMismatch));</span>
-<span class="fc" id="L130">        }</span>
-<span class="fc bfc" id="L131" title="All 2 branches covered.">        else if (SUBPACKAGE_ELEMENT_NAME.equals(qName)) {</span>
-<span class="fc" id="L132">            final String name = safeGet(attributes, &quot;name&quot;);</span>
-<span class="fc" id="L133">            final MismatchStrategy strategyOnMismatch = getStrategyForSubpackage(attributes);</span>
-<span class="fc" id="L134">            final boolean regex = containsRegexAttribute(attributes);</span>
-<span class="fc" id="L135">            final ImportControl parentImportControl = stack.peek();</span>
-<span class="fc" id="L136">            final ImportControl importControl = new ImportControl(parentImportControl, name,</span>
-                    regex, strategyOnMismatch);
-<span class="fc" id="L138">            parentImportControl.addChild(importControl);</span>
-<span class="fc" id="L139">            stack.push(importControl);</span>
-<span class="fc" id="L140">        }</span>
-<span class="fc bfc" id="L141" title="All 4 branches covered.">        else if (ALLOW_ELEMENT_NAME.equals(qName) || &quot;disallow&quot;.equals(qName)) {</span>
-            // Need to handle either &quot;pkg&quot; or &quot;class&quot; attribute.
-            // May have &quot;exact-match&quot; for &quot;pkg&quot;
-            // May have &quot;local-only&quot;
-<span class="fc" id="L145">            final boolean isAllow = ALLOW_ELEMENT_NAME.equals(qName);</span>
-<span class="fc bfc" id="L146" title="All 2 branches covered.">            final boolean isLocalOnly = attributes.getValue(&quot;local-only&quot;) != null;</span>
-<span class="fc" id="L147">            final String pkg = attributes.getValue(PKG_ATTRIBUTE_NAME);</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (&quot;import-control&quot;.equals(qName)) {</span>
+<span class="fc" id="L140">            final String pkg = safeGet(attributes, PKG_ATTRIBUTE_NAME);</span>
+<span class="fc" id="L141">            final MismatchStrategy strategyOnMismatch = getStrategyForImportControl(attributes);</span>
+<span class="fc" id="L142">            final boolean regex = containsRegexAttribute(attributes);</span>
+<span class="fc" id="L143">            stack.push(new PkgImportControl(pkg, regex, strategyOnMismatch));</span>
+<span class="fc" id="L144">        }</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">        else if (SUBPACKAGE_ELEMENT_NAME.equals(qName)) {</span>
+<span class="fc" id="L146">            final String name = safeGet(attributes, NAME_ATTRIBUTE_NAME);</span>
+<span class="fc" id="L147">            final MismatchStrategy strategyOnMismatch = getStrategyForSubpackage(attributes);</span>
 <span class="fc" id="L148">            final boolean regex = containsRegexAttribute(attributes);</span>
-            final AbstractImportRule rule;
-<span class="fc bfc" id="L150" title="All 2 branches covered.">            if (pkg == null) {</span>
-                // handle class names which can be normal class names or regular
-                // expressions
-<span class="fc" id="L153">                final String clazz = safeGet(attributes, &quot;class&quot;);</span>
-<span class="fc" id="L154">                rule = new ClassImportRule(isAllow, isLocalOnly, clazz, regex);</span>
-<span class="fc" id="L155">            }</span>
-            else {
-<span class="fc" id="L157">                final boolean exactMatch =</span>
-<span class="fc bfc" id="L158" title="All 2 branches covered.">                        attributes.getValue(&quot;exact-match&quot;) != null;</span>
-<span class="fc" id="L159">                rule = new PkgImportRule(isAllow, isLocalOnly, pkg, exactMatch, regex);</span>
-            }
-<span class="fc" id="L161">            stack.peek().addImportRule(rule);</span>
+<span class="fc" id="L149">            final PkgImportControl parentImportControl = (PkgImportControl) stack.peek();</span>
+<span class="fc" id="L150">            final AbstractImportControl importControl = new PkgImportControl(parentImportControl,</span>
+                    name, regex, strategyOnMismatch);
+<span class="fc" id="L152">            parentImportControl.addChild(importControl);</span>
+<span class="fc" id="L153">            stack.push(importControl);</span>
+<span class="fc" id="L154">        }</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        else if (FILE_ELEMENT_NAME.equals(qName)) {</span>
+<span class="fc" id="L156">            final String name = safeGet(attributes, NAME_ATTRIBUTE_NAME);</span>
+<span class="fc" id="L157">            final boolean regex = containsRegexAttribute(attributes);</span>
+<span class="fc" id="L158">            final PkgImportControl parentImportControl = (PkgImportControl) stack.peek();</span>
+<span class="fc" id="L159">            final AbstractImportControl importControl = new FileImportControl(parentImportControl,</span>
+                    name, regex);
+<span class="fc" id="L161">            parentImportControl.addChild(importControl);</span>
+<span class="fc" id="L162">            stack.push(importControl);</span>
+<span class="fc" id="L163">        }</span>
+<span class="fc bfc" id="L164" title="All 4 branches covered.">        else if (ALLOW_ELEMENT_NAME.equals(qName) || &quot;disallow&quot;.equals(qName)) {</span>
+<span class="fc" id="L165">            final AbstractImportRule rule = createImportRule(qName, attributes);</span>
+<span class="fc" id="L166">            stack.peek().addImportRule(rule);</span>
         }
-<span class="fc" id="L163">    }</span>
+<span class="fc" id="L168">    }</span>
+
+    /**
+     * Constructs an instance of an import rule based on the given {@code name} and
+     * {@code attributes}.
+     * @param qName The qualified name.
+     * @param attributes The attributes attached to the element.
+     * @return The created import rule.
+     * @throws SAXException if an error occurs.
+     */
+    private static AbstractImportRule createImportRule(String qName, Attributes attributes)
+            throws SAXException {
+        // Need to handle either &quot;pkg&quot; or &quot;class&quot; attribute.
+        // May have &quot;exact-match&quot; for &quot;pkg&quot;
+        // May have &quot;local-only&quot;
+<span class="fc" id="L183">        final boolean isAllow = ALLOW_ELEMENT_NAME.equals(qName);</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        final boolean isLocalOnly = attributes.getValue(&quot;local-only&quot;) != null;</span>
+<span class="fc" id="L185">        final String pkg = attributes.getValue(PKG_ATTRIBUTE_NAME);</span>
+<span class="fc" id="L186">        final boolean regex = containsRegexAttribute(attributes);</span>
+        final AbstractImportRule rule;
+<span class="fc bfc" id="L188" title="All 2 branches covered.">        if (pkg == null) {</span>
+            // handle class names which can be normal class names or regular
+            // expressions
+<span class="fc" id="L191">            final String clazz = safeGet(attributes, &quot;class&quot;);</span>
+<span class="fc" id="L192">            rule = new ClassImportRule(isAllow, isLocalOnly, clazz, regex);</span>
+<span class="fc" id="L193">        }</span>
+        else {
+<span class="fc" id="L195">            final boolean exactMatch =</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">                    attributes.getValue(&quot;exact-match&quot;) != null;</span>
+<span class="fc" id="L197">            rule = new PkgImportRule(isAllow, isLocalOnly, pkg, exactMatch, regex);</span>
+        }
+<span class="fc" id="L199">        return rule;</span>
+    }
 
     /**
      * Check if the given attributes contain the regex attribute.
@@ -168,38 +205,33 @@ final class ImportControlLoader extends XmlLoader {
      * @return if the regex attribute is contained.
      */
     private static boolean containsRegexAttribute(Attributes attributes) {
-<span class="fc bfc" id="L171" title="All 2 branches covered.">        return attributes.getValue(&quot;regex&quot;) != null;</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">        return attributes.getValue(&quot;regex&quot;) != null;</span>
     }
 
     @Override
     public void endElement(String namespaceUri, String localName,
         String qName) {
-<span class="fc bfc" id="L177" title="All 2 branches covered.">        if (SUBPACKAGE_ELEMENT_NAME.equals(qName)) {</span>
-<span class="fc" id="L178">            stack.pop();</span>
+<span class="fc bfc" id="L214" title="All 4 branches covered.">        if (SUBPACKAGE_ELEMENT_NAME.equals(qName) || FILE_ELEMENT_NAME.equals(qName)) {</span>
+<span class="fc" id="L215">            stack.pop();</span>
         }
-<span class="fc" id="L180">    }</span>
+<span class="fc" id="L217">    }</span>
 
     /**
      * Loads the import control file from a file.
      * @param uri the uri of the file to load.
-     * @return the root {@link ImportControl} object.
+     * @return the root {@link PkgImportControl} object.
      * @throws CheckstyleException if an error occurs.
      */
-    public static ImportControl load(URI uri) throws CheckstyleException {
-<span class="fc" id="L189">        InputStream inputStream = null;</span>
-        try {
-<span class="fc" id="L191">            inputStream = uri.toURL().openStream();</span>
-<span class="fc" id="L192">            final InputSource source = new InputSource(inputStream);</span>
-<span class="fc" id="L193">            return load(source, uri);</span>
+    public static PkgImportControl load(URI uri) throws CheckstyleException {
+<span class="fc" id="L226">        try (InputStream inputStream = uri.toURL().openStream()) {</span>
+<span class="fc" id="L227">            final InputSource source = new InputSource(inputStream);</span>
+<span class="fc" id="L228">            return load(source, uri);</span>
         }
-<span class="fc" id="L195">        catch (MalformedURLException ex) {</span>
-<span class="fc" id="L196">            throw new CheckstyleException(&quot;syntax error in url &quot; + uri, ex);</span>
+<span class="fc" id="L230">        catch (MalformedURLException ex) {</span>
+<span class="fc" id="L231">            throw new CheckstyleException(&quot;syntax error in url &quot; + uri, ex);</span>
         }
-<span class="fc" id="L198">        catch (IOException ex) {</span>
-<span class="fc" id="L199">            throw new CheckstyleException(&quot;unable to find &quot; + uri, ex);</span>
-        }
-        finally {
-<span class="fc" id="L202">            closeStream(inputStream);</span>
+<span class="fc" id="L233">        catch (IOException ex) {</span>
+<span class="fc" id="L234">            throw new CheckstyleException(&quot;unable to find &quot; + uri, ex);</span>
         }
     }
 
@@ -207,48 +239,31 @@ final class ImportControlLoader extends XmlLoader {
      * Loads the import control file from a {@link InputSource}.
      * @param source the source to load from.
      * @param uri uri of the source being loaded.
-     * @return the root {@link ImportControl} object.
+     * @return the root {@link PkgImportControl} object.
      * @throws CheckstyleException if an error occurs.
      */
-    private static ImportControl load(InputSource source,
+    private static PkgImportControl load(InputSource source,
         URI uri) throws CheckstyleException {
         try {
-<span class="fc" id="L216">            final ImportControlLoader loader = new ImportControlLoader();</span>
-<span class="fc" id="L217">            loader.parseInputSource(source);</span>
-<span class="fc" id="L218">            return loader.getRoot();</span>
+<span class="fc" id="L248">            final ImportControlLoader loader = new ImportControlLoader();</span>
+<span class="fc" id="L249">            loader.parseInputSource(source);</span>
+<span class="fc" id="L250">            return loader.getRoot();</span>
         }
-<span class="fc" id="L220">        catch (ParserConfigurationException | SAXException ex) {</span>
-<span class="fc" id="L221">            throw new CheckstyleException(&quot;unable to parse &quot; + uri</span>
-<span class="fc" id="L222">                    + &quot; - &quot; + ex.getMessage(), ex);</span>
+<span class="fc" id="L252">        catch (ParserConfigurationException | SAXException ex) {</span>
+<span class="fc" id="L253">            throw new CheckstyleException(&quot;unable to parse &quot; + uri</span>
+<span class="fc" id="L254">                    + &quot; - &quot; + ex.getMessage(), ex);</span>
         }
-<span class="fc" id="L224">        catch (IOException ex) {</span>
-<span class="fc" id="L225">            throw new CheckstyleException(&quot;unable to read &quot; + uri, ex);</span>
+<span class="fc" id="L256">        catch (IOException ex) {</span>
+<span class="fc" id="L257">            throw new CheckstyleException(&quot;unable to read &quot; + uri, ex);</span>
         }
     }
 
     /**
-     * This method exists only due to bug in cobertura library
-     * https://github.com/cobertura/cobertura/issues/170
-     * @param inputStream the InputStream to close
-     * @throws CheckstyleException if an error occurs.
+     * Returns root PkgImportControl.
+     * @return the root {@link PkgImportControl} object loaded.
      */
-    private static void closeStream(InputStream inputStream) throws CheckstyleException {
-<span class="fc bfc" id="L236" title="All 2 branches covered.">        if (inputStream != null) {</span>
-            try {
-<span class="fc" id="L238">                inputStream.close();</span>
-            }
-<span class="fc" id="L240">            catch (IOException ex) {</span>
-<span class="fc" id="L241">                throw new CheckstyleException(&quot;unable to close input stream&quot;, ex);</span>
-<span class="fc" id="L242">            }</span>
-        }
-<span class="fc" id="L244">    }</span>
-
-    /**
-     * Returns root ImportControl.
-     * @return the root {@link ImportControl} object loaded.
-     */
-    private ImportControl getRoot() {
-<span class="fc" id="L251">        return stack.peek();</span>
+    private PkgImportControl getRoot() {
+<span class="fc" id="L266">        return (PkgImportControl) stack.peek();</span>
     }
 
     /**
@@ -257,12 +272,12 @@ final class ImportControlLoader extends XmlLoader {
      * @return the value of the attribute.
      */
     private static MismatchStrategy getStrategyForImportControl(Attributes attributes) {
-<span class="fc" id="L260">        final String returnValue = attributes.getValue(STRATEGY_ON_MISMATCH_ATTRIBUTE_NAME);</span>
-<span class="fc" id="L261">        MismatchStrategy strategyOnMismatch = MismatchStrategy.DISALLOWED;</span>
-<span class="fc bfc" id="L262" title="All 2 branches covered.">        if (STRATEGY_ON_MISMATCH_ALLOWED_VALUE.equals(returnValue)) {</span>
-<span class="fc" id="L263">            strategyOnMismatch = MismatchStrategy.ALLOWED;</span>
+<span class="fc" id="L275">        final String returnValue = attributes.getValue(STRATEGY_ON_MISMATCH_ATTRIBUTE_NAME);</span>
+<span class="fc" id="L276">        MismatchStrategy strategyOnMismatch = MismatchStrategy.DISALLOWED;</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">        if (STRATEGY_ON_MISMATCH_ALLOWED_VALUE.equals(returnValue)) {</span>
+<span class="fc" id="L278">            strategyOnMismatch = MismatchStrategy.ALLOWED;</span>
         }
-<span class="fc" id="L265">        return strategyOnMismatch;</span>
+<span class="fc" id="L280">        return strategyOnMismatch;</span>
     }
 
     /**
@@ -271,15 +286,15 @@ final class ImportControlLoader extends XmlLoader {
      * @return the value of the attribute.
      */
     private static MismatchStrategy getStrategyForSubpackage(Attributes attributes) {
-<span class="fc" id="L274">        final String returnValue = attributes.getValue(STRATEGY_ON_MISMATCH_ATTRIBUTE_NAME);</span>
-<span class="fc" id="L275">        MismatchStrategy strategyOnMismatch = MismatchStrategy.DELEGATE_TO_PARENT;</span>
-<span class="fc bfc" id="L276" title="All 2 branches covered.">        if (STRATEGY_ON_MISMATCH_ALLOWED_VALUE.equals(returnValue)) {</span>
-<span class="fc" id="L277">            strategyOnMismatch = MismatchStrategy.ALLOWED;</span>
+<span class="fc" id="L289">        final String returnValue = attributes.getValue(STRATEGY_ON_MISMATCH_ATTRIBUTE_NAME);</span>
+<span class="fc" id="L290">        MismatchStrategy strategyOnMismatch = MismatchStrategy.DELEGATE_TO_PARENT;</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">        if (STRATEGY_ON_MISMATCH_ALLOWED_VALUE.equals(returnValue)) {</span>
+<span class="fc" id="L292">            strategyOnMismatch = MismatchStrategy.ALLOWED;</span>
         }
-<span class="fc bfc" id="L279" title="All 2 branches covered.">        else if (STRATEGY_ON_MISMATCH_DISALLOWED_VALUE.equals(returnValue)) {</span>
-<span class="fc" id="L280">            strategyOnMismatch = MismatchStrategy.DISALLOWED;</span>
+<span class="fc bfc" id="L294" title="All 2 branches covered.">        else if (STRATEGY_ON_MISMATCH_DISALLOWED_VALUE.equals(returnValue)) {</span>
+<span class="fc" id="L295">            strategyOnMismatch = MismatchStrategy.DISALLOWED;</span>
         }
-<span class="fc" id="L282">        return strategyOnMismatch;</span>
+<span class="fc" id="L297">        return strategyOnMismatch;</span>
     }
 
     /**
@@ -292,13 +307,13 @@ final class ImportControlLoader extends XmlLoader {
      */
     private static String safeGet(Attributes attributes, String name)
             throws SAXException {
-<span class="fc" id="L295">        final String returnValue = attributes.getValue(name);</span>
-<span class="fc bfc" id="L296" title="All 2 branches covered.">        if (returnValue == null) {</span>
+<span class="fc" id="L310">        final String returnValue = attributes.getValue(name);</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">        if (returnValue == null) {</span>
             // -@cs[IllegalInstantiation] SAXException is in the overridden method signature
             // of the only method which calls the current one
-<span class="fc" id="L299">            throw new SAXException(&quot;missing attribute &quot; + name);</span>
+<span class="fc" id="L314">            throw new SAXException(&quot;missing attribute &quot; + name);</span>
         }
-<span class="fc" id="L301">        return returnValue;</span>
+<span class="fc" id="L316">        return returnValue;</span>
     }
 
 }

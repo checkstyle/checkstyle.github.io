@@ -22,9 +22,8 @@ package com.puppycrawl.tools.checkstyle;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
@@ -57,8 +56,6 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
  * cache file to ensure the cache is invalidated when the
  * configuration has changed.
  *
- * @author Oliver Burn
- * @author Andrei Selkin
  */
 final class PropertyCacheFile {
 
@@ -79,7 +76,7 @@ final class PropertyCacheFile {
     public static final String EXTERNAL_RESOURCE_KEY_PREFIX = &quot;module-resource*?:&quot;;
 
     /** The details on files. **/
-<span class="fc" id="L82">    private final Properties details = new Properties();</span>
+<span class="fc" id="L79">    private final Properties details = new Properties();</span>
 
     /** Configuration object. **/
     private final Configuration config;
@@ -96,16 +93,16 @@ final class PropertyCacheFile {
      * @param config the current configuration, not null
      * @param fileName the cache file
      */
-<span class="fc" id="L99">    PropertyCacheFile(Configuration config, String fileName) {</span>
-<span class="fc bfc" id="L100" title="All 2 branches covered.">        if (config == null) {</span>
-<span class="fc" id="L101">            throw new IllegalArgumentException(&quot;config can not be null&quot;);</span>
+<span class="fc" id="L96">    PropertyCacheFile(Configuration config, String fileName) {</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">        if (config == null) {</span>
+<span class="fc" id="L98">            throw new IllegalArgumentException(&quot;config can not be null&quot;);</span>
         }
-<span class="fc bfc" id="L103" title="All 2 branches covered.">        if (fileName == null) {</span>
-<span class="fc" id="L104">            throw new IllegalArgumentException(&quot;fileName can not be null&quot;);</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">        if (fileName == null) {</span>
+<span class="fc" id="L101">            throw new IllegalArgumentException(&quot;fileName can not be null&quot;);</span>
         }
-<span class="fc" id="L106">        this.config = config;</span>
-<span class="fc" id="L107">        this.fileName = fileName;</span>
-<span class="fc" id="L108">    }</span>
+<span class="fc" id="L103">        this.config = config;</span>
+<span class="fc" id="L104">        this.fileName = fileName;</span>
+<span class="fc" id="L105">    }</span>
 
     /**
      * Load cached values from file.
@@ -114,54 +111,51 @@ final class PropertyCacheFile {
     public void load() throws IOException {
         // get the current config so if the file isn't found
         // the first time the hash will be added to output file
-<span class="fc" id="L117">        configHash = getHashCodeBasedOnObjectContent(config);</span>
-<span class="fc bfc" id="L118" title="All 2 branches covered.">        if (new File(fileName).exists()) {</span>
-<span class="fc" id="L119">            FileInputStream inStream = null;</span>
-            try {
-<span class="fc" id="L121">                inStream = new FileInputStream(fileName);</span>
-<span class="fc" id="L122">                details.load(inStream);</span>
-<span class="fc" id="L123">                final String cachedConfigHash = details.getProperty(CONFIG_HASH_KEY);</span>
-<span class="fc bfc" id="L124" title="All 2 branches covered.">                if (!configHash.equals(cachedConfigHash)) {</span>
+<span class="fc" id="L114">        configHash = getHashCodeBasedOnObjectContent(config);</span>
+<span class="fc" id="L115">        final File file = new File(fileName);</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (file.exists()) {</span>
+<span class="fc" id="L117">            try (InputStream inStream = Files.newInputStream(file.toPath())) {</span>
+<span class="fc" id="L118">                details.load(inStream);</span>
+<span class="fc" id="L119">                final String cachedConfigHash = details.getProperty(CONFIG_HASH_KEY);</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">                if (!configHash.equals(cachedConfigHash)) {</span>
                     // Detected configuration change - clear cache
-<span class="fc" id="L126">                    reset();</span>
+<span class="fc" id="L122">                    reset();</span>
                 }
-            }
-            finally {
-<span class="fc" id="L130">                Closeables.closeQuietly(inStream);</span>
-            }
-<span class="fc" id="L132">        }</span>
+<span class="fc" id="L124">            }</span>
+        }
         else {
             // put the hash in the file if the file is going to be created
-<span class="fc" id="L135">            reset();</span>
+<span class="fc" id="L128">            reset();</span>
         }
-<span class="fc" id="L137">    }</span>
+<span class="fc" id="L130">    }</span>
 
     /**
      * Cleans up the object and updates the cache file.
      * @throws IOException  when there is a problems with file save
      */
     public void persist() throws IOException {
-<span class="fc" id="L144">        final Path directory = Paths.get(fileName).getParent();</span>
-<span class="fc bfc" id="L145" title="All 2 branches covered.">        if (directory != null) {</span>
-<span class="fc" id="L146">            Files.createDirectories(directory);</span>
+<span class="fc" id="L137">        final Path path = Paths.get(fileName);</span>
+<span class="fc" id="L138">        final Path directory = path.getParent();</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (directory != null) {</span>
+<span class="fc" id="L140">            Files.createDirectories(directory);</span>
         }
-<span class="fc" id="L148">        FileOutputStream out = null;</span>
+<span class="fc" id="L142">        OutputStream out = null;</span>
         try {
-<span class="fc" id="L150">            out = new FileOutputStream(fileName);</span>
-<span class="fc" id="L151">            details.store(out, null);</span>
+<span class="fc" id="L144">            out = Files.newOutputStream(path);</span>
+<span class="fc" id="L145">            details.store(out, null);</span>
         }
         finally {
-<span class="fc" id="L154">            flushAndCloseOutStream(out);</span>
+<span class="fc" id="L148">            flushAndCloseOutStream(out);</span>
         }
-<span class="fc" id="L156">    }</span>
+<span class="fc" id="L150">    }</span>
 
     /**
      * Resets the cache to be empty except for the configuration hash.
      */
     public void reset() {
-<span class="fc" id="L162">        details.clear();</span>
-<span class="fc" id="L163">        details.setProperty(CONFIG_HASH_KEY, configHash);</span>
-<span class="fc" id="L164">    }</span>
+<span class="fc" id="L156">        details.clear();</span>
+<span class="fc" id="L157">        details.setProperty(CONFIG_HASH_KEY, configHash);</span>
+<span class="fc" id="L158">    }</span>
 
     /**
      * Flushes and closes output stream.
@@ -169,11 +163,11 @@ final class PropertyCacheFile {
      * @throws IOException  when there is a problems with file flush and close
      */
     private static void flushAndCloseOutStream(OutputStream stream) throws IOException {
-<span class="fc bfc" id="L172" title="All 2 branches covered.">        if (stream != null) {</span>
-<span class="fc" id="L173">            Flushables.flush(stream, false);</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        if (stream != null) {</span>
+<span class="fc" id="L167">            Flushables.flush(stream, false);</span>
         }
-<span class="fc" id="L175">        Closeables.close(stream, false);</span>
-<span class="fc" id="L176">    }</span>
+<span class="fc" id="L169">        Closeables.close(stream, false);</span>
+<span class="fc" id="L170">    }</span>
 
     /**
      * Checks that file is in cache.
@@ -182,8 +176,8 @@ final class PropertyCacheFile {
      * @return whether the specified file has already been checked ok
      */
     public boolean isInCache(String uncheckedFileName, long timestamp) {
-<span class="fc" id="L185">        final String lastChecked = details.getProperty(uncheckedFileName);</span>
-<span class="fc" id="L186">        return Objects.equals(lastChecked, Long.toString(timestamp));</span>
+<span class="fc" id="L179">        final String lastChecked = details.getProperty(uncheckedFileName);</span>
+<span class="fc" id="L180">        return Objects.equals(lastChecked, Long.toString(timestamp));</span>
     }
 
     /**
@@ -192,8 +186,8 @@ final class PropertyCacheFile {
      * @param timestamp the timestamp of the file
      */
     public void put(String checkedFileName, long timestamp) {
-<span class="fc" id="L195">        details.setProperty(checkedFileName, Long.toString(timestamp));</span>
-<span class="fc" id="L196">    }</span>
+<span class="fc" id="L189">        details.setProperty(checkedFileName, Long.toString(timestamp));</span>
+<span class="fc" id="L190">    }</span>
 
     /**
      * Retrieves the hash of a specific file.
@@ -201,7 +195,7 @@ final class PropertyCacheFile {
      * @return The has of the file or {@code null}.
      */
     public String get(String name) {
-<span class="fc" id="L204">        return details.getProperty(name);</span>
+<span class="fc" id="L198">        return details.getProperty(name);</span>
     }
 
     /**
@@ -209,8 +203,8 @@ final class PropertyCacheFile {
      * @param checkedFileName The name of the file to remove.
      */
     public void remove(String checkedFileName) {
-<span class="fc" id="L212">        details.remove(checkedFileName);</span>
-<span class="fc" id="L213">    }</span>
+<span class="fc" id="L206">        details.remove(checkedFileName);</span>
+<span class="fc" id="L207">    }</span>
 
     /**
      * Calculates the hashcode for the serializable object based on its content.
@@ -219,21 +213,21 @@ final class PropertyCacheFile {
      */
     private static String getHashCodeBasedOnObjectContent(Serializable object) {
         try {
-<span class="fc" id="L222">            final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();</span>
+<span class="fc" id="L216">            final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();</span>
             // in-memory serialization of Configuration
-<span class="fc" id="L224">            serialize(object, outputStream);</span>
+<span class="fc" id="L218">            serialize(object, outputStream);</span>
             // Instead of hexEncoding outputStream.toByteArray() directly we
             // use a message digest here to keep the length of the
             // hashcode reasonable
 
-<span class="fc" id="L229">            final MessageDigest digest = MessageDigest.getInstance(&quot;SHA-1&quot;);</span>
-<span class="fc" id="L230">            digest.update(outputStream.toByteArray());</span>
+<span class="fc" id="L223">            final MessageDigest digest = MessageDigest.getInstance(&quot;SHA-1&quot;);</span>
+<span class="fc" id="L224">            digest.update(outputStream.toByteArray());</span>
 
-<span class="fc" id="L232">            return BaseEncoding.base16().upperCase().encode(digest.digest());</span>
+<span class="fc" id="L226">            return BaseEncoding.base16().upperCase().encode(digest.digest());</span>
         }
-<span class="fc" id="L234">        catch (final IOException | NoSuchAlgorithmException ex) {</span>
+<span class="fc" id="L228">        catch (final IOException | NoSuchAlgorithmException ex) {</span>
             // rethrow as unchecked exception
-<span class="fc" id="L236">            throw new IllegalStateException(&quot;Unable to calculate hashcode.&quot;, ex);</span>
+<span class="fc" id="L230">            throw new IllegalStateException(&quot;Unable to calculate hashcode.&quot;, ex);</span>
         }
     }
 
@@ -245,14 +239,14 @@ final class PropertyCacheFile {
      */
     private static void serialize(Serializable object,
                                   OutputStream outputStream) throws IOException {
-<span class="fc" id="L248">        final ObjectOutputStream oos = new ObjectOutputStream(outputStream);</span>
+<span class="fc" id="L242">        final ObjectOutputStream oos = new ObjectOutputStream(outputStream);</span>
         try {
-<span class="fc" id="L250">            oos.writeObject(object);</span>
+<span class="fc" id="L244">            oos.writeObject(object);</span>
         }
         finally {
-<span class="fc" id="L253">            flushAndCloseOutStream(oos);</span>
+<span class="fc" id="L247">            flushAndCloseOutStream(oos);</span>
         }
-<span class="fc" id="L255">    }</span>
+<span class="fc" id="L249">    }</span>
 
     /**
      * Puts external resources in cache.
@@ -260,12 +254,12 @@ final class PropertyCacheFile {
      * @param locations locations of external resources.
      */
     public void putExternalResources(Set&lt;String&gt; locations) {
-<span class="fc" id="L263">        final Set&lt;ExternalResource&gt; resources = loadExternalResources(locations);</span>
-<span class="fc bfc" id="L264" title="All 2 branches covered.">        if (areExternalResourcesChanged(resources)) {</span>
-<span class="fc" id="L265">            reset();</span>
+<span class="fc" id="L257">        final Set&lt;ExternalResource&gt; resources = loadExternalResources(locations);</span>
+<span class="fc bfc" id="L258" title="All 2 branches covered.">        if (areExternalResourcesChanged(resources)) {</span>
+<span class="fc" id="L259">            reset();</span>
         }
-<span class="fc" id="L267">        fillCacheWithExternalResources(resources);</span>
-<span class="fc" id="L268">    }</span>
+<span class="fc" id="L261">        fillCacheWithExternalResources(resources);</span>
+<span class="fc" id="L262">    }</span>
 
     /**
      * Loads a set of {@link ExternalResource} based on their locations.
@@ -273,26 +267,26 @@ final class PropertyCacheFile {
      * @return a set of {@link ExternalResource}.
      */
     private static Set&lt;ExternalResource&gt; loadExternalResources(Set&lt;String&gt; resourceLocations) {
-<span class="fc" id="L276">        final Set&lt;ExternalResource&gt; resources = new HashSet&lt;&gt;();</span>
-<span class="fc bfc" id="L277" title="All 2 branches covered.">        for (String location : resourceLocations) {</span>
-<span class="fc" id="L278">            String contentHashSum = null;</span>
+<span class="fc" id="L270">        final Set&lt;ExternalResource&gt; resources = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L271" title="All 2 branches covered.">        for (String location : resourceLocations) {</span>
+<span class="fc" id="L272">            String contentHashSum = null;</span>
             try {
-<span class="fc" id="L280">                final byte[] content = loadExternalResource(location);</span>
-<span class="fc" id="L281">                contentHashSum = getHashCodeBasedOnObjectContent(content);</span>
+<span class="fc" id="L274">                final byte[] content = loadExternalResource(location);</span>
+<span class="fc" id="L275">                contentHashSum = getHashCodeBasedOnObjectContent(content);</span>
             }
-<span class="fc" id="L283">            catch (CheckstyleException ex) {</span>
+<span class="fc" id="L277">            catch (CheckstyleException ex) {</span>
                 // if exception happened (configuration resource was not found, connection is not
                 // available, resource is broken, etc), we need to calculate hash sum based on
                 // exception object content in order to check whether problem is resolved later
                 // and/or the configuration is changed.
-<span class="fc" id="L288">                contentHashSum = getHashCodeBasedOnObjectContent(ex);</span>
+<span class="fc" id="L282">                contentHashSum = getHashCodeBasedOnObjectContent(ex);</span>
             }
             finally {
-<span class="fc" id="L291">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</span>
+<span class="fc" id="L285">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</span>
                         contentHashSum));
             }
-<span class="fc" id="L294">        }</span>
-<span class="fc" id="L295">        return resources;</span>
+<span class="fc" id="L288">        }</span>
+<span class="fc" id="L289">        return resources;</span>
     }
 
     /**
@@ -303,16 +297,16 @@ final class PropertyCacheFile {
      */
     private static byte[] loadExternalResource(String location) throws CheckstyleException {
         final byte[] content;
-<span class="fc" id="L306">        final URI uri = CommonUtils.getUriByFilename(location);</span>
+<span class="fc" id="L300">        final URI uri = CommonUtils.getUriByFilename(location);</span>
 
         try {
-<span class="fc" id="L309">            content = ByteStreams.toByteArray(new BufferedInputStream(uri.toURL().openStream()));</span>
+<span class="fc" id="L303">            content = ByteStreams.toByteArray(new BufferedInputStream(uri.toURL().openStream()));</span>
         }
-<span class="fc" id="L311">        catch (IOException ex) {</span>
-<span class="fc" id="L312">            throw new CheckstyleException(&quot;Unable to load external resource file &quot; + location, ex);</span>
-<span class="fc" id="L313">        }</span>
+<span class="fc" id="L305">        catch (IOException ex) {</span>
+<span class="fc" id="L306">            throw new CheckstyleException(&quot;Unable to load external resource file &quot; + location, ex);</span>
+<span class="fc" id="L307">        }</span>
 
-<span class="fc" id="L315">        return content;</span>
+<span class="fc" id="L309">        return content;</span>
     }
 
     /**
@@ -321,19 +315,19 @@ final class PropertyCacheFile {
      * @return true if the contents of external configuration resources were changed.
      */
     private boolean areExternalResourcesChanged(Set&lt;ExternalResource&gt; resources) {
-<span class="fc" id="L324">        return resources.stream().anyMatch(resource -&gt; {</span>
-<span class="fc" id="L325">            boolean changed = false;</span>
-<span class="fc bfc" id="L326" title="All 2 branches covered.">            if (isResourceLocationInCache(resource.location)) {</span>
-<span class="fc" id="L327">                final String contentHashSum = resource.contentHashSum;</span>
-<span class="fc" id="L328">                final String cachedHashSum = details.getProperty(resource.location);</span>
-<span class="fc bfc" id="L329" title="All 2 branches covered.">                if (!cachedHashSum.equals(contentHashSum)) {</span>
-<span class="fc" id="L330">                    changed = true;</span>
+<span class="fc" id="L318">        return resources.stream().anyMatch(resource -&gt; {</span>
+<span class="fc" id="L319">            boolean changed = false;</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">            if (isResourceLocationInCache(resource.location)) {</span>
+<span class="fc" id="L321">                final String contentHashSum = resource.contentHashSum;</span>
+<span class="fc" id="L322">                final String cachedHashSum = details.getProperty(resource.location);</span>
+<span class="fc bfc" id="L323" title="All 2 branches covered.">                if (!cachedHashSum.equals(contentHashSum)) {</span>
+<span class="fc" id="L324">                    changed = true;</span>
                 }
-<span class="fc" id="L332">            }</span>
+<span class="fc" id="L326">            }</span>
             else {
-<span class="fc" id="L334">                changed = true;</span>
+<span class="fc" id="L328">                changed = true;</span>
             }
-<span class="fc" id="L336">            return changed;</span>
+<span class="fc" id="L330">            return changed;</span>
         });
     }
 
@@ -343,10 +337,10 @@ final class PropertyCacheFile {
      * @param externalResources a set of {@link ExternalResource}.
      */
     private void fillCacheWithExternalResources(Set&lt;ExternalResource&gt; externalResources) {
-<span class="fc" id="L346">        externalResources.stream()</span>
-<span class="fc bfc" id="L347" title="All 2 branches covered.">            .filter(resource -&gt; !isResourceLocationInCache(resource.location))</span>
-<span class="fc" id="L348">            .forEach(resource -&gt; details.setProperty(resource.location, resource.contentHashSum));</span>
-<span class="fc" id="L349">    }</span>
+<span class="fc" id="L340">        externalResources.stream()</span>
+<span class="fc bfc" id="L341" title="All 2 branches covered.">            .filter(resource -&gt; !isResourceLocationInCache(resource.location))</span>
+<span class="fc" id="L342">            .forEach(resource -&gt; details.setProperty(resource.location, resource.contentHashSum));</span>
+<span class="fc" id="L343">    }</span>
 
     /**
      * Checks whether resource location is in cache.
@@ -354,13 +348,12 @@ final class PropertyCacheFile {
      * @return true if resource location is in cache.
      */
     private boolean isResourceLocationInCache(String location) {
-<span class="fc" id="L357">        final String cachedHashSum = details.getProperty(location);</span>
-<span class="fc bfc" id="L358" title="All 2 branches covered.">        return cachedHashSum != null;</span>
+<span class="fc" id="L351">        final String cachedHashSum = details.getProperty(location);</span>
+<span class="fc bfc" id="L352" title="All 2 branches covered.">        return cachedHashSum != null;</span>
     }
 
     /**
      * Class which represents external resource.
-     * @author Andrei Selkin
      */
     private static class ExternalResource {
 
@@ -374,10 +367,10 @@ final class PropertyCacheFile {
          * @param location resource location.
          * @param contentHashSum content hash sum.
          */
-<span class="fc" id="L377">        ExternalResource(String location, String contentHashSum) {</span>
-<span class="fc" id="L378">            this.location = location;</span>
-<span class="fc" id="L379">            this.contentHashSum = contentHashSum;</span>
-<span class="fc" id="L380">        }</span>
+<span class="fc" id="L370">        ExternalResource(String location, String contentHashSum) {</span>
+<span class="fc" id="L371">            this.location = location;</span>
+<span class="fc" id="L372">            this.contentHashSum = contentHashSum;</span>
+<span class="fc" id="L373">        }</span>
 
     }
 

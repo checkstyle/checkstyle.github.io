@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PkgImportControl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.imports</a> &gt; <span class="el_source">PkgImportControl.java</span></div><h1>PkgImportControl.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.imports;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+
+/**
+ * Represents a tree of import rules for a specific package.
+ * Each instance may have zero or more children. A child may
+ * be a sub-package, a class, or an allow/disallow rule.
+ */
+class PkgImportControl extends AbstractImportControl {
+    /** The package separator: &quot;.&quot; */
+    private static final String DOT = &quot;.&quot;;
+    /** A pattern matching the package separator: &quot;.&quot; */
+<span class="fc" id="L35">    private static final Pattern DOT_PATTERN = Pattern.compile(DOT, Pattern.LITERAL);</span>
+    /** The regex for the package separator: &quot;\\.&quot;. */
+    private static final String DOT_REGEX = &quot;\\.&quot;;
+
+    /** List of children {@link AbstractImportControl} objects. */
+<span class="fc" id="L40">    private final List&lt;AbstractImportControl&gt; children = new ArrayList&lt;&gt;();</span>
+
+    /** The full name for the package. */
+    private final String fullPackageName;
+    /**
+     * The regex pattern for partial match (exact and for subpackages) - only not
+     * null if regex is true.
+     */
+    private final Pattern patternForPartialMatch;
+    /** The regex pattern for exact matches - only not null if regex is true. */
+    private final Pattern patternForExactMatch;
+    /** If this package represents a regular expression. */
+    private final boolean regex;
+
+    /**
+     * Construct a root, package node.
+     * @param packageName the name of the package.
+     * @param regex flags interpretation of name as regex pattern.
+     * @param strategyOnMismatch strategy in a case if matching allow/disallow rule was not found.
+     */
+    PkgImportControl(String packageName, boolean regex, MismatchStrategy strategyOnMismatch) {
+<span class="fc" id="L61">        super(null, strategyOnMismatch);</span>
+
+<span class="fc" id="L63">        this.regex = regex;</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        if (regex) {</span>
+            // ensure that fullName is a self-contained regular expression
+<span class="fc" id="L66">            fullPackageName = encloseInGroup(packageName);</span>
+<span class="fc" id="L67">            patternForPartialMatch = createPatternForPartialMatch(fullPackageName);</span>
+<span class="fc" id="L68">            patternForExactMatch = createPatternForExactMatch(fullPackageName);</span>
+        }
+        else {
+<span class="fc" id="L71">            fullPackageName = packageName;</span>
+<span class="fc" id="L72">            patternForPartialMatch = null;</span>
+<span class="fc" id="L73">            patternForExactMatch = null;</span>
+        }
+<span class="fc" id="L75">    }</span>
+
+    /**
+     * Construct a sub-package node. The concatenation of regular expressions needs special care:
+     * see {@link #ensureSelfContainedRegex(String, boolean)} for more details.
+     * @param parent the parent package.
+     * @param subPackageName the name of the current sub-package.
+     * @param regex flags interpretation of name as regex pattern.
+     * @param strategyOnMismatch strategy in a case if matching allow/disallow rule was not found.
+     */
+    PkgImportControl(PkgImportControl parent, String subPackageName, boolean regex,
+            MismatchStrategy strategyOnMismatch) {
+<span class="fc" id="L87">        super(parent, strategyOnMismatch);</span>
+<span class="fc bfc" id="L88" title="All 4 branches covered.">        if (regex || parent.regex) {</span>
+            // regex gets inherited
+<span class="fc" id="L90">            final String parentRegex = ensureSelfContainedRegex(parent.fullPackageName,</span>
+                    parent.regex);
+<span class="fc" id="L92">            final String thisRegex = ensureSelfContainedRegex(subPackageName, regex);</span>
+<span class="fc" id="L93">            fullPackageName = parentRegex + DOT_REGEX + thisRegex;</span>
+<span class="fc" id="L94">            patternForPartialMatch = createPatternForPartialMatch(fullPackageName);</span>
+<span class="fc" id="L95">            patternForExactMatch = createPatternForExactMatch(fullPackageName);</span>
+<span class="fc" id="L96">            this.regex = true;</span>
+<span class="fc" id="L97">        }</span>
+        else {
+<span class="fc" id="L99">            fullPackageName = parent.fullPackageName + DOT + subPackageName;</span>
+<span class="fc" id="L100">            patternForPartialMatch = null;</span>
+<span class="fc" id="L101">            patternForExactMatch = null;</span>
+<span class="fc" id="L102">            this.regex = false;</span>
+        }
+<span class="fc" id="L104">    }</span>
+
+    /**
+     * Returns a regex that is suitable for concatenation by 1) either converting a plain string
+     * into a regular expression (handling special characters) or 2) by enclosing {@code input} in
+     * a (non-capturing) group if {@code input} already is a regular expression.
+     *
+     * &lt;p&gt;1) When concatenating a non-regex package component (like &quot;org.google&quot;) with a regex
+     * component (like &quot;[^.]+&quot;) the other component has to be converted into a regex too, see
+     * {@link #toRegex(String)}.
+     *
+     * &lt;p&gt;2) The grouping is strictly necessary if a) {@code input} is a regular expression that b)
+     * contains the alteration character ('|') and if c) the pattern is not already enclosed in a
+     * group - as you see in this example: {@code parent=&quot;com|org&quot;, child=&quot;common|uncommon&quot;} will
+     * result in the pattern {@code &quot;(?:org|com)\.(?common|uncommon)&quot;} what will match
+     * {@code &quot;com.common&quot;}, {@code &quot;com.uncommon&quot;}, {@code &quot;org.common&quot;}, and {@code
+     * &quot;org.uncommon&quot;}. Without the grouping it would be {@code &quot;com|org.common|uncommon&quot;} which
+     * would match {@code &quot;com&quot;}, {@code &quot;org.common&quot;}, and {@code &quot;uncommon&quot;}, which clearly is
+     * undesirable. Adding the group fixes this.
+     *
+     * &lt;p&gt;For simplicity the grouping is added to regular expressions unconditionally.
+     *
+     * @param input the input string.
+     * @param alreadyRegex signals if input already is a regular expression.
+     * @return a regex string.
+     */
+    private static String ensureSelfContainedRegex(String input, boolean alreadyRegex) {
+        final String result;
+<span class="fc bfc" id="L132" title="All 2 branches covered.">        if (alreadyRegex) {</span>
+<span class="fc" id="L133">            result = encloseInGroup(input);</span>
+        }
+        else {
+<span class="fc" id="L136">            result = toRegex(input);</span>
+        }
+<span class="fc" id="L138">        return result;</span>
+    }
+
+    /**
+     * Enclose {@code expression} in a (non-capturing) group.
+     * @param expression the input regular expression
+     * @return a grouped pattern.
+     */
+    private static String encloseInGroup(String expression) {
+<span class="fc" id="L147">        return &quot;(?:&quot; + expression + &quot;)&quot;;</span>
+    }
+
+    /**
+     * Converts a normal package name into a regex pattern by escaping all
+     * special characters that may occur in a java package name.
+     * @param input the input string.
+     * @return a regex string.
+     */
+    private static String toRegex(String input) {
+<span class="fc" id="L157">        return DOT_PATTERN.matcher(input).replaceAll(DOT_REGEX);</span>
+    }
+
+    /**
+     * Creates a Pattern from {@code expression} that matches exactly and child packages.
+     * @param expression a self-contained regular expression matching the full package exactly.
+     * @return a Pattern.
+     */
+    private static Pattern createPatternForPartialMatch(String expression) {
+        // javadoc of encloseInGroup() explains how to concatenate regular expressions
+        // no grouping needs to be added to fullPackage since this already have been done.
+<span class="fc" id="L168">        return Pattern.compile(expression + &quot;(?:\\..*)?&quot;);</span>
+    }
+
+    /**
+     * Creates a Pattern from {@code expression}.
+     * @param expression a self-contained regular expression matching the full package exactly.
+     * @return a Pattern.
+     */
+    private static Pattern createPatternForExactMatch(String expression) {
+<span class="fc" id="L177">        return Pattern.compile(expression);</span>
+    }
+
+    @Override
+    public AbstractImportControl locateFinest(String forPkg, String forFileName) {
+<span class="fc" id="L182">        AbstractImportControl finestMatch = null;</span>
+        // Check if we are a match.
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        if (matchesAtFront(forPkg)) {</span>
+            // If there won't be match so I am the best there is.
+<span class="fc" id="L186">            finestMatch = this;</span>
+            // Check if any of the children match.
+<span class="fc bfc" id="L188" title="All 2 branches covered.">            for (AbstractImportControl child : children) {</span>
+<span class="fc" id="L189">                final AbstractImportControl match = child.locateFinest(forPkg, forFileName);</span>
+<span class="fc bfc" id="L190" title="All 2 branches covered.">                if (match != null) {</span>
+<span class="fc" id="L191">                    finestMatch = match;</span>
+<span class="fc" id="L192">                    break;</span>
+                }
+<span class="fc" id="L194">            }</span>
+        }
+<span class="fc" id="L196">        return finestMatch;</span>
+    }
+
+    /**
+     * Adds new child import control.
+     * @param importControl child import control
+     */
+    public void addChild(AbstractImportControl importControl) {
+<span class="fc" id="L204">        children.add(importControl);</span>
+<span class="fc" id="L205">    }</span>
+
+    /**
+     * Matches other package name exactly or partially at front.
+     * @param pkg the package to compare with.
+     * @return if it matches.
+     */
+    private boolean matchesAtFront(String pkg) {
+        final boolean result;
+<span class="fc bfc" id="L214" title="All 2 branches covered.">        if (regex) {</span>
+<span class="fc" id="L215">            result = patternForPartialMatch.matcher(pkg).matches();</span>
+        }
+        else {
+<span class="fc" id="L218">            result = matchesAtFrontNoRegex(pkg);</span>
+        }
+<span class="fc" id="L220">        return result;</span>
+    }
+
+    /**
+     * Non-regex case. Ensure a trailing dot for subpackages, i.e. &quot;com.puppy&quot;
+     * will match &quot;com.puppy.crawl&quot; but not &quot;com.puppycrawl.tools&quot;.
+     * @param pkg the package to compare with.
+     * @return if it matches.
+     */
+    private boolean matchesAtFrontNoRegex(String pkg) {
+<span class="fc bfc" id="L230" title="All 2 branches covered.">        return pkg.startsWith(fullPackageName)</span>
+<span class="fc bfc" id="L231" title="All 2 branches covered.">                &amp;&amp; (pkg.length() == fullPackageName.length()</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">                    || pkg.charAt(fullPackageName.length()) == '.');</span>
+    }
+
+    @Override
+    protected boolean matchesExactly(String pkg, String fileName) {
+        final boolean result;
+<span class="fc bfc" id="L238" title="All 2 branches covered.">        if (regex) {</span>
+<span class="fc" id="L239">            result = patternForExactMatch.matcher(pkg).matches();</span>
+        }
+        else {
+<span class="fc" id="L242">            result = fullPackageName.equals(pkg);</span>
+        }
+<span class="fc" id="L244">        return result;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.1.201803210924</span></div></body></html>
