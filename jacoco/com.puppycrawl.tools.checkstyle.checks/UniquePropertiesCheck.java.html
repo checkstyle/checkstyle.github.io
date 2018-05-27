@@ -23,14 +23,14 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.common.collect.HashMultiset;
-import com.google.common.collect.ImmutableMultiset;
-import com.google.common.collect.Multiset;
-import com.google.common.collect.Multiset.Entry;
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
 import com.puppycrawl.tools.checkstyle.api.FileText;
@@ -75,12 +75,12 @@ public class UniquePropertiesCheck extends AbstractFileSetCheck {
 <span class="fc" id="L75">                    ex.getLocalizedMessage());</span>
 <span class="fc" id="L76">        }</span>
 
-<span class="fc bfc" id="L78" title="All 2 branches covered.">        for (Entry&lt;String&gt; duplication : properties</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        for (Entry&lt;String, AtomicInteger&gt; duplication : properties</span>
 <span class="fc" id="L79">                .getDuplicatedKeys().entrySet()) {</span>
-<span class="fc" id="L80">            final String keyName = duplication.getElement();</span>
+<span class="fc" id="L80">            final String keyName = duplication.getKey();</span>
 <span class="fc" id="L81">            final int lineNumber = getLineNumber(fileText, keyName);</span>
             // Number of occurrences is number of duplications + 1
-<span class="fc" id="L83">            log(lineNumber, MSG_KEY, keyName, duplication.getCount() + 1);</span>
+<span class="fc" id="L83">            log(lineNumber, MSG_KEY, keyName, duplication.getValue().get() + 1);</span>
 <span class="fc" id="L84">        }</span>
 <span class="fc" id="L85">    }</span>
 
@@ -137,11 +137,10 @@ public class UniquePropertiesCheck extends AbstractFileSetCheck {
 
         private static final long serialVersionUID = 1L;
         /**
-         * Multiset, holding duplicated keys. Keys are added here only if they
+         * Map, holding duplicated keys and their count. Keys are added here only if they
          * already exist in Properties' inner map.
          */
-<span class="fc" id="L143">        private final Multiset&lt;String&gt; duplicatedKeys = HashMultiset</span>
-<span class="fc" id="L144">                .create();</span>
+<span class="fc" id="L143">        private final Map&lt;String, AtomicInteger&gt; duplicatedKeys = new HashMap&lt;&gt;();</span>
 
         /**
          * Puts the value into properties by the key specified.
@@ -149,12 +148,14 @@ public class UniquePropertiesCheck extends AbstractFileSetCheck {
          */
         @Override
         public synchronized Object put(Object key, Object value) {
-<span class="fc" id="L152">            final Object oldValue = super.put(key, value);</span>
-<span class="fc bfc" id="L153" title="All 4 branches covered.">            if (oldValue != null &amp;&amp; key instanceof String) {</span>
-<span class="fc" id="L154">                final String keyString = (String) key;</span>
-<span class="fc" id="L155">                duplicatedKeys.add(keyString);</span>
+<span class="fc" id="L151">            final Object oldValue = super.put(key, value);</span>
+<span class="fc bfc" id="L152" title="All 4 branches covered.">            if (oldValue != null &amp;&amp; key instanceof String) {</span>
+<span class="fc" id="L153">                final String keyString = (String) key;</span>
+
+<span class="fc" id="L155">                duplicatedKeys.computeIfAbsent(keyString, empty -&gt; new AtomicInteger(0))</span>
+<span class="fc" id="L156">                        .incrementAndGet();</span>
             }
-<span class="fc" id="L157">            return oldValue;</span>
+<span class="fc" id="L158">            return oldValue;</span>
         }
 
         /**
@@ -162,8 +163,8 @@ public class UniquePropertiesCheck extends AbstractFileSetCheck {
          *
          * @return A collection of duplicated keys.
          */
-        public Multiset&lt;String&gt; getDuplicatedKeys() {
-<span class="fc" id="L166">            return ImmutableMultiset.copyOf(duplicatedKeys);</span>
+        public Map&lt;String, AtomicInteger&gt; getDuplicatedKeys() {
+<span class="fc" id="L167">            return new HashMap&lt;&gt;(duplicatedKeys);</span>
         }
 
     }
