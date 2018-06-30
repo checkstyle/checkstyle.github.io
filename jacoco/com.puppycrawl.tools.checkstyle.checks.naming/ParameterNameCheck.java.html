@@ -24,23 +24,44 @@ import java.util.Optional;
 
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
-import com.puppycrawl.tools.checkstyle.utils.CheckUtils;
-import com.puppycrawl.tools.checkstyle.utils.ScopeUtils;
+import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
+import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
 /**
  * &lt;p&gt;
- * Checks that method and {@code catch} parameter names conform to a format specified
- * by the format property. The format is a
- * {@link java.util.regex.Pattern regular expression}
- * and defaults to
- * &lt;strong&gt;^[a-z][a-zA-Z0-9]*$&lt;/strong&gt;.
+ * Checks that method parameter names conform to a format specified
+ * by the format property. By using {@code accessModifiers} property it is possible
+ * to specify different formats for methods at different visibility levels.
  * &lt;/p&gt;
- * &lt;p&gt;The check has the following options:&lt;/p&gt;
- * &lt;p&gt;&lt;b&gt;ignoreOverridden&lt;/b&gt; - allows to skip methods with Override annotation from
- * validation. Default values is &lt;b&gt;false&lt;/b&gt; .&lt;/p&gt;
- * &lt;p&gt;&lt;b&gt;accessModifiers&lt;/b&gt; - access modifiers of methods which should to be checked.
- * Default value is &lt;b&gt;public, protected, package, private&lt;/b&gt; .&lt;/p&gt;
+ * &lt;p&gt;
+ * To validate {@code catch} parameters please use
+ * &lt;a href=&quot;#CatchParameterName&quot;&gt;CatchParameterName&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code format} - Specifies valid identifiers. Default value is
+ * {@code &quot;^[a-z][a-zA-Z0-9]*$&quot;}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code ignoreOverridden} - Allows to skip methods with Override annotation from
+ * validation. For example, the following method's parameter will be skipped from validation,
+ * if ignoreOverridden is true:
+ * &lt;pre&gt;
+ * &amp;#64;Override
+ * public boolean equals(Object o) {
+ *   return super.equals(o);
+ * }
+ * &lt;/pre&gt;
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code accessModifiers} - Access modifiers of methods where parameters are checked.
+ * Default value is {@code public, protected, package, private}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
  * An example of how to configure the check:
+ * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;ParameterName&quot;/&amp;gt;
  * &lt;/pre&gt;
@@ -50,7 +71,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtils;
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;ParameterName&quot;&amp;gt;
- *    &amp;lt;property name=&quot;format&quot; value=&quot;^[a-z][_a-zA-Z0-9]+$&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;^[a-z][_a-zA-Z0-9]+$&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
@@ -59,20 +80,55 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtils;
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;ParameterName&quot;&amp;gt;
- *    &amp;lt;property name=&quot;ignoreOverridden&quot; value=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;ignoreOverridden&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check for names that begin with a lower case letter, followed
+ * by letters and digits is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;ParameterName&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;^[a-z][a-zA-Z0-9]+$&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * The following configuration checks that the parameters always start with two lowercase
+ * characters and, in addition, that public method parameters cannot be one character long:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;ParameterName&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;^[a-z]([a-z0-9][a-zA-Z0-9]*)?$&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;accessModifiers&quot; value=&quot;protected, package, private&quot;/&amp;gt;
+ *   &amp;lt;message key=&quot;name.invalidPattern&quot;
+ *     value=&quot;Parameter name ''{0}'' must match pattern ''{1}''&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &amp;lt;module name=&quot;ParameterName&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;^[a-z][a-z0-9][a-zA-Z0-9]*$&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;accessModifiers&quot; value=&quot;public&quot;/&amp;gt;
+ *   &amp;lt;message key=&quot;name.invalidPattern&quot;
+ *     value=&quot;Parameter name ''{0}'' must match pattern ''{1}''&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  *
+ * @since 3.0
  */
 public class ParameterNameCheck extends AbstractNameCheck {
 
     /**
-     * Allows to skip methods with Override annotation from validation.
+     * Allows to skip methods with Override annotation from validation. For example, the following
+     * method's parameter will be skipped from validation, if ignoreOverridden is true:
+     * &lt;pre&gt;
+     * &amp;#64;Override
+     * public boolean equals(Object o) {
+     *   return super.equals(o);
+     * }
+     * &lt;/pre&gt;
      */
     private boolean ignoreOverridden;
 
-    /** Access modifiers of methods which should be checked. */
-<span class="fc" id="L75">    private AccessModifier[] accessModifiers = {</span>
+    /** Access modifiers of methods where parameters are checked. */
+<span class="fc" id="L131">    private AccessModifier[] accessModifiers = {</span>
         AccessModifier.PUBLIC,
         AccessModifier.PROTECTED,
         AccessModifier.PACKAGE,
@@ -83,51 +139,58 @@ public class ParameterNameCheck extends AbstractNameCheck {
      * Creates a new {@code ParameterNameCheck} instance.
      */
     public ParameterNameCheck() {
-<span class="fc" id="L86">        super(&quot;^[a-z][a-zA-Z0-9]*$&quot;);</span>
-<span class="fc" id="L87">    }</span>
+<span class="fc" id="L142">        super(&quot;^[a-z][a-zA-Z0-9]*$&quot;);</span>
+<span class="fc" id="L143">    }</span>
 
     /**
-     * Sets whether to skip methods with Override annotation from validation.
+     * Setter to allows to skip methods with Override annotation from validation. For example, the
+     * following method's parameter will be skipped from validation, if ignoreOverridden is true:
+     * &lt;pre&gt;
+     * &amp;#64;Override
+     * public boolean equals(Object o) {
+     *   return super.equals(o);
+     * }
+     * &lt;/pre&gt;
      * @param ignoreOverridden Flag for skipping methods with Override annotation.
      */
     public void setIgnoreOverridden(boolean ignoreOverridden) {
-<span class="fc" id="L94">        this.ignoreOverridden = ignoreOverridden;</span>
-<span class="fc" id="L95">    }</span>
+<span class="fc" id="L157">        this.ignoreOverridden = ignoreOverridden;</span>
+<span class="fc" id="L158">    }</span>
 
     /**
-     * Sets access modifiers of methods which should be checked.
+     * Setter to access modifiers of methods where parameters are checked.
      * @param accessModifiers access modifiers of methods which should be checked.
      */
     public void setAccessModifiers(AccessModifier... accessModifiers) {
-<span class="fc" id="L102">        this.accessModifiers =</span>
-<span class="fc" id="L103">            Arrays.copyOf(accessModifiers, accessModifiers.length);</span>
-<span class="fc" id="L104">    }</span>
+<span class="fc" id="L165">        this.accessModifiers =</span>
+<span class="fc" id="L166">            Arrays.copyOf(accessModifiers, accessModifiers.length);</span>
+<span class="fc" id="L167">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L108">        return getRequiredTokens();</span>
+<span class="fc" id="L171">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L113">        return getRequiredTokens();</span>
+<span class="fc" id="L176">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L118">        return new int[] {TokenTypes.PARAMETER_DEF};</span>
+<span class="fc" id="L181">        return new int[] {TokenTypes.PARAMETER_DEF};</span>
     }
 
     @Override
     protected boolean mustCheckName(DetailAST ast) {
-<span class="fc" id="L123">        boolean checkName = true;</span>
-<span class="fc bfc" id="L124" title="All 4 branches covered.">        if (ignoreOverridden &amp;&amp; isOverriddenMethod(ast)</span>
-<span class="fc bfc" id="L125" title="All 2 branches covered.">                || ast.getParent().getType() == TokenTypes.LITERAL_CATCH</span>
-<span class="fc bfc" id="L126" title="All 2 branches covered.">                || CheckUtils.isReceiverParameter(ast)</span>
-<span class="fc bfc" id="L127" title="All 2 branches covered.">                || !matchAccessModifiers(getAccessModifier(ast))) {</span>
-<span class="fc" id="L128">            checkName = false;</span>
+<span class="fc" id="L186">        boolean checkName = true;</span>
+<span class="fc bfc" id="L187" title="All 4 branches covered.">        if (ignoreOverridden &amp;&amp; isOverriddenMethod(ast)</span>
+<span class="fc bfc" id="L188" title="All 2 branches covered.">                || ast.getParent().getType() == TokenTypes.LITERAL_CATCH</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">                || CheckUtil.isReceiverParameter(ast)</span>
+<span class="fc bfc" id="L190" title="All 2 branches covered.">                || !matchAccessModifiers(getAccessModifier(ast))) {</span>
+<span class="fc" id="L191">            checkName = false;</span>
         }
-<span class="fc" id="L130">        return checkName;</span>
+<span class="fc" id="L193">        return checkName;</span>
     }
 
     /**
@@ -139,22 +202,22 @@ public class ParameterNameCheck extends AbstractNameCheck {
      * @return the access modifier of the method/constructor.
      */
     private static AccessModifier getAccessModifier(final DetailAST ast) {
-<span class="fc" id="L142">        final DetailAST params = ast.getParent();</span>
-<span class="fc" id="L143">        final DetailAST meth = params.getParent();</span>
-<span class="fc" id="L144">        AccessModifier accessModifier = AccessModifier.PRIVATE;</span>
+<span class="fc" id="L205">        final DetailAST params = ast.getParent();</span>
+<span class="fc" id="L206">        final DetailAST meth = params.getParent();</span>
+<span class="fc" id="L207">        AccessModifier accessModifier = AccessModifier.PRIVATE;</span>
 
-<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (meth.getType() == TokenTypes.METHOD_DEF</span>
-<span class="fc bfc" id="L147" title="All 2 branches covered.">                || meth.getType() == TokenTypes.CTOR_DEF) {</span>
-<span class="fc bfc" id="L148" title="All 2 branches covered.">            if (ScopeUtils.isInInterfaceOrAnnotationBlock(ast)) {</span>
-<span class="fc" id="L149">                accessModifier = AccessModifier.PUBLIC;</span>
+<span class="fc bfc" id="L209" title="All 2 branches covered.">        if (meth.getType() == TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L210" title="All 2 branches covered.">                || meth.getType() == TokenTypes.CTOR_DEF) {</span>
+<span class="fc bfc" id="L211" title="All 2 branches covered.">            if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
+<span class="fc" id="L212">                accessModifier = AccessModifier.PUBLIC;</span>
             }
             else {
-<span class="fc" id="L152">                final DetailAST modsToken = meth.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L153">                accessModifier = CheckUtils.getAccessModifierFromModifiersToken(modsToken);</span>
+<span class="fc" id="L215">                final DetailAST modsToken = meth.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L216">                accessModifier = CheckUtil.getAccessModifierFromModifiersToken(modsToken);</span>
             }
         }
 
-<span class="fc" id="L157">        return accessModifier;</span>
+<span class="fc" id="L220">        return accessModifier;</span>
     }
 
     /**
@@ -163,7 +226,7 @@ public class ParameterNameCheck extends AbstractNameCheck {
      * @return whether the method matches the expected access modifier.
      */
     private boolean matchAccessModifiers(final AccessModifier accessModifier) {
-<span class="fc bfc" id="L166" title="All 2 branches covered.">        return Arrays.stream(accessModifiers).anyMatch(modifier -&gt; modifier == accessModifier);</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">        return Arrays.stream(accessModifiers).anyMatch(modifier -&gt; modifier == accessModifier);</span>
     }
 
     /**
@@ -172,21 +235,21 @@ public class ParameterNameCheck extends AbstractNameCheck {
      * @return true if a method is annotated with Override annotation.
      */
     private static boolean isOverriddenMethod(DetailAST ast) {
-<span class="fc" id="L175">        boolean overridden = false;</span>
+<span class="fc" id="L238">        boolean overridden = false;</span>
 
-<span class="fc" id="L177">        final DetailAST parent = ast.getParent().getParent();</span>
-<span class="fc" id="L178">        final Optional&lt;DetailAST&gt; annotation =</span>
-<span class="fc" id="L179">            Optional.ofNullable(parent.getFirstChild().getFirstChild());</span>
+<span class="fc" id="L240">        final DetailAST parent = ast.getParent().getParent();</span>
+<span class="fc" id="L241">        final Optional&lt;DetailAST&gt; annotation =</span>
+<span class="fc" id="L242">            Optional.ofNullable(parent.getFirstChild().getFirstChild());</span>
 
-<span class="fc bfc" id="L181" title="All 2 branches covered.">        if (annotation.isPresent()</span>
-<span class="fc bfc" id="L182" title="All 2 branches covered.">                &amp;&amp; annotation.get().getType() == TokenTypes.ANNOTATION) {</span>
-<span class="fc" id="L183">            final Optional&lt;DetailAST&gt; overrideToken =</span>
-<span class="fc" id="L184">                Optional.ofNullable(annotation.get().findFirstToken(TokenTypes.IDENT));</span>
-<span class="fc bfc" id="L185" title="All 4 branches covered.">            if (overrideToken.isPresent() &amp;&amp; &quot;Override&quot;.equals(overrideToken.get().getText())) {</span>
-<span class="fc" id="L186">                overridden = true;</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">        if (annotation.isPresent()</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">                &amp;&amp; annotation.get().getType() == TokenTypes.ANNOTATION) {</span>
+<span class="fc" id="L246">            final Optional&lt;DetailAST&gt; overrideToken =</span>
+<span class="fc" id="L247">                Optional.ofNullable(annotation.get().findFirstToken(TokenTypes.IDENT));</span>
+<span class="fc bfc" id="L248" title="All 4 branches covered.">            if (overrideToken.isPresent() &amp;&amp; &quot;Override&quot;.equals(overrideToken.get().getText())) {</span>
+<span class="fc" id="L249">                overridden = true;</span>
             }
         }
-<span class="fc" id="L189">        return overridden;</span>
+<span class="fc" id="L252">        return overridden;</span>
     }
 
 }

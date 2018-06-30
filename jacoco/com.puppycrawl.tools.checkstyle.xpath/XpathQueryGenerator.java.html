@@ -23,15 +23,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.puppycrawl.tools.checkstyle.TreeWalkerAuditEvent;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.FileText;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
-import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
-import com.puppycrawl.tools.checkstyle.utils.TokenUtils;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
  * Generates xpath queries. Xpath queries are generated based on received
- * {@code DetailAst} element, line number and column number.
+ * {@code DetailAst} element, line number, column number and token type.
+ * Token type parameter is optional.
  *
  * &lt;p&gt;
  *     Example class
@@ -77,10 +79,23 @@ public class XpathQueryGenerator {
     private final int lineNumber;
     /** The column number of the element for which the query should be generated. */
     private final int columnNumber;
+    /** The token type of the element for which the query should be generated. Optional. */
+    private final int tokenType;
     /** The {@code FileText} object, representing content of the file. */
     private final FileText fileText;
     /** The distance between tab stop position. */
     private final int tabWidth;
+
+    /**
+     * Creates a new {@code XpathQueryGenerator} instance.
+     *
+     * @param event {@code TreeWalkerAuditEvent} object
+     * @param tabWidth distance between tab stop position
+     */
+    public XpathQueryGenerator(TreeWalkerAuditEvent event, int tabWidth) {
+<span class="fc" id="L96">        this(event.getRootAst(), event.getLine(), event.getColumn(), event.getTokenType(),</span>
+<span class="fc" id="L97">                event.getFileContents().getText(), tabWidth);</span>
+<span class="fc" id="L98">    }</span>
 
     /**
      * Creates a new {@code XpathQueryGenerator} instance.
@@ -92,24 +107,40 @@ public class XpathQueryGenerator {
      * @param tabWidth distance between tab stop position
      */
     public XpathQueryGenerator(DetailAST rootAst, int lineNumber, int columnNumber,
-<span class="fc" id="L95">                               FileText fileText, int tabWidth) {</span>
-<span class="fc" id="L96">        this.rootAst = rootAst;</span>
-<span class="fc" id="L97">        this.lineNumber = lineNumber;</span>
-<span class="fc" id="L98">        this.columnNumber = columnNumber;</span>
-<span class="fc" id="L99">        this.fileText = fileText;</span>
-<span class="fc" id="L100">        this.tabWidth = tabWidth;</span>
-<span class="fc" id="L101">    }</span>
+                               FileText fileText, int tabWidth) {
+<span class="fc" id="L111">        this(rootAst, lineNumber, columnNumber, 0, fileText, tabWidth);</span>
+<span class="fc" id="L112">    }</span>
 
     /**
-     * Returns list of xpath queries of nodes, matching line and column number.
+     * Creates a new {@code XpathQueryGenerator} instance.
+     *
+     * @param rootAst root ast
+     * @param lineNumber line number of the element for which the query should be generated
+     * @param columnNumber column number of the element for which the query should be generated
+     * @param tokenType token type of the element for which the query should be generated
+     * @param fileText the {@code FileText} object
+     * @param tabWidth distance between tab stop position
+     */
+    public XpathQueryGenerator(DetailAST rootAst, int lineNumber, int columnNumber, int tokenType,
+<span class="fc" id="L125">                               FileText fileText, int tabWidth) {</span>
+<span class="fc" id="L126">        this.rootAst = rootAst;</span>
+<span class="fc" id="L127">        this.lineNumber = lineNumber;</span>
+<span class="fc" id="L128">        this.columnNumber = columnNumber;</span>
+<span class="fc" id="L129">        this.tokenType = tokenType;</span>
+<span class="fc" id="L130">        this.fileText = fileText;</span>
+<span class="fc" id="L131">        this.tabWidth = tabWidth;</span>
+<span class="fc" id="L132">    }</span>
+
+    /**
+     * Returns list of xpath queries of nodes, matching line number, column number and token type.
      * This approach uses DetailAST traversal. DetailAST means detail abstract syntax tree.
-     * @return list of xpath queries of nodes, matching line and column number
+     * @return list of xpath queries of nodes, matching line number, column number and token type
      */
     public List&lt;String&gt; generate() {
-<span class="fc" id="L109">        return getMatchingAstElements()</span>
-<span class="fc" id="L110">            .stream()</span>
-<span class="fc" id="L111">            .map(XpathQueryGenerator::generateXpathQuery)</span>
-<span class="fc" id="L112">            .collect(Collectors.toList());</span>
+<span class="fc" id="L140">        return getMatchingAstElements()</span>
+<span class="fc" id="L141">            .stream()</span>
+<span class="fc" id="L142">            .map(XpathQueryGenerator::generateXpathQuery)</span>
+<span class="fc" id="L143">            .collect(Collectors.toList());</span>
     }
 
     /**
@@ -119,10 +150,10 @@ public class XpathQueryGenerator {
      * @return child {@code DetailAst} element of the given root
      */
     private static DetailAST findChildWithIdent(DetailAST root) {
-<span class="fc" id="L122">        return TokenUtils.findFirstTokenByPredicate(root,</span>
+<span class="fc" id="L153">        return TokenUtil.findFirstTokenByPredicate(root,</span>
             cur -&gt; {
-<span class="fc bfc" id="L124" title="All 2 branches covered.">                return cur.findFirstToken(TokenTypes.IDENT) != null;</span>
-<span class="fc" id="L125">            }).orElse(null);</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">                return cur.findFirstToken(TokenTypes.IDENT) != null;</span>
+<span class="fc" id="L156">            }).orElse(null);</span>
     }
 
     /**
@@ -131,38 +162,38 @@ public class XpathQueryGenerator {
      * @return full xpath query for given ast element
      */
     private static String generateXpathQuery(DetailAST ast) {
-<span class="fc" id="L134">        String xpathQuery = getXpathQuery(null, ast);</span>
-<span class="fc bfc" id="L135" title="All 2 branches covered.">        if (!isUniqueAst(ast)) {</span>
-<span class="fc" id="L136">            final DetailAST child = findChildWithIdent(ast);</span>
-<span class="fc bfc" id="L137" title="All 2 branches covered.">            if (child != null) {</span>
-<span class="fc" id="L138">                xpathQuery += &quot;[.&quot; + getXpathQuery(ast, child) + ']';</span>
+<span class="fc" id="L165">        String xpathQuery = getXpathQuery(null, ast);</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        if (!isUniqueAst(ast)) {</span>
+<span class="fc" id="L167">            final DetailAST child = findChildWithIdent(ast);</span>
+<span class="fc bfc" id="L168" title="All 2 branches covered.">            if (child != null) {</span>
+<span class="fc" id="L169">                xpathQuery += &quot;[.&quot; + getXpathQuery(ast, child) + ']';</span>
             }
         }
-<span class="fc" id="L141">        return xpathQuery;</span>
+<span class="fc" id="L172">        return xpathQuery;</span>
     }
 
     /**
-     * Returns list of nodes matching defined line and column number.
-     * @return list of nodes matching defined line and column number
+     * Returns list of nodes matching defined line number, column number and token type.
+     * @return list of nodes matching defined line number, column number and token type
      */
     private List&lt;DetailAST&gt; getMatchingAstElements() {
-<span class="fc" id="L149">        final List&lt;DetailAST&gt; result = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L150">        DetailAST curNode = rootAst;</span>
-<span class="fc bfc" id="L151" title="All 4 branches covered.">        while (curNode != null &amp;&amp; curNode.getLineNo() &lt;= lineNumber) {</span>
-<span class="fc bfc" id="L152" title="All 2 branches covered.">            if (isMatchingByLineAndColumnAndNotIdent(curNode)) {</span>
-<span class="fc" id="L153">                result.add(curNode);</span>
+<span class="fc" id="L180">        final List&lt;DetailAST&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L181">        DetailAST curNode = rootAst;</span>
+<span class="fc bfc" id="L182" title="All 4 branches covered.">        while (curNode != null &amp;&amp; curNode.getLineNo() &lt;= lineNumber) {</span>
+<span class="fc bfc" id="L183" title="All 2 branches covered.">            if (isMatchingByLineAndColumnAndTokenType(curNode)) {</span>
+<span class="fc" id="L184">                result.add(curNode);</span>
             }
-<span class="fc" id="L155">            DetailAST toVisit = curNode.getFirstChild();</span>
-<span class="fc bfc" id="L156" title="All 4 branches covered.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
-<span class="fc" id="L157">                toVisit = curNode.getNextSibling();</span>
-<span class="fc bfc" id="L158" title="All 2 branches covered.">                if (toVisit == null) {</span>
-<span class="fc" id="L159">                    curNode = curNode.getParent();</span>
+<span class="fc" id="L186">            DetailAST toVisit = curNode.getFirstChild();</span>
+<span class="fc bfc" id="L187" title="All 4 branches covered.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
+<span class="fc" id="L188">                toVisit = curNode.getNextSibling();</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">                if (toVisit == null) {</span>
+<span class="fc" id="L190">                    curNode = curNode.getParent();</span>
                 }
             }
 
-<span class="fc" id="L163">            curNode = toVisit;</span>
-<span class="fc" id="L164">        }</span>
-<span class="fc" id="L165">        return result;</span>
+<span class="fc" id="L194">            curNode = toVisit;</span>
+<span class="fc" id="L195">        }</span>
+<span class="fc" id="L196">        return result;</span>
     }
 
     /**
@@ -172,22 +203,22 @@ public class XpathQueryGenerator {
      * @return relative xpath query for given ast element from root
      */
     private static String getXpathQuery(DetailAST root, DetailAST ast) {
-<span class="fc" id="L175">        final StringBuilder resultBuilder = new StringBuilder(1024);</span>
-<span class="fc" id="L176">        DetailAST cur = ast;</span>
-<span class="fc bfc" id="L177" title="All 2 branches covered.">        while (cur != root) {</span>
-<span class="fc" id="L178">            final StringBuilder curNodeQueryBuilder = new StringBuilder(256);</span>
-<span class="fc" id="L179">            curNodeQueryBuilder.append('/')</span>
-<span class="fc" id="L180">                    .append(TokenUtils.getTokenName(cur.getType()));</span>
-<span class="fc" id="L181">            final DetailAST identAst = cur.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc bfc" id="L182" title="All 2 branches covered.">            if (identAst != null) {</span>
-<span class="fc" id="L183">                curNodeQueryBuilder.append(&quot;[@text='&quot;)</span>
-<span class="fc" id="L184">                        .append(identAst.getText())</span>
-<span class="fc" id="L185">                        .append(&quot;']&quot;);</span>
+<span class="fc" id="L206">        final StringBuilder resultBuilder = new StringBuilder(1024);</span>
+<span class="fc" id="L207">        DetailAST cur = ast;</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">        while (cur != root) {</span>
+<span class="fc" id="L209">            final StringBuilder curNodeQueryBuilder = new StringBuilder(256);</span>
+<span class="fc" id="L210">            curNodeQueryBuilder.append('/')</span>
+<span class="fc" id="L211">                    .append(TokenUtil.getTokenName(cur.getType()));</span>
+<span class="fc" id="L212">            final DetailAST identAst = cur.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">            if (identAst != null) {</span>
+<span class="fc" id="L214">                curNodeQueryBuilder.append(&quot;[@text='&quot;)</span>
+<span class="fc" id="L215">                        .append(identAst.getText())</span>
+<span class="fc" id="L216">                        .append(&quot;']&quot;);</span>
             }
-<span class="fc" id="L187">            resultBuilder.insert(0, curNodeQueryBuilder);</span>
-<span class="fc" id="L188">            cur = cur.getParent();</span>
-<span class="fc" id="L189">        }</span>
-<span class="fc" id="L190">        return resultBuilder.toString();</span>
+<span class="fc" id="L218">            resultBuilder.insert(0, curNodeQueryBuilder);</span>
+<span class="fc" id="L219">            cur = cur.getParent();</span>
+<span class="fc" id="L220">        }</span>
+<span class="fc" id="L221">        return resultBuilder.toString();</span>
     }
 
     /**
@@ -196,31 +227,31 @@ public class XpathQueryGenerator {
      * @return if the given ast element has unique {@code TokenTypes} among siblings
      */
     private static boolean hasAtLeastOneSiblingWithSameTokenType(DetailAST ast) {
-<span class="fc" id="L199">        boolean result = false;</span>
-<span class="fc bfc" id="L200" title="All 2 branches covered.">        if (ast.getParent() == null) {</span>
-<span class="fc" id="L201">            DetailAST prev = ast.getPreviousSibling();</span>
-<span class="fc bfc" id="L202" title="All 2 branches covered.">            while (prev != null) {</span>
-<span class="fc bfc" id="L203" title="All 2 branches covered.">                if (prev.getType() == ast.getType()) {</span>
-<span class="fc" id="L204">                    result = true;</span>
-<span class="fc" id="L205">                    break;</span>
+<span class="fc" id="L230">        boolean result = false;</span>
+<span class="fc bfc" id="L231" title="All 2 branches covered.">        if (ast.getParent() == null) {</span>
+<span class="fc" id="L232">            DetailAST prev = ast.getPreviousSibling();</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">            while (prev != null) {</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">                if (prev.getType() == ast.getType()) {</span>
+<span class="fc" id="L235">                    result = true;</span>
+<span class="fc" id="L236">                    break;</span>
                 }
-<span class="fc" id="L207">                prev = prev.getPreviousSibling();</span>
+<span class="fc" id="L238">                prev = prev.getPreviousSibling();</span>
             }
-<span class="fc bfc" id="L209" title="All 2 branches covered.">            if (!result) {</span>
-<span class="fc" id="L210">                DetailAST next = ast.getNextSibling();</span>
-<span class="fc bfc" id="L211" title="All 2 branches covered.">                while (next != null) {</span>
-<span class="fc bfc" id="L212" title="All 2 branches covered.">                    if (next.getType() == ast.getType()) {</span>
-<span class="fc" id="L213">                        result = true;</span>
-<span class="fc" id="L214">                        break;</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">            if (!result) {</span>
+<span class="fc" id="L241">                DetailAST next = ast.getNextSibling();</span>
+<span class="fc bfc" id="L242" title="All 2 branches covered.">                while (next != null) {</span>
+<span class="fc bfc" id="L243" title="All 2 branches covered.">                    if (next.getType() == ast.getType()) {</span>
+<span class="fc" id="L244">                        result = true;</span>
+<span class="fc" id="L245">                        break;</span>
                     }
-<span class="fc" id="L216">                    next = next.getNextSibling();</span>
+<span class="fc" id="L247">                    next = next.getNextSibling();</span>
                 }
             }
-<span class="fc" id="L219">        }</span>
+<span class="fc" id="L250">        }</span>
         else {
-<span class="fc bfc" id="L221" title="All 2 branches covered.">            result = ast.getParent().getChildCount(ast.getType()) &gt; 1;</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">            result = ast.getParent().getChildCount(ast.getType()) &gt; 1;</span>
         }
-<span class="fc" id="L223">        return result;</span>
+<span class="fc" id="L254">        return result;</span>
     }
 
     /**
@@ -229,18 +260,20 @@ public class XpathQueryGenerator {
      * @return the column number with tabs expanded
      */
     private int expandedTabColumn(DetailAST ast) {
-<span class="fc" id="L232">        return 1 + CommonUtils.lengthExpandedTabs(fileText.get(lineNumber - 1),</span>
-<span class="fc" id="L233">                ast.getColumnNo(), tabWidth);</span>
+<span class="fc" id="L263">        return 1 + CommonUtil.lengthExpandedTabs(fileText.get(lineNumber - 1),</span>
+<span class="fc" id="L264">                ast.getColumnNo(), tabWidth);</span>
     }
 
     /**
-     * Checks if the given {@code DetailAST} node is matching line and column number.
+     * Checks if the given {@code DetailAST} node is matching line number, column number and token
+     * type.
      * @param ast {@code DetailAST} ast element
      * @return true if the given {@code DetailAST} node is matching
      */
-    private boolean isMatchingByLineAndColumnAndNotIdent(DetailAST ast) {
-<span class="fc bfc" id="L242" title="All 2 branches covered.">        return ast.getLineNo() == lineNumber</span>
-<span class="fc bfc" id="L243" title="All 2 branches covered.">                &amp;&amp; expandedTabColumn(ast) == columnNumber;</span>
+    private boolean isMatchingByLineAndColumnAndTokenType(DetailAST ast) {
+<span class="fc bfc" id="L274" title="All 2 branches covered.">        return ast.getLineNo() == lineNumber</span>
+<span class="fc bfc" id="L275" title="All 4 branches covered.">                &amp;&amp; expandedTabColumn(ast) == columnNumber</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">                &amp;&amp; (tokenType == 0 || tokenType == ast.getType());</span>
     }
 
     /**
@@ -252,8 +285,8 @@ public class XpathQueryGenerator {
      * @return if {@code DetailAst} element is unique
      */
     private static boolean isUniqueAst(DetailAST ast) {
-<span class="fc bfc" id="L255" title="All 2 branches covered.">        return ast.findFirstToken(TokenTypes.IDENT) != null</span>
-<span class="fc bfc" id="L256" title="All 2 branches covered.">            || !hasAtLeastOneSiblingWithSameTokenType(ast);</span>
+<span class="fc bfc" id="L288" title="All 2 branches covered.">        return ast.findFirstToken(TokenTypes.IDENT) != null</span>
+<span class="fc bfc" id="L289" title="All 2 branches covered.">            || !hasAtLeastOneSiblingWithSameTokenType(ast);</span>
     }
 
 }
