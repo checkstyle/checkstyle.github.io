@@ -34,8 +34,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
- * Checks that particular class are never used as types in variable
- * declarations, return values or parameters.
+ * Checks that particular classes or interfaces are never used.
  *
  * &lt;p&gt;Rationale:
  * Helps reduce coupling on concrete classes.
@@ -71,7 +70,8 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  *
  * &lt;p&gt;&lt;b&gt;ignoredMethodNames&lt;/b&gt; - Methods that should not be checked.
  *
- * &lt;p&gt;&lt;b&gt;memberModifiers&lt;/b&gt; - To check only methods and fields with only specified modifiers.
+ * &lt;p&gt;&lt;b&gt;memberModifiers&lt;/b&gt; - To check only methods and fields with any of the specified modifiers.
+ * This property does not affect method calls nor method references.
  *
  * &lt;p&gt;In most cases it's justified to put following classes to &lt;b&gt;illegalClassNames&lt;/b&gt;:
  * &lt;ul&gt;
@@ -167,52 +167,56 @@ public final class IllegalTypeCheck extends AbstractCheck {
     @Override
     public int[] getAcceptableTokens() {
 <span class="fc" id="L169">        return new int[] {</span>
-            TokenTypes.VARIABLE_DEF,
-            TokenTypes.PARAMETER_DEF,
-            TokenTypes.METHOD_DEF,
+            TokenTypes.ANNOTATION_FIELD_DEF,
             TokenTypes.IMPORT,
+            TokenTypes.METHOD_CALL,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.METHOD_REF,
+            TokenTypes.PARAMETER_DEF,
+            TokenTypes.VARIABLE_DEF,
         };
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L179">        illegalShortClassNames.clear();</span>
+<span class="fc" id="L182">        illegalShortClassNames.clear();</span>
 
-<span class="fc bfc" id="L181" title="All 2 branches covered.">        for (String s : illegalClassNames) {</span>
-<span class="fc bfc" id="L182" title="All 2 branches covered.">            if (s.indexOf('.') == -1) {</span>
-<span class="fc" id="L183">                illegalShortClassNames.add(s);</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        for (String s : illegalClassNames) {</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">            if (s.indexOf('.') == -1) {</span>
+<span class="fc" id="L186">                illegalShortClassNames.add(s);</span>
             }
-<span class="fc" id="L185">        }</span>
-<span class="fc" id="L186">    }</span>
+<span class="fc" id="L188">        }</span>
+<span class="fc" id="L189">    }</span>
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L190">        return new int[] {TokenTypes.IMPORT};</span>
+<span class="fc" id="L193">        return new int[] {TokenTypes.IMPORT};</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L195" title="All 5 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L198" title="All 6 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.METHOD_CALL:
+            case TokenTypes.METHOD_REF:
+<span class="fc" id="L201">                visitMethodCallOrRef(ast);</span>
+<span class="fc" id="L202">                break;</span>
             case TokenTypes.METHOD_DEF:
-<span class="fc bfc" id="L197" title="All 2 branches covered.">                if (isVerifiable(ast)) {</span>
-<span class="fc" id="L198">                    visitMethodDef(ast);</span>
-                }
-                break;
+<span class="fc" id="L204">                visitMethodDef(ast);</span>
+<span class="fc" id="L205">                break;</span>
             case TokenTypes.VARIABLE_DEF:
-<span class="fc bfc" id="L202" title="All 2 branches covered.">                if (isVerifiable(ast)) {</span>
-<span class="fc" id="L203">                    visitVariableDef(ast);</span>
-                }
-                break;
+            case TokenTypes.ANNOTATION_FIELD_DEF:
+<span class="fc" id="L208">                visitVariableDef(ast);</span>
+<span class="fc" id="L209">                break;</span>
             case TokenTypes.PARAMETER_DEF:
-<span class="fc" id="L207">                visitParameterDef(ast);</span>
-<span class="fc" id="L208">                break;</span>
+<span class="fc" id="L211">                visitParameterDef(ast);</span>
+<span class="fc" id="L212">                break;</span>
             case TokenTypes.IMPORT:
-<span class="fc" id="L210">                visitImport(ast);</span>
-<span class="fc" id="L211">                break;</span>
+<span class="fc" id="L214">                visitImport(ast);</span>
+<span class="fc" id="L215">                break;</span>
             default:
-<span class="fc" id="L213">                throw new IllegalStateException(ast.toString());</span>
+<span class="fc" id="L217">                throw new IllegalStateException(ast.toString());</span>
         }
-<span class="fc" id="L215">    }</span>
+<span class="fc" id="L219">    }</span>
 
     /**
      * Checks if current method's return type or variable's type is verifiable
@@ -221,13 +225,13 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @return true if member is verifiable according to &lt;b&gt;memberModifiers&lt;/b&gt; option.
      */
     private boolean isVerifiable(DetailAST methodOrVariableDef) {
-<span class="fc" id="L224">        boolean result = true;</span>
-<span class="fc bfc" id="L225" title="All 2 branches covered.">        if (memberModifiers != null) {</span>
-<span class="fc" id="L226">            final DetailAST modifiersAst = methodOrVariableDef</span>
-<span class="fc" id="L227">                    .findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L228">            result = isContainVerifiableType(modifiersAst);</span>
+<span class="fc" id="L228">        boolean result = true;</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">        if (memberModifiers != null) {</span>
+<span class="fc" id="L230">            final DetailAST modifiersAst = methodOrVariableDef</span>
+<span class="fc" id="L231">                    .findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L232">            result = isContainVerifiableType(modifiersAst);</span>
         }
-<span class="fc" id="L230">        return result;</span>
+<span class="fc" id="L234">        return result;</span>
     }
 
     /**
@@ -238,17 +242,17 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @return true if method or variable can be verified
      */
     private boolean isContainVerifiableType(DetailAST modifiers) {
-<span class="fc" id="L241">        boolean result = false;</span>
-<span class="fc bfc" id="L242" title="All 2 branches covered.">        if (modifiers.getFirstChild() != null) {</span>
-<span class="fc bfc" id="L243" title="All 2 branches covered.">            for (DetailAST modifier = modifiers.getFirstChild(); modifier != null;</span>
-<span class="fc" id="L244">                     modifier = modifier.getNextSibling()) {</span>
-<span class="fc bfc" id="L245" title="All 2 branches covered.">                if (memberModifiers.contains(modifier.getType())) {</span>
-<span class="fc" id="L246">                    result = true;</span>
-<span class="fc" id="L247">                    break;</span>
+<span class="fc" id="L245">        boolean result = false;</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">        if (modifiers.getFirstChild() != null) {</span>
+<span class="fc bfc" id="L247" title="All 2 branches covered.">            for (DetailAST modifier = modifiers.getFirstChild(); modifier != null;</span>
+<span class="fc" id="L248">                     modifier = modifier.getNextSibling()) {</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">                if (memberModifiers.contains(modifier.getType())) {</span>
+<span class="fc" id="L250">                    result = true;</span>
+<span class="fc" id="L251">                    break;</span>
                 }
             }
         }
-<span class="fc" id="L251">        return result;</span>
+<span class="fc" id="L255">        return result;</span>
     }
 
     /**
@@ -256,31 +260,41 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @param methodDef method for check.
      */
     private void visitMethodDef(DetailAST methodDef) {
-<span class="fc bfc" id="L259" title="All 2 branches covered.">        if (isCheckedMethod(methodDef)) {</span>
-<span class="fc" id="L260">            checkClassName(methodDef);</span>
+<span class="fc bfc" id="L263" title="All 4 branches covered.">        if (isVerifiable(methodDef) &amp;&amp; isCheckedMethod(methodDef)) {</span>
+<span class="fc" id="L264">            checkClassName(methodDef);</span>
         }
-<span class="fc" id="L262">    }</span>
+<span class="fc" id="L266">    }</span>
 
     /**
      * Checks type of parameters.
      * @param parameterDef parameter list for check.
      */
     private void visitParameterDef(DetailAST parameterDef) {
-<span class="fc" id="L269">        final DetailAST grandParentAST = parameterDef.getParent().getParent();</span>
+<span class="fc" id="L273">        final DetailAST grandParentAST = parameterDef.getParent().getParent();</span>
 
-<span class="fc bfc" id="L271" title="All 2 branches covered.">        if (grandParentAST.getType() == TokenTypes.METHOD_DEF</span>
-<span class="fc bfc" id="L272" title="All 2 branches covered.">            &amp;&amp; isCheckedMethod(grandParentAST)) {</span>
-<span class="fc" id="L273">            checkClassName(parameterDef);</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">        if (grandParentAST.getType() == TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">            &amp;&amp; isCheckedMethod(grandParentAST)) {</span>
+<span class="fc" id="L277">            checkClassName(parameterDef);</span>
         }
-<span class="fc" id="L275">    }</span>
+<span class="fc" id="L279">    }</span>
 
     /**
      * Checks type of given variable.
      * @param variableDef variable to check.
      */
     private void visitVariableDef(DetailAST variableDef) {
-<span class="fc" id="L282">        checkClassName(variableDef);</span>
-<span class="fc" id="L283">    }</span>
+<span class="fc bfc" id="L286" title="All 2 branches covered.">        if (isVerifiable(variableDef)) {</span>
+<span class="fc" id="L287">            checkClassName(variableDef);</span>
+        }
+<span class="fc" id="L289">    }</span>
+
+    /**
+     * Checks the type arguments of given method call/reference.
+     * @param methodCallOrRef method call/reference to check.
+     */
+    private void visitMethodCallOrRef(DetailAST methodCallOrRef) {
+<span class="fc" id="L296">        checkTypeArguments(methodCallOrRef);</span>
+<span class="fc" id="L297">    }</span>
 
     /**
      * Checks imported type (as static and star imports are not supported by Check,
@@ -289,11 +303,11 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @param importAst {@link TokenTypes#IMPORT Import}
      */
     private void visitImport(DetailAST importAst) {
-<span class="fc bfc" id="L292" title="All 2 branches covered.">        if (!isStarImport(importAst)) {</span>
-<span class="fc" id="L293">            final String canonicalName = getImportedTypeCanonicalName(importAst);</span>
-<span class="fc" id="L294">            extendIllegalClassNamesWithShortName(canonicalName);</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">        if (!isStarImport(importAst)) {</span>
+<span class="fc" id="L307">            final String canonicalName = getImportedTypeCanonicalName(importAst);</span>
+<span class="fc" id="L308">            extendIllegalClassNamesWithShortName(canonicalName);</span>
         }
-<span class="fc" id="L296">    }</span>
+<span class="fc" id="L310">    }</span>
 
     /**
      * Checks if current import is star import. E.g.:
@@ -306,31 +320,107 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @return true if it is star import
      */
     private static boolean isStarImport(DetailAST importAst) {
-<span class="fc" id="L309">        boolean result = false;</span>
-<span class="fc" id="L310">        DetailAST toVisit = importAst;</span>
-<span class="fc bfc" id="L311" title="All 2 branches covered.">        while (toVisit != null) {</span>
-<span class="fc" id="L312">            toVisit = getNextSubTreeNode(toVisit, importAst);</span>
-<span class="fc bfc" id="L313" title="All 4 branches covered.">            if (toVisit != null &amp;&amp; toVisit.getType() == TokenTypes.STAR) {</span>
-<span class="fc" id="L314">                result = true;</span>
-<span class="fc" id="L315">                break;</span>
+<span class="fc" id="L323">        boolean result = false;</span>
+<span class="fc" id="L324">        DetailAST toVisit = importAst;</span>
+<span class="fc bfc" id="L325" title="All 2 branches covered.">        while (toVisit != null) {</span>
+<span class="fc" id="L326">            toVisit = getNextSubTreeNode(toVisit, importAst);</span>
+<span class="fc bfc" id="L327" title="All 4 branches covered.">            if (toVisit != null &amp;&amp; toVisit.getType() == TokenTypes.STAR) {</span>
+<span class="fc" id="L328">                result = true;</span>
+<span class="fc" id="L329">                break;</span>
             }
         }
-<span class="fc" id="L318">        return result;</span>
+<span class="fc" id="L332">        return result;</span>
     }
 
     /**
-     * Checks type of given method, parameter or variable.
+     * Checks type and type arguments/parameters of given method, parameter, variable or
+     * method call/reference.
      * @param ast node to check.
      */
     private void checkClassName(DetailAST ast) {
-<span class="fc" id="L326">        final DetailAST type = ast.findFirstToken(TokenTypes.TYPE);</span>
-<span class="fc" id="L327">        final FullIdent ident = FullIdent.createFullIdent(type.getFirstChild());</span>
+<span class="fc" id="L341">        final DetailAST type = ast.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L342">        checkType(type);</span>
+<span class="fc" id="L343">        checkTypeParameters(ast);</span>
+<span class="fc" id="L344">    }</span>
 
-<span class="fc bfc" id="L329" title="All 2 branches covered.">        if (isMatchingClassName(ident.getText())) {</span>
-<span class="fc" id="L330">            log(ident.getLineNo(), ident.getColumnNo(),</span>
-<span class="fc" id="L331">                MSG_KEY, ident.getText());</span>
+    /**
+     * Checks the identifier of the given type.
+     * @param type node to check.
+     */
+    private void checkIdent(DetailAST type) {
+<span class="fc" id="L351">        final FullIdent ident = FullIdent.createFullIdentBelow(type);</span>
+<span class="fc bfc" id="L352" title="All 2 branches covered.">        if (isMatchingClassName(ident.getText())) {</span>
+<span class="fc" id="L353">            log(ident.getDetailAst(), MSG_KEY, ident.getText());</span>
         }
-<span class="fc" id="L333">    }</span>
+<span class="fc" id="L355">    }</span>
+
+    /**
+     * Checks the given type, its arguments and parameters.
+     * @param type node to check.
+     */
+    private void checkType(DetailAST type) {
+<span class="fc" id="L362">        checkIdent(type);</span>
+<span class="fc" id="L363">        checkTypeArguments(type);</span>
+<span class="fc" id="L364">        checkTypeBounds(type);</span>
+<span class="fc" id="L365">    }</span>
+
+    /**
+     * Checks the upper and lower bounds for the given type.
+     * @param type node to check.
+     */
+    private void checkTypeBounds(DetailAST type) {
+<span class="fc" id="L372">        final DetailAST upperBounds = type.findFirstToken(TokenTypes.TYPE_UPPER_BOUNDS);</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">        if (upperBounds != null) {</span>
+<span class="fc" id="L374">            checkType(upperBounds);</span>
+        }
+<span class="fc" id="L376">        final DetailAST lowerBounds = type.findFirstToken(TokenTypes.TYPE_LOWER_BOUNDS);</span>
+<span class="fc bfc" id="L377" title="All 2 branches covered.">        if (lowerBounds != null) {</span>
+<span class="fc" id="L378">            checkType(lowerBounds);</span>
+        }
+<span class="fc" id="L380">    }</span>
+
+    /**
+     * Checks the type parameters of the node.
+     * @param node node to check.
+     */
+    private void checkTypeParameters(final DetailAST node) {
+<span class="fc" id="L387">        final DetailAST typeParameters = node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">        if (typeParameters != null) {</span>
+<span class="fc" id="L389">            final DetailAST typeParameter =</span>
+<span class="fc" id="L390">                    typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
+<span class="fc" id="L391">            checkType(typeParameter);</span>
+<span class="fc" id="L392">            DetailAST sibling = typeParameter.getNextSibling();</span>
+<span class="fc bfc" id="L393" title="All 2 branches covered.">            while (sibling != null) {</span>
+<span class="fc bfc" id="L394" title="All 2 branches covered.">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
+<span class="fc" id="L395">                    checkType(sibling);</span>
+                }
+<span class="fc" id="L397">                sibling = sibling.getNextSibling();</span>
+            }
+        }
+<span class="fc" id="L400">    }</span>
+
+    /**
+     * Checks the type arguments of the node.
+     * @param node node to check.
+     */
+    private void checkTypeArguments(final DetailAST node) {
+<span class="fc" id="L407">        DetailAST typeArguments = node.findFirstToken(TokenTypes.TYPE_ARGUMENTS);</span>
+<span class="fc bfc" id="L408" title="All 2 branches covered.">        if (typeArguments == null) {</span>
+<span class="fc" id="L409">            typeArguments = node.getFirstChild().findFirstToken(TokenTypes.TYPE_ARGUMENTS);</span>
+        }
+
+<span class="fc bfc" id="L412" title="All 2 branches covered.">        if (typeArguments != null) {</span>
+<span class="fc" id="L413">            final DetailAST typeArgument = typeArguments.findFirstToken(TokenTypes.TYPE_ARGUMENT);</span>
+<span class="fc" id="L414">            checkType(typeArgument);</span>
+<span class="fc" id="L415">            DetailAST sibling = typeArgument.getNextSibling();</span>
+<span class="fc bfc" id="L416" title="All 2 branches covered.">            while (sibling != null) {</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">                if (sibling.getType() == TokenTypes.TYPE_ARGUMENT) {</span>
+<span class="fc" id="L418">                    checkType(sibling);</span>
+                }
+<span class="fc" id="L420">                sibling = sibling.getNextSibling();</span>
+            }
+        }
+<span class="fc" id="L423">    }</span>
 
     /**
      * Returns true if given class name is one of illegal classes or else false.
@@ -339,12 +429,12 @@ public final class IllegalTypeCheck extends AbstractCheck {
      *         or if it matches to abstract class names pattern.
      */
     private boolean isMatchingClassName(String className) {
-<span class="fc" id="L342">        final String shortName = className.substring(className.lastIndexOf('.') + 1);</span>
-<span class="fc bfc" id="L343" title="All 2 branches covered.">        return illegalClassNames.contains(className)</span>
-<span class="fc bfc" id="L344" title="All 4 branches covered.">                || illegalShortClassNames.contains(shortName)</span>
+<span class="fc" id="L432">        final String shortName = className.substring(className.lastIndexOf('.') + 1);</span>
+<span class="fc bfc" id="L433" title="All 2 branches covered.">        return illegalClassNames.contains(className)</span>
+<span class="fc bfc" id="L434" title="All 4 branches covered.">                || illegalShortClassNames.contains(shortName)</span>
                 || validateAbstractClassNames
-<span class="fc bfc" id="L346" title="All 2 branches covered.">                    &amp;&amp; !legalAbstractClassNames.contains(className)</span>
-<span class="fc bfc" id="L347" title="All 2 branches covered.">                    &amp;&amp; format.matcher(className).find();</span>
+<span class="fc bfc" id="L436" title="All 2 branches covered.">                    &amp;&amp; !legalAbstractClassNames.contains(className)</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">                    &amp;&amp; format.matcher(className).find();</span>
     }
 
     /**
@@ -354,12 +444,12 @@ public final class IllegalTypeCheck extends AbstractCheck {
      *  Canonical&lt;/a&gt; name of imported type.
      */
     private void extendIllegalClassNamesWithShortName(String canonicalName) {
-<span class="fc bfc" id="L357" title="All 2 branches covered.">        if (illegalClassNames.contains(canonicalName)) {</span>
-<span class="fc" id="L358">            final String shortName = canonicalName</span>
-<span class="fc" id="L359">                .substring(canonicalName.lastIndexOf('.') + 1);</span>
-<span class="fc" id="L360">            illegalShortClassNames.add(shortName);</span>
+<span class="fc bfc" id="L447" title="All 2 branches covered.">        if (illegalClassNames.contains(canonicalName)) {</span>
+<span class="fc" id="L448">            final String shortName = canonicalName</span>
+<span class="fc" id="L449">                .substring(canonicalName.lastIndexOf('.') + 1);</span>
+<span class="fc" id="L450">            illegalShortClassNames.add(shortName);</span>
         }
-<span class="fc" id="L362">    }</span>
+<span class="fc" id="L452">    }</span>
 
     /**
      * Gets imported type's
@@ -369,19 +459,19 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @return Imported canonical type's name.
      */
     private static String getImportedTypeCanonicalName(DetailAST importAst) {
-<span class="fc" id="L372">        final StringBuilder canonicalNameBuilder = new StringBuilder(256);</span>
-<span class="fc" id="L373">        DetailAST toVisit = importAst;</span>
-<span class="fc bfc" id="L374" title="All 2 branches covered.">        while (toVisit != null) {</span>
-<span class="fc" id="L375">            toVisit = getNextSubTreeNode(toVisit, importAst);</span>
-<span class="fc bfc" id="L376" title="All 4 branches covered.">            if (toVisit != null &amp;&amp; toVisit.getType() == TokenTypes.IDENT) {</span>
-<span class="fc" id="L377">                canonicalNameBuilder.append(toVisit.getText());</span>
-<span class="fc" id="L378">                final DetailAST nextSubTreeNode = getNextSubTreeNode(toVisit, importAst);</span>
-<span class="fc bfc" id="L379" title="All 2 branches covered.">                if (nextSubTreeNode.getType() != TokenTypes.SEMI) {</span>
-<span class="fc" id="L380">                    canonicalNameBuilder.append('.');</span>
+<span class="fc" id="L462">        final StringBuilder canonicalNameBuilder = new StringBuilder(256);</span>
+<span class="fc" id="L463">        DetailAST toVisit = importAst;</span>
+<span class="fc bfc" id="L464" title="All 2 branches covered.">        while (toVisit != null) {</span>
+<span class="fc" id="L465">            toVisit = getNextSubTreeNode(toVisit, importAst);</span>
+<span class="fc bfc" id="L466" title="All 4 branches covered.">            if (toVisit != null &amp;&amp; toVisit.getType() == TokenTypes.IDENT) {</span>
+<span class="fc" id="L467">                canonicalNameBuilder.append(toVisit.getText());</span>
+<span class="fc" id="L468">                final DetailAST nextSubTreeNode = getNextSubTreeNode(toVisit, importAst);</span>
+<span class="fc bfc" id="L469" title="All 2 branches covered.">                if (nextSubTreeNode.getType() != TokenTypes.SEMI) {</span>
+<span class="fc" id="L470">                    canonicalNameBuilder.append('.');</span>
                 }
-<span class="fc" id="L382">            }</span>
+<span class="fc" id="L472">            }</span>
         }
-<span class="fc" id="L384">        return canonicalNameBuilder.toString();</span>
+<span class="fc" id="L474">        return canonicalNameBuilder.toString();</span>
     }
 
     /**
@@ -394,18 +484,18 @@ public final class IllegalTypeCheck extends AbstractCheck {
      */
     private static DetailAST
         getNextSubTreeNode(DetailAST currentNodeAst, DetailAST subTreeRootAst) {
-<span class="fc" id="L397">        DetailAST currentNode = currentNodeAst;</span>
-<span class="fc" id="L398">        DetailAST toVisitAst = currentNode.getFirstChild();</span>
-<span class="fc bfc" id="L399" title="All 2 branches covered.">        while (toVisitAst == null) {</span>
-<span class="fc" id="L400">            toVisitAst = currentNode.getNextSibling();</span>
-<span class="fc bfc" id="L401" title="All 2 branches covered.">            if (toVisitAst == null) {</span>
-<span class="fc bfc" id="L402" title="All 2 branches covered.">                if (currentNode.getParent().equals(subTreeRootAst)) {</span>
-<span class="fc" id="L403">                    break;</span>
+<span class="fc" id="L487">        DetailAST currentNode = currentNodeAst;</span>
+<span class="fc" id="L488">        DetailAST toVisitAst = currentNode.getFirstChild();</span>
+<span class="fc bfc" id="L489" title="All 2 branches covered.">        while (toVisitAst == null) {</span>
+<span class="fc" id="L490">            toVisitAst = currentNode.getNextSibling();</span>
+<span class="fc bfc" id="L491" title="All 2 branches covered.">            if (toVisitAst == null) {</span>
+<span class="fc bfc" id="L492" title="All 2 branches covered.">                if (currentNode.getParent().equals(subTreeRootAst)) {</span>
+<span class="fc" id="L493">                    break;</span>
                 }
-<span class="fc" id="L405">                currentNode = currentNode.getParent();</span>
+<span class="fc" id="L495">                currentNode = currentNode.getParent();</span>
             }
         }
-<span class="fc" id="L408">        return toVisitAst;</span>
+<span class="fc" id="L498">        return toVisitAst;</span>
     }
 
     /**
@@ -414,9 +504,9 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @return true if we should check this method.
      */
     private boolean isCheckedMethod(DetailAST ast) {
-<span class="fc" id="L417">        final String methodName =</span>
-<span class="fc" id="L418">            ast.findFirstToken(TokenTypes.IDENT).getText();</span>
-<span class="fc bfc" id="L419" title="All 2 branches covered.">        return !ignoredMethodNames.contains(methodName);</span>
+<span class="fc" id="L507">        final String methodName =</span>
+<span class="fc" id="L508">            ast.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc bfc" id="L509" title="All 2 branches covered.">        return !ignoredMethodNames.contains(methodName);</span>
     }
 
     /**
@@ -425,9 +515,9 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @noinspection WeakerAccess
      */
     public void setIllegalClassNames(String... classNames) {
-<span class="fc" id="L428">        illegalClassNames.clear();</span>
-<span class="fc" id="L429">        Collections.addAll(illegalClassNames, classNames);</span>
-<span class="fc" id="L430">    }</span>
+<span class="fc" id="L518">        illegalClassNames.clear();</span>
+<span class="fc" id="L519">        Collections.addAll(illegalClassNames, classNames);</span>
+<span class="fc" id="L520">    }</span>
 
     /**
      * Set the list of ignore method names.
@@ -435,9 +525,9 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @noinspection WeakerAccess
      */
     public void setIgnoredMethodNames(String... methodNames) {
-<span class="fc" id="L438">        ignoredMethodNames.clear();</span>
-<span class="fc" id="L439">        Collections.addAll(ignoredMethodNames, methodNames);</span>
-<span class="fc" id="L440">    }</span>
+<span class="fc" id="L528">        ignoredMethodNames.clear();</span>
+<span class="fc" id="L529">        Collections.addAll(ignoredMethodNames, methodNames);</span>
+<span class="fc" id="L530">    }</span>
 
     /**
      * Set the list of legal abstract class names.
@@ -445,20 +535,20 @@ public final class IllegalTypeCheck extends AbstractCheck {
      * @noinspection WeakerAccess
      */
     public void setLegalAbstractClassNames(String... classNames) {
-<span class="fc" id="L448">        Collections.addAll(legalAbstractClassNames, classNames);</span>
-<span class="fc" id="L449">    }</span>
+<span class="fc" id="L538">        Collections.addAll(legalAbstractClassNames, classNames);</span>
+<span class="fc" id="L539">    }</span>
 
     /**
      * Set the list of member modifiers (of methods and fields) which should be checked.
      * @param modifiers String contains modifiers.
      */
     public void setMemberModifiers(String modifiers) {
-<span class="fc" id="L456">        final List&lt;Integer&gt; modifiersList = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L457" title="All 2 branches covered.">        for (String modifier : modifiers.split(&quot;,&quot;)) {</span>
-<span class="fc" id="L458">            modifiersList.add(TokenUtil.getTokenId(modifier.trim()));</span>
+<span class="fc" id="L546">        final List&lt;Integer&gt; modifiersList = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L547" title="All 2 branches covered.">        for (String modifier : modifiers.split(&quot;,&quot;)) {</span>
+<span class="fc" id="L548">            modifiersList.add(TokenUtil.getTokenId(modifier.trim()));</span>
         }
-<span class="fc" id="L460">        memberModifiers = modifiersList;</span>
-<span class="fc" id="L461">    }</span>
+<span class="fc" id="L550">        memberModifiers = modifiersList;</span>
+<span class="fc" id="L551">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>
