@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SuppressWithPlainTextCommentFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.filters</a> &gt; <span class="el_source">SuppressWithPlainTextCommentFilter.java</span></div><h1>SuppressWithPlainTextCommentFilter.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.filters;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
+import com.puppycrawl.tools.checkstyle.api.AuditEvent;
+import com.puppycrawl.tools.checkstyle.api.AutomaticBean;
+import com.puppycrawl.tools.checkstyle.api.FileText;
+import com.puppycrawl.tools.checkstyle.api.Filter;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ *     A filter that uses comments to suppress audit events.
+ *     The filter can be used only to suppress audit events received from
+ *     {@link com.puppycrawl.tools.checkstyle.api.FileSetCheck} checks.
+ *     SuppressWithPlainTextCommentFilter knows nothing about AST,
+ *     it treats only plain text comments and extracts the information required for suppression from
+ *     the plain text comments. Currently the filter supports only single line comments.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ *     Rationale:
+ *     Sometimes there are legitimate reasons for violating a check. When
+ *     this is a matter of the code in question and not personal
+ *     preference, the best place to override the policy is in the code
+ *     itself.  Semi-structured comments can be associated with the check.
+ *     This is sometimes superior to a separate suppressions file, which
+ *     must be kept up-to-date as the source file is edited.
+ * &lt;/p&gt;
+ */
+<span class="fc" id="L58">public class SuppressWithPlainTextCommentFilter extends AutomaticBean implements Filter {</span>
+
+    /** Comment format which turns checkstyle reporting off. */
+    private static final String DEFAULT_OFF_FORMAT = &quot;// CHECKSTYLE:OFF&quot;;
+
+    /** Comment format which turns checkstyle reporting on. */
+    private static final String DEFAULT_ON_FORMAT = &quot;// CHECKSTYLE:ON&quot;;
+
+    /** Default check format to suppress. By default the filter suppress all checks. */
+    private static final String DEFAULT_CHECK_FORMAT = &quot;.*&quot;;
+
+    /** Regexp which turns checkstyle reporting off. */
+<span class="fc" id="L70">    private Pattern offCommentFormat = CommonUtil.createPattern(DEFAULT_OFF_FORMAT);</span>
+
+    /** Regexp which turns checkstyle reporting on. */
+<span class="fc" id="L73">    private Pattern onCommentFormat = CommonUtil.createPattern(DEFAULT_ON_FORMAT);</span>
+
+    /** The check format to suppress. */
+<span class="fc" id="L76">    private String checkFormat = DEFAULT_CHECK_FORMAT;</span>
+
+    /** The message format to suppress.*/
+    private String messageFormat;
+
+    /**
+     * Sets an off comment format pattern.
+     * @param pattern off comment format pattern.
+     */
+    public final void setOffCommentFormat(Pattern pattern) {
+<span class="fc" id="L86">        offCommentFormat = pattern;</span>
+<span class="fc" id="L87">    }</span>
+
+    /**
+     * Sets an on comment format pattern.
+     * @param pattern  on comment format pattern.
+     */
+    public final void setOnCommentFormat(Pattern pattern) {
+<span class="fc" id="L94">        onCommentFormat = pattern;</span>
+<span class="fc" id="L95">    }</span>
+
+    /**
+     * Sets a pattern for check format.
+     * @param format pattern for check format.
+     */
+    public final void setCheckFormat(String format) {
+<span class="fc" id="L102">        checkFormat = format;</span>
+<span class="fc" id="L103">    }</span>
+
+    /**
+     * Sets a pattern for message format.
+     * @param format pattern for message format.
+     */
+    public final void setMessageFormat(String format) {
+<span class="fc" id="L110">        messageFormat = format;</span>
+<span class="fc" id="L111">    }</span>
+
+    @Override
+    public boolean accept(AuditEvent event) {
+<span class="fc" id="L115">        boolean accepted = true;</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (event.getLocalizedMessage() != null) {</span>
+<span class="fc" id="L117">            final FileText fileText = getFileText(event.getFileName());</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">            if (fileText != null) {</span>
+<span class="fc" id="L119">                final List&lt;Suppression&gt; suppressions = getSuppressions(fileText);</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">                accepted = getNearestSuppression(suppressions, event) == null;</span>
+            }
+        }
+<span class="fc" id="L123">        return accepted;</span>
+    }
+
+    @Override
+    protected void finishLocalSetup() {
+        // No code by default
+<span class="fc" id="L129">    }</span>
+
+    /**
+     * Returns {@link FileText} instance created based on the given file name.
+     * @param fileName the name of the file.
+     * @return {@link FileText} instance.
+     */
+    private static FileText getFileText(String fileName) {
+<span class="fc" id="L137">        final File file = new File(fileName);</span>
+<span class="fc" id="L138">        FileText result = null;</span>
+
+        // some violations can be on a directory, instead of a file
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        if (!file.isDirectory()) {</span>
+            try {
+<span class="fc" id="L143">                result = new FileText(file, StandardCharsets.UTF_8.name());</span>
+            }
+<span class="fc" id="L145">            catch (IOException ex) {</span>
+<span class="fc" id="L146">                throw new IllegalStateException(&quot;Cannot read source file: &quot; + fileName, ex);</span>
+<span class="fc" id="L147">            }</span>
+        }
+
+<span class="fc" id="L150">        return result;</span>
+    }
+
+    /**
+     * Returns the list of {@link Suppression} instances retrieved from the given {@link FileText}.
+     * @param fileText {@link FileText} instance.
+     * @return list of {@link Suppression} instances.
+     */
+    private List&lt;Suppression&gt; getSuppressions(FileText fileText) {
+<span class="fc" id="L159">        final List&lt;Suppression&gt; suppressions = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L160" title="All 2 branches covered.">        for (int lineNo = 0; lineNo &lt; fileText.size(); lineNo++) {</span>
+<span class="fc" id="L161">            final Optional&lt;Suppression&gt; suppression = getSuppression(fileText, lineNo);</span>
+<span class="fc" id="L162">            suppression.ifPresent(suppressions::add);</span>
+        }
+<span class="fc" id="L164">        return suppressions;</span>
+    }
+
+    /**
+     * Tries to extract the suppression from the given line.
+     * @param fileText {@link FileText} instance.
+     * @param lineNo line number.
+     * @return {@link Optional} of {@link Suppression}.
+     */
+    private Optional&lt;Suppression&gt; getSuppression(FileText fileText, int lineNo) {
+<span class="fc" id="L174">        final String line = fileText.get(lineNo);</span>
+<span class="fc" id="L175">        final Matcher onCommentMatcher = onCommentFormat.matcher(line);</span>
+<span class="fc" id="L176">        final Matcher offCommentMatcher = offCommentFormat.matcher(line);</span>
+
+<span class="fc" id="L178">        Suppression suppression = null;</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">        if (onCommentMatcher.find()) {</span>
+<span class="fc" id="L180">            suppression = new Suppression(onCommentMatcher.group(0),</span>
+<span class="fc" id="L181">                lineNo + 1, onCommentMatcher.start(), SuppressionType.ON, this);</span>
+        }
+<span class="fc bfc" id="L183" title="All 2 branches covered.">        if (offCommentMatcher.find()) {</span>
+<span class="fc" id="L184">            suppression = new Suppression(offCommentMatcher.group(0),</span>
+<span class="fc" id="L185">                lineNo + 1, offCommentMatcher.start(), SuppressionType.OFF, this);</span>
+        }
+
+<span class="fc" id="L188">        return Optional.ofNullable(suppression);</span>
+    }
+
+    /**
+     * Finds the nearest {@link Suppression} instance which can suppress
+     * the given {@link AuditEvent}. The nearest suppression is the suppression which scope
+     * is before the line and column of the event.
+     * @param suppressions {@link Suppression} instance.
+     * @param event {@link AuditEvent} instance.
+     * @return {@link Suppression} instance.
+     */
+    private static Suppression getNearestSuppression(List&lt;Suppression&gt; suppressions,
+                                                     AuditEvent event) {
+<span class="fc" id="L201">        return suppressions</span>
+<span class="fc" id="L202">            .stream()</span>
+<span class="fc" id="L203">            .filter(suppression -&gt; suppression.isMatch(event))</span>
+<span class="fc" id="L204">            .reduce((first, second) -&gt; second)</span>
+<span class="fc bfc" id="L205" title="All 2 branches covered.">            .filter(suppression -&gt; suppression.suppressionType != SuppressionType.ON)</span>
+<span class="fc" id="L206">            .orElse(null);</span>
+    }
+
+    /** Enum which represents the type of the suppression. */
+<span class="fc" id="L210">    private enum SuppressionType {</span>
+
+        /** On suppression type. */
+<span class="fc" id="L213">        ON,</span>
+        /** Off suppression type. */
+<span class="fc" id="L215">        OFF,</span>
+
+    }
+
+    /** The class which represents the suppression. */
+    public static class Suppression {
+
+        /** The regexp which is used to match the event source.*/
+        private final Pattern eventSourceRegexp;
+        /** The regexp which is used to match the event message.*/
+        private final Pattern eventMessageRegexp;
+
+        /** Suppression text.*/
+        private final String text;
+        /** Suppression line.*/
+        private final int lineNo;
+        /** Suppression column number.*/
+        private final int columnNo;
+        /** Suppression type. */
+        private final SuppressionType suppressionType;
+
+        /**
+         * Creates new suppression instance.
+         * @param text suppression text.
+         * @param lineNo suppression line number.
+         * @param columnNo suppression column number.
+         * @param suppressionType suppression type.
+         * @param filter the {@link SuppressWithPlainTextCommentFilter} with the context.
+         */
+        protected Suppression(
+            String text,
+            int lineNo,
+            int columnNo,
+            SuppressionType suppressionType,
+            SuppressWithPlainTextCommentFilter filter
+<span class="fc" id="L250">        ) {</span>
+<span class="fc" id="L251">            this.text = text;</span>
+<span class="fc" id="L252">            this.lineNo = lineNo;</span>
+<span class="fc" id="L253">            this.columnNo = columnNo;</span>
+<span class="fc" id="L254">            this.suppressionType = suppressionType;</span>
+
+            //Expand regexp for check and message
+            //Does not intern Patterns with Utils.getPattern()
+<span class="fc" id="L258">            String format = &quot;&quot;;</span>
+            try {
+<span class="fc bfc" id="L260" title="All 2 branches covered.">                if (this.suppressionType == SuppressionType.ON) {</span>
+<span class="fc" id="L261">                    format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L262">                            filter.checkFormat, text, filter.onCommentFormat);</span>
+<span class="fc" id="L263">                    eventSourceRegexp = Pattern.compile(format);</span>
+<span class="fc bfc" id="L264" title="All 2 branches covered.">                    if (filter.messageFormat == null) {</span>
+<span class="fc" id="L265">                        eventMessageRegexp = null;</span>
+                    }
+                    else {
+<span class="fc" id="L268">                        format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L269">                                filter.messageFormat, text, filter.onCommentFormat);</span>
+<span class="fc" id="L270">                        eventMessageRegexp = Pattern.compile(format);</span>
+                    }
+                }
+                else {
+<span class="fc" id="L274">                    format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L275">                            filter.checkFormat, text, filter.offCommentFormat);</span>
+<span class="fc" id="L276">                    eventSourceRegexp = Pattern.compile(format);</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">                    if (filter.messageFormat == null) {</span>
+<span class="fc" id="L278">                        eventMessageRegexp = null;</span>
+                    }
+                    else {
+<span class="fc" id="L281">                        format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L282">                                filter.messageFormat, text, filter.offCommentFormat);</span>
+<span class="fc" id="L283">                        eventMessageRegexp = Pattern.compile(format);</span>
+                    }
+                }
+            }
+<span class="fc" id="L287">            catch (final PatternSyntaxException ex) {</span>
+<span class="fc" id="L288">                throw new IllegalArgumentException(</span>
+                    &quot;unable to parse expanded comment &quot; + format, ex);
+<span class="fc" id="L290">            }</span>
+<span class="fc" id="L291">        }</span>
+
+        @Override
+        public boolean equals(Object other) {
+<span class="fc bfc" id="L295" title="All 2 branches covered.">            if (this == other) {</span>
+<span class="fc" id="L296">                return true;</span>
+            }
+<span class="fc bfc" id="L298" title="All 4 branches covered.">            if (other == null || getClass() != other.getClass()) {</span>
+<span class="fc" id="L299">                return false;</span>
+            }
+<span class="fc" id="L301">            final Suppression suppression = (Suppression) other;</span>
+<span class="fc bfc" id="L302" title="All 2 branches covered.">            return Objects.equals(lineNo, suppression.lineNo)</span>
+<span class="fc bfc" id="L303" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(columnNo, suppression.columnNo)</span>
+<span class="fc bfc" id="L304" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(suppressionType, suppression.suppressionType)</span>
+<span class="fc bfc" id="L305" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(text, suppression.text)</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(eventSourceRegexp, suppression.eventSourceRegexp)</span>
+<span class="fc bfc" id="L307" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(eventMessageRegexp, suppression.eventMessageRegexp);</span>
+        }
+
+        @Override
+        public int hashCode() {
+<span class="fc" id="L312">            return Objects.hash(</span>
+<span class="fc" id="L313">                text, lineNo, columnNo, suppressionType, eventSourceRegexp, eventMessageRegexp);</span>
+        }
+
+        /**
+         * Checks whether the suppression matches the given {@link AuditEvent}.
+         * @param event {@link AuditEvent} instance.
+         * @return true if the suppression matches {@link AuditEvent}.
+         */
+        private boolean isMatch(AuditEvent event) {
+<span class="fc" id="L322">            boolean match = false;</span>
+<span class="fc bfc" id="L323" title="All 2 branches covered.">            if (isInScopeOfSuppression(event)) {</span>
+<span class="fc" id="L324">                final Matcher sourceNameMatcher = eventSourceRegexp.matcher(event.getSourceName());</span>
+<span class="fc bfc" id="L325" title="All 2 branches covered.">                if (sourceNameMatcher.find()) {</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">                    match = eventMessageRegexp == null</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">                        || eventMessageRegexp.matcher(event.getMessage()).find();</span>
+                }
+                else {
+<span class="fc bfc" id="L330" title="All 2 branches covered.">                    match = event.getModuleId() != null</span>
+<span class="fc bfc" id="L331" title="All 2 branches covered.">                        &amp;&amp; eventSourceRegexp.matcher(event.getModuleId()).find();</span>
+                }
+            }
+<span class="fc" id="L334">            return match;</span>
+        }
+
+        /**
+         * Checks whether {@link AuditEvent} is in the scope of the suppression.
+         * @param event {@link AuditEvent} instance.
+         * @return true if {@link AuditEvent} is in the scope of the suppression.
+         */
+        private boolean isInScopeOfSuppression(AuditEvent event) {
+<span class="fc bfc" id="L343" title="All 2 branches covered.">            return lineNo &lt;= event.getLine();</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

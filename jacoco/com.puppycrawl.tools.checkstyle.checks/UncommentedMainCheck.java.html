@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UncommentedMainCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks</a> &gt; <span class="el_source">UncommentedMainCheck.java</span></div><h1>UncommentedMainCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks;
+
+import java.util.Optional;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Detects uncommented main methods. Basically detects
+ * any main method, since if it is detectable
+ * that means it is uncommented.
+ *
+ * &lt;pre class=&quot;body&quot;&gt;
+ * &amp;lt;module name=&amp;quot;UncommentedMain&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ *
+ */
+@FileStatefulCheck
+<span class="fc" id="L42">public class UncommentedMainCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;uncommented.main&quot;;
+
+    /** Compiled regexp to exclude classes from check. */
+<span class="fc" id="L52">    private Pattern excludedClasses = Pattern.compile(&quot;^$&quot;);</span>
+    /** Current class name. */
+    private String currentClass;
+    /** Current package. */
+    private FullIdent packageName;
+    /** Class definition depth. */
+    private int classDepth;
+
+    /**
+     * Set the excluded classes pattern.
+     * @param excludedClasses a pattern
+     */
+    public void setExcludedClasses(Pattern excludedClasses) {
+<span class="fc" id="L65">        this.excludedClasses = excludedClasses;</span>
+<span class="fc" id="L66">    }</span>
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L70">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L75">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L80">        return new int[] {</span>
+            TokenTypes.METHOD_DEF,
+            TokenTypes.CLASS_DEF,
+            TokenTypes.PACKAGE_DEF,
+        };
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L89">        packageName = FullIdent.createFullIdent(null);</span>
+<span class="fc" id="L90">        currentClass = null;</span>
+<span class="fc" id="L91">        classDepth = 0;</span>
+<span class="fc" id="L92">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L97">            classDepth--;</span>
+        }
+<span class="fc" id="L99">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L103" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.PACKAGE_DEF:
+<span class="fc" id="L105">                visitPackageDef(ast);</span>
+<span class="fc" id="L106">                break;</span>
+            case TokenTypes.CLASS_DEF:
+<span class="fc" id="L108">                visitClassDef(ast);</span>
+<span class="fc" id="L109">                break;</span>
+            case TokenTypes.METHOD_DEF:
+<span class="fc" id="L111">                visitMethodDef(ast);</span>
+<span class="fc" id="L112">                break;</span>
+            default:
+<span class="fc" id="L114">                throw new IllegalStateException(ast.toString());</span>
+        }
+<span class="fc" id="L116">    }</span>
+
+    /**
+     * Sets current package.
+     * @param packageDef node for package definition
+     */
+    private void visitPackageDef(DetailAST packageDef) {
+<span class="fc" id="L123">        packageName = FullIdent.createFullIdent(packageDef.getLastChild()</span>
+<span class="fc" id="L124">                .getPreviousSibling());</span>
+<span class="fc" id="L125">    }</span>
+
+    /**
+     * If not inner class then change current class name.
+     * @param classDef node for class definition
+     */
+    private void visitClassDef(DetailAST classDef) {
+        // we are not use inner classes because they can not
+        // have static methods
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        if (classDepth == 0) {</span>
+<span class="fc" id="L135">            final DetailAST ident = classDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L136">            currentClass = packageName.getText() + &quot;.&quot; + ident.getText();</span>
+<span class="fc" id="L137">            classDepth++;</span>
+        }
+<span class="fc" id="L139">    }</span>
+
+    /**
+     * Checks method definition if this is
+     * {@code public static void main(String[])}.
+     * @param method method definition node
+     */
+    private void visitMethodDef(DetailAST method) {
+<span class="fc bfc" id="L147" title="All 2 branches covered.">        if (classDepth == 1</span>
+                // method not in inner class or in interface definition
+<span class="fc bfc" id="L149" title="All 2 branches covered.">                &amp;&amp; checkClassName()</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">                &amp;&amp; checkName(method)</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">                &amp;&amp; checkModifiers(method)</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">                &amp;&amp; checkType(method)</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">                &amp;&amp; checkParams(method)) {</span>
+<span class="fc" id="L154">            log(method.getLineNo(), MSG_KEY);</span>
+        }
+<span class="fc" id="L156">    }</span>
+
+    /**
+     * Checks that current class is not excluded.
+     * @return true if check passed, false otherwise
+     */
+    private boolean checkClassName() {
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        return !excludedClasses.matcher(currentClass).find();</span>
+    }
+
+    /**
+     * Checks that method name is @quot;main@quot;.
+     * @param method the METHOD_DEF node
+     * @return true if check passed, false otherwise
+     */
+    private static boolean checkName(DetailAST method) {
+<span class="fc" id="L172">        final DetailAST ident = method.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L173">        return &quot;main&quot;.equals(ident.getText());</span>
+    }
+
+    /**
+     * Checks that method has final and static modifiers.
+     * @param method the METHOD_DEF node
+     * @return true if check passed, false otherwise
+     */
+    private static boolean checkModifiers(DetailAST method) {
+<span class="fc" id="L182">        final DetailAST modifiers =</span>
+<span class="fc" id="L183">            method.findFirstToken(TokenTypes.MODIFIERS);</span>
+
+<span class="fc bfc" id="L185" title="All 2 branches covered.">        return modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+    }
+
+    /**
+     * Checks that return type is {@code void}.
+     * @param method the METHOD_DEF node
+     * @return true if check passed, false otherwise
+     */
+    private static boolean checkType(DetailAST method) {
+<span class="fc" id="L195">        final DetailAST type =</span>
+<span class="fc" id="L196">            method.findFirstToken(TokenTypes.TYPE).getFirstChild();</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">        return type.getType() == TokenTypes.LITERAL_VOID;</span>
+    }
+
+    /**
+     * Checks that method has only {@code String[]} or only {@code String...} param.
+     * @param method the METHOD_DEF node
+     * @return true if check passed, false otherwise
+     */
+    private static boolean checkParams(DetailAST method) {
+<span class="fc" id="L206">        boolean checkPassed = false;</span>
+<span class="fc" id="L207">        final DetailAST params = method.findFirstToken(TokenTypes.PARAMETERS);</span>
+
+<span class="fc bfc" id="L209" title="All 2 branches covered.">        if (params.getChildCount() == 1) {</span>
+<span class="fc" id="L210">            final DetailAST parameterType = params.getFirstChild().findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L211">            final Optional&lt;DetailAST&gt; arrayDecl = Optional.ofNullable(</span>
+<span class="fc" id="L212">                parameterType.findFirstToken(TokenTypes.ARRAY_DECLARATOR));</span>
+<span class="fc" id="L213">            final Optional&lt;DetailAST&gt; varargs = Optional.ofNullable(</span>
+<span class="fc" id="L214">                params.getFirstChild().findFirstToken(TokenTypes.ELLIPSIS));</span>
+
+<span class="fc bfc" id="L216" title="All 2 branches covered.">            if (arrayDecl.isPresent()) {</span>
+<span class="fc" id="L217">                checkPassed = isStringType(arrayDecl.get().getFirstChild());</span>
+            }
+<span class="fc bfc" id="L219" title="All 2 branches covered.">            else if (varargs.isPresent()) {</span>
+<span class="fc" id="L220">                checkPassed = isStringType(parameterType.getFirstChild());</span>
+            }
+        }
+<span class="fc" id="L223">        return checkPassed;</span>
+    }
+
+    /**
+     * Whether the type is java.lang.String.
+     * @param typeAst the type to check.
+     * @return true, if the type is java.lang.String.
+     */
+    private static boolean isStringType(DetailAST typeAst) {
+<span class="fc" id="L232">        final FullIdent type = FullIdent.createFullIdent(typeAst);</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        return &quot;String&quot;.equals(type.getText())</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">            || &quot;java.lang.String&quot;.equals(type.getText());</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

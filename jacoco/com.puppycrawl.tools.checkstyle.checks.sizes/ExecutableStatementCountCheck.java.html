@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExecutableStatementCountCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.sizes</a> &gt; <span class="el_source">ExecutableStatementCountCheck.java</span></div><h1>ExecutableStatementCountCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.sizes;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Restricts the number of executable statements to a specified limit
+ * (default = 30).
+ */
+@FileStatefulCheck
+public final class ExecutableStatementCountCheck
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;executableStatementCount&quot;;
+
+    /** Default threshold. */
+    private static final int DEFAULT_MAX = 30;
+
+    /** Stack of method contexts. */
+<span class="fc" id="L48">    private final Deque&lt;Context&gt; contextStack = new ArrayDeque&lt;&gt;();</span>
+
+    /** Threshold to report error for. */
+    private int max;
+
+    /** Current method context. */
+    private Context context;
+
+    /** Constructs a {@code ExecutableStatementCountCheck}. */
+<span class="fc" id="L57">    public ExecutableStatementCountCheck() {</span>
+<span class="fc" id="L58">        max = DEFAULT_MAX;</span>
+<span class="fc" id="L59">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L63">        return new int[] {</span>
+            TokenTypes.CTOR_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.SLIST,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L74">        return new int[] {TokenTypes.SLIST};</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L79">        return new int[] {</span>
+            TokenTypes.CTOR_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.SLIST,
+        };
+    }
+
+    /**
+     * Sets the maximum threshold.
+     * @param max the maximum threshold.
+     */
+    public void setMax(int max) {
+<span class="fc" id="L93">        this.max = max;</span>
+<span class="fc" id="L94">    }</span>
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L98">        context = new Context(null);</span>
+<span class="fc" id="L99">        contextStack.clear();</span>
+<span class="fc" id="L100">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L104" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.CTOR_DEF:
+            case TokenTypes.METHOD_DEF:
+            case TokenTypes.INSTANCE_INIT:
+            case TokenTypes.STATIC_INIT:
+<span class="fc" id="L109">                visitMemberDef(ast);</span>
+<span class="fc" id="L110">                break;</span>
+            case TokenTypes.SLIST:
+<span class="fc" id="L112">                visitSlist(ast);</span>
+<span class="fc" id="L113">                break;</span>
+            default:
+<span class="fc" id="L115">                throw new IllegalStateException(ast.toString());</span>
+        }
+<span class="fc" id="L117">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc bfc" id="L121" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.CTOR_DEF:
+            case TokenTypes.METHOD_DEF:
+            case TokenTypes.INSTANCE_INIT:
+            case TokenTypes.STATIC_INIT:
+<span class="fc" id="L126">                leaveMemberDef(ast);</span>
+<span class="fc" id="L127">                break;</span>
+            case TokenTypes.SLIST:
+                // Do nothing
+<span class="fc" id="L130">                break;</span>
+            default:
+<span class="fc" id="L132">                throw new IllegalStateException(ast.toString());</span>
+        }
+<span class="fc" id="L134">    }</span>
+
+    /**
+     * Process the start of the member definition.
+     * @param ast the token representing the member definition.
+     */
+    private void visitMemberDef(DetailAST ast) {
+<span class="fc" id="L141">        contextStack.push(context);</span>
+<span class="fc" id="L142">        context = new Context(ast);</span>
+<span class="fc" id="L143">    }</span>
+
+    /**
+     * Process the end of a member definition.
+     *
+     * @param ast the token representing the member definition.
+     */
+    private void leaveMemberDef(DetailAST ast) {
+<span class="fc" id="L151">        final int count = context.getCount();</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">        if (count &gt; max) {</span>
+<span class="fc" id="L153">            log(ast, MSG_KEY, count, max);</span>
+        }
+<span class="fc" id="L155">        context = contextStack.pop();</span>
+<span class="fc" id="L156">    }</span>
+
+    /**
+     * Process the end of a statement list.
+     *
+     * @param ast the token representing the statement list.
+     */
+    private void visitSlist(DetailAST ast) {
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (context.getAST() != null) {</span>
+            // find member AST for the statement list
+<span class="fc" id="L166">            final DetailAST contextAST = context.getAST();</span>
+<span class="fc" id="L167">            DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L168">            int type = parent.getType();</span>
+<span class="fc bfc" id="L169" title="All 8 branches covered.">            while (type != TokenTypes.CTOR_DEF</span>
+                &amp;&amp; type != TokenTypes.METHOD_DEF
+                &amp;&amp; type != TokenTypes.INSTANCE_INIT
+                &amp;&amp; type != TokenTypes.STATIC_INIT) {
+<span class="fc" id="L173">                parent = parent.getParent();</span>
+<span class="fc" id="L174">                type = parent.getType();</span>
+            }
+<span class="fc bfc" id="L176" title="All 2 branches covered.">            if (parent == contextAST) {</span>
+<span class="fc" id="L177">                context.addCount(ast.getChildCount() / 2);</span>
+            }
+        }
+<span class="fc" id="L180">    }</span>
+
+    /**
+     * Class to encapsulate counting information about one member.
+     */
+    private static class Context {
+
+        /** Member AST node. */
+        private final DetailAST ast;
+
+        /** Counter for context elements. */
+        private int count;
+
+        /**
+         * Creates new member context.
+         * @param ast member AST node.
+         */
+<span class="fc" id="L197">        Context(DetailAST ast) {</span>
+<span class="fc" id="L198">            this.ast = ast;</span>
+<span class="fc" id="L199">            count = 0;</span>
+<span class="fc" id="L200">        }</span>
+
+        /**
+         * Increase count.
+         * @param addition the count increment.
+         */
+        public void addCount(int addition) {
+<span class="fc" id="L207">            count += addition;</span>
+<span class="fc" id="L208">        }</span>
+
+        /**
+         * Gets the member AST node.
+         * @return the member AST node.
+         */
+        public DetailAST getAST() {
+<span class="fc" id="L215">            return ast;</span>
+        }
+
+        /**
+         * Gets the count.
+         * @return the count.
+         */
+        public int getCount() {
+<span class="fc" id="L223">            return count;</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

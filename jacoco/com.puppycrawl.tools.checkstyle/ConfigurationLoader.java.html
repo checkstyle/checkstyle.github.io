@@ -1,0 +1,731 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ConfigurationLoader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">ConfigurationLoader.java</span></div><h1>ConfigurationLoader.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
+import javax.xml.parsers.ParserConfigurationException;
+
+import org.xml.sax.Attributes;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.SAXParseException;
+
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.Configuration;
+import com.puppycrawl.tools.checkstyle.api.SeverityLevel;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * Loads a configuration from a standard configuration XML file.
+ *
+ */
+public final class ConfigurationLoader {
+
+    /**
+     * Enum to specify behaviour regarding ignored modules.
+     */
+<span class="fc" id="L57">    public enum IgnoredModulesOptions {</span>
+
+        /**
+         * Omit ignored modules.
+         */
+<span class="fc" id="L62">        OMIT,</span>
+
+        /**
+         * Execute ignored modules.
+         */
+<span class="fc" id="L67">        EXECUTE,</span>
+
+    }
+
+    /** Format of message for sax parse exception. */
+    private static final String SAX_PARSE_EXCEPTION_FORMAT = &quot;%s - %s:%s:%s&quot;;
+
+    /** The public ID for version 1_0 of the configuration dtd. */
+    private static final String DTD_PUBLIC_ID_1_0 =
+        &quot;-//Puppy Crawl//DTD Check Configuration 1.0//EN&quot;;
+
+    /** The new public ID for version 1_0 of the configuration dtd. */
+    private static final String DTD_PUBLIC_CS_ID_1_0 =
+        &quot;-//Checkstyle//DTD Checkstyle Configuration 1.0//EN&quot;;
+
+    /** The resource for version 1_0 of the configuration dtd. */
+    private static final String DTD_CONFIGURATION_NAME_1_0 =
+        &quot;com/puppycrawl/tools/checkstyle/configuration_1_0.dtd&quot;;
+
+    /** The public ID for version 1_1 of the configuration dtd. */
+    private static final String DTD_PUBLIC_ID_1_1 =
+        &quot;-//Puppy Crawl//DTD Check Configuration 1.1//EN&quot;;
+
+    /** The new public ID for version 1_1 of the configuration dtd. */
+    private static final String DTD_PUBLIC_CS_ID_1_1 =
+        &quot;-//Checkstyle//DTD Checkstyle Configuration 1.1//EN&quot;;
+
+    /** The resource for version 1_1 of the configuration dtd. */
+    private static final String DTD_CONFIGURATION_NAME_1_1 =
+        &quot;com/puppycrawl/tools/checkstyle/configuration_1_1.dtd&quot;;
+
+    /** The public ID for version 1_2 of the configuration dtd. */
+    private static final String DTD_PUBLIC_ID_1_2 =
+        &quot;-//Puppy Crawl//DTD Check Configuration 1.2//EN&quot;;
+
+    /** The new public ID for version 1_2 of the configuration dtd. */
+    private static final String DTD_PUBLIC_CS_ID_1_2 =
+        &quot;-//Checkstyle//DTD Checkstyle Configuration 1.2//EN&quot;;
+
+    /** The resource for version 1_2 of the configuration dtd. */
+    private static final String DTD_CONFIGURATION_NAME_1_2 =
+        &quot;com/puppycrawl/tools/checkstyle/configuration_1_2.dtd&quot;;
+
+    /** The public ID for version 1_3 of the configuration dtd. */
+    private static final String DTD_PUBLIC_ID_1_3 =
+        &quot;-//Puppy Crawl//DTD Check Configuration 1.3//EN&quot;;
+
+    /** The new public ID for version 1_3 of the configuration dtd. */
+    private static final String DTD_PUBLIC_CS_ID_1_3 =
+        &quot;-//Checkstyle//DTD Checkstyle Configuration 1.3//EN&quot;;
+
+    /** The resource for version 1_3 of the configuration dtd. */
+    private static final String DTD_CONFIGURATION_NAME_1_3 =
+        &quot;com/puppycrawl/tools/checkstyle/configuration_1_3.dtd&quot;;
+
+    /** Prefix for the exception when unable to parse resource. */
+    private static final String UNABLE_TO_PARSE_EXCEPTION_PREFIX = &quot;unable to parse&quot;
+            + &quot; configuration stream&quot;;
+
+    /** Dollar sign literal. */
+    private static final char DOLLAR_SIGN = '$';
+
+    /** The SAX document handler. */
+    private final InternalLoader saxHandler;
+
+    /** Property resolver. **/
+    private final PropertyResolver overridePropsResolver;
+    /** The loaded configurations. **/
+<span class="fc" id="L135">    private final Deque&lt;DefaultConfiguration&gt; configStack = new ArrayDeque&lt;&gt;();</span>
+
+    /** Flags if modules with the severity 'ignore' should be omitted. */
+    private final boolean omitIgnoredModules;
+
+    /** The thread mode configuration. */
+    private final ThreadModeSettings threadModeSettings;
+
+    /** The Configuration that is being built. */
+    private Configuration configuration;
+
+    /**
+     * Creates a new {@code ConfigurationLoader} instance.
+     * @param overrideProps resolver for overriding properties
+     * @param omitIgnoredModules {@code true} if ignored modules should be
+     *         omitted
+     * @param threadModeSettings the thread mode configuration
+     * @throws ParserConfigurationException if an error occurs
+     * @throws SAXException if an error occurs
+     */
+    private ConfigurationLoader(final PropertyResolver overrideProps,
+                                final boolean omitIgnoredModules,
+                                final ThreadModeSettings threadModeSettings)
+<span class="fc" id="L158">            throws ParserConfigurationException, SAXException {</span>
+<span class="fc" id="L159">        saxHandler = new InternalLoader();</span>
+<span class="fc" id="L160">        overridePropsResolver = overrideProps;</span>
+<span class="fc" id="L161">        this.omitIgnoredModules = omitIgnoredModules;</span>
+<span class="fc" id="L162">        this.threadModeSettings = threadModeSettings;</span>
+<span class="fc" id="L163">    }</span>
+
+    /**
+     * Creates mapping between local resources and dtd ids.
+     * @return map between local resources and dtd ids.
+     */
+    private static Map&lt;String, String&gt; createIdToResourceNameMap() {
+<span class="fc" id="L170">        final Map&lt;String, String&gt; map = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L171">        map.put(DTD_PUBLIC_ID_1_0, DTD_CONFIGURATION_NAME_1_0);</span>
+<span class="fc" id="L172">        map.put(DTD_PUBLIC_ID_1_1, DTD_CONFIGURATION_NAME_1_1);</span>
+<span class="fc" id="L173">        map.put(DTD_PUBLIC_ID_1_2, DTD_CONFIGURATION_NAME_1_2);</span>
+<span class="fc" id="L174">        map.put(DTD_PUBLIC_ID_1_3, DTD_CONFIGURATION_NAME_1_3);</span>
+<span class="fc" id="L175">        map.put(DTD_PUBLIC_CS_ID_1_0, DTD_CONFIGURATION_NAME_1_0);</span>
+<span class="fc" id="L176">        map.put(DTD_PUBLIC_CS_ID_1_1, DTD_CONFIGURATION_NAME_1_1);</span>
+<span class="fc" id="L177">        map.put(DTD_PUBLIC_CS_ID_1_2, DTD_CONFIGURATION_NAME_1_2);</span>
+<span class="fc" id="L178">        map.put(DTD_PUBLIC_CS_ID_1_3, DTD_CONFIGURATION_NAME_1_3);</span>
+<span class="fc" id="L179">        return map;</span>
+    }
+
+    /**
+     * Parses the specified input source loading the configuration information.
+     * The stream wrapped inside the source, if any, is NOT
+     * explicitly closed after parsing, it is the responsibility of
+     * the caller to close the stream.
+     *
+     * @param source the source that contains the configuration data
+     * @throws IOException if an error occurs
+     * @throws SAXException if an error occurs
+     */
+    private void parseInputSource(InputSource source)
+            throws IOException, SAXException {
+<span class="fc" id="L194">        saxHandler.parseInputSource(source);</span>
+<span class="fc" id="L195">    }</span>
+
+    /**
+     * Returns the module configurations in a specified file.
+     * @param config location of config file, can be either a URL or a filename
+     * @param overridePropsResolver overriding properties
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     */
+    public static Configuration loadConfiguration(String config,
+            PropertyResolver overridePropsResolver) throws CheckstyleException {
+<span class="fc" id="L206">        return loadConfiguration(config, overridePropsResolver, IgnoredModulesOptions.EXECUTE);</span>
+    }
+
+    /**
+     * Returns the module configurations in a specified file.
+     * @param config location of config file, can be either a URL or a filename
+     * @param overridePropsResolver overriding properties
+     * @param threadModeSettings the thread mode configuration
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     */
+    public static Configuration loadConfiguration(String config,
+            PropertyResolver overridePropsResolver, ThreadModeSettings threadModeSettings)
+            throws CheckstyleException {
+<span class="fc" id="L220">        return loadConfiguration(config, overridePropsResolver,</span>
+                IgnoredModulesOptions.EXECUTE, threadModeSettings);
+    }
+
+    /**
+     * Returns the module configurations in a specified file.
+     *
+     * @param config location of config file, can be either a URL or a filename
+     * @param overridePropsResolver overriding properties
+     * @param omitIgnoredModules {@code true} if modules with severity
+     *            'ignore' should be omitted, {@code false} otherwise
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     * @deprecated in order to fulfill demands of BooleanParameter IDEA check.
+     * @noinspection BooleanParameter
+     */
+    @Deprecated
+    public static Configuration loadConfiguration(String config,
+        PropertyResolver overridePropsResolver, boolean omitIgnoredModules)
+            throws CheckstyleException {
+<span class="fc" id="L240">        return loadConfiguration(config, overridePropsResolver, omitIgnoredModules,</span>
+                ThreadModeSettings.SINGLE_THREAD_MODE_INSTANCE);
+    }
+
+    /**
+     * Returns the module configurations in a specified file.
+     *
+     * @param config location of config file, can be either a URL or a filename
+     * @param overridePropsResolver overriding properties
+     * @param omitIgnoredModules {@code true} if modules with severity
+     *            'ignore' should be omitted, {@code false} otherwise
+     * @param threadModeSettings the thread mode configuration
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     * @deprecated in order to fulfill demands of BooleanParameter IDEA check.
+     * @noinspection BooleanParameter, WeakerAccess
+     */
+    @Deprecated
+    public static Configuration loadConfiguration(String config,
+            PropertyResolver overridePropsResolver,
+            boolean omitIgnoredModules, ThreadModeSettings threadModeSettings)
+            throws CheckstyleException {
+        // figure out if this is a File or a URL
+<span class="fc" id="L263">        final URI uri = CommonUtil.getUriByFilename(config);</span>
+<span class="fc" id="L264">        final InputSource source = new InputSource(uri.toString());</span>
+<span class="fc" id="L265">        return loadConfiguration(source, overridePropsResolver,</span>
+                omitIgnoredModules, threadModeSettings);
+    }
+
+    /**
+     * Returns the module configurations from a specified input stream.
+     * Note that clients are required to close the given stream by themselves
+     *
+     * @param configStream the input stream to the Checkstyle configuration
+     * @param overridePropsResolver overriding properties
+     * @param omitIgnoredModules {@code true} if modules with severity
+     *            'ignore' should be omitted, {@code false} otherwise
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     *
+     * @deprecated As this method does not provide a valid system ID,
+     *     preventing resolution of external entities, a
+     *     {@link #loadConfiguration(InputSource,PropertyResolver,boolean)
+     *          version using an InputSource}
+     *     should be used instead
+     * @noinspection BooleanParameter
+     */
+    @Deprecated
+    public static Configuration loadConfiguration(InputStream configStream,
+        PropertyResolver overridePropsResolver, boolean omitIgnoredModules)
+            throws CheckstyleException {
+<span class="fc" id="L291">        return loadConfiguration(new InputSource(configStream),</span>
+                                 overridePropsResolver, omitIgnoredModules);
+    }
+
+    /**
+     * Returns the module configurations from a specified input source.
+     * Note that if the source does wrap an open byte or character
+     * stream, clients are required to close that stream by themselves
+     *
+     * @param configSource the input stream to the Checkstyle configuration
+     * @param overridePropsResolver overriding properties
+     * @param omitIgnoredModules {@code true} if modules with severity
+     *            'ignore' should be omitted, {@code false} otherwise
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     * @deprecated in order to fulfill demands of BooleanParameter IDEA check.
+     * @noinspection BooleanParameter
+     */
+    @Deprecated
+    public static Configuration loadConfiguration(InputSource configSource,
+            PropertyResolver overridePropsResolver, boolean omitIgnoredModules)
+            throws CheckstyleException {
+<span class="fc" id="L313">        return loadConfiguration(configSource, overridePropsResolver,</span>
+                omitIgnoredModules, ThreadModeSettings.SINGLE_THREAD_MODE_INSTANCE);
+    }
+
+    /**
+     * Returns the module configurations from a specified input source.
+     * Note that if the source does wrap an open byte or character
+     * stream, clients are required to close that stream by themselves
+     *
+     * @param configSource the input stream to the Checkstyle configuration
+     * @param overridePropsResolver overriding properties
+     * @param omitIgnoredModules {@code true} if modules with severity
+     *            'ignore' should be omitted, {@code false} otherwise
+     * @param threadModeSettings the thread mode configuration
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     * @deprecated in order to fulfill demands of BooleanParameter IDEA check.
+     * @noinspection BooleanParameter, WeakerAccess
+     */
+    @Deprecated
+    public static Configuration loadConfiguration(InputSource configSource,
+        PropertyResolver overridePropsResolver,
+        boolean omitIgnoredModules, ThreadModeSettings threadModeSettings)
+            throws CheckstyleException {
+        try {
+<span class="fc" id="L338">            final ConfigurationLoader loader =</span>
+                new ConfigurationLoader(overridePropsResolver,
+                                        omitIgnoredModules, threadModeSettings);
+<span class="fc" id="L341">            loader.parseInputSource(configSource);</span>
+<span class="fc" id="L342">            return loader.configuration;</span>
+        }
+<span class="fc" id="L344">        catch (final SAXParseException ex) {</span>
+<span class="fc" id="L345">            final String message = String.format(Locale.ROOT, SAX_PARSE_EXCEPTION_FORMAT,</span>
+                    UNABLE_TO_PARSE_EXCEPTION_PREFIX,
+<span class="fc" id="L347">                    ex.getMessage(), ex.getLineNumber(), ex.getColumnNumber());</span>
+<span class="fc" id="L348">            throw new CheckstyleException(message, ex);</span>
+        }
+<span class="fc" id="L350">        catch (final ParserConfigurationException | IOException | SAXException ex) {</span>
+<span class="fc" id="L351">            throw new CheckstyleException(UNABLE_TO_PARSE_EXCEPTION_PREFIX, ex);</span>
+        }
+    }
+
+    /**
+     * Returns the module configurations in a specified file.
+     *
+     * @param config location of config file, can be either a URL or a filename
+     * @param overridePropsResolver overriding properties
+     * @param ignoredModulesOptions {@code OMIT} if modules with severity
+     *            'ignore' should be omitted, {@code EXECUTE} otherwise
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     */
+    public static Configuration loadConfiguration(String config,
+                                                  PropertyResolver overridePropsResolver,
+                                                  IgnoredModulesOptions ignoredModulesOptions)
+            throws CheckstyleException {
+<span class="fc" id="L369">        return loadConfiguration(config, overridePropsResolver, ignoredModulesOptions,</span>
+                ThreadModeSettings.SINGLE_THREAD_MODE_INSTANCE);
+    }
+
+    /**
+     * Returns the module configurations in a specified file.
+     *
+     * @param config location of config file, can be either a URL or a filename
+     * @param overridePropsResolver overriding properties
+     * @param ignoredModulesOptions {@code OMIT} if modules with severity
+     *            'ignore' should be omitted, {@code EXECUTE} otherwise
+     * @param threadModeSettings the thread mode configuration
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     */
+    public static Configuration loadConfiguration(String config,
+                                                  PropertyResolver overridePropsResolver,
+                                                  IgnoredModulesOptions ignoredModulesOptions,
+                                                  ThreadModeSettings threadModeSettings)
+            throws CheckstyleException {
+        // figure out if this is a File or a URL
+<span class="fc" id="L390">        final URI uri = CommonUtil.getUriByFilename(config);</span>
+<span class="fc" id="L391">        final InputSource source = new InputSource(uri.toString());</span>
+<span class="fc" id="L392">        return loadConfiguration(source, overridePropsResolver,</span>
+                ignoredModulesOptions, threadModeSettings);
+    }
+
+    /**
+     * Returns the module configurations from a specified input source.
+     * Note that if the source does wrap an open byte or character
+     * stream, clients are required to close that stream by themselves
+     *
+     * @param configSource the input stream to the Checkstyle configuration
+     * @param overridePropsResolver overriding properties
+     * @param ignoredModulesOptions {@code OMIT} if modules with severity
+     *            'ignore' should be omitted, {@code EXECUTE} otherwise
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     */
+    public static Configuration loadConfiguration(InputSource configSource,
+                                                  PropertyResolver overridePropsResolver,
+                                                  IgnoredModulesOptions ignoredModulesOptions)
+            throws CheckstyleException {
+<span class="fc" id="L412">        return loadConfiguration(configSource, overridePropsResolver,</span>
+                ignoredModulesOptions, ThreadModeSettings.SINGLE_THREAD_MODE_INSTANCE);
+    }
+
+    /**
+     * Returns the module configurations from a specified input source.
+     * Note that if the source does wrap an open byte or character
+     * stream, clients are required to close that stream by themselves
+     *
+     * @param configSource the input stream to the Checkstyle configuration
+     * @param overridePropsResolver overriding properties
+     * @param ignoredModulesOptions {@code OMIT} if modules with severity
+     *            'ignore' should be omitted, {@code EXECUTE} otherwise
+     * @param threadModeSettings the thread mode configuration
+     * @return the check configurations
+     * @throws CheckstyleException if an error occurs
+     * @noinspection WeakerAccess
+     */
+    public static Configuration loadConfiguration(InputSource configSource,
+                                                  PropertyResolver overridePropsResolver,
+                                                  IgnoredModulesOptions ignoredModulesOptions,
+                                                  ThreadModeSettings threadModeSettings)
+            throws CheckstyleException {
+        try {
+<span class="fc bfc" id="L436" title="All 2 branches covered.">            final boolean omitIgnoreModules = ignoredModulesOptions == IgnoredModulesOptions.OMIT;</span>
+<span class="fc" id="L437">            final ConfigurationLoader loader =</span>
+                    new ConfigurationLoader(overridePropsResolver,
+                            omitIgnoreModules, threadModeSettings);
+<span class="fc" id="L440">            loader.parseInputSource(configSource);</span>
+<span class="fc" id="L441">            return loader.configuration;</span>
+        }
+<span class="fc" id="L443">        catch (final SAXParseException ex) {</span>
+<span class="fc" id="L444">            final String message = String.format(Locale.ROOT, SAX_PARSE_EXCEPTION_FORMAT,</span>
+                    UNABLE_TO_PARSE_EXCEPTION_PREFIX,
+<span class="fc" id="L446">                    ex.getMessage(), ex.getLineNumber(), ex.getColumnNumber());</span>
+<span class="fc" id="L447">            throw new CheckstyleException(message, ex);</span>
+        }
+<span class="fc" id="L449">        catch (final ParserConfigurationException | IOException | SAXException ex) {</span>
+<span class="fc" id="L450">            throw new CheckstyleException(UNABLE_TO_PARSE_EXCEPTION_PREFIX, ex);</span>
+        }
+    }
+
+    /**
+     * Replaces {@code ${xxx}} style constructions in the given value
+     * with the string value of the corresponding data types.
+     *
+     * &lt;p&gt;Code copied from ant -
+     * http://cvs.apache.org/viewcvs/jakarta-ant/src/main/org/apache/tools/ant/ProjectHelper.java
+     *
+     * @param value The string to be scanned for property references.
+     *              May be {@code null}, in which case this
+     *              method returns immediately with no effect.
+     * @param props Mapping (String to String) of property names to their
+     *              values. Must not be {@code null}.
+     * @param defaultValue default to use if one of the properties in value
+     *              cannot be resolved from props.
+     *
+     * @return the original string with the properties replaced, or
+     *         {@code null} if the original string is {@code null}.
+     * @throws CheckstyleException if the string contains an opening
+     *                           {@code ${} without a closing
+     *                           {@code }}
+     * @noinspection MethodWithMultipleReturnPoints
+     */
+    private static String replaceProperties(
+            String value, PropertyResolver props, String defaultValue)
+            throws CheckstyleException {
+<span class="fc bfc" id="L479" title="All 2 branches covered.">        if (value == null) {</span>
+<span class="fc" id="L480">            return null;</span>
+        }
+
+<span class="fc" id="L483">        final List&lt;String&gt; fragments = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L484">        final List&lt;String&gt; propertyRefs = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L485">        parsePropertyString(value, fragments, propertyRefs);</span>
+
+<span class="fc" id="L487">        final StringBuilder sb = new StringBuilder(256);</span>
+<span class="fc" id="L488">        final Iterator&lt;String&gt; fragmentsIterator = fragments.iterator();</span>
+<span class="fc" id="L489">        final Iterator&lt;String&gt; propertyRefsIterator = propertyRefs.iterator();</span>
+<span class="fc bfc" id="L490" title="All 2 branches covered.">        while (fragmentsIterator.hasNext()) {</span>
+<span class="fc" id="L491">            String fragment = fragmentsIterator.next();</span>
+<span class="fc bfc" id="L492" title="All 2 branches covered.">            if (fragment == null) {</span>
+<span class="fc" id="L493">                final String propertyName = propertyRefsIterator.next();</span>
+<span class="fc" id="L494">                fragment = props.resolve(propertyName);</span>
+<span class="fc bfc" id="L495" title="All 2 branches covered.">                if (fragment == null) {</span>
+<span class="fc bfc" id="L496" title="All 2 branches covered.">                    if (defaultValue != null) {</span>
+<span class="fc" id="L497">                        sb.replace(0, sb.length(), defaultValue);</span>
+<span class="fc" id="L498">                        break;</span>
+                    }
+<span class="fc" id="L500">                    throw new CheckstyleException(</span>
+                        &quot;Property ${&quot; + propertyName + &quot;} has not been set&quot;);
+                }
+            }
+<span class="fc" id="L504">            sb.append(fragment);</span>
+<span class="fc" id="L505">        }</span>
+
+<span class="fc" id="L507">        return sb.toString();</span>
+    }
+
+    /**
+     * Parses a string containing {@code ${xxx}} style property
+     * references into two lists. The first list is a collection
+     * of text fragments, while the other is a set of string property names.
+     * {@code null} entries in the first list indicate a property
+     * reference from the second list.
+     *
+     * &lt;p&gt;Code copied from ant -
+     * http://cvs.apache.org/viewcvs/jakarta-ant/src/main/org/apache/tools/ant/ProjectHelper.java
+     *
+     * @param value     Text to parse. Must not be {@code null}.
+     * @param fragments List to add text fragments to.
+     *                  Must not be {@code null}.
+     * @param propertyRefs List to add property names to.
+     *                     Must not be {@code null}.
+     *
+     * @throws CheckstyleException if the string contains an opening
+     *                           {@code ${} without a closing
+     *                           {@code }}
+     */
+    private static void parsePropertyString(String value,
+                                           List&lt;String&gt; fragments,
+                                           List&lt;String&gt; propertyRefs)
+            throws CheckstyleException {
+<span class="fc" id="L534">        int prev = 0;</span>
+        //search for the next instance of $ from the 'prev' position
+<span class="fc" id="L536">        int pos = value.indexOf(DOLLAR_SIGN, prev);</span>
+<span class="fc bfc" id="L537" title="All 2 branches covered.">        while (pos &gt;= 0) {</span>
+            //if there was any text before this, add it as a fragment
+<span class="fc bfc" id="L539" title="All 2 branches covered.">            if (pos &gt; 0) {</span>
+<span class="fc" id="L540">                fragments.add(value.substring(prev, pos));</span>
+            }
+            //if we are at the end of the string, we tack on a $
+            //then move past it
+<span class="fc bfc" id="L544" title="All 2 branches covered.">            if (pos == value.length() - 1) {</span>
+<span class="fc" id="L545">                fragments.add(String.valueOf(DOLLAR_SIGN));</span>
+<span class="fc" id="L546">                prev = pos + 1;</span>
+            }
+<span class="fc bfc" id="L548" title="All 2 branches covered.">            else if (value.charAt(pos + 1) == '{') {</span>
+                //property found, extract its name or bail on a typo
+<span class="fc" id="L550">                final int endName = value.indexOf('}', pos);</span>
+<span class="fc bfc" id="L551" title="All 2 branches covered.">                if (endName == -1) {</span>
+<span class="fc" id="L552">                    throw new CheckstyleException(&quot;Syntax error in property: &quot;</span>
+                                                    + value);
+                }
+<span class="fc" id="L555">                final String propertyName = value.substring(pos + 2, endName);</span>
+<span class="fc" id="L556">                fragments.add(null);</span>
+<span class="fc" id="L557">                propertyRefs.add(propertyName);</span>
+<span class="fc" id="L558">                prev = endName + 1;</span>
+<span class="fc" id="L559">            }</span>
+            else {
+<span class="fc bfc" id="L561" title="All 2 branches covered.">                if (value.charAt(pos + 1) == DOLLAR_SIGN) {</span>
+                    //backwards compatibility two $ map to one mode
+<span class="fc" id="L563">                    fragments.add(String.valueOf(DOLLAR_SIGN));</span>
+                }
+                else {
+                    //new behaviour: $X maps to $X for all values of X!='$'
+<span class="fc" id="L567">                    fragments.add(value.substring(pos, pos + 2));</span>
+                }
+<span class="fc" id="L569">                prev = pos + 2;</span>
+            }
+
+            //search for the next instance of $ from the 'prev' position
+<span class="fc" id="L573">            pos = value.indexOf(DOLLAR_SIGN, prev);</span>
+        }
+        //no more $ signs found
+        //if there is any tail to the file, append it
+<span class="fc bfc" id="L577" title="All 2 branches covered.">        if (prev &lt; value.length()) {</span>
+<span class="fc" id="L578">            fragments.add(value.substring(prev));</span>
+        }
+<span class="fc" id="L580">    }</span>
+
+    /**
+     * Implements the SAX document handler interfaces, so they do not
+     * appear in the public API of the ConfigurationLoader.
+     */
+    private final class InternalLoader
+        extends XmlLoader {
+
+        /** Module elements. */
+        private static final String MODULE = &quot;module&quot;;
+        /** Name attribute. */
+        private static final String NAME = &quot;name&quot;;
+        /** Property element. */
+        private static final String PROPERTY = &quot;property&quot;;
+        /** Value attribute. */
+        private static final String VALUE = &quot;value&quot;;
+        /** Default attribute. */
+        private static final String DEFAULT = &quot;default&quot;;
+        /** Name of the severity property. */
+        private static final String SEVERITY = &quot;severity&quot;;
+        /** Name of the message element. */
+        private static final String MESSAGE = &quot;message&quot;;
+        /** Name of the message element. */
+        private static final String METADATA = &quot;metadata&quot;;
+        /** Name of the key attribute. */
+        private static final String KEY = &quot;key&quot;;
+
+        /**
+         * Creates a new InternalLoader.
+         * @throws SAXException if an error occurs
+         * @throws ParserConfigurationException if an error occurs
+         */
+        InternalLoader()
+<span class="fc" id="L614">                throws SAXException, ParserConfigurationException {</span>
+<span class="fc" id="L615">            super(createIdToResourceNameMap());</span>
+<span class="fc" id="L616">        }</span>
+
+        @Override
+        public void startElement(String uri,
+                                 String localName,
+                                 String qName,
+                                 Attributes attributes)
+                throws SAXException {
+<span class="fc bfc" id="L624" title="All 2 branches covered.">            if (qName.equals(MODULE)) {</span>
+                //create configuration
+<span class="fc" id="L626">                final String originalName = attributes.getValue(NAME);</span>
+<span class="fc" id="L627">                final String name = threadModeSettings.resolveName(originalName);</span>
+<span class="fc" id="L628">                final DefaultConfiguration conf =</span>
+<span class="fc" id="L629">                    new DefaultConfiguration(name, threadModeSettings);</span>
+
+<span class="fc bfc" id="L631" title="All 2 branches covered.">                if (configuration == null) {</span>
+<span class="fc" id="L632">                    configuration = conf;</span>
+                }
+
+                //add configuration to it's parent
+<span class="fc bfc" id="L636" title="All 2 branches covered.">                if (!configStack.isEmpty()) {</span>
+<span class="fc" id="L637">                    final DefaultConfiguration top =</span>
+<span class="fc" id="L638">                        configStack.peek();</span>
+<span class="fc" id="L639">                    top.addChild(conf);</span>
+                }
+
+<span class="fc" id="L642">                configStack.push(conf);</span>
+<span class="fc" id="L643">            }</span>
+<span class="fc bfc" id="L644" title="All 2 branches covered.">            else if (qName.equals(PROPERTY)) {</span>
+                //extract value and name
+                final String value;
+                try {
+<span class="fc" id="L648">                    value = replaceProperties(attributes.getValue(VALUE),</span>
+<span class="fc" id="L649">                        overridePropsResolver, attributes.getValue(DEFAULT));</span>
+                }
+<span class="fc" id="L651">                catch (final CheckstyleException ex) {</span>
+                    // -@cs[IllegalInstantiation] SAXException is in the overridden method signature
+<span class="fc" id="L653">                    throw new SAXException(ex);</span>
+<span class="fc" id="L654">                }</span>
+<span class="fc" id="L655">                final String name = attributes.getValue(NAME);</span>
+
+                //add to attributes of configuration
+<span class="fc" id="L658">                final DefaultConfiguration top =</span>
+<span class="fc" id="L659">                    configStack.peek();</span>
+<span class="fc" id="L660">                top.addAttribute(name, value);</span>
+<span class="fc" id="L661">            }</span>
+<span class="fc bfc" id="L662" title="All 2 branches covered.">            else if (qName.equals(MESSAGE)) {</span>
+                //extract key and value
+<span class="fc" id="L664">                final String key = attributes.getValue(KEY);</span>
+<span class="fc" id="L665">                final String value = attributes.getValue(VALUE);</span>
+
+                //add to messages of configuration
+<span class="fc" id="L668">                final DefaultConfiguration top = configStack.peek();</span>
+<span class="fc" id="L669">                top.addMessage(key, value);</span>
+<span class="fc" id="L670">            }</span>
+            else {
+<span class="fc bfc" id="L672" title="All 2 branches covered.">                if (!qName.equals(METADATA)) {</span>
+<span class="fc" id="L673">                    throw new IllegalStateException(&quot;Unknown name:&quot; + qName + &quot;.&quot;);</span>
+                }
+            }
+<span class="fc" id="L676">        }</span>
+
+        @Override
+        public void endElement(String uri,
+                               String localName,
+                               String qName) throws SAXException {
+<span class="fc bfc" id="L682" title="All 2 branches covered.">            if (qName.equals(MODULE)) {</span>
+<span class="fc" id="L683">                final Configuration recentModule =</span>
+<span class="fc" id="L684">                    configStack.pop();</span>
+
+                // get severity attribute if it exists
+<span class="fc" id="L687">                SeverityLevel level = null;</span>
+<span class="fc bfc" id="L688" title="All 2 branches covered.">                if (containsAttribute(recentModule, SEVERITY)) {</span>
+                    try {
+<span class="fc" id="L690">                        final String severity = recentModule.getAttribute(SEVERITY);</span>
+<span class="fc" id="L691">                        level = SeverityLevel.getInstance(severity);</span>
+                    }
+<span class="fc" id="L693">                    catch (final CheckstyleException ex) {</span>
+                        // -@cs[IllegalInstantiation] SAXException is in the overridden
+                        // method signature
+<span class="fc" id="L696">                        throw new SAXException(</span>
+                                &quot;Problem during accessing '&quot; + SEVERITY + &quot;' attribute for &quot;
+<span class="fc" id="L698">                                        + recentModule.getName(), ex);</span>
+<span class="fc" id="L699">                    }</span>
+                }
+
+                // omit this module if these should be omitted and the module
+                // has the severity 'ignore'
+<span class="fc bfc" id="L704" title="All 4 branches covered.">                final boolean omitModule = omitIgnoredModules</span>
+                    &amp;&amp; level == SeverityLevel.IGNORE;
+
+<span class="fc bfc" id="L707" title="All 4 branches covered.">                if (omitModule &amp;&amp; !configStack.isEmpty()) {</span>
+<span class="fc" id="L708">                    final DefaultConfiguration parentModule =</span>
+<span class="fc" id="L709">                        configStack.peek();</span>
+<span class="fc" id="L710">                    parentModule.removeChild(recentModule);</span>
+                }
+            }
+<span class="fc" id="L713">        }</span>
+
+        /**
+         * Util method to recheck attribute in module.
+         * @param module module to check
+         * @param attributeName name of attribute in module to find
+         * @return true if attribute is present in module
+         */
+        private boolean containsAttribute(Configuration module, String attributeName) {
+<span class="fc" id="L722">            final String[] names = module.getAttributeNames();</span>
+<span class="fc" id="L723">            final Optional&lt;String&gt; result = Arrays.stream(names)</span>
+<span class="fc" id="L724">                    .filter(name -&gt; name.equals(attributeName)).findFirst();</span>
+<span class="fc" id="L725">            return result.isPresent();</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

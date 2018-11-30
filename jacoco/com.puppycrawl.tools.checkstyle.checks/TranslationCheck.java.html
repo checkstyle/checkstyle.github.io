@@ -1,0 +1,588 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TranslationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks</a> &gt; <span class="el_source">TranslationCheck.java</span></div><h1>TranslationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.puppycrawl.tools.checkstyle.Definitions;
+import com.puppycrawl.tools.checkstyle.GlobalStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
+import com.puppycrawl.tools.checkstyle.api.FileText;
+import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
+import com.puppycrawl.tools.checkstyle.api.MessageDispatcher;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ * The TranslationCheck class helps to ensure the correct translation of code by
+ * checking locale-specific resource files for consistency regarding their keys.
+ * Two locale-specific resource files describing one and the same context are consistent if they
+ * contain the same keys. TranslationCheck also can check an existence of required translations
+ * which must exist in project, if 'requiredTranslations' option is used.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Translation&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * Check has the following options:
+ *
+ * &lt;p&gt;&lt;b&gt;baseName&lt;/b&gt; - a base name regexp for resource bundles which contain message resources. It
+ * helps the check to distinguish config and localization resources. Default value is
+ * &lt;b&gt;^messages.*$&lt;/b&gt;
+ * &lt;p&gt;An example of how to configure the check to validate only bundles which base names start with
+ * &quot;ButtonLabels&quot;:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Translation&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;baseName&quot; value=&quot;^ButtonLabels.*$&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;To configure the check to check only files which have '.properties' and '.translations'
+ * extensions:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Translation&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;fileExtensions&quot; value=&quot;properties, translations&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;&lt;b&gt;requiredTranslations&lt;/b&gt; which allows to specify language codes of required translations
+ * which must exist in project. Language code is composed of the lowercase, two-letter codes as
+ * defined by &lt;a href=&quot;https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes&quot;&gt;ISO 639-1&lt;/a&gt;.
+ * Default value is &lt;b&gt;empty String Set&lt;/b&gt; which means that only the existence of
+ * default translation is checked. Note, if you specify language codes (or just one language
+ * code) of required translations the check will also check for existence of default translation
+ * files in project. ATTENTION: the check will perform the validation of ISO codes if the option
+ * is used. So, if you specify, for example, &quot;mm&quot; for language code, TranslationCheck will rise
+ * violation that the language code is incorrect.
+ * &lt;br&gt;
+ *
+ */
+@GlobalStatefulCheck
+public class TranslationCheck extends AbstractFileSetCheck {
+
+    /**
+     * A key is pointing to the warning message text for missing key
+     * in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_KEY = &quot;translation.missingKey&quot;;
+
+    /**
+     * A key is pointing to the warning message text for missing translation file
+     * in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_KEY_MISSING_TRANSLATION_FILE =
+        &quot;translation.missingTranslationFile&quot;;
+
+    /** Resource bundle which contains messages for TranslationCheck. */
+    private static final String TRANSLATION_BUNDLE =
+        &quot;com.puppycrawl.tools.checkstyle.checks.messages&quot;;
+
+    /**
+     * A key is pointing to the warning message text for wrong language code
+     * in &quot;messages.properties&quot; file.
+     */
+    private static final String WRONG_LANGUAGE_CODE_KEY = &quot;translation.wrongLanguageCode&quot;;
+
+    /**
+     * Regexp string for default translation files.
+     * For example, messages.properties.
+     */
+    private static final String DEFAULT_TRANSLATION_REGEXP = &quot;^.+\\..+$&quot;;
+
+    /**
+     * Regexp pattern for bundles names which end with language code, followed by country code and
+     * variant suffix. For example, messages_es_ES_UNIX.properties.
+     */
+<span class="fc" id="L139">    private static final Pattern LANGUAGE_COUNTRY_VARIANT_PATTERN =</span>
+<span class="fc" id="L140">        CommonUtil.createPattern(&quot;^.+\\_[a-z]{2}\\_[A-Z]{2}\\_[A-Za-z]+\\..+$&quot;);</span>
+    /**
+     * Regexp pattern for bundles names which end with language code, followed by country code
+     * suffix. For example, messages_es_ES.properties.
+     */
+<span class="fc" id="L145">    private static final Pattern LANGUAGE_COUNTRY_PATTERN =</span>
+<span class="fc" id="L146">        CommonUtil.createPattern(&quot;^.+\\_[a-z]{2}\\_[A-Z]{2}\\..+$&quot;);</span>
+    /**
+     * Regexp pattern for bundles names which end with language code suffix.
+     * For example, messages_es.properties.
+     */
+<span class="fc" id="L151">    private static final Pattern LANGUAGE_PATTERN =</span>
+<span class="fc" id="L152">        CommonUtil.createPattern(&quot;^.+\\_[a-z]{2}\\..+$&quot;);</span>
+
+    /** File name format for default translation. */
+    private static final String DEFAULT_TRANSLATION_FILE_NAME_FORMATTER = &quot;%s.%s&quot;;
+    /** File name format with language code. */
+    private static final String FILE_NAME_WITH_LANGUAGE_CODE_FORMATTER = &quot;%s_%s.%s&quot;;
+
+    /** Formatting string to form regexp to validate required translations file names. */
+    private static final String REGEXP_FORMAT_TO_CHECK_REQUIRED_TRANSLATIONS =
+        &quot;^%1$s\\_%2$s(\\_[A-Z]{2})?\\.%3$s$|^%1$s\\_%2$s\\_[A-Z]{2}\\_[A-Za-z]+\\.%3$s$&quot;;
+    /** Formatting string to form regexp to validate default translations file names. */
+    private static final String REGEXP_FORMAT_TO_CHECK_DEFAULT_TRANSLATIONS = &quot;^%s\\.%s$&quot;;
+
+    /** Logger for TranslationCheck. */
+    private final Log log;
+
+    /** The files to process. */
+<span class="fc" id="L169">    private final Set&lt;File&gt; filesToProcess = ConcurrentHashMap.newKeySet();</span>
+
+    /** The base name regexp pattern. */
+    private Pattern baseName;
+
+    /**
+     * Language codes of required translations for the check (de, pt, ja, etc).
+     */
+<span class="fc" id="L177">    private Set&lt;String&gt; requiredTranslations = new HashSet&lt;&gt;();</span>
+
+    /**
+     * Creates a new {@code TranslationCheck} instance.
+     */
+<span class="fc" id="L182">    public TranslationCheck() {</span>
+<span class="fc" id="L183">        setFileExtensions(&quot;properties&quot;);</span>
+<span class="fc" id="L184">        baseName = CommonUtil.createPattern(&quot;^messages.*$&quot;);</span>
+<span class="fc" id="L185">        log = LogFactory.getLog(TranslationCheck.class);</span>
+<span class="fc" id="L186">    }</span>
+
+    /**
+     * Sets the base name regexp pattern.
+     * @param baseName base name regexp.
+     */
+    public void setBaseName(Pattern baseName) {
+<span class="fc" id="L193">        this.baseName = baseName;</span>
+<span class="fc" id="L194">    }</span>
+
+    /**
+     * Sets language codes of required translations for the check.
+     * @param translationCodes a comma separated list of language codes.
+     */
+    public void setRequiredTranslations(String... translationCodes) {
+<span class="fc" id="L201">        requiredTranslations = Arrays.stream(translationCodes).collect(Collectors.toSet());</span>
+<span class="fc" id="L202">        validateUserSpecifiedLanguageCodes(requiredTranslations);</span>
+<span class="fc" id="L203">    }</span>
+
+    /**
+     * Validates the correctness of user specified language codes for the check.
+     * @param languageCodes user specified language codes for the check.
+     */
+    private void validateUserSpecifiedLanguageCodes(Set&lt;String&gt; languageCodes) {
+<span class="fc bfc" id="L210" title="All 2 branches covered.">        for (String code : languageCodes) {</span>
+<span class="fc bfc" id="L211" title="All 2 branches covered.">            if (!isValidLanguageCode(code)) {</span>
+<span class="fc" id="L212">                final LocalizedMessage msg = new LocalizedMessage(1, TRANSLATION_BUNDLE,</span>
+<span class="fc" id="L213">                        WRONG_LANGUAGE_CODE_KEY, new Object[] {code}, getId(), getClass(), null);</span>
+<span class="fc" id="L214">                final String exceptionMessage = String.format(Locale.ROOT,</span>
+<span class="fc" id="L215">                        &quot;%s [%s]&quot;, msg.getMessage(), TranslationCheck.class.getSimpleName());</span>
+<span class="fc" id="L216">                throw new IllegalArgumentException(exceptionMessage);</span>
+            }
+<span class="fc" id="L218">        }</span>
+<span class="fc" id="L219">    }</span>
+
+    /**
+     * Checks whether user specified language code is correct (is contained in available locales).
+     * @param userSpecifiedLanguageCode user specified language code.
+     * @return true if user specified language code is correct.
+     */
+    private static boolean isValidLanguageCode(final String userSpecifiedLanguageCode) {
+<span class="fc" id="L227">        boolean valid = false;</span>
+<span class="fc" id="L228">        final Locale[] locales = Locale.getAvailableLocales();</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">        for (Locale locale : locales) {</span>
+<span class="fc bfc" id="L230" title="All 2 branches covered.">            if (userSpecifiedLanguageCode.equals(locale.toString())) {</span>
+<span class="fc" id="L231">                valid = true;</span>
+<span class="fc" id="L232">                break;</span>
+            }
+        }
+<span class="fc" id="L235">        return valid;</span>
+    }
+
+    @Override
+    public void beginProcessing(String charset) {
+<span class="fc" id="L240">        filesToProcess.clear();</span>
+<span class="fc" id="L241">    }</span>
+
+    @Override
+    protected void processFiltered(File file, FileText fileText) {
+        // We just collecting files for processing at finishProcessing()
+<span class="fc" id="L246">        filesToProcess.add(file);</span>
+<span class="fc" id="L247">    }</span>
+
+    @Override
+    public void finishProcessing() {
+<span class="fc" id="L251">        final Set&lt;ResourceBundle&gt; bundles = groupFilesIntoBundles(filesToProcess, baseName);</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">        for (ResourceBundle currentBundle : bundles) {</span>
+<span class="fc" id="L253">            checkExistenceOfDefaultTranslation(currentBundle);</span>
+<span class="fc" id="L254">            checkExistenceOfRequiredTranslations(currentBundle);</span>
+<span class="fc" id="L255">            checkTranslationKeys(currentBundle);</span>
+<span class="fc" id="L256">        }</span>
+<span class="fc" id="L257">    }</span>
+
+    /**
+     * Checks an existence of default translation file in the resource bundle.
+     * @param bundle resource bundle.
+     */
+    private void checkExistenceOfDefaultTranslation(ResourceBundle bundle) {
+<span class="fc" id="L264">        final Optional&lt;String&gt; fileName = getMissingFileName(bundle, null);</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        if (fileName.isPresent()) {</span>
+<span class="fc" id="L266">            logMissingTranslation(bundle.getPath(), fileName.get());</span>
+        }
+<span class="fc" id="L268">    }</span>
+
+    /**
+     * Checks an existence of translation files in the resource bundle.
+     * The name of translation file begins with the base name of resource bundle which is followed
+     * by '_' and a language code (country and variant are optional), it ends with the extension
+     * suffix.
+     * @param bundle resource bundle.
+     */
+    private void checkExistenceOfRequiredTranslations(ResourceBundle bundle) {
+<span class="fc bfc" id="L278" title="All 2 branches covered.">        for (String languageCode : requiredTranslations) {</span>
+<span class="fc" id="L279">            final Optional&lt;String&gt; fileName = getMissingFileName(bundle, languageCode);</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">            if (fileName.isPresent()) {</span>
+<span class="fc" id="L281">                logMissingTranslation(bundle.getPath(), fileName.get());</span>
+            }
+<span class="fc" id="L283">        }</span>
+<span class="fc" id="L284">    }</span>
+
+    /**
+     * Returns the name of translation file which is absent in resource bundle or Guava's Optional,
+     * if there is not missing translation.
+     * @param bundle resource bundle.
+     * @param languageCode language code.
+     * @return the name of translation file which is absent in resource bundle or Guava's Optional,
+     *         if there is not missing translation.
+     */
+    private static Optional&lt;String&gt; getMissingFileName(ResourceBundle bundle, String languageCode) {
+        final String fileNameRegexp;
+        final boolean searchForDefaultTranslation;
+<span class="fc" id="L297">        final String extension = bundle.getExtension();</span>
+<span class="fc" id="L298">        final String baseName = bundle.getBaseName();</span>
+<span class="fc bfc" id="L299" title="All 2 branches covered.">        if (languageCode == null) {</span>
+<span class="fc" id="L300">            searchForDefaultTranslation = true;</span>
+<span class="fc" id="L301">            fileNameRegexp = String.format(Locale.ROOT, REGEXP_FORMAT_TO_CHECK_DEFAULT_TRANSLATIONS,</span>
+                    baseName, extension);
+        }
+        else {
+<span class="fc" id="L305">            searchForDefaultTranslation = false;</span>
+<span class="fc" id="L306">            fileNameRegexp = String.format(Locale.ROOT,</span>
+                REGEXP_FORMAT_TO_CHECK_REQUIRED_TRANSLATIONS, baseName, languageCode, extension);
+        }
+<span class="fc" id="L309">        Optional&lt;String&gt; missingFileName = Optional.empty();</span>
+<span class="fc bfc" id="L310" title="All 2 branches covered.">        if (!bundle.containsFile(fileNameRegexp)) {</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">            if (searchForDefaultTranslation) {</span>
+<span class="fc" id="L312">                missingFileName = Optional.of(String.format(Locale.ROOT,</span>
+                        DEFAULT_TRANSLATION_FILE_NAME_FORMATTER, baseName, extension));
+            }
+            else {
+<span class="fc" id="L316">                missingFileName = Optional.of(String.format(Locale.ROOT,</span>
+                        FILE_NAME_WITH_LANGUAGE_CODE_FORMATTER, baseName, languageCode, extension));
+            }
+        }
+<span class="fc" id="L320">        return missingFileName;</span>
+    }
+
+    /**
+     * Logs that translation file is missing.
+     * @param filePath file path.
+     * @param fileName file name.
+     */
+    private void logMissingTranslation(String filePath, String fileName) {
+<span class="fc" id="L329">        final MessageDispatcher dispatcher = getMessageDispatcher();</span>
+<span class="fc" id="L330">        dispatcher.fireFileStarted(filePath);</span>
+<span class="fc" id="L331">        log(1, MSG_KEY_MISSING_TRANSLATION_FILE, fileName);</span>
+<span class="fc" id="L332">        fireErrors(filePath);</span>
+<span class="fc" id="L333">        dispatcher.fireFileFinished(filePath);</span>
+<span class="fc" id="L334">    }</span>
+
+    /**
+     * Groups a set of files into bundles.
+     * Only files, which names match base name regexp pattern will be grouped.
+     * @param files set of files.
+     * @param baseNameRegexp base name regexp pattern.
+     * @return set of ResourceBundles.
+     */
+    private static Set&lt;ResourceBundle&gt; groupFilesIntoBundles(Set&lt;File&gt; files,
+                                                             Pattern baseNameRegexp) {
+<span class="fc" id="L345">        final Set&lt;ResourceBundle&gt; resourceBundles = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">        for (File currentFile : files) {</span>
+<span class="fc" id="L347">            final String fileName = currentFile.getName();</span>
+<span class="fc" id="L348">            final String baseName = extractBaseName(fileName);</span>
+<span class="fc" id="L349">            final Matcher baseNameMatcher = baseNameRegexp.matcher(baseName);</span>
+<span class="fc bfc" id="L350" title="All 2 branches covered.">            if (baseNameMatcher.matches()) {</span>
+<span class="fc" id="L351">                final String extension = CommonUtil.getFileExtension(fileName);</span>
+<span class="fc" id="L352">                final String path = getPath(currentFile.getAbsolutePath());</span>
+<span class="fc" id="L353">                final ResourceBundle newBundle = new ResourceBundle(baseName, path, extension);</span>
+<span class="fc" id="L354">                final Optional&lt;ResourceBundle&gt; bundle = findBundle(resourceBundles, newBundle);</span>
+<span class="fc bfc" id="L355" title="All 2 branches covered.">                if (bundle.isPresent()) {</span>
+<span class="fc" id="L356">                    bundle.get().addFile(currentFile);</span>
+                }
+                else {
+<span class="fc" id="L359">                    newBundle.addFile(currentFile);</span>
+<span class="fc" id="L360">                    resourceBundles.add(newBundle);</span>
+                }
+            }
+<span class="fc" id="L363">        }</span>
+<span class="fc" id="L364">        return resourceBundles;</span>
+    }
+
+    /**
+     * Searches for specific resource bundle in a set of resource bundles.
+     * @param bundles set of resource bundles.
+     * @param targetBundle target bundle to search for.
+     * @return Guava's Optional of resource bundle (present if target bundle is found).
+     */
+    private static Optional&lt;ResourceBundle&gt; findBundle(Set&lt;ResourceBundle&gt; bundles,
+                                                       ResourceBundle targetBundle) {
+<span class="fc" id="L375">        Optional&lt;ResourceBundle&gt; result = Optional.empty();</span>
+<span class="fc bfc" id="L376" title="All 2 branches covered.">        for (ResourceBundle currentBundle : bundles) {</span>
+<span class="fc bfc" id="L377" title="All 2 branches covered.">            if (targetBundle.getBaseName().equals(currentBundle.getBaseName())</span>
+<span class="fc bfc" id="L378" title="All 2 branches covered.">                    &amp;&amp; targetBundle.getExtension().equals(currentBundle.getExtension())</span>
+<span class="fc bfc" id="L379" title="All 2 branches covered.">                    &amp;&amp; targetBundle.getPath().equals(currentBundle.getPath())) {</span>
+<span class="fc" id="L380">                result = Optional.of(currentBundle);</span>
+<span class="fc" id="L381">                break;</span>
+            }
+<span class="fc" id="L383">        }</span>
+<span class="fc" id="L384">        return result;</span>
+    }
+
+    /**
+     * Extracts the base name (the unique prefix) of resource bundle from translation file name.
+     * For example &quot;messages&quot; is the base name of &quot;messages.properties&quot;,
+     * &quot;messages_de_AT.properties&quot;, &quot;messages_en.properties&quot;, etc.
+     * @param fileName the fully qualified name of the translation file.
+     * @return the extracted base name.
+     */
+    private static String extractBaseName(String fileName) {
+        final String regexp;
+<span class="fc" id="L396">        final Matcher languageCountryVariantMatcher =</span>
+<span class="fc" id="L397">            LANGUAGE_COUNTRY_VARIANT_PATTERN.matcher(fileName);</span>
+<span class="fc" id="L398">        final Matcher languageCountryMatcher = LANGUAGE_COUNTRY_PATTERN.matcher(fileName);</span>
+<span class="fc" id="L399">        final Matcher languageMatcher = LANGUAGE_PATTERN.matcher(fileName);</span>
+<span class="fc bfc" id="L400" title="All 2 branches covered.">        if (languageCountryVariantMatcher.matches()) {</span>
+<span class="fc" id="L401">            regexp = LANGUAGE_COUNTRY_VARIANT_PATTERN.pattern();</span>
+        }
+<span class="fc bfc" id="L403" title="All 2 branches covered.">        else if (languageCountryMatcher.matches()) {</span>
+<span class="fc" id="L404">            regexp = LANGUAGE_COUNTRY_PATTERN.pattern();</span>
+        }
+<span class="fc bfc" id="L406" title="All 2 branches covered.">        else if (languageMatcher.matches()) {</span>
+<span class="fc" id="L407">            regexp = LANGUAGE_PATTERN.pattern();</span>
+        }
+        else {
+<span class="fc" id="L410">            regexp = DEFAULT_TRANSLATION_REGEXP;</span>
+        }
+        // We use substring(...) instead of replace(...), so that the regular expression does
+        // not have to be compiled each time it is used inside 'replace' method.
+<span class="fc" id="L414">        final String removePattern = regexp.substring(&quot;^.+&quot;.length(), regexp.length());</span>
+<span class="fc" id="L415">        return fileName.replaceAll(removePattern, &quot;&quot;);</span>
+    }
+
+    /**
+     * Extracts path from a file name which contains the path.
+     * For example, if file nam is /xyz/messages.properties, then the method
+     * will return /xyz/.
+     * @param fileNameWithPath file name which contains the path.
+     * @return file path.
+     */
+    private static String getPath(String fileNameWithPath) {
+<span class="fc" id="L426">        return fileNameWithPath</span>
+<span class="fc" id="L427">            .substring(0, fileNameWithPath.lastIndexOf(File.separator));</span>
+    }
+
+    /**
+     * Checks resource files in bundle for consistency regarding their keys.
+     * All files in bundle must have the same key set. If this is not the case
+     * an error message is posted giving information which key misses in which file.
+     * @param bundle resource bundle.
+     */
+    private void checkTranslationKeys(ResourceBundle bundle) {
+<span class="fc" id="L437">        final Set&lt;File&gt; filesInBundle = bundle.getFiles();</span>
+<span class="fc bfc" id="L438" title="All 2 branches covered.">        if (filesInBundle.size() &gt;= 2) {</span>
+            // build a map from files to the keys they contain
+<span class="fc" id="L440">            final Set&lt;String&gt; allTranslationKeys = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L441">            final Map&lt;File, Set&lt;String&gt;&gt; filesAssociatedWithKeys = new HashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L442" title="All 2 branches covered.">            for (File currentFile : filesInBundle) {</span>
+<span class="fc" id="L443">                final Set&lt;String&gt; keysInCurrentFile = getTranslationKeys(currentFile);</span>
+<span class="fc" id="L444">                allTranslationKeys.addAll(keysInCurrentFile);</span>
+<span class="fc" id="L445">                filesAssociatedWithKeys.put(currentFile, keysInCurrentFile);</span>
+<span class="fc" id="L446">            }</span>
+<span class="fc" id="L447">            checkFilesForConsistencyRegardingTheirKeys(filesAssociatedWithKeys, allTranslationKeys);</span>
+        }
+<span class="fc" id="L449">    }</span>
+
+    /**
+     * Compares th the specified key set with the key sets of the given translation files (arranged
+     * in a map). All missing keys are reported.
+     * @param fileKeys a Map from translation files to their key sets.
+     * @param keysThatMustExist the set of keys to compare with.
+     */
+    private void checkFilesForConsistencyRegardingTheirKeys(Map&lt;File, Set&lt;String&gt;&gt; fileKeys,
+                                                            Set&lt;String&gt; keysThatMustExist) {
+<span class="fc bfc" id="L459" title="All 2 branches covered.">        for (Entry&lt;File, Set&lt;String&gt;&gt; fileKey : fileKeys.entrySet()) {</span>
+<span class="fc" id="L460">            final MessageDispatcher dispatcher = getMessageDispatcher();</span>
+<span class="fc" id="L461">            final String path = fileKey.getKey().getPath();</span>
+<span class="fc" id="L462">            dispatcher.fireFileStarted(path);</span>
+<span class="fc" id="L463">            final Set&lt;String&gt; currentFileKeys = fileKey.getValue();</span>
+<span class="fc" id="L464">            final Set&lt;String&gt; missingKeys = keysThatMustExist.stream()</span>
+<span class="fc bfc" id="L465" title="All 2 branches covered.">                .filter(key -&gt; !currentFileKeys.contains(key)).collect(Collectors.toSet());</span>
+<span class="fc bfc" id="L466" title="All 2 branches covered.">            if (!missingKeys.isEmpty()) {</span>
+<span class="fc bfc" id="L467" title="All 2 branches covered.">                for (Object key : missingKeys) {</span>
+<span class="fc" id="L468">                    log(1, MSG_KEY, key);</span>
+<span class="fc" id="L469">                }</span>
+            }
+<span class="fc" id="L471">            fireErrors(path);</span>
+<span class="fc" id="L472">            dispatcher.fireFileFinished(path);</span>
+<span class="fc" id="L473">        }</span>
+<span class="fc" id="L474">    }</span>
+
+    /**
+     * Loads the keys from the specified translation file into a set.
+     * @param file translation file.
+     * @return a Set object which holds the loaded keys.
+     */
+    private Set&lt;String&gt; getTranslationKeys(File file) {
+<span class="fc" id="L482">        Set&lt;String&gt; keys = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L483">        try (InputStream inStream = Files.newInputStream(file.toPath())) {</span>
+<span class="fc" id="L484">            final Properties translations = new Properties();</span>
+<span class="fc" id="L485">            translations.load(inStream);</span>
+<span class="fc" id="L486">            keys = translations.stringPropertyNames();</span>
+        }
+<span class="fc" id="L488">        catch (final IOException ex) {</span>
+<span class="fc" id="L489">            logIoException(ex, file);</span>
+<span class="fc" id="L490">        }</span>
+<span class="fc" id="L491">        return keys;</span>
+    }
+
+    /**
+     * Helper method to log an io exception.
+     * @param exception the exception that occurred
+     * @param file the file that could not be processed
+     */
+    private void logIoException(IOException exception, File file) {
+<span class="fc" id="L500">        String[] args = null;</span>
+<span class="fc" id="L501">        String key = &quot;general.fileNotFound&quot;;</span>
+<span class="fc bfc" id="L502" title="All 2 branches covered.">        if (!(exception instanceof NoSuchFileException)) {</span>
+<span class="fc" id="L503">            args = new String[] {exception.getMessage()};</span>
+<span class="fc" id="L504">            key = &quot;general.exception&quot;;</span>
+        }
+<span class="fc" id="L506">        final LocalizedMessage message =</span>
+            new LocalizedMessage(
+                0,
+                Definitions.CHECKSTYLE_BUNDLE,
+                key,
+                args,
+<span class="fc" id="L512">                getId(),</span>
+<span class="fc" id="L513">                getClass(), null);</span>
+<span class="fc" id="L514">        final SortedSet&lt;LocalizedMessage&gt; messages = new TreeSet&lt;&gt;();</span>
+<span class="fc" id="L515">        messages.add(message);</span>
+<span class="fc" id="L516">        getMessageDispatcher().fireErrors(file.getPath(), messages);</span>
+<span class="fc" id="L517">        log.debug(&quot;IOException occurred.&quot;, exception);</span>
+<span class="fc" id="L518">    }</span>
+
+    /** Class which represents a resource bundle. */
+    private static class ResourceBundle {
+
+        /** Bundle base name. */
+        private final String baseName;
+        /** Common extension of files which are included in the resource bundle. */
+        private final String extension;
+        /** Common path of files which are included in the resource bundle. */
+        private final String path;
+        /** Set of files which are included in the resource bundle. */
+        private final Set&lt;File&gt; files;
+
+        /**
+         * Creates a ResourceBundle object with specific base name, common files extension.
+         * @param baseName bundle base name.
+         * @param path common path of files which are included in the resource bundle.
+         * @param extension common extension of files which are included in the resource bundle.
+         */
+<span class="fc" id="L538">        ResourceBundle(String baseName, String path, String extension) {</span>
+<span class="fc" id="L539">            this.baseName = baseName;</span>
+<span class="fc" id="L540">            this.path = path;</span>
+<span class="fc" id="L541">            this.extension = extension;</span>
+<span class="fc" id="L542">            files = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L543">        }</span>
+
+        public String getBaseName() {
+<span class="fc" id="L546">            return baseName;</span>
+        }
+
+        public String getPath() {
+<span class="fc" id="L550">            return path;</span>
+        }
+
+        public String getExtension() {
+<span class="fc" id="L554">            return extension;</span>
+        }
+
+        public Set&lt;File&gt; getFiles() {
+<span class="fc" id="L558">            return Collections.unmodifiableSet(files);</span>
+        }
+
+        /**
+         * Adds a file into resource bundle.
+         * @param file file which should be added into resource bundle.
+         */
+        public void addFile(File file) {
+<span class="fc" id="L566">            files.add(file);</span>
+<span class="fc" id="L567">        }</span>
+
+        /**
+         * Checks whether a resource bundle contains a file which name matches file name regexp.
+         * @param fileNameRegexp file name regexp.
+         * @return true if a resource bundle contains a file which name matches file name regexp.
+         */
+        public boolean containsFile(String fileNameRegexp) {
+<span class="fc" id="L575">            boolean containsFile = false;</span>
+<span class="fc bfc" id="L576" title="All 2 branches covered.">            for (File currentFile : files) {</span>
+<span class="fc bfc" id="L577" title="All 2 branches covered.">                if (Pattern.matches(fileNameRegexp, currentFile.getName())) {</span>
+<span class="fc" id="L578">                    containsFile = true;</span>
+<span class="fc" id="L579">                    break;</span>
+                }
+<span class="fc" id="L581">            }</span>
+<span class="fc" id="L582">            return containsFile;</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

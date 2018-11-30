@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ImportControlCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.imports</a> &gt; <span class="el_source">ImportControlCheck.java</span></div><h1>ImportControlCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.imports;
+
+import java.net.URI;
+import java.util.Collections;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.ExternalResourceHolder;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Check that controls what can be imported in each package and file. Useful
+ * for ensuring that application layering is not violated. Ideas on how the
+ * check can be improved include support for:
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Change the default policy that if a package being checked does not
+ * match any guards, then it is allowed. Currently defaults to disallowed.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ */
+@FileStatefulCheck
+<span class="fc" id="L48">public class ImportControlCheck extends AbstractCheck implements ExternalResourceHolder {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_MISSING_FILE = &quot;import.control.missing.file&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_UNKNOWN_PKG = &quot;import.control.unknown.pkg&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_DISALLOWED = &quot;import.control.disallowed&quot;;
+
+    /**
+     * A part of message for exception.
+     */
+    private static final String UNABLE_TO_LOAD = &quot;Unable to load &quot;;
+
+    /** Location of import control file. */
+    private URI file;
+
+    /** The filepath pattern this check applies to. */
+<span class="fc" id="L77">    private Pattern path = Pattern.compile(&quot;.*&quot;);</span>
+    /** Whether to process the current file. */
+    private boolean processCurrentFile;
+
+    /** The root package controller. */
+    private PkgImportControl root;
+    /** The package doing the import. */
+    private String packageName;
+    /** The file name doing the import. */
+    private String fileName;
+
+    /**
+     * The package controller for the current file. Used for performance
+     * optimisation.
+     */
+    private AbstractImportControl currentImportControl;
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L96">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L101">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L106">        return new int[] {TokenTypes.PACKAGE_DEF, TokenTypes.IMPORT, TokenTypes.STATIC_IMPORT, };</span>
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L111">        currentImportControl = null;</span>
+<span class="fc" id="L112">        processCurrentFile = path.matcher(getFileContents().getFileName()).find();</span>
+<span class="fc" id="L113">        fileName = getFileContents().getText().getFile().getName();</span>
+
+<span class="fc" id="L115">        final int period = fileName.lastIndexOf('.');</span>
+
+<span class="fc bfc" id="L117" title="All 2 branches covered.">        if (period != -1) {</span>
+<span class="fc" id="L118">            fileName = fileName.substring(0, period);</span>
+        }
+<span class="fc" id="L120">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        if (processCurrentFile) {</span>
+<span class="fc bfc" id="L125" title="All 2 branches covered.">            if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">                if (root == null) {</span>
+<span class="fc" id="L127">                    log(ast, MSG_MISSING_FILE);</span>
+                }
+                else {
+<span class="fc" id="L130">                    packageName = getPackageText(ast);</span>
+<span class="fc" id="L131">                    currentImportControl = root.locateFinest(packageName, fileName);</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">                    if (currentImportControl == null) {</span>
+<span class="fc" id="L133">                        log(ast, MSG_UNKNOWN_PKG);</span>
+                    }
+                }
+            }
+<span class="fc bfc" id="L137" title="All 2 branches covered.">            else if (currentImportControl != null) {</span>
+<span class="fc" id="L138">                final String importText = getImportText(ast);</span>
+<span class="fc" id="L139">                final AccessResult access = currentImportControl.checkAccess(packageName, fileName,</span>
+                        importText);
+<span class="fc bfc" id="L141" title="All 2 branches covered.">                if (access != AccessResult.ALLOWED) {</span>
+<span class="fc" id="L142">                    log(ast, MSG_DISALLOWED, importText);</span>
+                }
+            }
+        }
+<span class="fc" id="L146">    }</span>
+
+    @Override
+    public Set&lt;String&gt; getExternalResourceLocations() {
+<span class="fc" id="L150">        return Collections.singleton(file.toString());</span>
+    }
+
+    /**
+     * Returns package text.
+     * @param ast PACKAGE_DEF ast node
+     * @return String that represents full package name
+     */
+    private static String getPackageText(DetailAST ast) {
+<span class="fc" id="L159">        final DetailAST nameAST = ast.getLastChild().getPreviousSibling();</span>
+<span class="fc" id="L160">        return FullIdent.createFullIdent(nameAST).getText();</span>
+    }
+
+    /**
+     * Returns import text.
+     * @param ast ast node that represents import
+     * @return String that represents importing class
+     */
+    private static String getImportText(DetailAST ast) {
+        final FullIdent imp;
+<span class="fc bfc" id="L170" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IMPORT) {</span>
+<span class="fc" id="L171">            imp = FullIdent.createFullIdentBelow(ast);</span>
+        }
+        else {
+            // know it is a static import
+<span class="fc" id="L175">            imp = FullIdent.createFullIdent(ast</span>
+<span class="fc" id="L176">                    .getFirstChild().getNextSibling());</span>
+        }
+<span class="fc" id="L178">        return imp.getText();</span>
+    }
+
+    /**
+     * Set the name for the file containing the import control
+     * configuration. It can also be a URL or resource in the classpath.
+     * It will cause the file to be loaded.
+     * @param uri the uri of the file to load.
+     * @throws IllegalArgumentException on error loading the file.
+     */
+    public void setFile(URI uri) {
+        // Handle empty param
+<span class="fc bfc" id="L190" title="All 2 branches covered.">        if (uri != null) {</span>
+            try {
+<span class="fc" id="L192">                root = ImportControlLoader.load(uri);</span>
+<span class="fc" id="L193">                file = uri;</span>
+            }
+<span class="fc" id="L195">            catch (CheckstyleException ex) {</span>
+<span class="fc" id="L196">                throw new IllegalArgumentException(UNABLE_TO_LOAD + uri, ex);</span>
+<span class="fc" id="L197">            }</span>
+        }
+<span class="fc" id="L199">    }</span>
+
+    /**
+     * Set the file path pattern that this check applies to.
+     * @param pattern the file path regex this check should apply to.
+     */
+    public void setPath(Pattern pattern) {
+<span class="fc" id="L206">        path = pattern;</span>
+<span class="fc" id="L207">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

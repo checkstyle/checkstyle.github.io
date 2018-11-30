@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AstTreeStringPrinter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">AstTreeStringPrinter.java</span></div><h1>AstTreeStringPrinter.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.DetailNode;
+import com.puppycrawl.tools.checkstyle.api.FileText;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
+
+/**
+ * Class for printing AST to String.
+ */
+public final class AstTreeStringPrinter {
+
+    /** Newline pattern. */
+<span class="fc" id="L40">    private static final Pattern NEWLINE = Pattern.compile(&quot;\n&quot;);</span>
+    /** Return pattern. */
+<span class="fc" id="L42">    private static final Pattern RETURN = Pattern.compile(&quot;\r&quot;);</span>
+    /** Tab pattern. */
+<span class="fc" id="L44">    private static final Pattern TAB = Pattern.compile(&quot;\t&quot;);</span>
+
+    /** OS specific line separator. */
+<span class="fc" id="L47">    private static final String LINE_SEPARATOR = System.getProperty(&quot;line.separator&quot;);</span>
+
+    /** Prevent instances. */
+    private AstTreeStringPrinter() {
+        // no code
+    }
+
+    /**
+     * Parse a file and print the parse tree.
+     * @param file the file to print.
+     * @param options {@link JavaParser.Options} to control the inclusion of comment nodes.
+     * @return the AST of the file in String form.
+     * @throws IOException if the file could not be read.
+     * @throws CheckstyleException if the file is not a Java source.
+     */
+    public static String printFileAst(File file, JavaParser.Options options)
+            throws IOException, CheckstyleException {
+<span class="fc" id="L64">        return printTree(JavaParser.parseFile(file, options));</span>
+    }
+
+    /**
+     * Prints full AST (java + comments + javadoc) of the java file.
+     * @param file java file
+     * @return Full tree
+     * @throws IOException Failed to open a file
+     * @throws CheckstyleException error while parsing the file
+     */
+    public static String printJavaAndJavadocTree(File file)
+            throws IOException, CheckstyleException {
+<span class="fc" id="L76">        final DetailAST tree = JavaParser.parseFile(file, JavaParser.Options.WITH_COMMENTS);</span>
+<span class="fc" id="L77">        return printJavaAndJavadocTree(tree);</span>
+    }
+
+    /**
+     * Prints full tree (java + comments + javadoc) of the DetailAST.
+     * @param ast root DetailAST
+     * @return Full tree
+     */
+    private static String printJavaAndJavadocTree(DetailAST ast) {
+<span class="fc" id="L86">        final StringBuilder messageBuilder = new StringBuilder(1024);</span>
+<span class="fc" id="L87">        DetailAST node = ast;</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">        while (node != null) {</span>
+<span class="fc" id="L89">            messageBuilder.append(getIndentation(node))</span>
+<span class="fc" id="L90">                .append(getNodeInfo(node))</span>
+<span class="fc" id="L91">                .append(LINE_SEPARATOR);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">            if (node.getType() == TokenTypes.COMMENT_CONTENT</span>
+<span class="fc bfc" id="L93" title="All 2 branches covered.">                    &amp;&amp; JavadocUtil.isJavadocComment(node.getParent())) {</span>
+<span class="fc" id="L94">                final String javadocTree = parseAndPrintJavadocTree(node);</span>
+<span class="fc" id="L95">                messageBuilder.append(javadocTree);</span>
+<span class="fc" id="L96">            }</span>
+            else {
+<span class="fc" id="L98">                messageBuilder.append(printJavaAndJavadocTree(node.getFirstChild()));</span>
+            }
+<span class="fc" id="L100">            node = node.getNextSibling();</span>
+        }
+<span class="fc" id="L102">        return messageBuilder.toString();</span>
+    }
+
+    /**
+     * Parses block comment as javadoc and prints its tree.
+     * @param node block comment begin
+     * @return string javadoc tree
+     */
+    private static String parseAndPrintJavadocTree(DetailAST node) {
+<span class="fc" id="L111">        final DetailAST javadocBlock = node.getParent();</span>
+<span class="fc" id="L112">        final DetailNode tree = DetailNodeTreeStringPrinter.parseJavadocAsDetailNode(javadocBlock);</span>
+
+<span class="fc" id="L114">        String baseIndentation = getIndentation(node);</span>
+<span class="fc" id="L115">        baseIndentation = baseIndentation.substring(0, baseIndentation.length() - 2);</span>
+<span class="fc" id="L116">        final String rootPrefix = baseIndentation + &quot;   `--&quot;;</span>
+<span class="fc" id="L117">        final String prefix = baseIndentation + &quot;       &quot;;</span>
+<span class="fc" id="L118">        return DetailNodeTreeStringPrinter.printTree(tree, rootPrefix, prefix);</span>
+    }
+
+    /**
+     * Parse a file and print the parse tree.
+     * @param text the text to parse.
+     * @param options {@link JavaParser.Options} to control the inclusion of comment nodes.
+     * @return the AST of the file in String form.
+     * @throws CheckstyleException if the file is not a Java source.
+     */
+    public static String printAst(FileText text, JavaParser.Options options)
+            throws CheckstyleException {
+<span class="fc" id="L130">        final DetailAST ast = JavaParser.parseFileText(text, options);</span>
+<span class="fc" id="L131">        return printTree(ast);</span>
+    }
+
+    /**
+     * Print AST.
+     * @param ast the root AST node.
+     * @return string AST.
+     */
+    private static String printTree(DetailAST ast) {
+<span class="fc" id="L140">        final StringBuilder messageBuilder = new StringBuilder(1024);</span>
+<span class="fc" id="L141">        DetailAST node = ast;</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">        while (node != null) {</span>
+<span class="fc" id="L143">            messageBuilder.append(getIndentation(node))</span>
+<span class="fc" id="L144">                    .append(getNodeInfo(node))</span>
+<span class="fc" id="L145">                    .append(LINE_SEPARATOR)</span>
+<span class="fc" id="L146">                    .append(printTree(node.getFirstChild()));</span>
+<span class="fc" id="L147">            node = node.getNextSibling();</span>
+        }
+<span class="fc" id="L149">        return messageBuilder.toString();</span>
+    }
+
+    /**
+     * Get string representation of the node as token name,
+     * node text, line number and column number.
+     * @param node DetailAST
+     * @return node info
+     */
+    private static String getNodeInfo(DetailAST node) {
+<span class="fc" id="L159">        return TokenUtil.getTokenName(node.getType())</span>
+<span class="fc" id="L160">                + &quot; -&gt; &quot; + escapeAllControlChars(node.getText())</span>
+<span class="fc" id="L161">                + &quot; [&quot; + node.getLineNo() + ':' + node.getColumnNo() + ']';</span>
+    }
+
+    /**
+     * Get indentation for an AST node.
+     * @param ast the AST to get the indentation for.
+     * @return the indentation in String format.
+     */
+    private static String getIndentation(DetailAST ast) {
+<span class="fc bfc" id="L170" title="All 2 branches covered.">        final boolean isLastChild = ast.getNextSibling() == null;</span>
+<span class="fc" id="L171">        DetailAST node = ast;</span>
+<span class="fc" id="L172">        final StringBuilder indentation = new StringBuilder(1024);</span>
+<span class="fc bfc" id="L173" title="All 2 branches covered.">        while (node.getParent() != null) {</span>
+<span class="fc" id="L174">            node = node.getParent();</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">            if (node.getParent() == null) {</span>
+<span class="fc bfc" id="L176" title="All 2 branches covered.">                if (isLastChild) {</span>
+                    // only ASCII symbols must be used due to
+                    // problems with running tests on Windows
+<span class="fc" id="L179">                    indentation.append(&quot;`--&quot;);</span>
+                }
+                else {
+<span class="fc" id="L182">                    indentation.append(&quot;|--&quot;);</span>
+                }
+            }
+            else {
+<span class="fc bfc" id="L186" title="All 2 branches covered.">                if (node.getNextSibling() == null) {</span>
+<span class="fc" id="L187">                    indentation.insert(0, &quot;    &quot;);</span>
+                }
+                else {
+<span class="fc" id="L190">                    indentation.insert(0, &quot;|   &quot;);</span>
+                }
+            }
+        }
+<span class="fc" id="L194">        return indentation.toString();</span>
+    }
+
+    /**
+     * Replace all control chars with escaped symbols.
+     * @param text the String to process.
+     * @return the processed String with all control chars escaped.
+     */
+    private static String escapeAllControlChars(String text) {
+<span class="fc" id="L203">        final String textWithoutNewlines = NEWLINE.matcher(text).replaceAll(&quot;\\\\n&quot;);</span>
+<span class="fc" id="L204">        final String textWithoutReturns = RETURN.matcher(textWithoutNewlines).replaceAll(&quot;\\\\r&quot;);</span>
+<span class="fc" id="L205">        return TAB.matcher(textWithoutReturns).replaceAll(&quot;\\\\t&quot;);</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

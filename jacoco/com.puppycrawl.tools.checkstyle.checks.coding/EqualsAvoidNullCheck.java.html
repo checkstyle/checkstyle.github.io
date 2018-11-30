@@ -1,0 +1,647 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EqualsAvoidNullCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">EqualsAvoidNullCheck.java</span></div><h1>EqualsAvoidNullCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Checks that any combination of String literals
+ * is on the left side of an equals() comparison.
+ * Also checks for String literals assigned to some field
+ * (such as {@code someString.equals(anotherString = &quot;text&quot;)}).
+ *
+ * &lt;p&gt;Rationale: Calling the equals() method on String literals
+ * will avoid a potential NullPointerException.  Also, it is
+ * pretty common to see null check right before equals comparisons
+ * which is not necessary in the below example.
+ *
+ * &lt;p&gt;For example:
+ *
+ * &lt;pre&gt;
+ *  {@code
+ *    String nullString = null;
+ *    nullString.equals(&amp;quot;My_Sweet_String&amp;quot;);
+ *  }
+ * &lt;/pre&gt;
+ * should be refactored to
+ *
+ * &lt;pre&gt;
+ *  {@code
+ *    String nullString = null;
+ *    &amp;quot;My_Sweet_String&amp;quot;.equals(nullString);
+ *  }
+ * &lt;/pre&gt;
+ *
+ */
+@FileStatefulCheck
+<span class="fc" id="L61">public class EqualsAvoidNullCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_EQUALS_AVOID_NULL = &quot;equals.avoid.null&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_EQUALS_IGNORE_CASE_AVOID_NULL = &quot;equalsIgnoreCase.avoid.null&quot;;
+
+    /** Method name for comparison. */
+    private static final String EQUALS = &quot;equals&quot;;
+
+    /** Type name for comparison. */
+    private static final String STRING = &quot;String&quot;;
+
+    /** Whether to process equalsIgnoreCase() invocations. */
+    private boolean ignoreEqualsIgnoreCase;
+
+    /** Stack of sets of field names, one for each class of a set of nested classes. */
+    private FieldFrame currentFrame;
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L89">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L94">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L99">        return new int[] {</span>
+            TokenTypes.METHOD_CALL,
+            TokenTypes.CLASS_DEF,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.LITERAL_IF,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.LITERAL_WHILE,
+            TokenTypes.LITERAL_DO,
+            TokenTypes.LITERAL_CATCH,
+            TokenTypes.LITERAL_TRY,
+            TokenTypes.VARIABLE_DEF,
+            TokenTypes.PARAMETER_DEF,
+            TokenTypes.CTOR_DEF,
+            TokenTypes.SLIST,
+            TokenTypes.ENUM_DEF,
+            TokenTypes.ENUM_CONSTANT_DEF,
+            TokenTypes.LITERAL_NEW,
+        };
+    }
+
+    /**
+     * Whether to ignore checking {@code String.equalsIgnoreCase(String)}.
+     * @param newValue whether to ignore checking
+     *    {@code String.equalsIgnoreCase(String)}.
+     */
+    public void setIgnoreEqualsIgnoreCase(boolean newValue) {
+<span class="fc" id="L125">        ignoreEqualsIgnoreCase = newValue;</span>
+<span class="fc" id="L126">    }</span>
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L130">        currentFrame = new FieldFrame(null);</span>
+<span class="fc" id="L131">    }</span>
+
+    @Override
+    public void visitToken(final DetailAST ast) {
+<span class="fc bfc" id="L135" title="All 5 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.VARIABLE_DEF:
+            case TokenTypes.PARAMETER_DEF:
+<span class="fc" id="L138">                currentFrame.addField(ast);</span>
+<span class="fc" id="L139">                break;</span>
+            case TokenTypes.METHOD_CALL:
+<span class="fc" id="L141">                processMethodCall(ast);</span>
+<span class="fc" id="L142">                break;</span>
+            case TokenTypes.SLIST:
+<span class="fc" id="L144">                processSlist(ast);</span>
+<span class="fc" id="L145">                break;</span>
+            case TokenTypes.LITERAL_NEW:
+<span class="fc" id="L147">                processLiteralNew(ast);</span>
+<span class="fc" id="L148">                break;</span>
+            default:
+<span class="fc" id="L150">                processFrame(ast);</span>
+        }
+<span class="fc" id="L152">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc" id="L156">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L157" title="All 12 branches covered.">        if (astType != TokenTypes.VARIABLE_DEF</span>
+                &amp;&amp; astType != TokenTypes.PARAMETER_DEF
+                &amp;&amp; astType != TokenTypes.METHOD_CALL
+                &amp;&amp; astType != TokenTypes.SLIST
+                &amp;&amp; astType != TokenTypes.LITERAL_NEW
+                || astType == TokenTypes.LITERAL_NEW
+<span class="fc bfc" id="L163" title="All 2 branches covered.">                    &amp;&amp; ast.findFirstToken(TokenTypes.OBJBLOCK) != null) {</span>
+<span class="fc" id="L164">            currentFrame = currentFrame.getParent();</span>
+        }
+<span class="fc bfc" id="L166" title="All 2 branches covered.">        else if (astType == TokenTypes.SLIST) {</span>
+<span class="fc" id="L167">            leaveSlist(ast);</span>
+        }
+<span class="fc" id="L169">    }</span>
+
+    @Override
+    public void finishTree(DetailAST ast) {
+<span class="fc" id="L173">        traverseFieldFrameTree(currentFrame);</span>
+<span class="fc" id="L174">    }</span>
+
+    /**
+     * Determine whether SLIST begins static or non-static block and add it as
+     * a frame in this case.
+     * @param ast SLIST ast.
+     */
+    private void processSlist(DetailAST ast) {
+<span class="fc" id="L182">        final int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L183" title="All 6 branches covered.">        if (parentType == TokenTypes.SLIST</span>
+                || parentType == TokenTypes.STATIC_INIT
+                || parentType == TokenTypes.INSTANCE_INIT) {
+<span class="fc" id="L186">            final FieldFrame frame = new FieldFrame(currentFrame);</span>
+<span class="fc" id="L187">            currentFrame.addChild(frame);</span>
+<span class="fc" id="L188">            currentFrame = frame;</span>
+        }
+<span class="fc" id="L190">    }</span>
+
+    /**
+     * Determine whether SLIST begins static or non-static block.
+     * @param ast SLIST ast.
+     */
+    private void leaveSlist(DetailAST ast) {
+<span class="fc" id="L197">        final int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L198" title="All 6 branches covered.">        if (parentType == TokenTypes.SLIST</span>
+                || parentType == TokenTypes.STATIC_INIT
+                || parentType == TokenTypes.INSTANCE_INIT) {
+<span class="fc" id="L201">            currentFrame = currentFrame.getParent();</span>
+        }
+<span class="fc" id="L203">    }</span>
+
+    /**
+     * Process CLASS_DEF, METHOD_DEF, LITERAL_IF, LITERAL_FOR, LITERAL_WHILE, LITERAL_DO,
+     * LITERAL_CATCH, LITERAL_TRY, CTOR_DEF, ENUM_DEF, ENUM_CONSTANT_DEF.
+     * @param ast processed ast.
+     */
+    private void processFrame(DetailAST ast) {
+<span class="fc" id="L211">        final FieldFrame frame = new FieldFrame(currentFrame);</span>
+<span class="fc" id="L212">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L213" title="All 6 branches covered.">        if (astType == TokenTypes.CLASS_DEF</span>
+                || astType == TokenTypes.ENUM_DEF
+                || astType == TokenTypes.ENUM_CONSTANT_DEF) {
+<span class="fc" id="L216">            frame.setClassOrEnumOrEnumConstDef(true);</span>
+<span class="fc" id="L217">            frame.setFrameName(ast.findFirstToken(TokenTypes.IDENT).getText());</span>
+        }
+<span class="fc" id="L219">        currentFrame.addChild(frame);</span>
+<span class="fc" id="L220">        currentFrame = frame;</span>
+<span class="fc" id="L221">    }</span>
+
+    /**
+     * Add the method call to the current frame if it should be processed.
+     * @param methodCall METHOD_CALL ast.
+     */
+    private void processMethodCall(DetailAST methodCall) {
+<span class="fc" id="L228">        final DetailAST dot = methodCall.getFirstChild();</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">        if (dot.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L230">            final String methodName = dot.getLastChild().getText();</span>
+<span class="fc bfc" id="L231" title="All 4 branches covered.">            if (EQUALS.equals(methodName)</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">                    || !ignoreEqualsIgnoreCase &amp;&amp; &quot;equalsIgnoreCase&quot;.equals(methodName)) {</span>
+<span class="fc" id="L233">                currentFrame.addMethodCall(methodCall);</span>
+            }
+        }
+<span class="fc" id="L236">    }</span>
+
+    /**
+     * Determine whether LITERAL_NEW is an anonymous class definition and add it as
+     * a frame in this case.
+     * @param ast LITERAL_NEW ast.
+     */
+    private void processLiteralNew(DetailAST ast) {
+<span class="fc bfc" id="L244" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.OBJBLOCK) != null) {</span>
+<span class="fc" id="L245">            final FieldFrame frame = new FieldFrame(currentFrame);</span>
+<span class="fc" id="L246">            currentFrame.addChild(frame);</span>
+<span class="fc" id="L247">            currentFrame = frame;</span>
+        }
+<span class="fc" id="L249">    }</span>
+
+    /**
+     * Traverse the tree of the field frames to check all equals method calls.
+     * @param frame to check method calls in.
+     */
+    private void traverseFieldFrameTree(FieldFrame frame) {
+<span class="fc bfc" id="L256" title="All 2 branches covered.">        for (FieldFrame child: frame.getChildren()) {</span>
+<span class="fc bfc" id="L257" title="All 2 branches covered.">            if (!child.getChildren().isEmpty()) {</span>
+<span class="fc" id="L258">                traverseFieldFrameTree(child);</span>
+            }
+<span class="fc" id="L260">            currentFrame = child;</span>
+<span class="fc" id="L261">            child.getMethodCalls().forEach(this::checkMethodCall);</span>
+<span class="fc" id="L262">        }</span>
+<span class="fc" id="L263">    }</span>
+
+    /**
+     * Check whether the method call should be violated.
+     * @param methodCall method call to check.
+     */
+    private void checkMethodCall(DetailAST methodCall) {
+<span class="fc" id="L270">        DetailAST objCalledOn = methodCall.getFirstChild().getFirstChild();</span>
+<span class="fc bfc" id="L271" title="All 2 branches covered.">        if (objCalledOn.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L272">            objCalledOn = objCalledOn.getLastChild();</span>
+        }
+<span class="fc" id="L274">        final DetailAST expr = methodCall.findFirstToken(TokenTypes.ELIST).getFirstChild();</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">        if (isObjectValid(objCalledOn)</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">                &amp;&amp; containsOneArgument(methodCall)</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">                &amp;&amp; containsAllSafeTokens(expr)</span>
+<span class="fc bfc" id="L278" title="All 2 branches covered.">                &amp;&amp; isCalledOnStringFieldOrVariable(objCalledOn)) {</span>
+<span class="fc" id="L279">            final String methodName = methodCall.getFirstChild().getLastChild().getText();</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">            if (EQUALS.equals(methodName)) {</span>
+<span class="fc" id="L281">                log(methodCall, MSG_EQUALS_AVOID_NULL);</span>
+            }
+            else {
+<span class="fc" id="L284">                log(methodCall, MSG_EQUALS_IGNORE_CASE_AVOID_NULL);</span>
+            }
+        }
+<span class="fc" id="L287">    }</span>
+
+    /**
+     * Check whether the object equals method is called on is not a String literal
+     * and not too complex.
+     * @param objCalledOn the object equals method is called on ast.
+     * @return true if the object is valid.
+     */
+    private static boolean isObjectValid(DetailAST objCalledOn) {
+<span class="fc" id="L296">        boolean result = true;</span>
+<span class="fc" id="L297">        final DetailAST previousSibling = objCalledOn.getPreviousSibling();</span>
+<span class="fc bfc" id="L298" title="All 2 branches covered.">        if (previousSibling != null</span>
+<span class="fc bfc" id="L299" title="All 2 branches covered.">                &amp;&amp; previousSibling.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L300">            result = false;</span>
+        }
+<span class="fc bfc" id="L302" title="All 2 branches covered.">        if (isStringLiteral(objCalledOn)) {</span>
+<span class="fc" id="L303">            result = false;</span>
+        }
+<span class="fc" id="L305">        return result;</span>
+    }
+
+    /**
+     * Checks for calling equals on String literal and
+     * anon object which cannot be null.
+     * @param objCalledOn object AST
+     * @return if it is string literal
+     */
+    private static boolean isStringLiteral(DetailAST objCalledOn) {
+<span class="fc bfc" id="L315" title="All 2 branches covered.">        return objCalledOn.getType() == TokenTypes.STRING_LITERAL</span>
+<span class="fc bfc" id="L316" title="All 2 branches covered.">                || objCalledOn.getType() == TokenTypes.LITERAL_NEW;</span>
+    }
+
+    /**
+     * Verify that method call has one argument.
+     *
+     * @param methodCall METHOD_CALL DetailAST
+     * @return true if method call has one argument.
+     */
+    private static boolean containsOneArgument(DetailAST methodCall) {
+<span class="fc" id="L326">        final DetailAST elist = methodCall.findFirstToken(TokenTypes.ELIST);</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">        return elist.getChildCount() == 1;</span>
+    }
+
+    /**
+     * Looks for all &quot;safe&quot; Token combinations in the argument
+     * expression branch.
+     * @param expr the argument expression
+     * @return - true if any child matches the set of tokens, false if not
+     */
+    private static boolean containsAllSafeTokens(final DetailAST expr) {
+<span class="fc" id="L337">        DetailAST arg = expr.getFirstChild();</span>
+<span class="fc" id="L338">        arg = skipVariableAssign(arg);</span>
+
+<span class="fc" id="L340">        boolean argIsNotNull = false;</span>
+<span class="fc bfc" id="L341" title="All 2 branches covered.">        if (arg.getType() == TokenTypes.PLUS) {</span>
+<span class="fc" id="L342">            DetailAST child = arg.getFirstChild();</span>
+<span class="fc bfc" id="L343" title="All 4 branches covered.">            while (child != null</span>
+                    &amp;&amp; !argIsNotNull) {
+<span class="fc bfc" id="L345" title="All 2 branches covered.">                argIsNotNull = child.getType() == TokenTypes.STRING_LITERAL</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">                        || child.getType() == TokenTypes.IDENT;</span>
+<span class="fc" id="L347">                child = child.getNextSibling();</span>
+            }
+        }
+
+<span class="fc bfc" id="L351" title="All 2 branches covered.">        return argIsNotNull</span>
+<span class="fc bfc" id="L352" title="All 2 branches covered.">                || !arg.branchContains(TokenTypes.IDENT)</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">                    &amp;&amp; !arg.branchContains(TokenTypes.LITERAL_NULL);</span>
+    }
+
+    /**
+     * Skips over an inner assign portion of an argument expression.
+     * @param currentAST current token in the argument expression
+     * @return the next relevant token
+     */
+    private static DetailAST skipVariableAssign(final DetailAST currentAST) {
+<span class="fc" id="L362">        DetailAST result = currentAST;</span>
+<span class="fc bfc" id="L363" title="All 2 branches covered.">        if (currentAST.getType() == TokenTypes.ASSIGN</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">                &amp;&amp; currentAST.getFirstChild().getType() == TokenTypes.IDENT) {</span>
+<span class="fc" id="L365">            result = currentAST.getFirstChild().getNextSibling();</span>
+        }
+<span class="fc" id="L367">        return result;</span>
+    }
+
+    /**
+     * Determine, whether equals method is called on a field of String type.
+     * @param objCalledOn object ast.
+     * @return true if the object is of String type.
+     */
+    private boolean isCalledOnStringFieldOrVariable(DetailAST objCalledOn) {
+        final boolean result;
+<span class="fc" id="L377">        final DetailAST previousSiblingAst = objCalledOn.getPreviousSibling();</span>
+<span class="fc bfc" id="L378" title="All 2 branches covered.">        if (previousSiblingAst == null) {</span>
+<span class="fc" id="L379">            result = isStringFieldOrVariable(objCalledOn);</span>
+        }
+        else {
+<span class="fc bfc" id="L382" title="All 2 branches covered.">            if (previousSiblingAst.getType() == TokenTypes.LITERAL_THIS) {</span>
+<span class="fc" id="L383">                result = isStringFieldOrVariableFromThisInstance(objCalledOn);</span>
+            }
+            else {
+<span class="fc" id="L386">                final String className = previousSiblingAst.getText();</span>
+<span class="fc" id="L387">                result = isStringFieldOrVariableFromClass(objCalledOn, className);</span>
+            }
+        }
+<span class="fc" id="L390">        return result;</span>
+    }
+
+    /**
+     * Whether the field or the variable is of String type.
+     * @param objCalledOn the field or the variable to check.
+     * @return true if the field or the variable is of String type.
+     */
+    private boolean isStringFieldOrVariable(DetailAST objCalledOn) {
+<span class="fc" id="L399">        boolean result = false;</span>
+<span class="fc" id="L400">        final String name = objCalledOn.getText();</span>
+<span class="fc" id="L401">        FieldFrame frame = currentFrame;</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">        while (frame != null) {</span>
+<span class="fc" id="L403">            final DetailAST field = frame.findField(name);</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">            if (field != null</span>
+<span class="fc bfc" id="L405" title="All 2 branches covered.">                    &amp;&amp; (frame.isClassOrEnumOrEnumConstDef()</span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">                            || checkLineNo(field, objCalledOn))) {</span>
+<span class="fc" id="L407">                result = STRING.equals(getFieldType(field));</span>
+<span class="fc" id="L408">                break;</span>
+            }
+<span class="fc" id="L410">            frame = frame.getParent();</span>
+<span class="fc" id="L411">        }</span>
+<span class="fc" id="L412">        return result;</span>
+    }
+
+    /**
+     * Whether the field or the variable from THIS instance is of String type.
+     * @param objCalledOn the field or the variable from THIS instance to check.
+     * @return true if the field or the variable from THIS instance is of String type.
+     */
+    private boolean isStringFieldOrVariableFromThisInstance(DetailAST objCalledOn) {
+<span class="fc" id="L421">        boolean result = false;</span>
+<span class="fc" id="L422">        final String name = objCalledOn.getText();</span>
+<span class="fc" id="L423">        final DetailAST field = getObjectFrame(currentFrame).findField(name);</span>
+<span class="fc bfc" id="L424" title="All 2 branches covered.">        if (field != null) {</span>
+<span class="fc" id="L425">            result = STRING.equals(getFieldType(field));</span>
+        }
+<span class="fc" id="L427">        return result;</span>
+    }
+
+    /**
+     * Whether the field or the variable from the specified class is of String type.
+     * @param objCalledOn the field or the variable from the specified class to check.
+     * @param className the name of the class to check in.
+     * @return true if the field or the variable from the specified class is of String type.
+     */
+    private boolean isStringFieldOrVariableFromClass(DetailAST objCalledOn,
+            final String className) {
+<span class="fc" id="L438">        boolean result = false;</span>
+<span class="fc" id="L439">        final String name = objCalledOn.getText();</span>
+<span class="fc" id="L440">        FieldFrame frame = getObjectFrame(currentFrame);</span>
+<span class="fc bfc" id="L441" title="All 2 branches covered.">        while (frame != null) {</span>
+<span class="fc bfc" id="L442" title="All 2 branches covered.">            if (className.equals(frame.getFrameName())) {</span>
+<span class="fc" id="L443">                final DetailAST field = frame.findField(name);</span>
+<span class="fc bfc" id="L444" title="All 2 branches covered.">                if (field != null) {</span>
+<span class="fc" id="L445">                    result = STRING.equals(getFieldType(field));</span>
+                }
+                break;
+            }
+<span class="fc" id="L449">            frame = getObjectFrame(frame.getParent());</span>
+        }
+<span class="fc" id="L451">        return result;</span>
+    }
+
+    /**
+     * Get the nearest parent frame which is CLASS_DEF, ENUM_DEF or ENUM_CONST_DEF.
+     * @param frame to start the search from.
+     * @return the nearest parent frame which is CLASS_DEF, ENUM_DEF or ENUM_CONST_DEF.
+     */
+    private static FieldFrame getObjectFrame(FieldFrame frame) {
+<span class="fc" id="L460">        FieldFrame objectFrame = frame;</span>
+<span class="fc bfc" id="L461" title="All 4 branches covered.">        while (objectFrame != null &amp;&amp; !objectFrame.isClassOrEnumOrEnumConstDef()) {</span>
+<span class="fc" id="L462">            objectFrame = objectFrame.getParent();</span>
+        }
+<span class="fc" id="L464">        return objectFrame;</span>
+    }
+
+    /**
+     * Check whether the field is declared before the method call in case of
+     * methods and initialization blocks.
+     * @param field field to check.
+     * @param objCalledOn object equals method called on.
+     * @return true if the field is declared before the method call.
+     */
+    private static boolean checkLineNo(DetailAST field, DetailAST objCalledOn) {
+<span class="fc" id="L475">        boolean result = false;</span>
+        // Required for pitest coverage. We should specify columnNo passing condition
+        // in such a way, so that the minimal possible distance between field and
+        // objCalledOn will be the maximal condition to pass this check.
+        // The minimal distance between objCalledOn and field (of type String) initialization
+        // is calculated as follows:
+        // String(6) + space(1) + variableName(1) + assign(1) +
+        // anotherStringVariableName(1) + semicolon(1) = 11
+        // Example: length of &quot;String s=d;&quot; is 11 symbols.
+<span class="fc" id="L484">        final int minimumSymbolsBetween = 11;</span>
+<span class="fc bfc" id="L485" title="All 2 branches covered.">        if (field.getLineNo() &lt; objCalledOn.getLineNo()</span>
+<span class="fc bfc" id="L486" title="All 2 branches covered.">                || field.getLineNo() == objCalledOn.getLineNo()</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">                    &amp;&amp; field.getColumnNo() + minimumSymbolsBetween &lt;= objCalledOn.getColumnNo()) {</span>
+<span class="fc" id="L488">            result = true;</span>
+        }
+<span class="fc" id="L490">        return result;</span>
+    }
+
+    /**
+     * Get field type.
+     * @param field to get the type from.
+     * @return type of the field.
+     */
+    private static String getFieldType(DetailAST field) {
+<span class="fc" id="L499">        String fieldType = null;</span>
+<span class="fc" id="L500">        final DetailAST identAst = field.findFirstToken(TokenTypes.TYPE)</span>
+<span class="fc" id="L501">                .findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc bfc" id="L502" title="All 2 branches covered.">        if (identAst != null) {</span>
+<span class="fc" id="L503">            fieldType = identAst.getText();</span>
+        }
+<span class="fc" id="L505">        return fieldType;</span>
+    }
+
+    /**
+     * Holds the names of fields of a type.
+     */
+    private static class FieldFrame {
+
+        /** Parent frame. */
+        private final FieldFrame parent;
+
+        /** Set of frame's children. */
+<span class="fc" id="L517">        private final Set&lt;FieldFrame&gt; children = new HashSet&lt;&gt;();</span>
+
+        /** Set of fields. */
+<span class="fc" id="L520">        private final Set&lt;DetailAST&gt; fields = new HashSet&lt;&gt;();</span>
+
+        /** Set of equals calls. */
+<span class="fc" id="L523">        private final Set&lt;DetailAST&gt; methodCalls = new HashSet&lt;&gt;();</span>
+
+        /** Name of the class, enum or enum constant declaration. */
+        private String frameName;
+
+        /** Whether the frame is CLASS_DEF, ENUM_DEF or ENUM_CONST_DEF. */
+        private boolean classOrEnumOrEnumConstDef;
+
+        /**
+         * Creates new frame.
+         * @param parent parent frame.
+         */
+<span class="fc" id="L535">        FieldFrame(FieldFrame parent) {</span>
+<span class="fc" id="L536">            this.parent = parent;</span>
+<span class="fc" id="L537">        }</span>
+
+        /**
+         * Set the frame name.
+         * @param frameName value to set.
+         */
+        public void setFrameName(String frameName) {
+<span class="fc" id="L544">            this.frameName = frameName;</span>
+<span class="fc" id="L545">        }</span>
+
+        /**
+         * Getter for the frame name.
+         * @return frame name.
+         */
+        public String getFrameName() {
+<span class="fc" id="L552">            return frameName;</span>
+        }
+
+        /**
+         * Getter for the parent frame.
+         * @return parent frame.
+         */
+        public FieldFrame getParent() {
+<span class="fc" id="L560">            return parent;</span>
+        }
+
+        /**
+         * Getter for frame's children.
+         * @return children of this frame.
+         */
+        public Set&lt;FieldFrame&gt; getChildren() {
+<span class="fc" id="L568">            return Collections.unmodifiableSet(children);</span>
+        }
+
+        /**
+         * Add child frame to this frame.
+         * @param child frame to add.
+         */
+        public void addChild(FieldFrame child) {
+<span class="fc" id="L576">            children.add(child);</span>
+<span class="fc" id="L577">        }</span>
+
+        /**
+         * Add field to this FieldFrame.
+         * @param field the ast of the field.
+         */
+        public void addField(DetailAST field) {
+<span class="fc" id="L584">            fields.add(field);</span>
+<span class="fc" id="L585">        }</span>
+
+        /**
+         * Sets isClassOrEnum.
+         * @param value value to set.
+         */
+        public void setClassOrEnumOrEnumConstDef(boolean value) {
+<span class="fc" id="L592">            classOrEnumOrEnumConstDef = value;</span>
+<span class="fc" id="L593">        }</span>
+
+        /**
+         * Getter for classOrEnumOrEnumConstDef.
+         * @return classOrEnumOrEnumConstDef.
+         */
+        public boolean isClassOrEnumOrEnumConstDef() {
+<span class="fc" id="L600">            return classOrEnumOrEnumConstDef;</span>
+        }
+
+        /**
+         * Add method call to this frame.
+         * @param methodCall METHOD_CALL ast.
+         */
+        public void addMethodCall(DetailAST methodCall) {
+<span class="fc" id="L608">            methodCalls.add(methodCall);</span>
+<span class="fc" id="L609">        }</span>
+
+        /**
+         * Determines whether this FieldFrame contains the field.
+         * @param name name of the field to check.
+         * @return true if this FieldFrame contains instance field field.
+         */
+        public DetailAST findField(String name) {
+<span class="fc" id="L617">            DetailAST resultField = null;</span>
+<span class="fc bfc" id="L618" title="All 2 branches covered.">            for (DetailAST field: fields) {</span>
+<span class="fc bfc" id="L619" title="All 2 branches covered.">                if (getFieldName(field).equals(name)) {</span>
+<span class="fc" id="L620">                    resultField = field;</span>
+<span class="fc" id="L621">                    break;</span>
+                }
+<span class="fc" id="L623">            }</span>
+<span class="fc" id="L624">            return resultField;</span>
+        }
+
+        /**
+         * Getter for frame's method calls.
+         * @return method calls of this frame.
+         */
+        public Set&lt;DetailAST&gt; getMethodCalls() {
+<span class="fc" id="L632">            return Collections.unmodifiableSet(methodCalls);</span>
+        }
+
+        /**
+         * Get the name of the field.
+         * @param field to get the name from.
+         * @return name of the field.
+         */
+        private static String getFieldName(DetailAST field) {
+<span class="fc" id="L641">            return field.findFirstToken(TokenTypes.IDENT).getText();</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

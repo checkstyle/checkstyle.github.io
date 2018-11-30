@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SuppressionCommentFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.filters</a> &gt; <span class="el_source">SuppressionCommentFilter.java</span></div><h1>SuppressionCommentFilter.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.filters;
+
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
+import com.puppycrawl.tools.checkstyle.TreeWalkerAuditEvent;
+import com.puppycrawl.tools.checkstyle.TreeWalkerFilter;
+import com.puppycrawl.tools.checkstyle.api.AutomaticBean;
+import com.puppycrawl.tools.checkstyle.api.FileContents;
+import com.puppycrawl.tools.checkstyle.api.TextBlock;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ * A filter that uses comments to suppress audit events.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Rationale:
+ * Sometimes there are legitimate reasons for violating a check.  When
+ * this is a matter of the code in question and not personal
+ * preference, the best place to override the policy is in the code
+ * itself.  Semi-structured comments can be associated with the check.
+ * This is sometimes superior to a separate suppressions file, which
+ * must be kept up-to-date as the source file is edited.
+ * &lt;/p&gt;
+ */
+<span class="fc" id="L53">public class SuppressionCommentFilter</span>
+    extends AutomaticBean
+    implements TreeWalkerFilter {
+
+    /**
+     * Enum to be used for switching checkstyle reporting for tags.
+     */
+<span class="fc" id="L60">    public enum TagType {</span>
+
+        /**
+         * Switch reporting on.
+         */
+<span class="fc" id="L65">        ON,</span>
+        /**
+         * Switch reporting off.
+         */
+<span class="fc" id="L69">        OFF,</span>
+
+    }
+
+    /** Turns checkstyle reporting off. */
+    private static final String DEFAULT_OFF_FORMAT = &quot;CHECKSTYLE:OFF&quot;;
+
+    /** Turns checkstyle reporting on. */
+    private static final String DEFAULT_ON_FORMAT = &quot;CHECKSTYLE:ON&quot;;
+
+    /** Control all checks. */
+    private static final String DEFAULT_CHECK_FORMAT = &quot;.*&quot;;
+
+    /** Tagged comments. */
+<span class="fc" id="L83">    private final List&lt;Tag&gt; tags = new ArrayList&lt;&gt;();</span>
+
+    /** Whether to look in comments of the C type. */
+<span class="fc" id="L86">    private boolean checkC = true;</span>
+
+    /** Whether to look in comments of the C++ type. */
+    // -@cs[AbbreviationAsWordInName] we can not change it as,
+    // Check property is a part of API (used in configurations)
+<span class="fc" id="L91">    private boolean checkCPP = true;</span>
+
+    /** Parsed comment regexp that turns checkstyle reporting off. */
+<span class="fc" id="L94">    private Pattern offCommentFormat = Pattern.compile(DEFAULT_OFF_FORMAT);</span>
+
+    /** Parsed comment regexp that turns checkstyle reporting on. */
+<span class="fc" id="L97">    private Pattern onCommentFormat = Pattern.compile(DEFAULT_ON_FORMAT);</span>
+
+    /** The check format to suppress. */
+<span class="fc" id="L100">    private String checkFormat = DEFAULT_CHECK_FORMAT;</span>
+
+    /** The message format to suppress. */
+    private String messageFormat;
+
+    /**
+     * References the current FileContents for this filter.
+     * Since this is a weak reference to the FileContents, the FileContents
+     * can be reclaimed as soon as the strong references in TreeWalker
+     * are reassigned to the next FileContents, at which time filtering for
+     * the current FileContents is finished.
+     */
+<span class="fc" id="L112">    private WeakReference&lt;FileContents&gt; fileContentsReference = new WeakReference&lt;&gt;(null);</span>
+
+    /**
+     * Set the format for a comment that turns off reporting.
+     * @param pattern a pattern.
+     */
+    public final void setOffCommentFormat(Pattern pattern) {
+<span class="fc" id="L119">        offCommentFormat = pattern;</span>
+<span class="fc" id="L120">    }</span>
+
+    /**
+     * Set the format for a comment that turns on reporting.
+     * @param pattern a pattern.
+     */
+    public final void setOnCommentFormat(Pattern pattern) {
+<span class="fc" id="L127">        onCommentFormat = pattern;</span>
+<span class="fc" id="L128">    }</span>
+
+    /**
+     * Returns FileContents for this filter.
+     * @return the FileContents for this filter.
+     */
+    private FileContents getFileContents() {
+<span class="fc" id="L135">        return fileContentsReference.get();</span>
+    }
+
+    /**
+     * Set the FileContents for this filter.
+     * @param fileContents the FileContents for this filter.
+     * @noinspection WeakerAccess
+     */
+    public void setFileContents(FileContents fileContents) {
+<span class="fc" id="L144">        fileContentsReference = new WeakReference&lt;&gt;(fileContents);</span>
+<span class="fc" id="L145">    }</span>
+
+    /**
+     * Set the format for a check.
+     * @param format a {@code String} value
+     */
+    public final void setCheckFormat(String format) {
+<span class="fc" id="L152">        checkFormat = format;</span>
+<span class="fc" id="L153">    }</span>
+
+    /**
+     * Set the format for a message.
+     * @param format a {@code String} value
+     */
+    public void setMessageFormat(String format) {
+<span class="fc" id="L160">        messageFormat = format;</span>
+<span class="fc" id="L161">    }</span>
+
+    /**
+     * Set whether to look in C++ comments.
+     * @param checkCpp {@code true} if C++ comments are checked.
+     */
+    // -@cs[AbbreviationAsWordInName] We can not change it as,
+    // check's property is a part of API (used in configurations).
+    public void setCheckCPP(boolean checkCpp) {
+<span class="fc" id="L170">        checkCPP = checkCpp;</span>
+<span class="fc" id="L171">    }</span>
+
+    /**
+     * Set whether to look in C comments.
+     * @param checkC {@code true} if C comments are checked.
+     */
+    public void setCheckC(boolean checkC) {
+<span class="fc" id="L178">        this.checkC = checkC;</span>
+<span class="fc" id="L179">    }</span>
+
+    @Override
+    protected void finishLocalSetup() {
+        // No code by default
+<span class="fc" id="L184">    }</span>
+
+    @Override
+    public boolean accept(TreeWalkerAuditEvent event) {
+<span class="fc" id="L188">        boolean accepted = true;</span>
+
+<span class="fc bfc" id="L190" title="All 2 branches covered.">        if (event.getLocalizedMessage() != null) {</span>
+            // Lazy update. If the first event for the current file, update file
+            // contents and tag suppressions
+<span class="fc" id="L193">            final FileContents currentContents = event.getFileContents();</span>
+
+<span class="fc bfc" id="L195" title="All 2 branches covered.">            if (getFileContents() != currentContents) {</span>
+<span class="fc" id="L196">                setFileContents(currentContents);</span>
+<span class="fc" id="L197">                tagSuppressions();</span>
+            }
+<span class="fc" id="L199">            final Tag matchTag = findNearestMatch(event);</span>
+<span class="fc bfc" id="L200" title="All 4 branches covered.">            accepted = matchTag == null || matchTag.getTagType() == TagType.ON;</span>
+        }
+<span class="fc" id="L202">        return accepted;</span>
+    }
+
+    /**
+     * Finds the nearest comment text tag that matches an audit event.
+     * The nearest tag is before the line and column of the event.
+     * @param event the {@code TreeWalkerAuditEvent} to match.
+     * @return The {@code Tag} nearest event.
+     */
+    private Tag findNearestMatch(TreeWalkerAuditEvent event) {
+<span class="fc" id="L212">        Tag result = null;</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">        for (Tag tag : tags) {</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">            if (tag.getLine() &gt; event.getLine()</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">                || tag.getLine() == event.getLine()</span>
+<span class="fc bfc" id="L216" title="All 2 branches covered.">                    &amp;&amp; tag.getColumn() &gt; event.getColumn()) {</span>
+<span class="fc" id="L217">                break;</span>
+            }
+<span class="fc bfc" id="L219" title="All 2 branches covered.">            if (tag.isMatch(event)) {</span>
+<span class="fc" id="L220">                result = tag;</span>
+            }
+<span class="fc" id="L222">        }</span>
+<span class="fc" id="L223">        return result;</span>
+    }
+
+    /**
+     * Collects all the suppression tags for all comments into a list and
+     * sorts the list.
+     */
+    private void tagSuppressions() {
+<span class="fc" id="L231">        tags.clear();</span>
+<span class="fc" id="L232">        final FileContents contents = getFileContents();</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        if (checkCPP) {</span>
+<span class="fc" id="L234">            tagSuppressions(contents.getSingleLineComments().values());</span>
+        }
+<span class="fc bfc" id="L236" title="All 2 branches covered.">        if (checkC) {</span>
+<span class="fc" id="L237">            final Collection&lt;List&lt;TextBlock&gt;&gt; cComments = contents</span>
+<span class="fc" id="L238">                    .getBlockComments().values();</span>
+<span class="fc" id="L239">            cComments.forEach(this::tagSuppressions);</span>
+        }
+<span class="fc" id="L241">        Collections.sort(tags);</span>
+<span class="fc" id="L242">    }</span>
+
+    /**
+     * Appends the suppressions in a collection of comments to the full
+     * set of suppression tags.
+     * @param comments the set of comments.
+     */
+    private void tagSuppressions(Collection&lt;TextBlock&gt; comments) {
+<span class="fc bfc" id="L250" title="All 2 branches covered.">        for (TextBlock comment : comments) {</span>
+<span class="fc" id="L251">            final int startLineNo = comment.getStartLineNo();</span>
+<span class="fc" id="L252">            final String[] text = comment.getText();</span>
+<span class="fc" id="L253">            tagCommentLine(text[0], startLineNo, comment.getStartColNo());</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">            for (int i = 1; i &lt; text.length; i++) {</span>
+<span class="fc" id="L255">                tagCommentLine(text[i], startLineNo + i, 0);</span>
+            }
+<span class="fc" id="L257">        }</span>
+<span class="fc" id="L258">    }</span>
+
+    /**
+     * Tags a string if it matches the format for turning
+     * checkstyle reporting on or the format for turning reporting off.
+     * @param text the string to tag.
+     * @param line the line number of text.
+     * @param column the column number of text.
+     */
+    private void tagCommentLine(String text, int line, int column) {
+<span class="fc" id="L268">        final Matcher offMatcher = offCommentFormat.matcher(text);</span>
+<span class="fc bfc" id="L269" title="All 2 branches covered.">        if (offMatcher.find()) {</span>
+<span class="fc" id="L270">            addTag(offMatcher.group(0), line, column, TagType.OFF);</span>
+        }
+        else {
+<span class="fc" id="L273">            final Matcher onMatcher = onCommentFormat.matcher(text);</span>
+<span class="fc bfc" id="L274" title="All 2 branches covered.">            if (onMatcher.find()) {</span>
+<span class="fc" id="L275">                addTag(onMatcher.group(0), line, column, TagType.ON);</span>
+            }
+        }
+<span class="fc" id="L278">    }</span>
+
+    /**
+     * Adds a {@code Tag} to the list of all tags.
+     * @param text the text of the tag.
+     * @param line the line number of the tag.
+     * @param column the column number of the tag.
+     * @param reportingOn {@code true} if the tag turns checkstyle reporting on.
+     */
+    private void addTag(String text, int line, int column, TagType reportingOn) {
+<span class="fc" id="L288">        final Tag tag = new Tag(line, column, text, reportingOn, this);</span>
+<span class="fc" id="L289">        tags.add(tag);</span>
+<span class="fc" id="L290">    }</span>
+
+    /**
+     * A Tag holds a suppression comment and its location, and determines
+     * whether the suppression turns checkstyle reporting on or off.
+     */
+    public static class Tag
+        implements Comparable&lt;Tag&gt; {
+
+        /** The text of the tag. */
+        private final String text;
+
+        /** The line number of the tag. */
+        private final int line;
+
+        /** The column number of the tag. */
+        private final int column;
+
+        /** Determines whether the suppression turns checkstyle reporting on. */
+        private final TagType tagType;
+
+        /** The parsed check regexp, expanded for the text of this tag. */
+        private final Pattern tagCheckRegexp;
+
+        /** The parsed message regexp, expanded for the text of this tag. */
+        private final Pattern tagMessageRegexp;
+
+        /**
+         * Constructs a tag.
+         * @param line the line number.
+         * @param column the column number.
+         * @param text the text of the suppression.
+         * @param tagType {@code ON} if the tag turns checkstyle reporting.
+         * @param filter the {@code SuppressionCommentFilter} with the context
+         * @throws IllegalArgumentException if unable to parse expanded text.
+         */
+        public Tag(int line, int column, String text, TagType tagType,
+<span class="fc" id="L327">                   SuppressionCommentFilter filter) {</span>
+<span class="fc" id="L328">            this.line = line;</span>
+<span class="fc" id="L329">            this.column = column;</span>
+<span class="fc" id="L330">            this.text = text;</span>
+<span class="fc" id="L331">            this.tagType = tagType;</span>
+
+            //Expand regexp for check and message
+            //Does not intern Patterns with Utils.getPattern()
+<span class="fc" id="L335">            String format = &quot;&quot;;</span>
+            try {
+<span class="fc bfc" id="L337" title="All 2 branches covered.">                if (this.tagType == TagType.ON) {</span>
+<span class="fc" id="L338">                    format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L339">                            filter.checkFormat, text, filter.onCommentFormat);</span>
+<span class="fc" id="L340">                    tagCheckRegexp = Pattern.compile(format);</span>
+<span class="fc bfc" id="L341" title="All 2 branches covered.">                    if (filter.messageFormat == null) {</span>
+<span class="fc" id="L342">                        tagMessageRegexp = null;</span>
+                    }
+                    else {
+<span class="fc" id="L345">                        format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L346">                                filter.messageFormat, text, filter.onCommentFormat);</span>
+<span class="fc" id="L347">                        tagMessageRegexp = Pattern.compile(format);</span>
+                    }
+                }
+                else {
+<span class="fc" id="L351">                    format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L352">                            filter.checkFormat, text, filter.offCommentFormat);</span>
+<span class="fc" id="L353">                    tagCheckRegexp = Pattern.compile(format);</span>
+<span class="fc bfc" id="L354" title="All 2 branches covered.">                    if (filter.messageFormat == null) {</span>
+<span class="fc" id="L355">                        tagMessageRegexp = null;</span>
+                    }
+                    else {
+<span class="fc" id="L358">                        format = CommonUtil.fillTemplateWithStringsByRegexp(</span>
+<span class="fc" id="L359">                                filter.messageFormat, text, filter.offCommentFormat);</span>
+<span class="fc" id="L360">                        tagMessageRegexp = Pattern.compile(format);</span>
+                    }
+                }
+            }
+<span class="fc" id="L364">            catch (final PatternSyntaxException ex) {</span>
+<span class="fc" id="L365">                throw new IllegalArgumentException(</span>
+                    &quot;unable to parse expanded comment &quot; + format, ex);
+<span class="fc" id="L367">            }</span>
+<span class="fc" id="L368">        }</span>
+
+        /**
+         * Returns line number of the tag in the source file.
+         * @return the line number of the tag in the source file.
+         */
+        public int getLine() {
+<span class="fc" id="L375">            return line;</span>
+        }
+
+        /**
+         * Determines the column number of the tag in the source file.
+         * Will be 0 for all lines of multiline comment, except the
+         * first line.
+         * @return the column number of the tag in the source file.
+         */
+        public int getColumn() {
+<span class="fc" id="L385">            return column;</span>
+        }
+
+        /**
+         * Determines whether the suppression turns checkstyle reporting on or
+         * off.
+         * @return {@code ON} if the suppression turns reporting on.
+         */
+        public TagType getTagType() {
+<span class="fc" id="L394">            return tagType;</span>
+        }
+
+        /**
+         * Compares the position of this tag in the file
+         * with the position of another tag.
+         * @param object the tag to compare with this one.
+         * @return a negative number if this tag is before the other tag,
+         *     0 if they are at the same position, and a positive number if this
+         *     tag is after the other tag.
+         */
+        @Override
+        public int compareTo(Tag object) {
+            final int result;
+<span class="fc bfc" id="L408" title="All 2 branches covered.">            if (line == object.line) {</span>
+<span class="fc" id="L409">                result = Integer.compare(column, object.column);</span>
+            }
+            else {
+<span class="fc" id="L412">                result = Integer.compare(line, object.line);</span>
+            }
+<span class="fc" id="L414">            return result;</span>
+        }
+
+        @Override
+        public boolean equals(Object other) {
+<span class="fc bfc" id="L419" title="All 2 branches covered.">            if (this == other) {</span>
+<span class="fc" id="L420">                return true;</span>
+            }
+<span class="fc bfc" id="L422" title="All 4 branches covered.">            if (other == null || getClass() != other.getClass()) {</span>
+<span class="fc" id="L423">                return false;</span>
+            }
+<span class="fc" id="L425">            final Tag tag = (Tag) other;</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">            return Objects.equals(line, tag.line)</span>
+<span class="fc bfc" id="L427" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(column, tag.column)</span>
+<span class="fc bfc" id="L428" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(tagType, tag.tagType)</span>
+<span class="fc bfc" id="L429" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(text, tag.text)</span>
+<span class="fc bfc" id="L430" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(tagCheckRegexp, tag.tagCheckRegexp)</span>
+<span class="fc bfc" id="L431" title="All 2 branches covered.">                    &amp;&amp; Objects.equals(tagMessageRegexp, tag.tagMessageRegexp);</span>
+        }
+
+        @Override
+        public int hashCode() {
+<span class="fc" id="L436">            return Objects.hash(text, line, column, tagType, tagCheckRegexp, tagMessageRegexp);</span>
+        }
+
+        /**
+         * Determines whether the source of an audit event
+         * matches the text of this tag.
+         * @param event the {@code TreeWalkerAuditEvent} to check.
+         * @return true if the source of event matches the text of this tag.
+         */
+        public boolean isMatch(TreeWalkerAuditEvent event) {
+<span class="fc" id="L446">            boolean match = false;</span>
+<span class="fc" id="L447">            final Matcher tagMatcher = tagCheckRegexp.matcher(event.getSourceName());</span>
+<span class="fc bfc" id="L448" title="All 2 branches covered.">            if (tagMatcher.find()) {</span>
+<span class="fc bfc" id="L449" title="All 2 branches covered.">                if (tagMessageRegexp == null) {</span>
+<span class="fc" id="L450">                    match = true;</span>
+                }
+                else {
+<span class="fc" id="L453">                    final Matcher messageMatcher = tagMessageRegexp.matcher(event.getMessage());</span>
+<span class="fc" id="L454">                    match = messageMatcher.find();</span>
+<span class="fc" id="L455">                }</span>
+            }
+<span class="fc bfc" id="L457" title="All 2 branches covered.">            else if (event.getModuleId() != null) {</span>
+<span class="fc" id="L458">                final Matcher idMatcher = tagCheckRegexp.matcher(event.getModuleId());</span>
+<span class="fc" id="L459">                match = idMatcher.find();</span>
+            }
+<span class="fc" id="L461">            return match;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="fc" id="L466">            return &quot;Tag[text='&quot; + text + '\''</span>
+                    + &quot;, line=&quot; + line
+                    + &quot;, column=&quot; + column
+                    + &quot;, type=&quot; + tagType
+                    + &quot;, tagCheckRegexp=&quot; + tagCheckRegexp
+                    + &quot;, tagMessageRegexp=&quot; + tagMessageRegexp + ']';
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

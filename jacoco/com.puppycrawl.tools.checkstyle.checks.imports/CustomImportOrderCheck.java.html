@@ -1,0 +1,902 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CustomImportOrderCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.imports</a> &gt; <span class="el_source">CustomImportOrderCheck.java</span></div><h1>CustomImportOrderCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.imports;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringTokenizer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks that the groups of import declarations appear in the order specified
+ * by the user. If there is an import but its group is not specified in the
+ * configuration such an import should be placed at the end of the import list.
+ * &lt;/p&gt;
+ * The rule consists of:
+ *
+ * &lt;p&gt;
+ * 1. STATIC group. This group sets the ordering of static imports.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * 2. SAME_PACKAGE(n) group. This group sets the ordering of the same package imports.
+ * Imports are considered on SAME_PACKAGE group if &lt;b&gt;n&lt;/b&gt; first domains in package name
+ * and import name are identical.
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ *{@code
+ *package java.util.concurrent.locks;
+ *
+ *import java.io.File;
+ *import java.util.*; //#1
+ *import java.util.List; //#2
+ *import java.util.StringTokenizer; //#3
+ *import java.util.concurrent.*; //#4
+ *import java.util.concurrent.AbstractExecutorService; //#5
+ *import java.util.concurrent.locks.LockSupport; //#6
+ *import java.util.regex.Pattern; //#7
+ *import java.util.regex.Matcher; //#8
+ *}
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * If we have SAME_PACKAGE(3) on configuration file,
+ * imports #4-6 will be considered as a SAME_PACKAGE group (java.util.concurrent.*,
+ * java.util.concurrent.AbstractExecutorService, java.util.concurrent.locks.LockSupport).
+ * SAME_PACKAGE(2) will include #1-8. SAME_PACKAGE(4) will include only #6.
+ * SAME_PACKAGE(5) will result in no imports assigned to SAME_PACKAGE group because
+ * actual package java.util.concurrent.locks has only 4 domains.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * 3. THIRD_PARTY_PACKAGE group. This group sets ordering of third party imports.
+ * Third party imports are all imports except STATIC,
+ * SAME_PACKAGE(n), STANDARD_JAVA_PACKAGE and SPECIAL_IMPORTS.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * 4. STANDARD_JAVA_PACKAGE group. By default this group sets ordering of standard java/javax
+ * imports.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * 5. SPECIAL_IMPORTS group. This group may contains some imports
+ * that have particular meaning for the user.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * NOTE!
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Use the separator '###' between rules.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To set RegExps for THIRD_PARTY_PACKAGE and STANDARD_JAVA_PACKAGE groups use
+ * thirdPartyPackageRegExp and standardPackageRegExp options.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Pretty often one import can match more than one group. For example, static import from standard
+ * package or regular expressions are configured to allow one import match multiple groups.
+ * In this case, group will be assigned according to priorities:
+ * &lt;/p&gt;
+ * &lt;ol&gt;
+ * &lt;li&gt;
+ *    STATIC has top priority
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ *    SAME_PACKAGE has second priority
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ *    STANDARD_JAVA_PACKAGE and SPECIAL_IMPORTS will compete using &quot;best match&quot; rule: longer
+ *    matching substring wins; in case of the same length, lower position of matching substring
+ *    wins; if position is the same, order of rules in configuration solves the puzzle.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ *    THIRD_PARTY has the least priority
+ * &lt;/li&gt;
+ * &lt;/ol&gt;
+ * &lt;p&gt;
+ *    Few examples to illustrate &quot;best match&quot;:
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ *    1. patterns STANDARD_JAVA_PACKAGE = &quot;Check&quot;, SPECIAL_IMPORTS=&quot;ImportOrderCheck&quot; and input
+ *    file:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ *{@code
+ *import com.puppycrawl.tools.checkstyle.checks.imports.CustomImportOrderCheck;
+ *import com.puppycrawl.tools.checkstyle.checks.imports.ImportOrderCheck;}
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ *    Result: imports will be assigned to SPECIAL_IMPORTS, because matching substring length is 16.
+ *    Matching substring for STANDARD_JAVA_PACKAGE is 5.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ *    2. patterns STANDARD_JAVA_PACKAGE = &quot;Check&quot;, SPECIAL_IMPORTS=&quot;Avoid&quot; and file:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ *{@code
+ *import com.puppycrawl.tools.checkstyle.checks.imports.AvoidStarImportCheck;}
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ *   Result: import will be assigned to SPECIAL_IMPORTS. Matching substring length is 5 for both
+ *   patterns. However, &quot;Avoid&quot; position is lower then &quot;Check&quot; position.
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ *    Properties:
+ * &lt;/pre&gt;
+ * &lt;table summary=&quot;Properties&quot; border=&quot;1&quot;&gt;
+ *     &lt;tr&gt;&lt;th&gt;name&lt;/th&gt;&lt;th&gt;Description&lt;/th&gt;&lt;th&gt;type&lt;/th&gt;&lt;th&gt;default value&lt;/th&gt;&lt;/tr&gt;
+ *      &lt;tr&gt;&lt;td&gt;customImportOrderRules&lt;/td&gt;&lt;td&gt;List of order declaration customizing by user.&lt;/td&gt;
+ *          &lt;td&gt;string&lt;/td&gt;&lt;td&gt;null&lt;/td&gt;&lt;/tr&gt;
+ *      &lt;tr&gt;&lt;td&gt;standardPackageRegExp&lt;/td&gt;&lt;td&gt;RegExp for STANDARD_JAVA_PACKAGE group imports.&lt;/td&gt;
+ *          &lt;td&gt;regular expression&lt;/td&gt;&lt;td&gt;^(java|javax)\.&lt;/td&gt;&lt;/tr&gt;
+ *      &lt;tr&gt;&lt;td&gt;thirdPartyPackageRegExp&lt;/td&gt;&lt;td&gt;RegExp for THIRD_PARTY_PACKAGE group imports.&lt;/td&gt;
+ *          &lt;td&gt;regular expression&lt;/td&gt;&lt;td&gt;.*&lt;/td&gt;&lt;/tr&gt;
+ *      &lt;tr&gt;&lt;td&gt;specialImportsRegExp&lt;/td&gt;&lt;td&gt;RegExp for SPECIAL_IMPORTS group imports.&lt;/td&gt;
+ *          &lt;td&gt;regular expression&lt;/td&gt;&lt;td&gt;^$&lt;/td&gt;&lt;/tr&gt;
+ *      &lt;tr&gt;&lt;td&gt;separateLineBetweenGroups&lt;/td&gt;&lt;td&gt;Force empty line separator between import groups.
+ *          &lt;/td&gt;&lt;td&gt;boolean&lt;/td&gt;&lt;td&gt;true&lt;/td&gt;&lt;/tr&gt;
+ *      &lt;tr&gt;&lt;td&gt;sortImportsInGroupAlphabetically&lt;/td&gt;&lt;td&gt;Force grouping alphabetically,
+ *          in ASCII sort order.&lt;/td&gt;&lt;td&gt;boolean&lt;/td&gt;&lt;td&gt;false&lt;/td&gt;&lt;/tr&gt;
+ * &lt;/table&gt;
+ *
+ * &lt;p&gt;
+ * For example:
+ * &lt;/p&gt;
+ *        &lt;p&gt;To configure the check so that it matches default Eclipse formatter configuration
+ *        (tested on Kepler, Luna and Mars):&lt;/p&gt;
+ *        &lt;ul&gt;
+ *          &lt;li&gt;group of static imports is on the top&lt;/li&gt;
+ *          &lt;li&gt;groups of non-static imports: &amp;quot;java&amp;quot; and &amp;quot;javax&amp;quot; packages
+ *          first, then &amp;quot;org&amp;quot; and then all other imports&lt;/li&gt;
+ *          &lt;li&gt;imports will be sorted in the groups&lt;/li&gt;
+ *          &lt;li&gt;groups are separated by, at least, one blank line&lt;/li&gt;
+ *        &lt;/ul&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;customImportOrderRules&amp;quot;
+ *        value=&amp;quot;STATIC###STANDARD_JAVA_PACKAGE###SPECIAL_IMPORTS&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;specialImportsRegExp&amp;quot; value=&amp;quot;org&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;sortImportsInGroupAlphabetically&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;separateLineBetweenGroups&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ *        &lt;p&gt;To configure the check so that it matches default IntelliJ IDEA formatter
+ *        configuration (tested on v14):&lt;/p&gt;
+ *        &lt;ul&gt;
+ *          &lt;li&gt;group of static imports is on the bottom&lt;/li&gt;
+ *          &lt;li&gt;groups of non-static imports: all imports except of &amp;quot;javax&amp;quot;
+ *          and &amp;quot;java&amp;quot;, then &amp;quot;javax&amp;quot; and &amp;quot;java&amp;quot;&lt;/li&gt;
+ *          &lt;li&gt;imports will be sorted in the groups&lt;/li&gt;
+ *          &lt;li&gt;groups are separated by, at least, one blank line&lt;/li&gt;
+ *        &lt;/ul&gt;
+ *
+ *        &lt;p&gt;
+ *        Note: &amp;quot;separated&amp;quot; option is disabled because IDEA default has blank line
+ *        between &amp;quot;java&amp;quot; and static imports, and no blank line between
+ *        &amp;quot;javax&amp;quot; and &amp;quot;java&amp;quot;
+ *        &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;customImportOrderRules&amp;quot;
+ *        value=&amp;quot;THIRD_PARTY_PACKAGE###SPECIAL_IMPORTS###STANDARD_JAVA_PACKAGE
+ *        ###STATIC&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;specialImportsRegExp&amp;quot; value=&amp;quot;^javax\.&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;standardPackageRegExp&amp;quot; value=&amp;quot;^java\.&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;sortImportsInGroupAlphabetically&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;separateLineBetweenGroups&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
+ *&amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;To configure the check so that it matches default NetBeans formatter
+ *    configuration (tested on v8):&lt;/p&gt;
+ * &lt;ul&gt;
+ *     &lt;li&gt;groups of non-static imports are not defined, all imports will be sorted as a one
+ *         group&lt;/li&gt;
+ *     &lt;li&gt;static imports are not separated, they will be sorted along with other imports&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * &lt;pre&gt;
+ *&amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;To set RegExps for THIRD_PARTY_PACKAGE and STANDARD_JAVA_PACKAGE groups use
+ *         thirdPartyPackageRegExp and standardPackageRegExp options.&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;customImportOrderRules&amp;quot;
+ *    value=&amp;quot;STATIC###SAME_PACKAGE(3)###THIRD_PARTY_PACKAGE###STANDARD_JAVA_PACKAGE&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;thirdPartyPackageRegExp&amp;quot; value=&amp;quot;com|org&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;standardPackageRegExp&amp;quot; value=&amp;quot;^(java|javax)\.&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Also, this check can be configured to force empty line separator between
+ * import groups. For example
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;separateLineBetweenGroups&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * It is possible to enforce
+ * &lt;a href=&quot;https://en.wikipedia.org/wiki/ASCII#Order&quot;&gt;ASCII sort order&lt;/a&gt;
+ * of imports in groups using the following configuration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;sortImportsInGroupAlphabetically&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example of ASCII order:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * {@code
+ *import java.awt.Dialog;
+ *import java.awt.Window;
+ *import java.awt.color.ColorSpace;
+ *import java.awt.Frame; // violation here - in ASCII order 'F' should go before 'c',
+ *                       // as all uppercase come before lowercase letters}
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To force checking imports sequence such as:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * {@code
+ * package com.puppycrawl.tools.checkstyle.imports;
+ *
+ * import com.google.common.annotations.GwtCompatible;
+ * import com.google.common.annotations.Beta;
+ * import com.google.common.annotations.VisibleForTesting;
+ *
+ * import org.abego.treelayout.Configuration;
+ *
+ * import static sun.tools.util.ModifierFilter.ALL_ACCESS;
+ *
+ * import com.google.common.annotations.GwtCompatible; // violation here - should be in the
+ *                                                     // THIRD_PARTY_PACKAGE group
+ * import android.*;}
+ * &lt;/pre&gt;
+ * configure as follows:
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;CustomImportOrder&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;customImportOrderRules&amp;quot;
+ *    value=&amp;quot;SAME_PACKAGE(3)###THIRD_PARTY_PACKAGE###STATIC###SPECIAL_IMPORTS&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;specialImportsRegExp&amp;quot; value=&amp;quot;android.*&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ */
+@FileStatefulCheck
+<span class="fc" id="L305">public class CustomImportOrderCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_LINE_SEPARATOR = &quot;custom.import.order.line.separator&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_LEX = &quot;custom.import.order.lex&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_NONGROUP_IMPORT = &quot;custom.import.order.nonGroup.import&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_NONGROUP_EXPECTED = &quot;custom.import.order.nonGroup.expected&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_ORDER = &quot;custom.import.order&quot;;
+
+    /** STATIC group name. */
+    public static final String STATIC_RULE_GROUP = &quot;STATIC&quot;;
+
+    /** SAME_PACKAGE group name. */
+    public static final String SAME_PACKAGE_RULE_GROUP = &quot;SAME_PACKAGE&quot;;
+
+    /** THIRD_PARTY_PACKAGE group name. */
+    public static final String THIRD_PARTY_PACKAGE_RULE_GROUP = &quot;THIRD_PARTY_PACKAGE&quot;;
+
+    /** STANDARD_JAVA_PACKAGE group name. */
+    public static final String STANDARD_JAVA_PACKAGE_RULE_GROUP = &quot;STANDARD_JAVA_PACKAGE&quot;;
+
+    /** SPECIAL_IMPORTS group name. */
+    public static final String SPECIAL_IMPORTS_RULE_GROUP = &quot;SPECIAL_IMPORTS&quot;;
+
+    /** NON_GROUP group name. */
+    private static final String NON_GROUP_RULE_GROUP = &quot;NOT_ASSIGNED_TO_ANY_GROUP&quot;;
+
+    /** Pattern used to separate groups of imports. */
+<span class="fc" id="L356">    private static final Pattern GROUP_SEPARATOR_PATTERN = Pattern.compile(&quot;\\s*###\\s*&quot;);</span>
+
+    /** List of order declaration customizing by user. */
+<span class="fc" id="L359">    private final List&lt;String&gt; customImportOrderRules = new ArrayList&lt;&gt;();</span>
+
+    /** Contains objects with import attributes. */
+<span class="fc" id="L362">    private final List&lt;ImportDetails&gt; importToGroupList = new ArrayList&lt;&gt;();</span>
+
+    /** RegExp for SAME_PACKAGE group imports. */
+<span class="fc" id="L365">    private String samePackageDomainsRegExp = &quot;&quot;;</span>
+
+    /** RegExp for STANDARD_JAVA_PACKAGE group imports. */
+<span class="fc" id="L368">    private Pattern standardPackageRegExp = Pattern.compile(&quot;^(java|javax)\\.&quot;);</span>
+
+    /** RegExp for THIRD_PARTY_PACKAGE group imports. */
+<span class="fc" id="L371">    private Pattern thirdPartyPackageRegExp = Pattern.compile(&quot;.*&quot;);</span>
+
+    /** RegExp for SPECIAL_IMPORTS group imports. */
+<span class="fc" id="L374">    private Pattern specialImportsRegExp = Pattern.compile(&quot;^$&quot;);</span>
+
+    /** Force empty line separator between import groups. */
+<span class="fc" id="L377">    private boolean separateLineBetweenGroups = true;</span>
+
+    /** Force grouping alphabetically, in ASCII order. */
+    private boolean sortImportsInGroupAlphabetically;
+
+    /** Number of first domains for SAME_PACKAGE group. */
+<span class="fc" id="L383">    private int samePackageMatchingDepth = 2;</span>
+
+    /**
+     * Sets standardRegExp specified by user.
+     * @param regexp
+     *        user value.
+     */
+    public final void setStandardPackageRegExp(Pattern regexp) {
+<span class="fc" id="L391">        standardPackageRegExp = regexp;</span>
+<span class="fc" id="L392">    }</span>
+
+    /**
+     * Sets thirdPartyRegExp specified by user.
+     * @param regexp
+     *        user value.
+     */
+    public final void setThirdPartyPackageRegExp(Pattern regexp) {
+<span class="fc" id="L400">        thirdPartyPackageRegExp = regexp;</span>
+<span class="fc" id="L401">    }</span>
+
+    /**
+     * Sets specialImportsRegExp specified by user.
+     * @param regexp
+     *        user value.
+     */
+    public final void setSpecialImportsRegExp(Pattern regexp) {
+<span class="fc" id="L409">        specialImportsRegExp = regexp;</span>
+<span class="fc" id="L410">    }</span>
+
+    /**
+     * Sets separateLineBetweenGroups specified by user.
+     * @param value
+     *        user value.
+     */
+    public final void setSeparateLineBetweenGroups(boolean value) {
+<span class="fc" id="L418">        separateLineBetweenGroups = value;</span>
+<span class="fc" id="L419">    }</span>
+
+    /**
+     * Sets sortImportsInGroupAlphabetically specified by user.
+     * @param value
+     *        user value.
+     */
+    public final void setSortImportsInGroupAlphabetically(boolean value) {
+<span class="fc" id="L427">        sortImportsInGroupAlphabetically = value;</span>
+<span class="fc" id="L428">    }</span>
+
+    /**
+     * Sets a custom import order from the rules in the string format specified
+     * by user.
+     * @param inputCustomImportOrder
+     *        user value.
+     */
+    public final void setCustomImportOrderRules(final String inputCustomImportOrder) {
+<span class="fc bfc" id="L437" title="All 2 branches covered.">        for (String currentState : GROUP_SEPARATOR_PATTERN.split(inputCustomImportOrder)) {</span>
+<span class="fc" id="L438">            addRulesToList(currentState);</span>
+        }
+<span class="fc" id="L440">        customImportOrderRules.add(NON_GROUP_RULE_GROUP);</span>
+<span class="fc" id="L441">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L445">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L450">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L455">        return new int[] {</span>
+            TokenTypes.IMPORT,
+            TokenTypes.STATIC_IMPORT,
+            TokenTypes.PACKAGE_DEF,
+        };
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L464">        importToGroupList.clear();</span>
+<span class="fc" id="L465">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L469" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
+<span class="fc bfc" id="L470" title="All 2 branches covered.">            if (customImportOrderRules.contains(SAME_PACKAGE_RULE_GROUP)) {</span>
+<span class="fc" id="L471">                samePackageDomainsRegExp = createSamePackageRegexp(</span>
+                        samePackageMatchingDepth, ast);
+            }
+        }
+        else {
+<span class="fc" id="L476">            final String importFullPath = getFullImportIdent(ast);</span>
+<span class="fc" id="L477">            final int lineNo = ast.getLineNo();</span>
+<span class="fc bfc" id="L478" title="All 2 branches covered.">            final boolean isStatic = ast.getType() == TokenTypes.STATIC_IMPORT;</span>
+<span class="fc" id="L479">            importToGroupList.add(new ImportDetails(importFullPath,</span>
+<span class="fc" id="L480">                    lineNo, getImportGroup(isStatic, importFullPath),</span>
+                    isStatic));
+        }
+<span class="fc" id="L483">    }</span>
+
+    @Override
+    public void finishTree(DetailAST rootAST) {
+<span class="fc bfc" id="L487" title="All 2 branches covered.">        if (!importToGroupList.isEmpty()) {</span>
+<span class="fc" id="L488">            finishImportList();</span>
+        }
+<span class="fc" id="L490">    }</span>
+
+    /** Examine the order of all the imports and log any violations. */
+    private void finishImportList() {
+<span class="fc" id="L494">        final ImportDetails firstImport = importToGroupList.get(0);</span>
+<span class="fc" id="L495">        String currentGroup = getImportGroup(firstImport.isStaticImport(),</span>
+<span class="fc" id="L496">                firstImport.getImportFullPath());</span>
+<span class="fc" id="L497">        int currentGroupNumber = customImportOrderRules.indexOf(currentGroup);</span>
+<span class="fc" id="L498">        String previousImportFromCurrentGroup = null;</span>
+
+<span class="fc bfc" id="L500" title="All 2 branches covered.">        for (ImportDetails importObject : importToGroupList) {</span>
+<span class="fc" id="L501">            final String importGroup = importObject.getImportGroup();</span>
+<span class="fc" id="L502">            final String fullImportIdent = importObject.getImportFullPath();</span>
+
+<span class="fc bfc" id="L504" title="All 2 branches covered.">            if (getCountOfEmptyLinesBefore(importObject.getLineNumber()) &gt; 1) {</span>
+<span class="fc" id="L505">                log(importObject.getLineNumber(), MSG_LINE_SEPARATOR, fullImportIdent);</span>
+            }
+<span class="fc bfc" id="L507" title="All 2 branches covered.">            if (importGroup.equals(currentGroup)) {</span>
+<span class="fc bfc" id="L508" title="All 4 branches covered.">                if (sortImportsInGroupAlphabetically</span>
+                        &amp;&amp; previousImportFromCurrentGroup != null
+<span class="fc bfc" id="L510" title="All 2 branches covered.">                        &amp;&amp; compareImports(fullImportIdent, previousImportFromCurrentGroup) &lt; 0) {</span>
+<span class="fc" id="L511">                    log(importObject.getLineNumber(), MSG_LEX,</span>
+                            fullImportIdent, previousImportFromCurrentGroup);
+                }
+                else {
+<span class="fc" id="L515">                    previousImportFromCurrentGroup = fullImportIdent;</span>
+                }
+            }
+            else {
+                //not the last group, last one is always NON_GROUP
+<span class="fc bfc" id="L520" title="All 2 branches covered.">                if (customImportOrderRules.size() &gt; currentGroupNumber + 1) {</span>
+<span class="fc" id="L521">                    final String nextGroup = getNextImportGroup(currentGroupNumber + 1);</span>
+<span class="fc bfc" id="L522" title="All 2 branches covered.">                    if (importGroup.equals(nextGroup)) {</span>
+<span class="fc bfc" id="L523" title="All 2 branches covered.">                        if (separateLineBetweenGroups</span>
+<span class="fc bfc" id="L524" title="All 2 branches covered.">                                &amp;&amp; getCountOfEmptyLinesBefore(importObject.getLineNumber()) == 0) {</span>
+<span class="fc" id="L525">                            log(importObject.getLineNumber(), MSG_LINE_SEPARATOR, fullImportIdent);</span>
+                        }
+<span class="fc" id="L527">                        currentGroup = nextGroup;</span>
+<span class="fc" id="L528">                        currentGroupNumber = customImportOrderRules.indexOf(nextGroup);</span>
+<span class="fc" id="L529">                        previousImportFromCurrentGroup = fullImportIdent;</span>
+                    }
+                    else {
+<span class="fc" id="L532">                        logWrongImportGroupOrder(importObject.getLineNumber(),</span>
+                                importGroup, nextGroup, fullImportIdent);
+                    }
+<span class="fc" id="L535">                }</span>
+                else {
+<span class="fc" id="L537">                    logWrongImportGroupOrder(importObject.getLineNumber(),</span>
+                            importGroup, currentGroup, fullImportIdent);
+                }
+            }
+<span class="fc" id="L541">        }</span>
+<span class="fc" id="L542">    }</span>
+
+    /**
+     * Log wrong import group order.
+     * @param currentImportLine
+     *        line number of current import current import.
+     * @param importGroup
+     *        import group.
+     * @param currentGroupNumber
+     *        current group number we are checking.
+     * @param fullImportIdent
+     *        full import name.
+     */
+    private void logWrongImportGroupOrder(int currentImportLine, String importGroup,
+            String currentGroupNumber, String fullImportIdent) {
+<span class="fc bfc" id="L557" title="All 2 branches covered.">        if (NON_GROUP_RULE_GROUP.equals(importGroup)) {</span>
+<span class="fc" id="L558">            log(currentImportLine, MSG_NONGROUP_IMPORT, fullImportIdent);</span>
+        }
+<span class="fc bfc" id="L560" title="All 2 branches covered.">        else if (NON_GROUP_RULE_GROUP.equals(currentGroupNumber)) {</span>
+<span class="fc" id="L561">            log(currentImportLine, MSG_NONGROUP_EXPECTED, importGroup, fullImportIdent);</span>
+        }
+        else {
+<span class="fc" id="L564">            log(currentImportLine, MSG_ORDER, importGroup, currentGroupNumber, fullImportIdent);</span>
+        }
+<span class="fc" id="L566">    }</span>
+
+    /**
+     * Get next import group.
+     * @param currentGroupNumber
+     *        current group number.
+     * @return
+     *        next import group.
+     */
+    private String getNextImportGroup(int currentGroupNumber) {
+<span class="fc" id="L576">        int nextGroupNumber = currentGroupNumber;</span>
+
+<span class="fc bfc" id="L578" title="All 2 branches covered.">        while (customImportOrderRules.size() &gt; nextGroupNumber + 1) {</span>
+<span class="fc bfc" id="L579" title="All 2 branches covered.">            if (hasAnyImportInCurrentGroup(customImportOrderRules.get(nextGroupNumber))) {</span>
+<span class="fc" id="L580">                break;</span>
+            }
+<span class="fc" id="L582">            nextGroupNumber++;</span>
+        }
+<span class="fc" id="L584">        return customImportOrderRules.get(nextGroupNumber);</span>
+    }
+
+    /**
+     * Checks if current group contains any import.
+     * @param currentGroup
+     *        current group.
+     * @return
+     *        true, if current group contains at least one import.
+     */
+    private boolean hasAnyImportInCurrentGroup(String currentGroup) {
+<span class="fc" id="L595">        boolean result = false;</span>
+<span class="fc bfc" id="L596" title="All 2 branches covered.">        for (ImportDetails currentImport : importToGroupList) {</span>
+<span class="fc bfc" id="L597" title="All 2 branches covered.">            if (currentGroup.equals(currentImport.getImportGroup())) {</span>
+<span class="fc" id="L598">                result = true;</span>
+<span class="fc" id="L599">                break;</span>
+            }
+<span class="fc" id="L601">        }</span>
+<span class="fc" id="L602">        return result;</span>
+    }
+
+    /**
+     * Get import valid group.
+     * @param isStatic
+     *        is static import.
+     * @param importPath
+     *        full import path.
+     * @return import valid group.
+     */
+    private String getImportGroup(boolean isStatic, String importPath) {
+<span class="fc" id="L614">        RuleMatchForImport bestMatch = new RuleMatchForImport(NON_GROUP_RULE_GROUP, 0, 0);</span>
+<span class="fc bfc" id="L615" title="All 4 branches covered.">        if (isStatic &amp;&amp; customImportOrderRules.contains(STATIC_RULE_GROUP)) {</span>
+<span class="fc" id="L616">            bestMatch.group = STATIC_RULE_GROUP;</span>
+<span class="fc" id="L617">            bestMatch.matchLength = importPath.length();</span>
+        }
+<span class="fc bfc" id="L619" title="All 2 branches covered.">        else if (customImportOrderRules.contains(SAME_PACKAGE_RULE_GROUP)) {</span>
+<span class="fc" id="L620">            final String importPathTrimmedToSamePackageDepth =</span>
+<span class="fc" id="L621">                    getFirstDomainsFromIdent(samePackageMatchingDepth, importPath);</span>
+<span class="fc bfc" id="L622" title="All 2 branches covered.">            if (samePackageDomainsRegExp.equals(importPathTrimmedToSamePackageDepth)) {</span>
+<span class="fc" id="L623">                bestMatch.group = SAME_PACKAGE_RULE_GROUP;</span>
+<span class="fc" id="L624">                bestMatch.matchLength = importPath.length();</span>
+            }
+        }
+<span class="fc bfc" id="L627" title="All 2 branches covered.">        if (bestMatch.group.equals(NON_GROUP_RULE_GROUP)) {</span>
+<span class="fc bfc" id="L628" title="All 2 branches covered.">            for (String group : customImportOrderRules) {</span>
+<span class="fc bfc" id="L629" title="All 2 branches covered.">                if (STANDARD_JAVA_PACKAGE_RULE_GROUP.equals(group)) {</span>
+<span class="fc" id="L630">                    bestMatch = findBetterPatternMatch(importPath,</span>
+                            STANDARD_JAVA_PACKAGE_RULE_GROUP, standardPackageRegExp, bestMatch);
+                }
+<span class="fc bfc" id="L633" title="All 2 branches covered.">                if (SPECIAL_IMPORTS_RULE_GROUP.equals(group)) {</span>
+<span class="fc" id="L634">                    bestMatch = findBetterPatternMatch(importPath,</span>
+                            group, specialImportsRegExp, bestMatch);
+                }
+<span class="fc" id="L637">            }</span>
+        }
+<span class="fc bfc" id="L639" title="All 2 branches covered.">        if (bestMatch.group.equals(NON_GROUP_RULE_GROUP)</span>
+<span class="fc bfc" id="L640" title="All 2 branches covered.">                &amp;&amp; customImportOrderRules.contains(THIRD_PARTY_PACKAGE_RULE_GROUP)</span>
+<span class="fc bfc" id="L641" title="All 2 branches covered.">                &amp;&amp; thirdPartyPackageRegExp.matcher(importPath).find()) {</span>
+<span class="fc" id="L642">            bestMatch.group = THIRD_PARTY_PACKAGE_RULE_GROUP;</span>
+        }
+<span class="fc" id="L644">        return bestMatch.group;</span>
+    }
+
+    /** Tries to find better matching regular expression:
+     * longer matching substring wins; in case of the same length,
+     * lower position of matching substring wins.
+     * @param importPath
+     *      Full import identifier
+     * @param group
+     *      Import group we are trying to assign the import
+     * @param regExp
+     *      Regular expression for import group
+     * @param currentBestMatch
+     *      object with currently best match
+     * @return better match (if found) or the same (currentBestMatch)
+     */
+    private static RuleMatchForImport findBetterPatternMatch(String importPath, String group,
+            Pattern regExp, RuleMatchForImport currentBestMatch) {
+<span class="fc" id="L662">        RuleMatchForImport betterMatchCandidate = currentBestMatch;</span>
+<span class="fc" id="L663">        final Matcher matcher = regExp.matcher(importPath);</span>
+<span class="fc bfc" id="L664" title="All 2 branches covered.">        while (matcher.find()) {</span>
+<span class="fc" id="L665">            final int length = matcher.end() - matcher.start();</span>
+<span class="fc bfc" id="L666" title="All 2 branches covered.">            if (length &gt; betterMatchCandidate.matchLength</span>
+<span class="fc bfc" id="L667" title="All 2 branches covered.">                    || length == betterMatchCandidate.matchLength</span>
+<span class="fc bfc" id="L668" title="All 2 branches covered.">                        &amp;&amp; matcher.start() &lt; betterMatchCandidate.matchPosition) {</span>
+<span class="fc" id="L669">                betterMatchCandidate = new RuleMatchForImport(group, length, matcher.start());</span>
+            }
+<span class="fc" id="L671">        }</span>
+<span class="fc" id="L672">        return betterMatchCandidate;</span>
+    }
+
+    /**
+     * Checks compare two import paths.
+     * @param import1
+     *        current import.
+     * @param import2
+     *        previous import.
+     * @return a negative integer, zero, or a positive integer as the
+     *        specified String is greater than, equal to, or less
+     *        than this String, ignoring case considerations.
+     */
+    private static int compareImports(String import1, String import2) {
+<span class="fc" id="L686">        int result = 0;</span>
+<span class="fc" id="L687">        final String separator = &quot;\\.&quot;;</span>
+<span class="fc" id="L688">        final String[] import1Tokens = import1.split(separator);</span>
+<span class="fc" id="L689">        final String[] import2Tokens = import2.split(separator);</span>
+<span class="fc bfc" id="L690" title="All 4 branches covered.">        for (int i = 0; i != import1Tokens.length &amp;&amp; i != import2Tokens.length; i++) {</span>
+<span class="fc" id="L691">            final String import1Token = import1Tokens[i];</span>
+<span class="fc" id="L692">            final String import2Token = import2Tokens[i];</span>
+<span class="fc" id="L693">            result = import1Token.compareTo(import2Token);</span>
+<span class="fc bfc" id="L694" title="All 2 branches covered.">            if (result != 0) {</span>
+<span class="fc" id="L695">                break;</span>
+            }
+        }
+<span class="fc bfc" id="L698" title="All 2 branches covered.">        if (result == 0) {</span>
+<span class="fc" id="L699">            result = Integer.compare(import1Tokens.length, import2Tokens.length);</span>
+        }
+<span class="fc" id="L701">        return result;</span>
+    }
+
+    /**
+     * Counts empty lines before given.
+     * @param lineNo
+     *        Line number of current import.
+     * @return count of empty lines before given.
+     */
+    private int getCountOfEmptyLinesBefore(int lineNo) {
+<span class="fc" id="L711">        int result = 0;</span>
+<span class="fc" id="L712">        final String[] lines = getLines();</span>
+        //  [lineNo - 2] is the number of the previous line
+        //  because the numbering starts from zero.
+<span class="fc" id="L715">        int lineBeforeIndex = lineNo - 2;</span>
+<span class="fc bfc" id="L716" title="All 2 branches covered.">        while (lineBeforeIndex &gt;= 0</span>
+<span class="fc bfc" id="L717" title="All 2 branches covered.">                &amp;&amp; CommonUtil.isBlank(lines[lineBeforeIndex])) {</span>
+<span class="fc" id="L718">            lineBeforeIndex--;</span>
+<span class="fc" id="L719">            result++;</span>
+        }
+<span class="fc" id="L721">        return result;</span>
+    }
+
+    /**
+     * Forms import full path.
+     * @param token
+     *        current token.
+     * @return full path or null.
+     */
+    private static String getFullImportIdent(DetailAST token) {
+<span class="fc" id="L731">        String ident = &quot;&quot;;</span>
+<span class="fc bfc" id="L732" title="All 2 branches covered.">        if (token != null) {</span>
+<span class="fc" id="L733">            ident = FullIdent.createFullIdent(token.findFirstToken(TokenTypes.DOT)).getText();</span>
+        }
+<span class="fc" id="L735">        return ident;</span>
+    }
+
+    /**
+     * Parses ordering rule and adds it to the list with rules.
+     * @param ruleStr
+     *        String with rule.
+     */
+    private void addRulesToList(String ruleStr) {
+<span class="fc bfc" id="L744" title="All 2 branches covered.">        if (STATIC_RULE_GROUP.equals(ruleStr)</span>
+<span class="fc bfc" id="L745" title="All 2 branches covered.">                || THIRD_PARTY_PACKAGE_RULE_GROUP.equals(ruleStr)</span>
+<span class="fc bfc" id="L746" title="All 2 branches covered.">                || STANDARD_JAVA_PACKAGE_RULE_GROUP.equals(ruleStr)</span>
+<span class="fc bfc" id="L747" title="All 2 branches covered.">                || SPECIAL_IMPORTS_RULE_GROUP.equals(ruleStr)) {</span>
+<span class="fc" id="L748">            customImportOrderRules.add(ruleStr);</span>
+        }
+<span class="fc bfc" id="L750" title="All 2 branches covered.">        else if (ruleStr.startsWith(SAME_PACKAGE_RULE_GROUP)) {</span>
+<span class="fc" id="L751">            final String rule = ruleStr.substring(ruleStr.indexOf('(') + 1,</span>
+<span class="fc" id="L752">                    ruleStr.indexOf(')'));</span>
+<span class="fc" id="L753">            samePackageMatchingDepth = Integer.parseInt(rule);</span>
+<span class="fc bfc" id="L754" title="All 2 branches covered.">            if (samePackageMatchingDepth &lt;= 0) {</span>
+<span class="fc" id="L755">                throw new IllegalArgumentException(</span>
+                        &quot;SAME_PACKAGE rule parameter should be positive integer: &quot; + ruleStr);
+            }
+<span class="fc" id="L758">            customImportOrderRules.add(SAME_PACKAGE_RULE_GROUP);</span>
+<span class="fc" id="L759">        }</span>
+        else {
+<span class="fc" id="L761">            throw new IllegalStateException(&quot;Unexpected rule: &quot; + ruleStr);</span>
+        }
+<span class="fc" id="L763">    }</span>
+
+    /**
+     * Creates samePackageDomainsRegExp of the first package domains.
+     * @param firstPackageDomainsCount
+     *        number of first package domains.
+     * @param packageNode
+     *        package node.
+     * @return same package regexp.
+     */
+    private static String createSamePackageRegexp(int firstPackageDomainsCount,
+             DetailAST packageNode) {
+<span class="fc" id="L775">        final String packageFullPath = getFullImportIdent(packageNode);</span>
+<span class="fc" id="L776">        return getFirstDomainsFromIdent(firstPackageDomainsCount, packageFullPath);</span>
+    }
+
+    /**
+     * Extracts defined amount of domains from the left side of package/import identifier.
+     * @param firstPackageDomainsCount
+     *        number of first package domains.
+     * @param packageFullPath
+     *        full identifier containing path to package or imported object.
+     * @return String with defined amount of domains or full identifier
+     *        (if full identifier had less domain then specified)
+     */
+    private static String getFirstDomainsFromIdent(
+            final int firstPackageDomainsCount, final String packageFullPath) {
+<span class="fc" id="L790">        final StringBuilder builder = new StringBuilder(256);</span>
+<span class="fc" id="L791">        final StringTokenizer tokens = new StringTokenizer(packageFullPath, &quot;.&quot;);</span>
+<span class="fc" id="L792">        int count = firstPackageDomainsCount;</span>
+
+<span class="fc bfc" id="L794" title="All 4 branches covered.">        while (count &gt; 0 &amp;&amp; tokens.hasMoreTokens()) {</span>
+<span class="fc" id="L795">            builder.append(tokens.nextToken()).append('.');</span>
+<span class="fc" id="L796">            count--;</span>
+        }
+<span class="fc" id="L798">        return builder.toString();</span>
+    }
+
+    /**
+     * Contains import attributes as line number, import full path, import
+     * group.
+     */
+    private static class ImportDetails {
+
+        /** Import full path. */
+        private final String importFullPath;
+
+        /** Import line number. */
+        private final int lineNumber;
+
+        /** Import group. */
+        private final String importGroup;
+
+        /** Is static import. */
+        private final boolean staticImport;
+
+        /**
+         * Initialise importFullPath, lineNumber, importGroup, staticImport.
+         * @param importFullPath
+         *        import full path.
+         * @param lineNumber
+         *        import line number.
+         * @param importGroup
+         *        import group.
+         * @param staticImport
+         *        if import is static.
+         */
+        ImportDetails(String importFullPath,
+<span class="fc" id="L831">                int lineNumber, String importGroup, boolean staticImport) {</span>
+<span class="fc" id="L832">            this.importFullPath = importFullPath;</span>
+<span class="fc" id="L833">            this.lineNumber = lineNumber;</span>
+<span class="fc" id="L834">            this.importGroup = importGroup;</span>
+<span class="fc" id="L835">            this.staticImport = staticImport;</span>
+<span class="fc" id="L836">        }</span>
+
+        /**
+         * Get import full path variable.
+         * @return import full path variable.
+         */
+        public String getImportFullPath() {
+<span class="fc" id="L843">            return importFullPath;</span>
+        }
+
+        /**
+         * Get import line number.
+         * @return import line.
+         */
+        public int getLineNumber() {
+<span class="fc" id="L851">            return lineNumber;</span>
+        }
+
+        /**
+         * Get import group.
+         * @return import group.
+         */
+        public String getImportGroup() {
+<span class="fc" id="L859">            return importGroup;</span>
+        }
+
+        /**
+         * Checks if import is static.
+         * @return true, if import is static.
+         */
+        public boolean isStaticImport() {
+<span class="fc" id="L867">            return staticImport;</span>
+        }
+
+    }
+
+    /**
+     * Contains matching attributes assisting in definition of &quot;best matching&quot;
+     * group for import.
+     */
+    private static class RuleMatchForImport {
+
+        /** Position of matching string for current best match. */
+        private final int matchPosition;
+        /** Length of matching string for current best match. */
+        private int matchLength;
+        /** Import group for current best match. */
+        private String group;
+
+        /** Constructor to initialize the fields.
+         * @param group
+         *        Matched group.
+         * @param length
+         *        Matching length.
+         * @param position
+         *        Matching position.
+         */
+<span class="fc" id="L893">        RuleMatchForImport(String group, int length, int position) {</span>
+<span class="fc" id="L894">            this.group = group;</span>
+<span class="fc" id="L895">            matchLength = length;</span>
+<span class="fc" id="L896">            matchPosition = position;</span>
+<span class="fc" id="L897">        }</span>
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

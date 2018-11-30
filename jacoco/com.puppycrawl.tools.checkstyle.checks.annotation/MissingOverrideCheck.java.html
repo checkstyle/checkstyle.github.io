@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MissingOverrideCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.annotation</a> &gt; <span class="el_source">MissingOverrideCheck.java</span></div><h1>MissingOverrideCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.annotation;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TextBlock;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocTagInfo;
+import com.puppycrawl.tools.checkstyle.utils.AnnotationUtil;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ * This class is used to verify that the {@link Override Override}
+ * annotation is present when the inheritDoc javadoc tag is present.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * Rationale: The {@link Override Override} annotation helps
+ * compiler tools ensure that an override is actually occurring.  It is
+ * quite easy to accidentally overload a method or hide a static method
+ * and using the {@link Override Override} annotation points
+ * out these problems.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * This check will log a violation if using the inheritDoc tag on a method that
+ * is not valid (ex: private, or static method).
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * There is a slight difference between the Override annotation in Java 5 versus
+ * Java 6 and above. In Java 5, any method overridden from an interface cannot
+ * be annotated with Override. In Java 6 this behavior is allowed.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * As a result of the aforementioned difference between Java 5 and Java 6, a
+ * property called {@code javaFiveCompatibility } is available. This
+ * property will only check classes, interfaces, etc. that do not contain the
+ * extends or implements keyword or are not anonymous classes. This means it
+ * only checks methods overridden from {@code java.lang.Object}
+ *
+ * &lt;b&gt;Java 5 Compatibility mode severely limits this check. It is recommended to
+ * only use it on Java 5 source&lt;/b&gt;
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;MissingOverride&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;javaFiveCompatibility&amp;quot;
+ *        value=&amp;quot;true&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ */
+@StatelessCheck
+<span class="fc" id="L79">public final class MissingOverrideCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_TAG_NOT_VALID_ON = &quot;tag.not.valid.on&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_ANNOTATION_MISSING_OVERRIDE =
+        &quot;annotation.missing.override&quot;;
+
+    /** {@link Override Override} annotation name. */
+    private static final String OVERRIDE = &quot;Override&quot;;
+
+    /** Fully-qualified {@link Override Override} annotation name. */
+    private static final String FQ_OVERRIDE = &quot;java.lang.&quot; + OVERRIDE;
+
+    /** Compiled regexp to match Javadoc tags with no argument and {}. */
+<span class="fc" id="L101">    private static final Pattern MATCH_INHERIT_DOC =</span>
+<span class="fc" id="L102">            CommonUtil.createPattern(&quot;\\{\\s*@(inheritDoc)\\s*\\}&quot;);</span>
+
+    /**
+     * Java 5 compatibility option.
+     * @see #setJavaFiveCompatibility(boolean)
+     */
+    private boolean javaFiveCompatibility;
+
+    /**
+     * Sets Java 5 compatibility mode.
+     *
+     * &lt;p&gt;
+     * In Java 5, this check could flag code that is not valid for the Override
+     * annotation even though it is a proper override. See the class
+     * documentation for more information.
+     * &lt;/p&gt;
+     *
+     * &lt;p&gt;
+     * Set this to true to turn on Java 5 compatibility mode. Set this to
+     * false to turn off Java 5 compatibility mode.
+     * &lt;/p&gt;
+     *
+     * @param compatibility compatibility or not
+     */
+    public void setJavaFiveCompatibility(final boolean compatibility) {
+<span class="fc" id="L127">        javaFiveCompatibility = compatibility;</span>
+<span class="fc" id="L128">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L132">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L137">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L142">        return new int[]</span>
+        {TokenTypes.METHOD_DEF, };
+    }
+
+    // -@cs[CyclomaticComplexity] Too complex to break apart.
+    @Override
+    public void visitToken(final DetailAST ast) {
+<span class="fc" id="L149">        final TextBlock javadoc =</span>
+<span class="fc" id="L150">            getFileContents().getJavadocBefore(ast.getLineNo());</span>
+
+<span class="fc" id="L152">        final boolean containsTag = containsJavadocTag(javadoc);</span>
+<span class="fc bfc" id="L153" title="All 4 branches covered.">        if (containsTag &amp;&amp; !JavadocTagInfo.INHERIT_DOC.isValidOn(ast)) {</span>
+<span class="fc" id="L154">            log(ast.getLineNo(), MSG_KEY_TAG_NOT_VALID_ON,</span>
+<span class="fc" id="L155">                JavadocTagInfo.INHERIT_DOC.getText());</span>
+        }
+        else {
+<span class="fc" id="L158">            boolean check = true;</span>
+
+<span class="fc bfc" id="L160" title="All 2 branches covered.">            if (javaFiveCompatibility) {</span>
+<span class="fc" id="L161">                final DetailAST defOrNew = ast.getParent().getParent();</span>
+
+<span class="fc bfc" id="L163" title="All 2 branches covered.">                if (defOrNew.findFirstToken(TokenTypes.EXTENDS_CLAUSE) != null</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">                    || defOrNew.findFirstToken(TokenTypes.IMPLEMENTS_CLAUSE) != null</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">                    || defOrNew.getType() == TokenTypes.LITERAL_NEW) {</span>
+<span class="fc" id="L166">                    check = false;</span>
+                }
+            }
+
+<span class="fc bfc" id="L170" title="All 4 branches covered.">            if (check</span>
+                &amp;&amp; containsTag
+<span class="fc bfc" id="L172" title="All 2 branches covered.">                &amp;&amp; !AnnotationUtil.containsAnnotation(ast, OVERRIDE)</span>
+<span class="fc bfc" id="L173" title="All 2 branches covered.">                &amp;&amp; !AnnotationUtil.containsAnnotation(ast, FQ_OVERRIDE)) {</span>
+<span class="fc" id="L174">                log(ast.getLineNo(), MSG_KEY_ANNOTATION_MISSING_OVERRIDE);</span>
+            }
+        }
+<span class="fc" id="L177">    }</span>
+
+    /**
+     * Checks to see if the text block contains a inheritDoc tag.
+     *
+     * @param javadoc the javadoc of the AST
+     * @return true if contains the tag
+     */
+    private static boolean containsJavadocTag(final TextBlock javadoc) {
+<span class="fc" id="L186">        boolean javadocTag = false;</span>
+
+<span class="fc bfc" id="L188" title="All 2 branches covered.">        if (javadoc != null) {</span>
+<span class="fc" id="L189">            final String[] lines = javadoc.getText();</span>
+
+<span class="fc bfc" id="L191" title="All 2 branches covered.">            for (final String line : lines) {</span>
+<span class="fc" id="L192">                final Matcher matchInheritDoc =</span>
+<span class="fc" id="L193">                    MATCH_INHERIT_DOC.matcher(line);</span>
+
+<span class="fc bfc" id="L195" title="All 2 branches covered.">                if (matchInheritDoc.find()) {</span>
+<span class="fc" id="L196">                    javadocTag = true;</span>
+<span class="fc" id="L197">                    break;</span>
+                }
+            }
+        }
+<span class="fc" id="L201">        return javadocTag;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

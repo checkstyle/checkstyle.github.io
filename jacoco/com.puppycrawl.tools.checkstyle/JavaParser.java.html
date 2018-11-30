@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JavaParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">JavaParser.java</span></div><h1>JavaParser.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+
+import antlr.CommonHiddenStreamToken;
+import antlr.RecognitionException;
+import antlr.Token;
+import antlr.TokenStreamException;
+import antlr.TokenStreamHiddenTokenFilter;
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FileContents;
+import com.puppycrawl.tools.checkstyle.api.FileText;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.grammar.GeneratedJavaLexer;
+import com.puppycrawl.tools.checkstyle.grammar.GeneratedJavaRecognizer;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * Helper methods to parse java source files.
+ *
+ */
+public final class JavaParser {
+
+    /**
+     * Enum to be used for test if comments should be used.
+     */
+<span class="fc" id="L52">    public enum Options {</span>
+
+        /**
+         * Comments nodes should be processed.
+         */
+<span class="fc" id="L57">        WITH_COMMENTS,</span>
+
+        /**
+         * Comments nodes should be ignored.
+         */
+<span class="fc" id="L62">        WITHOUT_COMMENTS,</span>
+
+    }
+
+    /** Stop instances being created. **/
+    private JavaParser() {
+    }
+
+    /**
+     * Static helper method to parses a Java source file.
+     * @param contents contains the contents of the file
+     * @return the root of the AST
+     * @throws CheckstyleException if the contents is not a valid Java source
+     */
+    public static DetailAST parse(FileContents contents)
+            throws CheckstyleException {
+<span class="fc" id="L78">        final String fullText = contents.getText().getFullText().toString();</span>
+<span class="fc" id="L79">        final Reader reader = new StringReader(fullText);</span>
+<span class="fc" id="L80">        final GeneratedJavaLexer lexer = new GeneratedJavaLexer(reader);</span>
+<span class="fc" id="L81">        lexer.setCommentListener(contents);</span>
+<span class="fc" id="L82">        lexer.setTokenObjectClass(&quot;antlr.CommonHiddenStreamToken&quot;);</span>
+
+<span class="fc" id="L84">        final TokenStreamHiddenTokenFilter filter = new TokenStreamHiddenTokenFilter(lexer);</span>
+<span class="fc" id="L85">        filter.hide(TokenTypes.SINGLE_LINE_COMMENT);</span>
+<span class="fc" id="L86">        filter.hide(TokenTypes.BLOCK_COMMENT_BEGIN);</span>
+
+<span class="fc" id="L88">        final GeneratedJavaRecognizer parser = new GeneratedJavaRecognizer(filter);</span>
+<span class="fc" id="L89">        parser.setFilename(contents.getFileName());</span>
+<span class="fc" id="L90">        parser.setASTNodeClass(DetailAST.class.getName());</span>
+        try {
+<span class="fc" id="L92">            parser.compilationUnit();</span>
+        }
+<span class="fc" id="L94">        catch (RecognitionException | TokenStreamException ex) {</span>
+<span class="fc" id="L95">            final String exceptionMsg = String.format(Locale.ROOT,</span>
+                &quot;%s occurred while parsing file %s.&quot;,
+<span class="fc" id="L97">                ex.getClass().getSimpleName(), contents.getFileName());</span>
+<span class="fc" id="L98">            throw new CheckstyleException(exceptionMsg, ex);</span>
+<span class="fc" id="L99">        }</span>
+
+<span class="fc" id="L101">        return (DetailAST) parser.getAST();</span>
+    }
+
+    /**
+     * Parse a text and return the parse tree.
+     * @param text the text to parse
+     * @param options {@link Options} to control inclusion of comment nodes
+     * @return the root node of the parse tree
+     * @throws CheckstyleException if the text is not a valid Java source
+     */
+    public static DetailAST parseFileText(FileText text, Options options)
+            throws CheckstyleException {
+<span class="fc" id="L113">        final FileContents contents = new FileContents(text);</span>
+<span class="fc" id="L114">        DetailAST ast = parse(contents);</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        if (options == Options.WITH_COMMENTS) {</span>
+<span class="fc" id="L116">            ast = appendHiddenCommentNodes(ast);</span>
+        }
+<span class="fc" id="L118">        return ast;</span>
+    }
+
+    /**
+     * Parses Java source file.
+     * @param file the file to parse
+     * @param options {@link Options} to control inclusion of comment nodes
+     * @return DetailAST tree
+     * @throws IOException if the file could not be read
+     * @throws CheckstyleException if the file is not a valid Java source file
+     */
+    public static DetailAST parseFile(File file, Options options)
+            throws IOException, CheckstyleException {
+<span class="fc" id="L131">        final FileText text = new FileText(file.getAbsoluteFile(),</span>
+<span class="fc" id="L132">            System.getProperty(&quot;file.encoding&quot;, StandardCharsets.UTF_8.name()));</span>
+<span class="fc" id="L133">        return parseFileText(text, options);</span>
+    }
+
+    /**
+     * Appends comment nodes to existing AST.
+     * It traverses each node in AST, looks for hidden comment tokens
+     * and appends found comment tokens as nodes in AST.
+     * @param root of AST
+     * @return root of AST with comment nodes
+     */
+    public static DetailAST appendHiddenCommentNodes(DetailAST root) {
+<span class="fc" id="L144">        DetailAST result = root;</span>
+<span class="fc" id="L145">        DetailAST curNode = root;</span>
+<span class="fc" id="L146">        DetailAST lastNode = root;</span>
+
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        while (curNode != null) {</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">            if (isPositionGreater(curNode, lastNode)) {</span>
+<span class="fc" id="L150">                lastNode = curNode;</span>
+            }
+
+<span class="fc" id="L153">            CommonHiddenStreamToken tokenBefore = curNode.getHiddenBefore();</span>
+<span class="fc" id="L154">            DetailAST currentSibling = curNode;</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">            while (tokenBefore != null) {</span>
+<span class="fc" id="L156">                final DetailAST newCommentNode =</span>
+<span class="fc" id="L157">                         createCommentAstFromToken(tokenBefore);</span>
+
+<span class="fc" id="L159">                currentSibling.addPreviousSibling(newCommentNode);</span>
+
+<span class="fc bfc" id="L161" title="All 2 branches covered.">                if (currentSibling == result) {</span>
+<span class="fc" id="L162">                    result = newCommentNode;</span>
+                }
+
+<span class="fc" id="L165">                currentSibling = newCommentNode;</span>
+<span class="fc" id="L166">                tokenBefore = tokenBefore.getHiddenBefore();</span>
+<span class="fc" id="L167">            }</span>
+
+<span class="fc" id="L169">            DetailAST toVisit = curNode.getFirstChild();</span>
+<span class="fc bfc" id="L170" title="All 4 branches covered.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
+<span class="fc" id="L171">                toVisit = curNode.getNextSibling();</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">                if (toVisit == null) {</span>
+<span class="fc" id="L173">                    curNode = curNode.getParent();</span>
+                }
+            }
+<span class="fc" id="L176">            curNode = toVisit;</span>
+<span class="fc" id="L177">        }</span>
+<span class="fc bfc" id="L178" title="All 2 branches covered.">        if (lastNode != null) {</span>
+<span class="fc" id="L179">            CommonHiddenStreamToken tokenAfter = lastNode.getHiddenAfter();</span>
+<span class="fc" id="L180">            DetailAST currentSibling = lastNode;</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">            while (tokenAfter != null) {</span>
+<span class="fc" id="L182">                final DetailAST newCommentNode =</span>
+<span class="fc" id="L183">                        createCommentAstFromToken(tokenAfter);</span>
+
+<span class="fc" id="L185">                currentSibling.addNextSibling(newCommentNode);</span>
+
+<span class="fc" id="L187">                currentSibling = newCommentNode;</span>
+<span class="fc" id="L188">                tokenAfter = tokenAfter.getHiddenAfter();</span>
+<span class="fc" id="L189">            }</span>
+        }
+<span class="fc" id="L191">        return result;</span>
+    }
+
+    /**
+     * Checks if position of first DetailAST is greater than position of
+     * second DetailAST. Position is line number and column number in source file.
+     * @param ast1 first DetailAST node
+     * @param ast2 second DetailAST node
+     * @return true if position of ast1 is greater than position of ast2
+     */
+    private static boolean isPositionGreater(DetailAST ast1, DetailAST ast2) {
+<span class="fc bfc" id="L202" title="All 2 branches covered.">        boolean isGreater = ast1.getLineNo() &gt; ast2.getLineNo();</span>
+<span class="fc bfc" id="L203" title="All 4 branches covered.">        if (!isGreater &amp;&amp; ast1.getLineNo() == ast2.getLineNo()) {</span>
+<span class="fc bfc" id="L204" title="All 2 branches covered.">            isGreater = ast1.getColumnNo() &gt; ast2.getColumnNo();</span>
+        }
+<span class="fc" id="L206">        return isGreater;</span>
+    }
+
+    /**
+     * Create comment AST from token. Depending on token type
+     * SINGLE_LINE_COMMENT or BLOCK_COMMENT_BEGIN is created.
+     * @param token to create the AST
+     * @return DetailAST of comment node
+     */
+    private static DetailAST createCommentAstFromToken(Token token) {
+        final DetailAST commentAst;
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        if (token.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</span>
+<span class="fc" id="L218">            commentAst = createSlCommentNode(token);</span>
+        }
+        else {
+<span class="fc" id="L221">            commentAst = CommonUtil.createBlockCommentNode(token);</span>
+        }
+<span class="fc" id="L223">        return commentAst;</span>
+    }
+
+    /**
+     * Create single-line comment from token.
+     * @param token to create the AST
+     * @return DetailAST with SINGLE_LINE_COMMENT type
+     */
+    private static DetailAST createSlCommentNode(Token token) {
+<span class="fc" id="L232">        final DetailAST slComment = new DetailAST();</span>
+<span class="fc" id="L233">        slComment.setType(TokenTypes.SINGLE_LINE_COMMENT);</span>
+<span class="fc" id="L234">        slComment.setText(&quot;//&quot;);</span>
+
+        // column counting begins from 0
+<span class="fc" id="L237">        slComment.setColumnNo(token.getColumn() - 1);</span>
+<span class="fc" id="L238">        slComment.setLineNo(token.getLine());</span>
+
+<span class="fc" id="L240">        final DetailAST slCommentContent = new DetailAST();</span>
+<span class="fc" id="L241">        slCommentContent.setType(TokenTypes.COMMENT_CONTENT);</span>
+
+        // column counting begins from 0
+        // plus length of '//'
+<span class="fc" id="L245">        slCommentContent.setColumnNo(token.getColumn() - 1 + 2);</span>
+<span class="fc" id="L246">        slCommentContent.setLineNo(token.getLine());</span>
+<span class="fc" id="L247">        slCommentContent.setText(token.getText());</span>
+
+<span class="fc" id="L249">        slComment.addChild(slCommentContent);</span>
+<span class="fc" id="L250">        return slComment;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

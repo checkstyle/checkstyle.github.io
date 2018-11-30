@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JavadocPropertiesGenerator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">JavadocPropertiesGenerator.java</span></div><h1>JavadocPropertiesGenerator.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.DetailNode;
+import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.ParameterException;
+import picocli.CommandLine.Parameters;
+import picocli.CommandLine.ParseResult;
+
+/**
+ * This class is used internally in the build process to write a property file
+ * with short descriptions (the first sentences) of TokenTypes constants.
+ * Request: 724871
+ * For IDE plugins (like the eclipse plugin) it would be useful to have
+ * a programmatic access to the first sentence of the TokenType constants,
+ * so they can use them in their configuration gui.
+ * @noinspection UseOfSystemOutOrSystemErr, unused, ClassIndependentOfModule
+ */
+public final class JavadocPropertiesGenerator {
+
+    /**
+     * This regexp is used to extract the first sentence from the text.
+     * The end of the sentence is determined by the symbol &quot;period&quot;, &quot;exclamation mark&quot; or
+     * &quot;question mark&quot;, followed by a space or the end of the text.
+     */
+<span class="fc" id="L59">    private static final Pattern END_OF_SENTENCE_PATTERN = Pattern.compile(&quot;(.*?[.?!])(\\s|$)&quot;);</span>
+
+    /** Max width of the usage help message for this command. */
+    private static final int USAGE_HELP_WIDTH = 100;
+
+    /**
+     * Don't create instance of this class, use the {@link #main(String[])} method instead.
+     */
+    private JavadocPropertiesGenerator() {
+    }
+
+    /**
+     * TokenTypes.properties generator entry point.
+     * @param args the command line arguments
+     * @throws CheckstyleException if parser or lexer failed or if there is an IO problem
+     **/
+    public static void main(String... args) throws CheckstyleException {
+<span class="fc" id="L76">        final CliOptions cliOptions = new CliOptions();</span>
+<span class="fc" id="L77">        final CommandLine cmd = new CommandLine(cliOptions).setUsageHelpWidth(USAGE_HELP_WIDTH);</span>
+        try {
+<span class="fc" id="L79">            final ParseResult parseResult = cmd.parseArgs(args);</span>
+<span class="fc bfc" id="L80" title="All 2 branches covered.">            if (parseResult.isUsageHelpRequested()) {</span>
+<span class="fc" id="L81">                cmd.usage(System.out);</span>
+            }
+            else {
+<span class="fc" id="L84">                writePropertiesFile(cliOptions);</span>
+            }
+        }
+<span class="fc" id="L87">        catch (ParameterException ex) {</span>
+<span class="fc" id="L88">            System.err.println(ex.getMessage());</span>
+<span class="fc" id="L89">            ex.getCommandLine().usage(System.err);</span>
+<span class="fc" id="L90">        }</span>
+<span class="fc" id="L91">    }</span>
+
+    /**
+     * Creates the .properties file from a .java file.
+     * @param options the user-specified options
+     * @throws CheckstyleException if a javadoc comment can not be parsed
+     */
+    private static void writePropertiesFile(CliOptions options) throws CheckstyleException {
+<span class="fc" id="L99">        try (PrintWriter writer = new PrintWriter(options.outputFile,</span>
+<span class="fc" id="L100">                StandardCharsets.UTF_8.name())) {</span>
+<span class="fc" id="L101">            final DetailAST top = JavaParser.parseFile(options.inputFile,</span>
+                    JavaParser.Options.WITH_COMMENTS);
+<span class="fc" id="L103">            final DetailAST objBlock = getClassBody(top);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">            if (objBlock != null) {</span>
+<span class="fc" id="L105">                iteratePublicStaticIntFields(objBlock, writer::println);</span>
+            }
+        }
+<span class="fc" id="L108">        catch (IOException ex) {</span>
+<span class="fc" id="L109">            throw new CheckstyleException(&quot;Failed to write javadoc properties of '&quot;</span>
+<span class="fc" id="L110">                    + options.inputFile + &quot;' to '&quot; + options.outputFile + &quot;'&quot;, ex);</span>
+<span class="fc" id="L111">        }</span>
+<span class="fc" id="L112">    }</span>
+
+    /**
+     * Walks over the type members and push the first javadoc sentence of every
+     * {@code public} {@code static} {@code int} field to the consumer.
+     * @param objBlock the OBJBLOCK of a class to iterate over its members
+     * @param consumer first javadoc sentence consumer
+     * @throws CheckstyleException if failed to parse a javadoc comment
+     */
+    private static void iteratePublicStaticIntFields(DetailAST objBlock, Consumer&lt;String&gt; consumer)
+            throws CheckstyleException {
+<span class="fc bfc" id="L123" title="All 2 branches covered.">        for (DetailAST member = objBlock.getFirstChild(); member != null;</span>
+<span class="fc" id="L124">                member = member.getNextSibling()) {</span>
+<span class="fc bfc" id="L125" title="All 2 branches covered.">            if (isPublicStaticFinalIntField(member)) {</span>
+<span class="fc" id="L126">                final DetailAST modifiers = member.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L127">                final String firstJavadocSentence = getFirstJavadocSentence(modifiers);</span>
+<span class="fc bfc" id="L128" title="All 2 branches covered.">                if (firstJavadocSentence != null) {</span>
+<span class="fc" id="L129">                    consumer.accept(getName(member) + &quot;=&quot; + firstJavadocSentence.trim());</span>
+                }
+            }
+        }
+<span class="fc" id="L133">    }</span>
+
+    /**
+     * Finds the class body of the first class in the DetailAST.
+     * @param top AST to find the class body
+     * @return OBJBLOCK token if found; {@code null} otherwise
+     */
+    private static DetailAST getClassBody(DetailAST top) {
+<span class="fc" id="L141">        DetailAST ast = top;</span>
+<span class="fc bfc" id="L142" title="All 4 branches covered.">        while (ast != null &amp;&amp; ast.getType() != TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L143">            ast = ast.getNextSibling();</span>
+        }
+<span class="fc" id="L145">        DetailAST objBlock = null;</span>
+<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (ast != null) {</span>
+<span class="fc" id="L147">            objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);</span>
+        }
+<span class="fc" id="L149">        return objBlock;</span>
+    }
+
+    /**
+     * Checks that the DetailAST is a {@code public} {@code static} {@code final} {@code int} field.
+     * @param ast to process
+     * @return {@code true} if matches; {@code false} otherwise
+     */
+    private static boolean isPublicStaticFinalIntField(DetailAST ast) {
+<span class="fc bfc" id="L158" title="All 2 branches covered.">        boolean result = ast.getType() == TokenTypes.VARIABLE_DEF;</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">        if (result) {</span>
+<span class="fc" id="L160">            final DetailAST type = ast.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">            result = type.getFirstChild().getType() == TokenTypes.LITERAL_INT;</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">            if (result) {</span>
+<span class="fc" id="L163">                final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">                result = modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null</span>
+<span class="fc bfc" id="L165" title="All 2 branches covered.">                    &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null</span>
+<span class="fc bfc" id="L166" title="All 2 branches covered.">                    &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) != null;</span>
+            }
+        }
+<span class="fc" id="L169">        return result;</span>
+    }
+
+    /**
+     * Extracts the name of an ast.
+     * @param ast to extract the name
+     * @return the text content of the inner {@code TokenTypes.IDENT} node
+     */
+    private static String getName(DetailAST ast) {
+<span class="fc" id="L178">        return ast.findFirstToken(TokenTypes.IDENT).getText();</span>
+    }
+
+    /**
+     * Extracts the first sentence as HTML formatted text from the comment of an DetailAST.
+     * The end of the sentence is determined by the symbol &quot;period&quot;, &quot;exclamation mark&quot; or
+     * &quot;question mark&quot;, followed by a space or the end of the text. Inline tags @code and @literal
+     * are converted to HTML code.
+     * @param ast to extract the first sentence
+     * @return the first sentence of the inner {@code TokenTypes.BLOCK_COMMENT_BEGIN} node
+     *      or {@code null} if the first sentence is absent or malformed (does not end with period)
+     * @throws CheckstyleException if a javadoc comment can not be parsed or an unsupported inline
+     *      tag found
+     */
+    private static String getFirstJavadocSentence(DetailAST ast) throws CheckstyleException {
+<span class="fc" id="L193">        String firstSentence = null;</span>
+<span class="fc bfc" id="L194" title="All 4 branches covered.">        for (DetailAST child = ast.getFirstChild(); child != null &amp;&amp; firstSentence == null;</span>
+<span class="fc" id="L195">                child = child.getNextSibling()) {</span>
+            // If there is an annotation, the javadoc comment will be a child of it.
+<span class="fc bfc" id="L197" title="All 2 branches covered.">            if (child.getType() == TokenTypes.ANNOTATION) {</span>
+<span class="fc" id="L198">                firstSentence = getFirstJavadocSentence(child);</span>
+            }
+            // Otherwise, the javadoc comment will be right here.
+<span class="fc bfc" id="L201" title="All 2 branches covered.">            else if (child.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">                    &amp;&amp; JavadocUtil.isJavadocComment(child)) {</span>
+<span class="fc" id="L203">                final DetailNode tree = DetailNodeTreeStringPrinter.parseJavadocAsDetailNode(child);</span>
+<span class="fc" id="L204">                firstSentence = getFirstJavadocSentence(tree);</span>
+            }
+        }
+<span class="fc" id="L207">        return firstSentence;</span>
+    }
+
+    /**
+     * Extracts the first sentence as HTML formatted text from a DetailNode.
+     * The end of the sentence is determined by the symbol &quot;period&quot;, &quot;exclamation mark&quot; or
+     * &quot;question mark&quot;, followed by a space or the end of the text. Inline tags @code and @literal
+     * are converted to HTML code.
+     * @param tree to extract the first sentence
+     * @return the first sentence of the node or {@code null} if the first sentence is absent or
+     *      malformed (does not end with any of the end-of-sentence markers)
+     * @throws CheckstyleException if an unsupported inline tag found
+     */
+    private static String getFirstJavadocSentence(DetailNode tree) throws CheckstyleException {
+<span class="fc" id="L221">        String firstSentence = null;</span>
+<span class="fc" id="L222">        final StringBuilder builder = new StringBuilder(128);</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        for (DetailNode node : tree.getChildren()) {</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">            if (node.getType() == JavadocTokenTypes.TEXT) {</span>
+<span class="fc" id="L225">                final Matcher matcher = END_OF_SENTENCE_PATTERN.matcher(node.getText());</span>
+<span class="fc bfc" id="L226" title="All 2 branches covered.">                if (matcher.find()) {</span>
+                    // Commit the sentence if an end-of-sentence marker is found.
+<span class="fc" id="L228">                    firstSentence = builder.append(matcher.group(1)).toString();</span>
+<span class="fc" id="L229">                    break;</span>
+                }
+                // Otherwise append the whole line and look for an end-of-sentence marker
+                // on the next line.
+<span class="fc" id="L233">                builder.append(node.getText());</span>
+<span class="fc" id="L234">            }</span>
+<span class="fc bfc" id="L235" title="All 2 branches covered.">            else if (node.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</span>
+<span class="fc" id="L236">                formatInlineCodeTag(builder, node);</span>
+            }
+<span class="fc bfc" id="L238" title="All 2 branches covered.">            else if (node.getType() == JavadocTokenTypes.HTML_ELEMENT) {</span>
+<span class="fc" id="L239">                formatHtmlElement(builder, node);</span>
+            }
+        }
+<span class="fc" id="L242">        return firstSentence;</span>
+    }
+
+    /**
+     * Converts inline code tag into HTML form.
+     * @param builder to append
+     * @param inlineTag to format
+     * @throws CheckstyleException if the inline javadoc tag is not a literal nor a code tag
+     */
+    private static void formatInlineCodeTag(StringBuilder builder, DetailNode inlineTag)
+            throws CheckstyleException {
+<span class="fc" id="L253">        boolean wrapWithCodeTag = false;</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">        for (DetailNode node : inlineTag.getChildren()) {</span>
+<span class="fc bfc" id="L255" title="All 4 branches covered.">            switch (node.getType()) {</span>
+                case JavadocTokenTypes.CODE_LITERAL:
+<span class="fc" id="L257">                    wrapWithCodeTag = true;</span>
+<span class="fc" id="L258">                    break;</span>
+                // The text to append.
+                case JavadocTokenTypes.TEXT:
+<span class="fc bfc" id="L261" title="All 2 branches covered.">                    if (wrapWithCodeTag) {</span>
+<span class="fc" id="L262">                        builder.append(&quot;&lt;code&gt;&quot;).append(node.getText()).append(&quot;&lt;/code&gt;&quot;);</span>
+                    }
+                    else {
+<span class="fc" id="L265">                        builder.append(node.getText());</span>
+                    }
+<span class="fc" id="L267">                    break;</span>
+                // Empty content tags.
+                case JavadocTokenTypes.LITERAL_LITERAL:
+                case JavadocTokenTypes.JAVADOC_INLINE_TAG_START:
+                case JavadocTokenTypes.JAVADOC_INLINE_TAG_END:
+                case JavadocTokenTypes.WS:
+<span class="fc" id="L273">                    break;</span>
+                default:
+<span class="fc" id="L275">                    throw new CheckstyleException(&quot;Unsupported inline tag &quot;</span>
+<span class="fc" id="L276">                        + JavadocUtil.getTokenName(node.getType()));</span>
+            }
+        }
+<span class="fc" id="L279">    }</span>
+
+    /**
+     * Concatenates the HTML text from AST of a JavadocTokenTypes.HTML_ELEMENT.
+     * @param builder to append
+     * @param node to format
+     */
+    private static void formatHtmlElement(StringBuilder builder, DetailNode node) {
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        switch (node.getType()) {</span>
+            case JavadocTokenTypes.START:
+            case JavadocTokenTypes.HTML_TAG_NAME:
+            case JavadocTokenTypes.END:
+            case JavadocTokenTypes.TEXT:
+            case JavadocTokenTypes.SLASH:
+<span class="fc" id="L293">                builder.append(node.getText());</span>
+<span class="fc" id="L294">                break;</span>
+            default:
+<span class="fc bfc" id="L296" title="All 2 branches covered.">                for (DetailNode child : node.getChildren()) {</span>
+<span class="fc" id="L297">                    formatHtmlElement(builder, child);</span>
+                }
+                break;
+        }
+<span class="fc" id="L301">    }</span>
+
+    /**
+     * Helper class encapsulating the command line options and positional parameters.
+     */
+    @Command(name = &quot;java com.puppycrawl.tools.checkstyle.JavadocPropertiesGenerator&quot;,
+            mixinStandardHelpOptions = true)
+    private static class CliOptions {
+
+        /**
+         * The command line option to specify the output file.
+         */
+        @Option(names = &quot;--destfile&quot;, required = true, description = &quot;The output file.&quot;)
+        private File outputFile;
+
+        /**
+         * The command line positional parameter to specify the input file.
+         */
+        @Parameters(index = &quot;0&quot;, description = &quot;The input file.&quot;)
+        private File inputFile;
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

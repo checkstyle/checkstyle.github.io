@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IllegalInstantiationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">IllegalInstantiationCheck.java</span></div><h1>IllegalInstantiationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import antlr.collections.AST;
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks for illegal instantiations where a factory method is preferred.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Rationale: Depending on the project, for some classes it might be
+ * preferable to create instances through factory methods rather than
+ * calling the constructor.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * A simple example is the java.lang.Boolean class, to save memory and CPU
+ * cycles it is preferable to use the predefined constants TRUE and FALSE.
+ * Constructor invocations should be replaced by calls to Boolean.valueOf().
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Some extremely performance sensitive projects may require the use of factory
+ * methods for other classes as well, to enforce the usage of number caches or
+ * object pools.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Limitations: It is currently not possible to specify array classes.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;IllegalInstantiation&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ */
+@FileStatefulCheck
+<span class="fc" id="L65">public class IllegalInstantiationCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;instantiation.avoid&quot;;
+
+    /** {@link java.lang} package as string. */
+    private static final String JAVA_LANG = &quot;java.lang.&quot;;
+
+    /** The imports for the file. */
+<span class="fc" id="L78">    private final Set&lt;FullIdent&gt; imports = new HashSet&lt;&gt;();</span>
+
+    /** The class names defined in the file. */
+<span class="fc" id="L81">    private final Set&lt;String&gt; classNames = new HashSet&lt;&gt;();</span>
+
+    /** The instantiations in the file. */
+<span class="fc" id="L84">    private final Set&lt;DetailAST&gt; instantiations = new HashSet&lt;&gt;();</span>
+
+    /** Set of fully qualified class names. E.g. &quot;java.lang.Boolean&quot; */
+<span class="fc" id="L87">    private Set&lt;String&gt; classes = new HashSet&lt;&gt;();</span>
+
+    /** Name of the package. */
+    private String pkgName;
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L94">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L99">        return new int[] {</span>
+            TokenTypes.IMPORT,
+            TokenTypes.LITERAL_NEW,
+            TokenTypes.PACKAGE_DEF,
+            TokenTypes.CLASS_DEF,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L109">        return new int[] {</span>
+            TokenTypes.IMPORT,
+            TokenTypes.LITERAL_NEW,
+            TokenTypes.PACKAGE_DEF,
+        };
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc" id="L118">        pkgName = null;</span>
+<span class="fc" id="L119">        imports.clear();</span>
+<span class="fc" id="L120">        instantiations.clear();</span>
+<span class="fc" id="L121">        classNames.clear();</span>
+<span class="fc" id="L122">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L126" title="All 5 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.LITERAL_NEW:
+<span class="fc" id="L128">                processLiteralNew(ast);</span>
+<span class="fc" id="L129">                break;</span>
+            case TokenTypes.PACKAGE_DEF:
+<span class="fc" id="L131">                processPackageDef(ast);</span>
+<span class="fc" id="L132">                break;</span>
+            case TokenTypes.IMPORT:
+<span class="fc" id="L134">                processImport(ast);</span>
+<span class="fc" id="L135">                break;</span>
+            case TokenTypes.CLASS_DEF:
+<span class="fc" id="L137">                processClassDef(ast);</span>
+<span class="fc" id="L138">                break;</span>
+            default:
+<span class="fc" id="L140">                throw new IllegalArgumentException(&quot;Unknown type &quot; + ast);</span>
+        }
+<span class="fc" id="L142">    }</span>
+
+    @Override
+    public void finishTree(DetailAST rootAST) {
+<span class="fc" id="L146">        instantiations.forEach(this::postProcessLiteralNew);</span>
+<span class="fc" id="L147">    }</span>
+
+    /**
+     * Collects classes defined in the source file. Required
+     * to avoid false alarms for local vs. java.lang classes.
+     *
+     * @param ast the class def token.
+     */
+    private void processClassDef(DetailAST ast) {
+<span class="fc" id="L156">        final DetailAST identToken = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L157">        final String className = identToken.getText();</span>
+<span class="fc" id="L158">        classNames.add(className);</span>
+<span class="fc" id="L159">    }</span>
+
+    /**
+     * Perform processing for an import token.
+     * @param ast the import token
+     */
+    private void processImport(DetailAST ast) {
+<span class="fc" id="L166">        final FullIdent name = FullIdent.createFullIdentBelow(ast);</span>
+        // Note: different from UnusedImportsCheck.processImport(),
+        // '.*' imports are also added here
+<span class="fc" id="L169">        imports.add(name);</span>
+<span class="fc" id="L170">    }</span>
+
+    /**
+     * Perform processing for an package token.
+     * @param ast the package token
+     */
+    private void processPackageDef(DetailAST ast) {
+<span class="fc" id="L177">        final DetailAST packageNameAST = ast.getLastChild()</span>
+<span class="fc" id="L178">                .getPreviousSibling();</span>
+<span class="fc" id="L179">        final FullIdent packageIdent =</span>
+<span class="fc" id="L180">                FullIdent.createFullIdent(packageNameAST);</span>
+<span class="fc" id="L181">        pkgName = packageIdent.getText();</span>
+<span class="fc" id="L182">    }</span>
+
+    /**
+     * Collects a &quot;new&quot; token.
+     * @param ast the &quot;new&quot; token
+     */
+    private void processLiteralNew(DetailAST ast) {
+<span class="fc bfc" id="L189" title="All 2 branches covered.">        if (ast.getParent().getType() != TokenTypes.METHOD_REF) {</span>
+<span class="fc" id="L190">            instantiations.add(ast);</span>
+        }
+<span class="fc" id="L192">    }</span>
+
+    /**
+     * Processes one of the collected &quot;new&quot; tokens when walking tree
+     * has finished.
+     * @param newTokenAst the &quot;new&quot; token.
+     */
+    private void postProcessLiteralNew(DetailAST newTokenAst) {
+<span class="fc" id="L200">        final DetailAST typeNameAst = newTokenAst.getFirstChild();</span>
+<span class="fc" id="L201">        final AST nameSibling = typeNameAst.getNextSibling();</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">        if (nameSibling.getType() != TokenTypes.ARRAY_DECLARATOR) {</span>
+            // ast != &quot;new Boolean[]&quot;
+<span class="fc" id="L204">            final FullIdent typeIdent = FullIdent.createFullIdent(typeNameAst);</span>
+<span class="fc" id="L205">            final String typeName = typeIdent.getText();</span>
+<span class="fc" id="L206">            final String fqClassName = getIllegalInstantiation(typeName);</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">            if (fqClassName != null) {</span>
+<span class="fc" id="L208">                log(newTokenAst, MSG_KEY, fqClassName);</span>
+            }
+        }
+<span class="fc" id="L211">    }</span>
+
+    /**
+     * Checks illegal instantiations.
+     * @param className instantiated class, may or may not be qualified
+     * @return the fully qualified class name of className
+     *     or null if instantiation of className is OK
+     */
+    private String getIllegalInstantiation(String className) {
+<span class="fc" id="L220">        String fullClassName = null;</span>
+
+<span class="fc bfc" id="L222" title="All 2 branches covered.">        if (classes.contains(className)) {</span>
+<span class="fc" id="L223">            fullClassName = className;</span>
+        }
+        else {
+            final int pkgNameLen;
+
+<span class="fc bfc" id="L228" title="All 2 branches covered.">            if (pkgName == null) {</span>
+<span class="fc" id="L229">                pkgNameLen = 0;</span>
+            }
+            else {
+<span class="fc" id="L232">                pkgNameLen = pkgName.length();</span>
+            }
+
+<span class="fc bfc" id="L235" title="All 2 branches covered.">            for (String illegal : classes) {</span>
+<span class="fc bfc" id="L236" title="All 2 branches covered.">                if (isStandardClass(className, illegal)</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">                        || isSamePackage(className, pkgNameLen, illegal)) {</span>
+<span class="fc" id="L238">                    fullClassName = illegal;</span>
+                }
+                else {
+<span class="fc" id="L241">                    fullClassName = checkImportStatements(className);</span>
+                }
+
+<span class="fc bfc" id="L244" title="All 2 branches covered.">                if (fullClassName != null) {</span>
+<span class="fc" id="L245">                    break;</span>
+                }
+<span class="fc" id="L247">            }</span>
+        }
+<span class="fc" id="L249">        return fullClassName;</span>
+    }
+
+    /**
+     * Check import statements.
+     * @param className name of the class
+     * @return value of illegal instantiated type
+     */
+    private String checkImportStatements(String className) {
+<span class="fc" id="L258">        String illegalType = null;</span>
+        // import statements
+<span class="fc bfc" id="L260" title="All 2 branches covered.">        for (FullIdent importLineText : imports) {</span>
+<span class="fc" id="L261">            String importArg = importLineText.getText();</span>
+<span class="fc bfc" id="L262" title="All 2 branches covered.">            if (importArg.endsWith(&quot;.*&quot;)) {</span>
+<span class="fc" id="L263">                importArg = importArg.substring(0, importArg.length() - 1)</span>
+                        + className;
+            }
+<span class="fc bfc" id="L266" title="All 2 branches covered.">            if (CommonUtil.baseClassName(importArg).equals(className)</span>
+<span class="fc bfc" id="L267" title="All 2 branches covered.">                    &amp;&amp; classes.contains(importArg)) {</span>
+<span class="fc" id="L268">                illegalType = importArg;</span>
+<span class="fc" id="L269">                break;</span>
+            }
+<span class="fc" id="L271">        }</span>
+<span class="fc" id="L272">        return illegalType;</span>
+    }
+
+    /**
+     * Check that type is of the same package.
+     * @param className class name
+     * @param pkgNameLen package name
+     * @param illegal illegal value
+     * @return true if type of the same package
+     */
+    private boolean isSamePackage(String className, int pkgNameLen, String illegal) {
+        // class from same package
+
+        // the top level package (pkgName == null) is covered by the
+        // &quot;illegalInstances.contains(className)&quot; check above
+
+        // the test is the &quot;no garbage&quot; version of
+        // illegal.equals(pkgName + &quot;.&quot; + className)
+<span class="fc bfc" id="L290" title="All 2 branches covered.">        return pkgName != null</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">                &amp;&amp; className.length() == illegal.length() - pkgNameLen - 1</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">                &amp;&amp; illegal.charAt(pkgNameLen) == '.'</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">                &amp;&amp; illegal.endsWith(className)</span>
+<span class="fc bfc" id="L294" title="All 2 branches covered.">                &amp;&amp; illegal.startsWith(pkgName);</span>
+    }
+
+    /**
+     * Is class of the same package.
+     * @param className class name
+     * @return true if same package class
+     */
+    private boolean isSamePackage(String className) {
+<span class="fc" id="L303">        boolean isSamePackage = false;</span>
+        try {
+<span class="fc" id="L305">            final ClassLoader classLoader = getClassLoader();</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">            if (classLoader != null) {</span>
+<span class="fc" id="L307">                final String fqName = pkgName + &quot;.&quot; + className;</span>
+<span class="fc" id="L308">                classLoader.loadClass(fqName);</span>
+                // no ClassNotFoundException, fqName is a known class
+<span class="fc" id="L310">                isSamePackage = true;</span>
+            }
+        }
+<span class="fc" id="L313">        catch (final ClassNotFoundException ignored) {</span>
+            // not a class from the same package
+<span class="fc" id="L315">            isSamePackage = false;</span>
+<span class="fc" id="L316">        }</span>
+<span class="fc" id="L317">        return isSamePackage;</span>
+    }
+
+    /**
+     * Is Standard Class.
+     * @param className class name
+     * @param illegal illegal value
+     * @return true if type is standard
+     */
+    private boolean isStandardClass(String className, String illegal) {
+<span class="fc" id="L327">        boolean isStandardClass = false;</span>
+        // class from java.lang
+<span class="fc bfc" id="L329" title="All 2 branches covered.">        if (illegal.length() - JAVA_LANG.length() == className.length()</span>
+<span class="fc bfc" id="L330" title="All 2 branches covered.">            &amp;&amp; illegal.endsWith(className)</span>
+<span class="fc bfc" id="L331" title="All 2 branches covered.">            &amp;&amp; illegal.startsWith(JAVA_LANG)) {</span>
+            // java.lang needs no import, but a class without import might
+            // also come from the same file or be in the same package.
+            // E.g. if a class defines an inner class &quot;Boolean&quot;,
+            // the expression &quot;new Boolean()&quot; refers to that class,
+            // not to java.lang.Boolean
+
+<span class="fc" id="L338">            final boolean isSameFile = classNames.contains(className);</span>
+<span class="fc" id="L339">            final boolean isSamePackage = isSamePackage(className);</span>
+
+<span class="fc bfc" id="L341" title="All 4 branches covered.">            if (!isSameFile &amp;&amp; !isSamePackage) {</span>
+<span class="fc" id="L342">                isStandardClass = true;</span>
+            }
+        }
+<span class="fc" id="L345">        return isStandardClass;</span>
+    }
+
+    /**
+     * Sets the classes that are illegal to instantiate.
+     * @param names a comma separate list of class names
+     */
+    public void setClasses(String... names) {
+<span class="fc" id="L353">        classes = Arrays.stream(names).collect(Collectors.toSet());</span>
+<span class="fc" id="L354">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>
