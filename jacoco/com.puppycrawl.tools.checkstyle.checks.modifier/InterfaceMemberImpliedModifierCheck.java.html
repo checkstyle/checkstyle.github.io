@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>InterfaceMemberImpliedModifierCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.modifier</a> &gt; <span class="el_source">InterfaceMemberImpliedModifierCheck.java</span></div><h1>InterfaceMemberImpliedModifierCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.modifier;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks for implicit modifiers on interface members and nested types.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * This check is effectively the opposite of &lt;a href=&quot;#RedundantModifier&quot;&gt;RedundantModifier&lt;/a&gt;.
+ * It checks the modifiers on interface members, ensuring that certain modifiers are explicitly
+ * specified even though they are actually redundant.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Methods in interfaces are {@code public} by default, however from Java 9 they can also be
+ * {@code private}. This check provides the ability to enforce that {@code public} is explicitly
+ * coded and not implicitly added by the compiler.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * From Java 8, there are three types of methods in interfaces - static methods marked with
+ * {@code static}, default methods marked with {@code default} and abstract methods which do not
+ * have to be marked with anything. From Java 9, there are also private methods marked with
+ * {@code private}. This check provides the ability to enforce that {@code abstract} is
+ * explicitly coded and not implicitly added by the compiler.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Fields in interfaces are always {@code public static final} and as such the compiler does not
+ * require these modifiers. This check provides the ability to enforce that these modifiers are
+ * explicitly coded and not implicitly added by the compiler.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Nested types within an interface are always {@code public static} and as such the compiler
+ * does not require the {@code public static} modifiers. This check provides the ability to
+ * enforce that the {@code public} and {@code static} modifiers are explicitly coded and not
+ * implicitly added by the compiler.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public interface AddressFactory {
+ *   // check enforces code contains &quot;public static final&quot;
+ *   public static final String UNKNOWN = &quot;Unknown&quot;;
+ *
+ *   String OTHER = &quot;Other&quot;;  // violation
+ *
+ *   // check enforces code contains &quot;public&quot; or &quot;private&quot;
+ *   public static AddressFactory instance();
+ *
+ *   // check enforces code contains &quot;public abstract&quot;
+ *   public abstract Address createAddress(String addressLine, String city);
+ *
+ *   List&amp;lt;Address&amp;gt; findAddresses(String city);  // violation
+ *
+ *   // check enforces default methods are explicitly declared &quot;public&quot;
+ *   public default Address createAddress(String city) {
+ *     return createAddress(UNKNOWN, city);
+ *   }
+ *
+ *   default Address createOtherAddress() {  // violation
+ *     return createAddress(OTHER, OTHER);
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Rationale for this check: Methods, fields and nested types are treated differently
+ * depending on whether they are part of an interface or part of a class. For example, by
+ * default methods are package-scoped on classes, but public in interfaces. However, from
+ * Java 8 onwards, interfaces have changed to be much more like abstract classes.
+ * Interfaces now have static and instance methods with code. Developers should not have to
+ * remember which modifiers are required and which are implied. This check allows the simpler
+ * alternative approach to be adopted where the implied modifiers must always be coded explicitly.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedPublicField} - Control whether to enforce that {@code public}
+ * is explicitly coded on interface fields.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedStaticField} - Control whether to enforce that {@code static}
+ * is explicitly coded on interface fields.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedFinalField} - Control whether to enforce that {@code final}
+ * is explicitly coded on interface fields.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedPublicMethod} - Control whether to enforce that {@code public}
+ * is explicitly coded on interface methods.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedAbstractMethod} - Control whether to enforce that {@code abstract}
+ * is explicitly coded on interface methods.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedPublicNested} - Control whether to enforce that {@code public}
+ * is explicitly coded on interface nested types.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code violateImpliedStaticNested} - Control whether to enforce that {@code static}
+ * is explicitly coded on interface nested types.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * This example checks that all implicit modifiers on methods, fields and nested
+ * types are explicitly specified in interfaces.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Configuration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;InterfaceMemberImpliedModifier&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Code:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public interface AddressFactory {
+ *
+ *   public static final String UNKNOWN = &quot;Unknown&quot;;  // valid
+ *
+ *   String OTHER = &quot;Other&quot;;  // violation
+ *
+ *   public static AddressFactory instance();  // valid
+ *
+ *   public abstract Address createAddress(String addressLine, String city);  // valid
+ *
+ *   List&amp;lt;Address&amp;gt; findAddresses(String city);  // violation
+ *
+ *   interface Address {  // violation
+ *
+ *     String getCity();  // violation
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * This example checks that all implicit modifiers on methods and fields are
+ * explicitly specified, but nested types do not need to be.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Configuration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;InterfaceMemberImpliedModifier&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;violateImpliedPublicNested&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
+ *   &amp;lt;property name=&amp;quot;violateImpliedStaticNested&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Code:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public interface RoadFeature {
+ *
+ *   String STOP = &quot;Stop&quot;;  // violation
+ *
+ *   enum Lights {  // valid because of configured properties
+ *
+ *     RED, YELLOW, GREEN;
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * @since 8.12
+ */
+@StatelessCheck
+<span class="fc" id="L193">public class InterfaceMemberImpliedModifierCheck</span>
+    extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_KEY = &quot;interface.implied.modifier&quot;;
+
+    /** Name for 'public' access modifier. */
+    private static final String PUBLIC_ACCESS_MODIFIER = &quot;public&quot;;
+
+    /** Name for 'abstract' keyword. */
+    private static final String ABSTRACT_KEYWORD = &quot;abstract&quot;;
+
+    /** Name for 'static' keyword. */
+    private static final String STATIC_KEYWORD = &quot;static&quot;;
+
+    /** Name for 'final' keyword. */
+    private static final String FINAL_KEYWORD = &quot;final&quot;;
+
+    /**
+     * Control whether to enforce that {@code public} is explicitly coded
+     * on interface fields.
+     */
+<span class="fc" id="L217">    private boolean violateImpliedPublicField = true;</span>
+
+    /**
+     * Control whether to enforce that {@code static} is explicitly coded
+     * on interface fields.
+     */
+<span class="fc" id="L223">    private boolean violateImpliedStaticField = true;</span>
+
+    /**
+     * Control whether to enforce that {@code final} is explicitly coded
+     * on interface fields.
+     */
+<span class="fc" id="L229">    private boolean violateImpliedFinalField = true;</span>
+
+    /**
+     * Control whether to enforce that {@code public} is explicitly coded
+     * on interface methods.
+     */
+<span class="fc" id="L235">    private boolean violateImpliedPublicMethod = true;</span>
+
+    /**
+     * Control whether to enforce that {@code abstract} is explicitly coded
+     * on interface methods.
+     */
+<span class="fc" id="L241">    private boolean violateImpliedAbstractMethod = true;</span>
+
+    /**
+     * Control whether to enforce that {@code public} is explicitly coded
+     * on interface nested types.
+     */
+<span class="fc" id="L247">    private boolean violateImpliedPublicNested = true;</span>
+
+    /**
+     * Control whether to enforce that {@code static} is explicitly coded
+     * on interface nested types.
+     */
+<span class="fc" id="L253">    private boolean violateImpliedStaticNested = true;</span>
+
+    /**
+     * Setter to control whether to enforce that {@code public} is explicitly coded
+     * on interface fields.
+     * @param violateImpliedPublicField
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedPublicField(boolean violateImpliedPublicField) {
+<span class="fc" id="L262">        this.violateImpliedPublicField = violateImpliedPublicField;</span>
+<span class="fc" id="L263">    }</span>
+
+    /**
+     * Setter to control whether to enforce that {@code static} is explicitly coded
+     * on interface fields.
+     * @param violateImpliedStaticField
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedStaticField(boolean violateImpliedStaticField) {
+<span class="fc" id="L272">        this.violateImpliedStaticField = violateImpliedStaticField;</span>
+<span class="fc" id="L273">    }</span>
+
+    /**
+     * Setter to control whether to enforce that {@code final} is explicitly coded
+     * on interface fields.
+     * @param violateImpliedFinalField
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedFinalField(boolean violateImpliedFinalField) {
+<span class="fc" id="L282">        this.violateImpliedFinalField = violateImpliedFinalField;</span>
+<span class="fc" id="L283">    }</span>
+
+    /**
+     * Setter to control whether to enforce that {@code public} is explicitly coded
+     * on interface methods.
+     * @param violateImpliedPublicMethod
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedPublicMethod(boolean violateImpliedPublicMethod) {
+<span class="fc" id="L292">        this.violateImpliedPublicMethod = violateImpliedPublicMethod;</span>
+<span class="fc" id="L293">    }</span>
+
+    /**
+     * Setter to control whether to enforce that {@code abstract} is explicitly coded
+     * on interface methods.
+     * @param violateImpliedAbstractMethod
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedAbstractMethod(boolean violateImpliedAbstractMethod) {
+<span class="fc" id="L302">        this.violateImpliedAbstractMethod = violateImpliedAbstractMethod;</span>
+<span class="fc" id="L303">    }</span>
+
+    /**
+     * Setter to control whether to enforce that {@code public} is explicitly coded
+     * on interface nested types.
+     * @param violateImpliedPublicNested
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedPublicNested(boolean violateImpliedPublicNested) {
+<span class="fc" id="L312">        this.violateImpliedPublicNested = violateImpliedPublicNested;</span>
+<span class="fc" id="L313">    }</span>
+
+    /**
+     * Setter to control whether to enforce that {@code static} is explicitly coded
+     * on interface nested types.
+     * @param violateImpliedStaticNested
+     *        True to perform the check, false to turn the check off.
+     */
+    public void setViolateImpliedStaticNested(boolean violateImpliedStaticNested) {
+<span class="fc" id="L322">        this.violateImpliedStaticNested = violateImpliedStaticNested;</span>
+<span class="fc" id="L323">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L327">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L332">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L337">        return new int[] {</span>
+            TokenTypes.METHOD_DEF,
+            TokenTypes.VARIABLE_DEF,
+            TokenTypes.INTERFACE_DEF,
+            TokenTypes.CLASS_DEF,
+            TokenTypes.ENUM_DEF,
+        };
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L348" title="All 4 branches covered.">        if (ScopeUtil.isInInterfaceBlock(ast) &amp;&amp; !ScopeUtil.isInCodeBlock(ast)) {</span>
+<span class="fc bfc" id="L349" title="All 4 branches covered.">            switch (ast.getType()) {</span>
+                case TokenTypes.METHOD_DEF:
+<span class="fc" id="L351">                    processMethod(ast);</span>
+<span class="fc" id="L352">                    break;</span>
+                case TokenTypes.VARIABLE_DEF:
+<span class="fc" id="L354">                    processField(ast);</span>
+<span class="fc" id="L355">                    break;</span>
+                case TokenTypes.CLASS_DEF:
+                case TokenTypes.INTERFACE_DEF:
+                case TokenTypes.ENUM_DEF:
+<span class="fc" id="L359">                    processNestedType(ast);</span>
+<span class="fc" id="L360">                    break;</span>
+                default:
+<span class="fc" id="L362">                    throw new IllegalStateException(ast.toString());</span>
+            }
+        }
+<span class="fc" id="L365">    }</span>
+
+    /**
+     * Check method in interface.
+     * @param ast the method AST
+     */
+    private void processMethod(DetailAST ast) {
+<span class="fc" id="L372">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">        if (violateImpliedPublicMethod</span>
+<span class="fc bfc" id="L374" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</span>
+<span class="fc bfc" id="L375" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) == null) {</span>
+<span class="fc" id="L376">            log(ast, MSG_KEY, PUBLIC_ACCESS_MODIFIER);</span>
+        }
+<span class="fc bfc" id="L378" title="All 2 branches covered.">        if (violateImpliedAbstractMethod</span>
+<span class="fc bfc" id="L379" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</span>
+<span class="fc bfc" id="L380" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null</span>
+<span class="fc bfc" id="L381" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_DEFAULT) == null</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.ABSTRACT) == null) {</span>
+<span class="fc" id="L383">            log(ast, MSG_KEY, ABSTRACT_KEYWORD);</span>
+        }
+<span class="fc" id="L385">    }</span>
+
+    /**
+     * Check field in interface.
+     * @param ast the field AST
+     */
+    private void processField(DetailAST ast) {
+<span class="fc" id="L392">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L393" title="All 2 branches covered.">        if (violateImpliedPublicField</span>
+<span class="fc bfc" id="L394" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) == null) {</span>
+<span class="fc" id="L395">            log(ast, MSG_KEY, PUBLIC_ACCESS_MODIFIER);</span>
+        }
+<span class="fc bfc" id="L397" title="All 2 branches covered.">        if (violateImpliedStaticField</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null) {</span>
+<span class="fc" id="L399">            log(ast, MSG_KEY, STATIC_KEYWORD);</span>
+        }
+<span class="fc bfc" id="L401" title="All 2 branches covered.">        if (violateImpliedFinalField</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null) {</span>
+<span class="fc" id="L403">            log(ast, MSG_KEY, FINAL_KEYWORD);</span>
+        }
+<span class="fc" id="L405">    }</span>
+
+    /**
+     * Check nested types in interface.
+     * @param ast the nested type AST
+     */
+    private void processNestedType(DetailAST ast) {
+<span class="fc" id="L412">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L413" title="All 2 branches covered.">        if (violateImpliedPublicNested</span>
+<span class="fc bfc" id="L414" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) == null) {</span>
+<span class="fc" id="L415">            log(ast, MSG_KEY, PUBLIC_ACCESS_MODIFIER);</span>
+        }
+<span class="fc bfc" id="L417" title="All 2 branches covered.">        if (violateImpliedStaticNested</span>
+<span class="fc bfc" id="L418" title="All 2 branches covered.">                &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null) {</span>
+<span class="fc" id="L419">            log(ast, MSG_KEY, STATIC_KEYWORD);</span>
+        }
+<span class="fc" id="L421">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

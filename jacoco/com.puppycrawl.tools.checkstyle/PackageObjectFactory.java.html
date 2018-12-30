@@ -1,0 +1,861 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PackageObjectFactory.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">PackageObjectFactory.java</span></div><h1>PackageObjectFactory.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
+import com.puppycrawl.tools.checkstyle.utils.ModuleReflectionUtil;
+
+/**
+ * A factory for creating objects from package names and names.
+ * Consider the below example for better understanding.
+ * &lt;ul&gt;
+ *     &lt;li&gt;module name - name of java class that represents module;&lt;/li&gt;
+ *     &lt;li&gt;module full name - fully qualifies name of java class that represents module;&lt;/li&gt;
+ *     &lt;li&gt;check module short name - name of Check without 'Check' suffix;&lt;/li&gt;
+ *     &lt;li&gt;check module name - name of java class that represents Check (with 'Check' suffix);&lt;/li&gt;
+ *     &lt;li&gt;
+ *         check module full name - fully qualifies name of java class
+ *         that represents Check (with 'Check' suffix).
+ *     &lt;/li&gt;
+ * &lt;/ul&gt;
+ */
+public class PackageObjectFactory implements ModuleFactory {
+
+    /**
+     * Enum class to define loading options.
+     */
+<span class="fc" id="L57">    public enum ModuleLoadOption {</span>
+
+        /**
+         * Searching from registered checkstyle modules and from packages given in constructor.
+         **/
+<span class="fc" id="L62">        SEARCH_REGISTERED_PACKAGES,</span>
+        /**
+         * As SEARCH_REGISTERED_PACKAGES and also try to load class from all of packages given in
+         * constructor.
+         * Required for eclipse-cs plugin.
+         **/
+<span class="fc" id="L68">        TRY_IN_ALL_REGISTERED_PACKAGES,</span>
+
+    }
+
+    /** Base package of checkstyle modules checks. */
+    public static final String BASE_PACKAGE = &quot;com.puppycrawl.tools.checkstyle&quot;;
+
+    /** Exception message when it is unable to create a class instance. */
+    public static final String UNABLE_TO_INSTANTIATE_EXCEPTION_MESSAGE =
+            &quot;PackageObjectFactory.unableToInstantiateExceptionMessage&quot;;
+
+    /** Exception message when there is ambiguous module name in config file. */
+    public static final String AMBIGUOUS_MODULE_NAME_EXCEPTION_MESSAGE =
+            &quot;PackageObjectFactory.ambiguousModuleNameExceptionMessage&quot;;
+
+    /** Suffix of checks. */
+    public static final String CHECK_SUFFIX = &quot;Check&quot;;
+
+    /** Character separate package names in qualified name of java class. */
+    public static final String PACKAGE_SEPARATOR = &quot;.&quot;;
+
+    /** Exception message when null class loader is given. */
+    public static final String NULL_LOADER_MESSAGE = &quot;moduleClassLoader must not be null&quot;;
+
+    /** Exception message when null package name is given. */
+    public static final String NULL_PACKAGE_MESSAGE = &quot;package name must not be null&quot;;
+
+    /** Separator to use in strings. */
+    public static final String STRING_SEPARATOR = &quot;, &quot;;
+
+    /** Map of Checkstyle module names to their fully qualified names. */
+<span class="fc" id="L99">    private static final Map&lt;String, String&gt; NAME_TO_FULL_MODULE_NAME = new HashMap&lt;&gt;();</span>
+
+    /** A list of package names to prepend to class names. */
+    private final Set&lt;String&gt; packages;
+
+    /** The class loader used to load Checkstyle core and custom modules. */
+    private final ClassLoader moduleClassLoader;
+
+    /** Map of third party Checkstyle module names to the set of their fully qualified names. */
+    private Map&lt;String, Set&lt;String&gt;&gt; thirdPartyNameToFullModuleNames;
+
+    /** Module load option which defines class search type. */
+    private ModuleLoadOption moduleLoadOption;
+
+    static {
+<span class="fc" id="L114">        fillShortToFullModuleNamesMap();</span>
+<span class="fc" id="L115">    }</span>
+
+    /**
+     * Creates a new {@code PackageObjectFactory} instance.
+     * @param packageNames the list of package names to use
+     * @param moduleClassLoader class loader used to load Checkstyle
+     *          core and custom modules
+     */
+    public PackageObjectFactory(Set&lt;String&gt; packageNames, ClassLoader moduleClassLoader) {
+<span class="fc" id="L124">        this(packageNames, moduleClassLoader, ModuleLoadOption.SEARCH_REGISTERED_PACKAGES);</span>
+<span class="fc" id="L125">    }</span>
+
+    /**
+     * Creates a new {@code PackageObjectFactory} instance.
+     * @param packageNames the list of package names to use
+     * @param moduleClassLoader class loader used to load Checkstyle
+     *          core and custom modules
+     * @param moduleLoadOption loading option
+     */
+    public PackageObjectFactory(Set&lt;String&gt; packageNames, ClassLoader moduleClassLoader,
+<span class="fc" id="L135">            ModuleLoadOption moduleLoadOption) {</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">        if (moduleClassLoader == null) {</span>
+<span class="fc" id="L137">            throw new IllegalArgumentException(NULL_LOADER_MESSAGE);</span>
+        }
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (packageNames.contains(null)) {</span>
+<span class="fc" id="L140">            throw new IllegalArgumentException(NULL_PACKAGE_MESSAGE);</span>
+        }
+
+        //create a copy of the given set, but retain ordering
+<span class="fc" id="L144">        packages = new LinkedHashSet&lt;&gt;(packageNames);</span>
+<span class="fc" id="L145">        this.moduleClassLoader = moduleClassLoader;</span>
+<span class="fc" id="L146">        this.moduleLoadOption = moduleLoadOption;</span>
+<span class="fc" id="L147">    }</span>
+
+    /**
+     * Creates a new {@code PackageObjectFactory} instance.
+     * @param packageName The package name to use
+     * @param moduleClassLoader class loader used to load Checkstyle
+     *          core and custom modules
+     */
+<span class="fc" id="L155">    public PackageObjectFactory(String packageName, ClassLoader moduleClassLoader) {</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        if (moduleClassLoader == null) {</span>
+<span class="fc" id="L157">            throw new IllegalArgumentException(NULL_LOADER_MESSAGE);</span>
+        }
+<span class="fc bfc" id="L159" title="All 2 branches covered.">        if (packageName == null) {</span>
+<span class="fc" id="L160">            throw new IllegalArgumentException(NULL_PACKAGE_MESSAGE);</span>
+        }
+
+<span class="fc" id="L163">        packages = Collections.singleton(packageName);</span>
+<span class="fc" id="L164">        this.moduleClassLoader = moduleClassLoader;</span>
+<span class="fc" id="L165">    }</span>
+
+    /**
+     * Creates a new instance of a class from a given name, or that name
+     * concatenated with &amp;quot;Check&amp;quot;. If the name is
+     * a class name, creates an instance of the named class. Otherwise, creates
+     * an instance of a class name obtained by concatenating the given name
+     * to a package name from a given list of package names.
+     * @param name the name of a class.
+     * @return the {@code Object} created by loader.
+     * @throws CheckstyleException if an error occurs.
+     */
+    @Override
+    public Object createModule(String name) throws CheckstyleException {
+<span class="fc" id="L179">        Object instance = null;</span>
+        // if the name is a simple class name, try to find it in maps at first
+<span class="fc bfc" id="L181" title="All 2 branches covered.">        if (!name.contains(PACKAGE_SEPARATOR)) {</span>
+<span class="fc" id="L182">            instance = createFromStandardCheckSet(name);</span>
+            // find the name in third party map
+<span class="fc bfc" id="L184" title="All 2 branches covered.">            if (instance == null) {</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">                if (thirdPartyNameToFullModuleNames == null) {</span>
+<span class="fc" id="L186">                    thirdPartyNameToFullModuleNames =</span>
+<span class="fc" id="L187">                            generateThirdPartyNameToFullModuleName(moduleClassLoader);</span>
+                }
+<span class="fc" id="L189">                instance = createObjectFromMap(name, thirdPartyNameToFullModuleNames);</span>
+            }
+        }
+<span class="fc bfc" id="L192" title="All 2 branches covered.">        if (instance == null) {</span>
+<span class="fc" id="L193">            instance = createObject(name);</span>
+        }
+<span class="fc bfc" id="L195" title="All 4 branches covered.">        if (instance == null</span>
+                &amp;&amp; moduleLoadOption == ModuleLoadOption.TRY_IN_ALL_REGISTERED_PACKAGES) {
+<span class="fc" id="L197">            instance = createModuleByTryInEachPackage(name);</span>
+        }
+<span class="fc bfc" id="L199" title="All 2 branches covered.">        if (instance == null) {</span>
+<span class="fc" id="L200">            String attemptedNames = null;</span>
+<span class="fc bfc" id="L201" title="All 2 branches covered.">            if (!name.contains(PACKAGE_SEPARATOR)) {</span>
+<span class="fc" id="L202">                final String nameCheck = name + CHECK_SUFFIX;</span>
+<span class="fc" id="L203">                attemptedNames = joinPackageNamesWithClassName(name, packages)</span>
+                        + STRING_SEPARATOR + nameCheck + STRING_SEPARATOR
+<span class="fc" id="L205">                        + joinPackageNamesWithClassName(nameCheck, packages);</span>
+            }
+<span class="fc" id="L207">            final LocalizedMessage exceptionMessage = new LocalizedMessage(1,</span>
+                Definitions.CHECKSTYLE_BUNDLE, UNABLE_TO_INSTANTIATE_EXCEPTION_MESSAGE,
+<span class="fc" id="L209">                new String[] {name, attemptedNames}, null, getClass(), null);</span>
+<span class="fc" id="L210">            throw new CheckstyleException(exceptionMessage.getMessage());</span>
+        }
+<span class="fc" id="L212">        return instance;</span>
+    }
+
+    /**
+     * Create object from one of Checkstyle module names.
+     * @param name name of module.
+     * @return instance of module.
+     * @throws CheckstyleException if the class fails to instantiate or there are ambiguous classes.
+     */
+    private Object createFromStandardCheckSet(String name) throws CheckstyleException {
+<span class="fc" id="L222">        final String fullModuleName = NAME_TO_FULL_MODULE_NAME.get(name);</span>
+<span class="fc" id="L223">        Object instance = null;</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">        if (fullModuleName == null) {</span>
+<span class="fc" id="L225">            final String fullCheckModuleName =</span>
+<span class="fc" id="L226">                    NAME_TO_FULL_MODULE_NAME.get(name + CHECK_SUFFIX);</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">            if (fullCheckModuleName != null) {</span>
+<span class="fc" id="L228">                instance = createObject(fullCheckModuleName);</span>
+            }
+<span class="fc" id="L230">        }</span>
+        else {
+<span class="fc" id="L232">            instance = createObject(fullModuleName);</span>
+        }
+<span class="fc" id="L234">        return instance;</span>
+    }
+
+    /**
+     * Create object with the help of the supplied map.
+     * @param name name of module.
+     * @param map the supplied map.
+     * @return instance of module if it is found in modules map and no ambiguous classes exist.
+     * @throws CheckstyleException if the class fails to instantiate or there are ambiguous classes.
+     */
+    private Object createObjectFromMap(String name, Map&lt;String, Set&lt;String&gt;&gt; map)
+            throws CheckstyleException {
+<span class="fc" id="L246">        final Set&lt;String&gt; fullModuleNames = map.get(name);</span>
+<span class="fc" id="L247">        Object instance = null;</span>
+<span class="fc bfc" id="L248" title="All 2 branches covered.">        if (fullModuleNames == null) {</span>
+<span class="fc" id="L249">            final Set&lt;String&gt; fullCheckModuleNames = map.get(name + CHECK_SUFFIX);</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">            if (fullCheckModuleNames != null) {</span>
+<span class="fc" id="L251">                instance = createObjectFromFullModuleNames(name, fullCheckModuleNames);</span>
+            }
+<span class="fc" id="L253">        }</span>
+        else {
+<span class="fc" id="L255">            instance = createObjectFromFullModuleNames(name, fullModuleNames);</span>
+        }
+<span class="fc" id="L257">        return instance;</span>
+    }
+
+    /**
+     * Create Object from optional full module names.
+     * In most case, there should be only one element in {@code fullModuleName}, otherwise
+     * an exception would be thrown.
+     * @param name name of module
+     * @param fullModuleNames the supplied full module names set
+     * @return instance of module if there is only one element in {@code fullModuleName}
+     * @throws CheckstyleException if the class fails to instantiate or there are more than one
+     *      element in {@code fullModuleName}
+     */
+    private Object createObjectFromFullModuleNames(String name, Set&lt;String&gt; fullModuleNames)
+            throws CheckstyleException {
+        final Object returnValue;
+<span class="fc bfc" id="L273" title="All 2 branches covered.">        if (fullModuleNames.size() == 1) {</span>
+<span class="fc" id="L274">            returnValue = createObject(fullModuleNames.iterator().next());</span>
+        }
+        else {
+<span class="fc" id="L277">            final String optionalNames = fullModuleNames.stream()</span>
+<span class="fc" id="L278">                    .sorted()</span>
+<span class="fc" id="L279">                    .collect(Collectors.joining(STRING_SEPARATOR));</span>
+<span class="fc" id="L280">            final LocalizedMessage exceptionMessage = new LocalizedMessage(1,</span>
+                    Definitions.CHECKSTYLE_BUNDLE, AMBIGUOUS_MODULE_NAME_EXCEPTION_MESSAGE,
+<span class="fc" id="L282">                    new String[] {name, optionalNames}, null, getClass(), null);</span>
+<span class="fc" id="L283">            throw new CheckstyleException(exceptionMessage.getMessage());</span>
+        }
+<span class="fc" id="L285">        return returnValue;</span>
+    }
+
+    /**
+     * Generate the map of third party Checkstyle module names to the set of their fully qualified
+     * names.
+     * @param loader the class loader used to load Checkstyle package names
+     * @return the map of third party Checkstyle module names to the set of their fully qualified
+     *      names
+     */
+    private Map&lt;String, Set&lt;String&gt;&gt; generateThirdPartyNameToFullModuleName(ClassLoader loader) {
+        Map&lt;String, Set&lt;String&gt;&gt; returnValue;
+        try {
+<span class="fc" id="L298">            returnValue = ModuleReflectionUtil.getCheckstyleModules(packages, loader).stream()</span>
+<span class="fc" id="L299">                .collect(Collectors.groupingBy(Class::getSimpleName,</span>
+<span class="fc" id="L300">                    Collectors.mapping(Class::getCanonicalName, Collectors.toSet())));</span>
+        }
+<span class="fc" id="L302">        catch (IOException ignore) {</span>
+<span class="fc" id="L303">            returnValue = Collections.emptyMap();</span>
+<span class="fc" id="L304">        }</span>
+<span class="fc" id="L305">        return returnValue;</span>
+    }
+
+    /**
+     * Returns simple check name from full modules names map.
+     * @param fullName name of the class for joining.
+     * @return simple check name.
+     */
+    public static String getShortFromFullModuleNames(String fullName) {
+<span class="fc" id="L314">        return NAME_TO_FULL_MODULE_NAME</span>
+<span class="fc" id="L315">                .entrySet()</span>
+<span class="fc" id="L316">                .stream()</span>
+<span class="fc" id="L317">                .filter(entry -&gt; entry.getValue().equals(fullName))</span>
+<span class="fc" id="L318">                .map(Entry::getKey)</span>
+<span class="fc" id="L319">                .findFirst()</span>
+<span class="fc" id="L320">                .orElse(fullName);</span>
+    }
+
+    /**
+     * Creates a string by joining package names with a class name.
+     * @param className name of the class for joining.
+     * @param packages packages names.
+     * @return a string which is obtained by joining package names with a class name.
+     */
+    private static String joinPackageNamesWithClassName(String className, Set&lt;String&gt; packages) {
+<span class="fc" id="L330">        return packages.stream().collect(</span>
+<span class="fc" id="L331">            Collectors.joining(PACKAGE_SEPARATOR + className + STRING_SEPARATOR, &quot;&quot;,</span>
+                    PACKAGE_SEPARATOR + className));
+    }
+
+    /**
+     * Creates a new instance of a named class.
+     * @param className the name of the class to instantiate.
+     * @return the {@code Object} created by loader or null.
+     * @throws CheckstyleException if the class fails to instantiate.
+     */
+    private Object createObject(String className) throws CheckstyleException {
+<span class="fc" id="L342">        Class&lt;?&gt; clazz = null;</span>
+
+        try {
+<span class="fc" id="L345">            clazz = Class.forName(className, true, moduleClassLoader);</span>
+        }
+<span class="fc" id="L347">        catch (final ReflectiveOperationException | NoClassDefFoundError ignored) {</span>
+            // ignore the exception
+<span class="fc" id="L349">        }</span>
+
+<span class="fc" id="L351">        Object instance = null;</span>
+
+<span class="fc bfc" id="L353" title="All 2 branches covered.">        if (clazz != null) {</span>
+            try {
+<span class="fc" id="L355">                final Constructor&lt;?&gt; declaredConstructor = clazz.getDeclaredConstructor();</span>
+<span class="fc" id="L356">                declaredConstructor.setAccessible(true);</span>
+<span class="fc" id="L357">                instance = declaredConstructor.newInstance();</span>
+            }
+<span class="fc" id="L359">            catch (final ReflectiveOperationException ex) {</span>
+<span class="fc" id="L360">                throw new CheckstyleException(&quot;Unable to instantiate &quot; + className, ex);</span>
+<span class="fc" id="L361">            }</span>
+        }
+
+<span class="fc" id="L364">        return instance;</span>
+    }
+
+    /**
+     * Searching to class with given name (or name concatenated with &amp;quot;Check&amp;quot;) in existing
+     * packages. Returns instance if class found or, otherwise, null.
+     * @param name the name of a class.
+     * @return the {@code Object} created by loader.
+     * @throws CheckstyleException if an error occurs.
+     */
+    private Object createModuleByTryInEachPackage(String name) throws CheckstyleException {
+<span class="fc" id="L375">        final List&lt;String&gt; possibleNames = packages.stream()</span>
+<span class="fc" id="L376">            .map(packageName -&gt; packageName + PACKAGE_SEPARATOR + name)</span>
+<span class="fc" id="L377">            .flatMap(className -&gt; Stream.of(className, className + CHECK_SUFFIX))</span>
+<span class="fc" id="L378">            .collect(Collectors.toList());</span>
+<span class="fc" id="L379">        Object instance = null;</span>
+<span class="fc bfc" id="L380" title="All 2 branches covered.">        for (String possibleName : possibleNames) {</span>
+<span class="fc" id="L381">            instance = createObject(possibleName);</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">            if (instance != null) {</span>
+<span class="fc" id="L383">                break;</span>
+            }
+<span class="fc" id="L385">        }</span>
+<span class="fc" id="L386">        return instance;</span>
+    }
+
+    /**
+     * Fill short-to-full module names map.
+     */
+    private static void fillShortToFullModuleNamesMap() {
+<span class="fc" id="L393">        fillChecksFromAnnotationPackage();</span>
+<span class="fc" id="L394">        fillChecksFromBlocksPackage();</span>
+<span class="fc" id="L395">        fillChecksFromCodingPackage();</span>
+<span class="fc" id="L396">        fillChecksFromDesignPackage();</span>
+<span class="fc" id="L397">        fillChecksFromHeaderPackage();</span>
+<span class="fc" id="L398">        fillChecksFromImportsPackage();</span>
+<span class="fc" id="L399">        fillChecksFromIndentationPackage();</span>
+<span class="fc" id="L400">        fillChecksFromJavadocPackage();</span>
+<span class="fc" id="L401">        fillChecksFromMetricsPackage();</span>
+<span class="fc" id="L402">        fillChecksFromModifierPackage();</span>
+<span class="fc" id="L403">        fillChecksFromNamingPackage();</span>
+<span class="fc" id="L404">        fillChecksFromRegexpPackage();</span>
+<span class="fc" id="L405">        fillChecksFromSizesPackage();</span>
+<span class="fc" id="L406">        fillChecksFromWhitespacePackage();</span>
+<span class="fc" id="L407">        fillModulesFromChecksPackage();</span>
+<span class="fc" id="L408">        fillModulesFromFilefiltersPackage();</span>
+<span class="fc" id="L409">        fillModulesFromFiltersPackage();</span>
+<span class="fc" id="L410">        fillModulesFromCheckstylePackage();</span>
+<span class="fc" id="L411">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from annotation package.
+     */
+    private static void fillChecksFromAnnotationPackage() {
+<span class="fc" id="L417">        NAME_TO_FULL_MODULE_NAME.put(&quot;AnnotationLocationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.AnnotationLocationCheck&quot;);
+<span class="fc" id="L419">        NAME_TO_FULL_MODULE_NAME.put(&quot;AnnotationOnSameLineCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.AnnotationOnSameLineCheck&quot;);
+<span class="fc" id="L421">        NAME_TO_FULL_MODULE_NAME.put(&quot;AnnotationUseStyleCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.AnnotationUseStyleCheck&quot;);
+<span class="fc" id="L423">        NAME_TO_FULL_MODULE_NAME.put(&quot;MissingDeprecatedCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.MissingDeprecatedCheck&quot;);
+<span class="fc" id="L425">        NAME_TO_FULL_MODULE_NAME.put(&quot;MissingOverrideCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.MissingOverrideCheck&quot;);
+<span class="fc" id="L427">        NAME_TO_FULL_MODULE_NAME.put(&quot;PackageAnnotationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.PackageAnnotationCheck&quot;);
+<span class="fc" id="L429">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressWarningsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.annotation.SuppressWarningsCheck&quot;);
+<span class="fc" id="L431">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from blocks package.
+     */
+    private static void fillChecksFromBlocksPackage() {
+<span class="fc" id="L437">        NAME_TO_FULL_MODULE_NAME.put(&quot;AvoidNestedBlocksCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.blocks.AvoidNestedBlocksCheck&quot;);
+<span class="fc" id="L439">        NAME_TO_FULL_MODULE_NAME.put(&quot;EmptyBlockCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.blocks.EmptyBlockCheck&quot;);
+<span class="fc" id="L441">        NAME_TO_FULL_MODULE_NAME.put(&quot;EmptyCatchBlockCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.blocks.EmptyCatchBlockCheck&quot;);
+<span class="fc" id="L443">        NAME_TO_FULL_MODULE_NAME.put(&quot;LeftCurlyCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.blocks.LeftCurlyCheck&quot;);
+<span class="fc" id="L445">        NAME_TO_FULL_MODULE_NAME.put(&quot;NeedBracesCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.blocks.NeedBracesCheck&quot;);
+<span class="fc" id="L447">        NAME_TO_FULL_MODULE_NAME.put(&quot;RightCurlyCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.blocks.RightCurlyCheck&quot;);
+<span class="fc" id="L449">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from coding package.
+     */
+    // -@cs[ExecutableStatementCount] splitting this method is not reasonable.
+    private static void fillChecksFromCodingPackage() {
+<span class="fc" id="L456">        NAME_TO_FULL_MODULE_NAME.put(&quot;ArrayTrailingCommaCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.ArrayTrailingCommaCheck&quot;);
+<span class="fc" id="L458">        NAME_TO_FULL_MODULE_NAME.put(&quot;AvoidInlineConditionalsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.AvoidInlineConditionalsCheck&quot;);
+<span class="fc" id="L460">        NAME_TO_FULL_MODULE_NAME.put(&quot;CovariantEqualsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.CovariantEqualsCheck&quot;);
+<span class="fc" id="L462">        NAME_TO_FULL_MODULE_NAME.put(&quot;DeclarationOrderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.DeclarationOrderCheck&quot;);
+<span class="fc" id="L464">        NAME_TO_FULL_MODULE_NAME.put(&quot;DefaultComesLastCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.DefaultComesLastCheck&quot;);
+<span class="fc" id="L466">        NAME_TO_FULL_MODULE_NAME.put(&quot;EmptyStatementCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.EmptyStatementCheck&quot;);
+<span class="fc" id="L468">        NAME_TO_FULL_MODULE_NAME.put(&quot;EqualsAvoidNullCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.EqualsAvoidNullCheck&quot;);
+<span class="fc" id="L470">        NAME_TO_FULL_MODULE_NAME.put(&quot;EqualsHashCodeCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.EqualsHashCodeCheck&quot;);
+<span class="fc" id="L472">        NAME_TO_FULL_MODULE_NAME.put(&quot;ExplicitInitializationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.ExplicitInitializationCheck&quot;);
+<span class="fc" id="L474">        NAME_TO_FULL_MODULE_NAME.put(&quot;FallThroughCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.FallThroughCheck&quot;);
+<span class="fc" id="L476">        NAME_TO_FULL_MODULE_NAME.put(&quot;FinalLocalVariableCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.FinalLocalVariableCheck&quot;);
+<span class="fc" id="L478">        NAME_TO_FULL_MODULE_NAME.put(&quot;HiddenFieldCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.HiddenFieldCheck&quot;);
+<span class="fc" id="L480">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalCatchCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.IllegalCatchCheck&quot;);
+<span class="fc" id="L482">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalInstantiationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.IllegalInstantiationCheck&quot;);
+<span class="fc" id="L484">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalThrowsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.IllegalThrowsCheck&quot;);
+<span class="fc" id="L486">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalTokenCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.IllegalTokenCheck&quot;);
+<span class="fc" id="L488">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalTokenTextCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.IllegalTokenTextCheck&quot;);
+<span class="fc" id="L490">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalTypeCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.IllegalTypeCheck&quot;);
+<span class="fc" id="L492">        NAME_TO_FULL_MODULE_NAME.put(&quot;InnerAssignmentCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.InnerAssignmentCheck&quot;);
+<span class="fc" id="L494">        NAME_TO_FULL_MODULE_NAME.put(&quot;MagicNumberCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.MagicNumberCheck&quot;);
+<span class="fc" id="L496">        NAME_TO_FULL_MODULE_NAME.put(&quot;MissingCtorCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.MissingCtorCheck&quot;);
+<span class="fc" id="L498">        NAME_TO_FULL_MODULE_NAME.put(&quot;MissingSwitchDefaultCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.MissingSwitchDefaultCheck&quot;);
+<span class="fc" id="L500">        NAME_TO_FULL_MODULE_NAME.put(&quot;ModifiedControlVariableCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.ModifiedControlVariableCheck&quot;);
+<span class="fc" id="L502">        NAME_TO_FULL_MODULE_NAME.put(&quot;MultipleStringLiteralsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.MultipleStringLiteralsCheck&quot;);
+<span class="fc" id="L504">        NAME_TO_FULL_MODULE_NAME.put(&quot;MultipleVariableDeclarationsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.MultipleVariableDeclarationsCheck&quot;);
+<span class="fc" id="L506">        NAME_TO_FULL_MODULE_NAME.put(&quot;NestedForDepthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.NestedForDepthCheck&quot;);
+<span class="fc" id="L508">        NAME_TO_FULL_MODULE_NAME.put(&quot;NestedIfDepthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.NestedIfDepthCheck&quot;);
+<span class="fc" id="L510">        NAME_TO_FULL_MODULE_NAME.put(&quot;NestedTryDepthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.NestedTryDepthCheck&quot;);
+<span class="fc" id="L512">        NAME_TO_FULL_MODULE_NAME.put(&quot;NoCloneCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.NoCloneCheck&quot;);
+<span class="fc" id="L514">        NAME_TO_FULL_MODULE_NAME.put(&quot;NoFinalizerCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.NoFinalizerCheck&quot;);
+<span class="fc" id="L516">        NAME_TO_FULL_MODULE_NAME.put(&quot;OneStatementPerLineCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.OneStatementPerLineCheck&quot;);
+<span class="fc" id="L518">        NAME_TO_FULL_MODULE_NAME.put(&quot;OverloadMethodsDeclarationOrderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.OverloadMethodsDeclarationOrderCheck&quot;);
+<span class="fc" id="L520">        NAME_TO_FULL_MODULE_NAME.put(&quot;PackageDeclarationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.PackageDeclarationCheck&quot;);
+<span class="fc" id="L522">        NAME_TO_FULL_MODULE_NAME.put(&quot;ParameterAssignmentCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.ParameterAssignmentCheck&quot;);
+<span class="fc" id="L524">        NAME_TO_FULL_MODULE_NAME.put(&quot;RequireThisCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.RequireThisCheck&quot;);
+<span class="fc" id="L526">        NAME_TO_FULL_MODULE_NAME.put(&quot;ReturnCountCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.ReturnCountCheck&quot;);
+<span class="fc" id="L528">        NAME_TO_FULL_MODULE_NAME.put(&quot;SimplifyBooleanExpressionCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.SimplifyBooleanExpressionCheck&quot;);
+<span class="fc" id="L530">        NAME_TO_FULL_MODULE_NAME.put(&quot;SimplifyBooleanReturnCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.SimplifyBooleanReturnCheck&quot;);
+<span class="fc" id="L532">        NAME_TO_FULL_MODULE_NAME.put(&quot;StringLiteralEqualityCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.StringLiteralEqualityCheck&quot;);
+<span class="fc" id="L534">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuperCloneCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.SuperCloneCheck&quot;);
+<span class="fc" id="L536">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuperFinalizeCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.SuperFinalizeCheck&quot;);
+<span class="fc" id="L538">        NAME_TO_FULL_MODULE_NAME.put(&quot;UnnecessaryParenthesesCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.UnnecessaryParenthesesCheck&quot;);
+<span class="fc" id="L540">        NAME_TO_FULL_MODULE_NAME.put(&quot;VariableDeclarationUsageDistanceCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.coding.VariableDeclarationUsageDistanceCheck&quot;);
+<span class="fc" id="L542">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from design package.
+     */
+    private static void fillChecksFromDesignPackage() {
+<span class="fc" id="L548">        NAME_TO_FULL_MODULE_NAME.put(&quot;DesignForExtensionCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.DesignForExtensionCheck&quot;);
+<span class="fc" id="L550">        NAME_TO_FULL_MODULE_NAME.put(&quot;FinalClassCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.FinalClassCheck&quot;);
+<span class="fc" id="L552">        NAME_TO_FULL_MODULE_NAME.put(&quot;HideUtilityClassConstructorCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.HideUtilityClassConstructorCheck&quot;);
+<span class="fc" id="L554">        NAME_TO_FULL_MODULE_NAME.put(&quot;InnerTypeLastCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.InnerTypeLastCheck&quot;);
+<span class="fc" id="L556">        NAME_TO_FULL_MODULE_NAME.put(&quot;InterfaceIsTypeCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.InterfaceIsTypeCheck&quot;);
+<span class="fc" id="L558">        NAME_TO_FULL_MODULE_NAME.put(&quot;MutableExceptionCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.MutableExceptionCheck&quot;);
+<span class="fc" id="L560">        NAME_TO_FULL_MODULE_NAME.put(&quot;OneTopLevelClassCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.OneTopLevelClassCheck&quot;);
+<span class="fc" id="L562">        NAME_TO_FULL_MODULE_NAME.put(&quot;ThrowsCountCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.ThrowsCountCheck&quot;);
+<span class="fc" id="L564">        NAME_TO_FULL_MODULE_NAME.put(&quot;VisibilityModifierCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.design.VisibilityModifierCheck&quot;);
+<span class="fc" id="L566">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from header package.
+     */
+    private static void fillChecksFromHeaderPackage() {
+<span class="fc" id="L572">        NAME_TO_FULL_MODULE_NAME.put(&quot;HeaderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.header.HeaderCheck&quot;);
+<span class="fc" id="L574">        NAME_TO_FULL_MODULE_NAME.put(&quot;RegexpHeaderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.header.RegexpHeaderCheck&quot;);
+<span class="fc" id="L576">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from imports package.
+     */
+    private static void fillChecksFromImportsPackage() {
+<span class="fc" id="L582">        NAME_TO_FULL_MODULE_NAME.put(&quot;AvoidStarImportCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.AvoidStarImportCheck&quot;);
+<span class="fc" id="L584">        NAME_TO_FULL_MODULE_NAME.put(&quot;AvoidStaticImportCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.AvoidStaticImportCheck&quot;);
+<span class="fc" id="L586">        NAME_TO_FULL_MODULE_NAME.put(&quot;CustomImportOrderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.CustomImportOrderCheck&quot;);
+<span class="fc" id="L588">        NAME_TO_FULL_MODULE_NAME.put(&quot;IllegalImportCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.IllegalImportCheck&quot;);
+<span class="fc" id="L590">        NAME_TO_FULL_MODULE_NAME.put(&quot;ImportControlCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.ImportControlCheck&quot;);
+<span class="fc" id="L592">        NAME_TO_FULL_MODULE_NAME.put(&quot;ImportOrderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.ImportOrderCheck&quot;);
+<span class="fc" id="L594">        NAME_TO_FULL_MODULE_NAME.put(&quot;RedundantImportCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.RedundantImportCheck&quot;);
+<span class="fc" id="L596">        NAME_TO_FULL_MODULE_NAME.put(&quot;UnusedImportsCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.imports.UnusedImportsCheck&quot;);
+<span class="fc" id="L598">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from indentation package.
+     */
+    private static void fillChecksFromIndentationPackage() {
+<span class="fc" id="L604">        NAME_TO_FULL_MODULE_NAME.put(&quot;CommentsIndentationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.indentation.CommentsIndentationCheck&quot;);
+<span class="fc" id="L606">        NAME_TO_FULL_MODULE_NAME.put(&quot;IndentationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.indentation.IndentationCheck&quot;);
+<span class="fc" id="L608">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from javadoc package.
+     */
+    private static void fillChecksFromJavadocPackage() {
+<span class="fc" id="L614">        NAME_TO_FULL_MODULE_NAME.put(&quot;AtclauseOrderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.AtclauseOrderCheck&quot;);
+<span class="fc" id="L616">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocMethodCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocMethodCheck&quot;);
+<span class="fc" id="L618">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocPackageCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocPackageCheck&quot;);
+<span class="fc" id="L620">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocParagraphCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocParagraphCheck&quot;);
+<span class="fc" id="L622">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocStyleCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocStyleCheck&quot;);
+<span class="fc" id="L624">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocTagContinuationIndentationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocTagContinuationIndentationCheck&quot;);
+<span class="fc" id="L626">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocTypeCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocTypeCheck&quot;);
+<span class="fc" id="L628">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavadocVariableCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.JavadocVariableCheck&quot;);
+<span class="fc" id="L630">        NAME_TO_FULL_MODULE_NAME.put(&quot;NonEmptyAtclauseDescriptionCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.NonEmptyAtclauseDescriptionCheck&quot;);
+<span class="fc" id="L632">        NAME_TO_FULL_MODULE_NAME.put(&quot;SingleLineJavadocCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.SingleLineJavadocCheck&quot;);
+<span class="fc" id="L634">        NAME_TO_FULL_MODULE_NAME.put(&quot;SummaryJavadocCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.SummaryJavadocCheck&quot;);
+<span class="fc" id="L636">        NAME_TO_FULL_MODULE_NAME.put(&quot;WriteTagCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.javadoc.WriteTagCheck&quot;);
+<span class="fc" id="L638">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from metrics package.
+     */
+    private static void fillChecksFromMetricsPackage() {
+<span class="fc" id="L644">        NAME_TO_FULL_MODULE_NAME.put(&quot;BooleanExpressionComplexityCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.metrics.BooleanExpressionComplexityCheck&quot;);
+<span class="fc" id="L646">        NAME_TO_FULL_MODULE_NAME.put(&quot;ClassDataAbstractionCouplingCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.metrics.ClassDataAbstractionCouplingCheck&quot;);
+<span class="fc" id="L648">        NAME_TO_FULL_MODULE_NAME.put(&quot;ClassFanOutComplexityCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.metrics.ClassFanOutComplexityCheck&quot;);
+<span class="fc" id="L650">        NAME_TO_FULL_MODULE_NAME.put(&quot;CyclomaticComplexityCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.metrics.CyclomaticComplexityCheck&quot;);
+<span class="fc" id="L652">        NAME_TO_FULL_MODULE_NAME.put(&quot;JavaNCSSCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.metrics.JavaNCSSCheck&quot;);
+<span class="fc" id="L654">        NAME_TO_FULL_MODULE_NAME.put(&quot;NPathComplexityCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.metrics.NPathComplexityCheck&quot;);
+<span class="fc" id="L656">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from modifier package.
+     */
+    private static void fillChecksFromModifierPackage() {
+<span class="fc" id="L662">        NAME_TO_FULL_MODULE_NAME.put(&quot;ClassMemberImpliedModifierCheck&quot;,</span>
+            BASE_PACKAGE + &quot;.checks.modifier.ClassMemberImpliedModifierCheck&quot;);
+<span class="fc" id="L664">        NAME_TO_FULL_MODULE_NAME.put(&quot;InterfaceMemberImpliedModifierCheck&quot;,</span>
+            BASE_PACKAGE + &quot;.checks.modifier.InterfaceMemberImpliedModifierCheck&quot;);
+<span class="fc" id="L666">        NAME_TO_FULL_MODULE_NAME.put(&quot;ModifierOrderCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.modifier.ModifierOrderCheck&quot;);
+<span class="fc" id="L668">        NAME_TO_FULL_MODULE_NAME.put(&quot;RedundantModifierCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.modifier.RedundantModifierCheck&quot;);
+<span class="fc" id="L670">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from naming package.
+     */
+    private static void fillChecksFromNamingPackage() {
+<span class="fc" id="L676">        NAME_TO_FULL_MODULE_NAME.put(&quot;AbbreviationAsWordInNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.AbbreviationAsWordInNameCheck&quot;);
+<span class="fc" id="L678">        NAME_TO_FULL_MODULE_NAME.put(&quot;AbstractClassNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.AbstractClassNameCheck&quot;);
+<span class="fc" id="L680">        NAME_TO_FULL_MODULE_NAME.put(&quot;CatchParameterNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.CatchParameterNameCheck&quot;);
+<span class="fc" id="L682">        NAME_TO_FULL_MODULE_NAME.put(&quot;ClassTypeParameterNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.ClassTypeParameterNameCheck&quot;);
+<span class="fc" id="L684">        NAME_TO_FULL_MODULE_NAME.put(&quot;ConstantNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.ConstantNameCheck&quot;);
+<span class="fc" id="L686">        NAME_TO_FULL_MODULE_NAME.put(&quot;InterfaceTypeParameterNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.InterfaceTypeParameterNameCheck&quot;);
+<span class="fc" id="L688">        NAME_TO_FULL_MODULE_NAME.put(&quot;LambdaParameterNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.LambdaParameterNameCheck&quot;);
+<span class="fc" id="L690">        NAME_TO_FULL_MODULE_NAME.put(&quot;LocalFinalVariableNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.LocalFinalVariableNameCheck&quot;);
+<span class="fc" id="L692">        NAME_TO_FULL_MODULE_NAME.put(&quot;LocalVariableNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.LocalVariableNameCheck&quot;);
+<span class="fc" id="L694">        NAME_TO_FULL_MODULE_NAME.put(&quot;MemberNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.MemberNameCheck&quot;);
+<span class="fc" id="L696">        NAME_TO_FULL_MODULE_NAME.put(&quot;MethodNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.MethodNameCheck&quot;);
+<span class="fc" id="L698">        NAME_TO_FULL_MODULE_NAME.put(&quot;MethodTypeParameterNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.MethodTypeParameterNameCheck&quot;);
+<span class="fc" id="L700">        NAME_TO_FULL_MODULE_NAME.put(&quot;PackageNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.PackageNameCheck&quot;);
+<span class="fc" id="L702">        NAME_TO_FULL_MODULE_NAME.put(&quot;ParameterNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.ParameterNameCheck&quot;);
+<span class="fc" id="L704">        NAME_TO_FULL_MODULE_NAME.put(&quot;StaticVariableNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.StaticVariableNameCheck&quot;);
+<span class="fc" id="L706">        NAME_TO_FULL_MODULE_NAME.put(&quot;TypeNameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.naming.TypeNameCheck&quot;);
+<span class="fc" id="L708">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from regexp package.
+     */
+    private static void fillChecksFromRegexpPackage() {
+<span class="fc" id="L714">        NAME_TO_FULL_MODULE_NAME.put(&quot;RegexpCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.regexp.RegexpCheck&quot;);
+<span class="fc" id="L716">        NAME_TO_FULL_MODULE_NAME.put(&quot;RegexpMultilineCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.regexp.RegexpMultilineCheck&quot;);
+<span class="fc" id="L718">        NAME_TO_FULL_MODULE_NAME.put(&quot;RegexpOnFilenameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.regexp.RegexpOnFilenameCheck&quot;);
+<span class="fc" id="L720">        NAME_TO_FULL_MODULE_NAME.put(&quot;RegexpSinglelineCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.regexp.RegexpSinglelineCheck&quot;);
+<span class="fc" id="L722">        NAME_TO_FULL_MODULE_NAME.put(&quot;RegexpSinglelineJavaCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.regexp.RegexpSinglelineJavaCheck&quot;);
+<span class="fc" id="L724">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from sizes package.
+     */
+    private static void fillChecksFromSizesPackage() {
+<span class="fc" id="L730">        NAME_TO_FULL_MODULE_NAME.put(&quot;AnonInnerLengthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.AnonInnerLengthCheck&quot;);
+<span class="fc" id="L732">        NAME_TO_FULL_MODULE_NAME.put(&quot;ExecutableStatementCountCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.ExecutableStatementCountCheck&quot;);
+<span class="fc" id="L734">        NAME_TO_FULL_MODULE_NAME.put(&quot;FileLengthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.FileLengthCheck&quot;);
+<span class="fc" id="L736">        NAME_TO_FULL_MODULE_NAME.put(&quot;LineLengthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.LineLengthCheck&quot;);
+<span class="fc" id="L738">        NAME_TO_FULL_MODULE_NAME.put(&quot;MethodCountCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.MethodCountCheck&quot;);
+<span class="fc" id="L740">        NAME_TO_FULL_MODULE_NAME.put(&quot;MethodLengthCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.MethodLengthCheck&quot;);
+<span class="fc" id="L742">        NAME_TO_FULL_MODULE_NAME.put(&quot;OuterTypeNumberCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.OuterTypeNumberCheck&quot;);
+<span class="fc" id="L744">        NAME_TO_FULL_MODULE_NAME.put(&quot;ParameterNumberCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.sizes.ParameterNumberCheck&quot;);
+<span class="fc" id="L746">    }</span>
+
+    /**
+     * Fill short-to-full module names map with Checks from whitespace package.
+     */
+    private static void fillChecksFromWhitespacePackage() {
+<span class="fc" id="L752">        NAME_TO_FULL_MODULE_NAME.put(&quot;EmptyForInitializerPadCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.EmptyForInitializerPadCheck&quot;);
+<span class="fc" id="L754">        NAME_TO_FULL_MODULE_NAME.put(&quot;EmptyForIteratorPadCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.EmptyForIteratorPadCheck&quot;);
+<span class="fc" id="L756">        NAME_TO_FULL_MODULE_NAME.put(&quot;EmptyLineSeparatorCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.EmptyLineSeparatorCheck&quot;);
+<span class="fc" id="L758">        NAME_TO_FULL_MODULE_NAME.put(&quot;FileTabCharacterCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.FileTabCharacterCheck&quot;);
+<span class="fc" id="L760">        NAME_TO_FULL_MODULE_NAME.put(&quot;GenericWhitespaceCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.GenericWhitespaceCheck&quot;);
+<span class="fc" id="L762">        NAME_TO_FULL_MODULE_NAME.put(&quot;MethodParamPadCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.MethodParamPadCheck&quot;);
+<span class="fc" id="L764">        NAME_TO_FULL_MODULE_NAME.put(&quot;NoLineWrapCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.NoLineWrapCheck&quot;);
+<span class="fc" id="L766">        NAME_TO_FULL_MODULE_NAME.put(&quot;NoWhitespaceAfterCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.NoWhitespaceAfterCheck&quot;);
+<span class="fc" id="L768">        NAME_TO_FULL_MODULE_NAME.put(&quot;NoWhitespaceBeforeCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.NoWhitespaceBeforeCheck&quot;);
+<span class="fc" id="L770">        NAME_TO_FULL_MODULE_NAME.put(&quot;OperatorWrapCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.OperatorWrapCheck&quot;);
+<span class="fc" id="L772">        NAME_TO_FULL_MODULE_NAME.put(&quot;ParenPadCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.ParenPadCheck&quot;);
+<span class="fc" id="L774">        NAME_TO_FULL_MODULE_NAME.put(&quot;SeparatorWrapCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.SeparatorWrapCheck&quot;);
+<span class="fc" id="L776">        NAME_TO_FULL_MODULE_NAME.put(&quot;SingleSpaceSeparatorCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.SingleSpaceSeparatorCheck&quot;);
+<span class="fc" id="L778">        NAME_TO_FULL_MODULE_NAME.put(&quot;TypecastParenPadCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.TypecastParenPadCheck&quot;);
+<span class="fc" id="L780">        NAME_TO_FULL_MODULE_NAME.put(&quot;WhitespaceAfterCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.WhitespaceAfterCheck&quot;);
+<span class="fc" id="L782">        NAME_TO_FULL_MODULE_NAME.put(&quot;WhitespaceAroundCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.whitespace.WhitespaceAroundCheck&quot;);
+<span class="fc" id="L784">    }</span>
+
+    /**
+     * Fill short-to-full module names map with modules from checks package.
+     */
+    private static void fillModulesFromChecksPackage() {
+<span class="fc" id="L790">        NAME_TO_FULL_MODULE_NAME.put(&quot;ArrayTypeStyleCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.ArrayTypeStyleCheck&quot;);
+<span class="fc" id="L792">        NAME_TO_FULL_MODULE_NAME.put(&quot;AvoidEscapedUnicodeCharactersCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.AvoidEscapedUnicodeCharactersCheck&quot;);
+<span class="fc" id="L794">        NAME_TO_FULL_MODULE_NAME.put(&quot;DescendantTokenCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.DescendantTokenCheck&quot;);
+<span class="fc" id="L796">        NAME_TO_FULL_MODULE_NAME.put(&quot;FinalParametersCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.FinalParametersCheck&quot;);
+<span class="fc" id="L798">        NAME_TO_FULL_MODULE_NAME.put(&quot;NewlineAtEndOfFileCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.NewlineAtEndOfFileCheck&quot;);
+<span class="fc" id="L800">        NAME_TO_FULL_MODULE_NAME.put(&quot;OuterTypeFilenameCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.OuterTypeFilenameCheck&quot;);
+<span class="fc" id="L802">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressWarningsHolder&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.SuppressWarningsHolder&quot;);
+<span class="fc" id="L804">        NAME_TO_FULL_MODULE_NAME.put(&quot;TodoCommentCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.TodoCommentCheck&quot;);
+<span class="fc" id="L806">        NAME_TO_FULL_MODULE_NAME.put(&quot;TrailingCommentCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.TrailingCommentCheck&quot;);
+<span class="fc" id="L808">        NAME_TO_FULL_MODULE_NAME.put(&quot;TranslationCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.TranslationCheck&quot;);
+<span class="fc" id="L810">        NAME_TO_FULL_MODULE_NAME.put(&quot;UncommentedMainCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.UncommentedMainCheck&quot;);
+<span class="fc" id="L812">        NAME_TO_FULL_MODULE_NAME.put(&quot;UniquePropertiesCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.UniquePropertiesCheck&quot;);
+<span class="fc" id="L814">        NAME_TO_FULL_MODULE_NAME.put(&quot;UpperEllCheck&quot;,</span>
+                BASE_PACKAGE + &quot;.checks.UpperEllCheck&quot;);
+<span class="fc" id="L816">    }</span>
+
+    /**
+     * Fill short-to-full module names map with modules from filefilters package.
+     */
+    private static void fillModulesFromFilefiltersPackage() {
+<span class="fc" id="L822">        NAME_TO_FULL_MODULE_NAME.put(&quot;BeforeExecutionExclusionFileFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filefilters.BeforeExecutionExclusionFileFilter&quot;);
+<span class="fc" id="L824">    }</span>
+
+    /**
+     * Fill short-to-full module names map with modules from filters package.
+     */
+    private static void fillModulesFromFiltersPackage() {
+<span class="fc" id="L830">        NAME_TO_FULL_MODULE_NAME.put(&quot;CsvFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.CsvFilter&quot;);
+<span class="fc" id="L832">        NAME_TO_FULL_MODULE_NAME.put(&quot;IntMatchFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.IntMatchFilter&quot;);
+<span class="fc" id="L834">        NAME_TO_FULL_MODULE_NAME.put(&quot;IntRangeFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.IntRangeFilter&quot;);
+<span class="fc" id="L836">        NAME_TO_FULL_MODULE_NAME.put(&quot;SeverityMatchFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.SeverityMatchFilter&quot;);
+<span class="fc" id="L838">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressWithPlainTextCommentFilter&quot;,</span>
+            BASE_PACKAGE + &quot;.filters.SuppressWithPlainTextCommentFilter&quot;);
+<span class="fc" id="L840">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressionCommentFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.SuppressionCommentFilter&quot;);
+<span class="fc" id="L842">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressionFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.SuppressionFilter&quot;);
+<span class="fc" id="L844">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressionXpathFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.SuppressionXpathFilter&quot;);
+<span class="fc" id="L846">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressWarningsFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.SuppressWarningsFilter&quot;);
+<span class="fc" id="L848">        NAME_TO_FULL_MODULE_NAME.put(&quot;SuppressWithNearbyCommentFilter&quot;,</span>
+                BASE_PACKAGE + &quot;.filters.SuppressWithNearbyCommentFilter&quot;);
+<span class="fc" id="L850">    }</span>
+
+    /**
+     * Fill short-to-full module names map with modules from checkstyle package.
+     */
+    private static void fillModulesFromCheckstylePackage() {
+<span class="fc" id="L856">        NAME_TO_FULL_MODULE_NAME.put(&quot;Checker&quot;, BASE_PACKAGE + &quot;.Checker&quot;);</span>
+<span class="fc" id="L857">        NAME_TO_FULL_MODULE_NAME.put(&quot;TreeWalker&quot;, BASE_PACKAGE + &quot;.TreeWalker&quot;);</span>
+<span class="fc" id="L858">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

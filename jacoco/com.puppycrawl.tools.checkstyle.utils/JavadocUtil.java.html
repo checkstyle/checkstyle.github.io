@@ -1,0 +1,408 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JavadocUtil.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.utils</a> &gt; <span class="el_source">JavadocUtil.java</span></div><h1>JavadocUtil.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.utils;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.DetailNode;
+import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;
+import com.puppycrawl.tools.checkstyle.api.TextBlock;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.InvalidJavadocTag;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocTag;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocTagInfo;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocTags;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.utils.BlockTagUtil;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.utils.InlineTagUtil;
+import com.puppycrawl.tools.checkstyle.checks.javadoc.utils.TagInfo;
+
+/**
+ * Contains utility methods for working with Javadoc.
+ */
+public final class JavadocUtil {
+
+    /**
+     * The type of Javadoc tag we want returned.
+     */
+<span class="fc" id="L48">    public enum JavadocTagType {</span>
+
+        /** Block type. */
+<span class="fc" id="L51">        BLOCK,</span>
+        /** Inline type. */
+<span class="fc" id="L53">        INLINE,</span>
+        /** All validTags. */
+<span class="fc" id="L55">        ALL,</span>
+
+    }
+
+    /** Maps from a token name to value. */
+    private static final Map&lt;String, Integer&gt; TOKEN_NAME_TO_VALUE;
+    /** Maps from a token value to name. */
+    private static final String[] TOKEN_VALUE_TO_NAME;
+
+    /** Exception message for unknown JavaDoc token id. */
+    private static final String UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE = &quot;Unknown javadoc&quot;
+            + &quot; token id. Given id: &quot;;
+
+    /** Newline pattern. */
+<span class="fc" id="L69">    private static final Pattern NEWLINE = Pattern.compile(&quot;\n&quot;);</span>
+
+    /** Return pattern. */
+<span class="fc" id="L72">    private static final Pattern RETURN = Pattern.compile(&quot;\r&quot;);</span>
+
+    /** Tab pattern. */
+<span class="fc" id="L75">    private static final Pattern TAB = Pattern.compile(&quot;\t&quot;);</span>
+
+    // initialise the constants
+    static {
+<span class="fc" id="L79">        TOKEN_NAME_TO_VALUE = TokenUtil.nameToValueMapFromPublicIntFields(JavadocTokenTypes.class);</span>
+<span class="fc" id="L80">        TOKEN_VALUE_TO_NAME = TokenUtil.valueToNameArrayFromNameToValueMap(TOKEN_NAME_TO_VALUE);</span>
+<span class="fc" id="L81">    }</span>
+
+    /** Prevent instantiation. */
+    private JavadocUtil() {
+    }
+
+    /**
+     * Gets validTags from a given piece of Javadoc.
+     * @param textBlock
+     *        the Javadoc comment to process.
+     * @param tagType
+     *        the type of validTags we're interested in
+     * @return all standalone validTags from the given javadoc.
+     */
+    public static JavadocTags getJavadocTags(TextBlock textBlock,
+            JavadocTagType tagType) {
+<span class="fc bfc" id="L97" title="All 4 branches covered.">        final boolean getBlockTags = tagType == JavadocTagType.ALL</span>
+                                         || tagType == JavadocTagType.BLOCK;
+<span class="fc bfc" id="L99" title="All 4 branches covered.">        final boolean getInlineTags = tagType == JavadocTagType.ALL</span>
+                                          || tagType == JavadocTagType.INLINE;
+
+<span class="fc" id="L102">        final List&lt;TagInfo&gt; tags = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L104" title="All 2 branches covered.">        if (getBlockTags) {</span>
+<span class="fc" id="L105">            tags.addAll(BlockTagUtil.extractBlockTags(textBlock.getText()));</span>
+        }
+
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        if (getInlineTags) {</span>
+<span class="fc" id="L109">            tags.addAll(InlineTagUtil.extractInlineTags(textBlock.getText()));</span>
+        }
+
+<span class="fc" id="L112">        final List&lt;JavadocTag&gt; validTags = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L113">        final List&lt;InvalidJavadocTag&gt; invalidTags = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        for (TagInfo tag : tags) {</span>
+<span class="fc" id="L116">            final int col = tag.getPosition().getColumn();</span>
+
+            // Add the starting line of the comment to the line number to get the actual line number
+            // in the source.
+            // Lines are one-indexed, so need a off-by-one correction.
+<span class="fc" id="L121">            final int line = textBlock.getStartLineNo() + tag.getPosition().getLine() - 1;</span>
+
+<span class="fc bfc" id="L123" title="All 2 branches covered.">            if (JavadocTagInfo.isValidName(tag.getName())) {</span>
+<span class="fc" id="L124">                validTags.add(</span>
+<span class="fc" id="L125">                    new JavadocTag(line, col, tag.getName(), tag.getValue()));</span>
+            }
+            else {
+<span class="fc" id="L128">                invalidTags.add(new InvalidJavadocTag(line, col, tag.getName()));</span>
+            }
+<span class="fc" id="L130">        }</span>
+
+<span class="fc" id="L132">        return new JavadocTags(validTags, invalidTags);</span>
+    }
+
+    /**
+     * Checks that commentContent starts with '*' javadoc comment identifier.
+     * @param commentContent
+     *        content of block comment
+     * @return true if commentContent starts with '*' javadoc comment
+     *         identifier.
+     */
+    public static boolean isJavadocComment(String commentContent) {
+<span class="fc" id="L143">        boolean result = false;</span>
+
+<span class="fc bfc" id="L145" title="All 2 branches covered.">        if (!commentContent.isEmpty()) {</span>
+<span class="fc" id="L146">            final char docCommentIdentifier = commentContent.charAt(0);</span>
+<span class="fc bfc" id="L147" title="All 2 branches covered.">            result = docCommentIdentifier == '*';</span>
+        }
+
+<span class="fc" id="L150">        return result;</span>
+    }
+
+    /**
+     * Checks block comment content starts with '*' javadoc comment identifier.
+     * @param blockCommentBegin
+     *        block comment AST
+     * @return true if block comment content starts with '*' javadoc comment
+     *         identifier.
+     */
+    public static boolean isJavadocComment(DetailAST blockCommentBegin) {
+<span class="fc" id="L161">        final String commentContent = getBlockCommentContent(blockCommentBegin);</span>
+<span class="fc bfc" id="L162" title="All 4 branches covered.">        return isJavadocComment(commentContent) &amp;&amp; isCorrectJavadocPosition(blockCommentBegin);</span>
+    }
+
+    /**
+     * Gets content of block comment.
+     * @param blockCommentBegin
+     *        block comment AST.
+     * @return content of block comment.
+     */
+    private static String getBlockCommentContent(DetailAST blockCommentBegin) {
+<span class="fc" id="L172">        final DetailAST commentContent = blockCommentBegin.getFirstChild();</span>
+<span class="fc" id="L173">        return commentContent.getText();</span>
+    }
+
+    /**
+     * Get content of Javadoc comment.
+     * @param javadocCommentBegin
+     *        Javadoc comment AST
+     * @return content of Javadoc comment.
+     */
+    public static String getJavadocCommentContent(DetailAST javadocCommentBegin) {
+<span class="fc" id="L183">        final DetailAST commentContent = javadocCommentBegin.getFirstChild();</span>
+<span class="fc" id="L184">        return commentContent.getText().substring(1);</span>
+    }
+
+    /**
+     * Returns the first child token that has a specified type.
+     * @param detailNode
+     *        Javadoc AST node
+     * @param type
+     *        the token type to match
+     * @return the matching token, or null if no match
+     */
+    public static DetailNode findFirstToken(DetailNode detailNode, int type) {
+<span class="fc" id="L196">        DetailNode returnValue = null;</span>
+<span class="fc" id="L197">        DetailNode node = getFirstChild(detailNode);</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">        while (node != null) {</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">            if (node.getType() == type) {</span>
+<span class="fc" id="L200">                returnValue = node;</span>
+<span class="fc" id="L201">                break;</span>
+            }
+<span class="fc" id="L203">            node = getNextSibling(node);</span>
+        }
+<span class="fc" id="L205">        return returnValue;</span>
+    }
+
+    /**
+     * Gets first child node of specified node.
+     *
+     * @param node DetailNode
+     * @return first child
+     */
+    public static DetailNode getFirstChild(DetailNode node) {
+<span class="fc" id="L215">        DetailNode resultNode = null;</span>
+
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        if (node.getChildren().length &gt; 0) {</span>
+<span class="fc" id="L218">            resultNode = node.getChildren()[0];</span>
+        }
+<span class="fc" id="L220">        return resultNode;</span>
+    }
+
+    /**
+     * Checks whether node contains any node of specified type among children on any deep level.
+     *
+     * @param node DetailNode
+     * @param type token type
+     * @return true if node contains any node of type type among children on any deep level.
+     */
+    public static boolean containsInBranch(DetailNode node, int type) {
+<span class="fc" id="L231">        boolean result = true;</span>
+<span class="fc" id="L232">        DetailNode curNode = node;</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        while (type != curNode.getType()) {</span>
+<span class="fc" id="L234">            DetailNode toVisit = getFirstChild(curNode);</span>
+<span class="fc bfc" id="L235" title="All 4 branches covered.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
+<span class="fc" id="L236">                toVisit = getNextSibling(curNode);</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">                if (toVisit == null) {</span>
+<span class="fc" id="L238">                    curNode = curNode.getParent();</span>
+                }
+            }
+
+<span class="fc bfc" id="L242" title="All 2 branches covered.">            if (curNode == toVisit) {</span>
+<span class="fc" id="L243">                result = false;</span>
+<span class="fc" id="L244">                break;</span>
+            }
+
+<span class="fc" id="L247">            curNode = toVisit;</span>
+<span class="fc" id="L248">        }</span>
+<span class="fc" id="L249">        return result;</span>
+    }
+
+    /**
+     * Gets next sibling of specified node.
+     *
+     * @param node DetailNode
+     * @return next sibling.
+     */
+    public static DetailNode getNextSibling(DetailNode node) {
+<span class="fc" id="L259">        DetailNode nextSibling = null;</span>
+<span class="fc" id="L260">        final DetailNode parent = node.getParent();</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">        if (parent != null) {</span>
+<span class="fc" id="L262">            final int nextSiblingIndex = node.getIndex() + 1;</span>
+<span class="fc" id="L263">            final DetailNode[] children = parent.getChildren();</span>
+<span class="fc bfc" id="L264" title="All 2 branches covered.">            if (nextSiblingIndex &lt;= children.length - 1) {</span>
+<span class="fc" id="L265">                nextSibling = children[nextSiblingIndex];</span>
+            }
+        }
+<span class="fc" id="L268">        return nextSibling;</span>
+    }
+
+    /**
+     * Gets next sibling of specified node with the specified type.
+     *
+     * @param node DetailNode
+     * @param tokenType javadoc token type
+     * @return next sibling.
+     */
+    public static DetailNode getNextSibling(DetailNode node, int tokenType) {
+<span class="fc" id="L279">        DetailNode nextSibling = getNextSibling(node);</span>
+<span class="fc bfc" id="L280" title="All 4 branches covered.">        while (nextSibling != null &amp;&amp; nextSibling.getType() != tokenType) {</span>
+<span class="fc" id="L281">            nextSibling = getNextSibling(nextSibling);</span>
+        }
+<span class="fc" id="L283">        return nextSibling;</span>
+    }
+
+    /**
+     * Gets previous sibling of specified node.
+     * @param node DetailNode
+     * @return previous sibling
+     */
+    public static DetailNode getPreviousSibling(DetailNode node) {
+<span class="fc" id="L292">        DetailNode previousSibling = null;</span>
+<span class="fc" id="L293">        final int previousSiblingIndex = node.getIndex() - 1;</span>
+<span class="fc bfc" id="L294" title="All 2 branches covered.">        if (previousSiblingIndex &gt;= 0) {</span>
+<span class="fc" id="L295">            final DetailNode parent = node.getParent();</span>
+<span class="fc" id="L296">            final DetailNode[] children = parent.getChildren();</span>
+<span class="fc" id="L297">            previousSibling = children[previousSiblingIndex];</span>
+        }
+<span class="fc" id="L299">        return previousSibling;</span>
+    }
+
+    /**
+     * Returns the name of a token for a given ID.
+     * @param id
+     *        the ID of the token name to get
+     * @return a token name
+     */
+    public static String getTokenName(int id) {
+        final String name;
+<span class="fc bfc" id="L310" title="All 2 branches covered.">        if (id == JavadocTokenTypes.EOF) {</span>
+<span class="fc" id="L311">            name = &quot;EOF&quot;;</span>
+        }
+<span class="fc bfc" id="L313" title="All 2 branches covered.">        else if (id &gt; TOKEN_VALUE_TO_NAME.length - 1) {</span>
+<span class="fc" id="L314">            throw new IllegalArgumentException(UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE + id);</span>
+        }
+        else {
+<span class="fc" id="L317">            name = TOKEN_VALUE_TO_NAME[id];</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">            if (name == null) {</span>
+<span class="fc" id="L319">                throw new IllegalArgumentException(UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE + id);</span>
+            }
+        }
+<span class="fc" id="L322">        return name;</span>
+    }
+
+    /**
+     * Returns the ID of a token for a given name.
+     * @param name
+     *        the name of the token ID to get
+     * @return a token ID
+     */
+    public static int getTokenId(String name) {
+<span class="fc" id="L332">        final Integer id = TOKEN_NAME_TO_VALUE.get(name);</span>
+<span class="fc bfc" id="L333" title="All 2 branches covered.">        if (id == null) {</span>
+<span class="fc" id="L334">            throw new IllegalArgumentException(&quot;Unknown javadoc token name. Given name &quot; + name);</span>
+        }
+<span class="fc" id="L336">        return id;</span>
+    }
+
+    /**
+     * Gets tag name from javadocTagSection.
+     *
+     * @param javadocTagSection to get tag name from.
+     * @return name, of the javadocTagSection's tag.
+     */
+    public static String getTagName(DetailNode javadocTagSection) {
+        final String javadocTagName;
+<span class="fc bfc" id="L347" title="All 2 branches covered.">        if (javadocTagSection.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</span>
+<span class="fc" id="L348">            javadocTagName = getNextSibling(</span>
+<span class="fc" id="L349">                    getFirstChild(javadocTagSection)).getText();</span>
+        }
+        else {
+<span class="fc" id="L352">            javadocTagName = getFirstChild(javadocTagSection).getText();</span>
+        }
+<span class="fc" id="L354">        return javadocTagName;</span>
+    }
+
+    /**
+     * Replace all control chars with escaped symbols.
+     * @param text the String to process.
+     * @return the processed String with all control chars escaped.
+     */
+    public static String escapeAllControlChars(String text) {
+<span class="fc" id="L363">        final String textWithoutNewlines = NEWLINE.matcher(text).replaceAll(&quot;\\\\n&quot;);</span>
+<span class="fc" id="L364">        final String textWithoutReturns = RETURN.matcher(textWithoutNewlines).replaceAll(&quot;\\\\r&quot;);</span>
+<span class="fc" id="L365">        return TAB.matcher(textWithoutReturns).replaceAll(&quot;\\\\t&quot;);</span>
+    }
+
+    /**
+     * Checks Javadoc comment it's in right place.
+     * &lt;p&gt;From Javadoc util documentation:
+     * &quot;Placement of comments - Documentation comments are recognized only when placed
+     * immediately before class, interface, constructor, method, field or annotation field
+     * declarations -- see the class example, method example, and field example.
+     * Documentation comments placed in the body of a method are ignored.&quot;&lt;/p&gt;
+     * &lt;p&gt;If there are many documentation comments per declaration statement,
+     * only the last one will be recognized.&lt;/p&gt;
+     *
+     * @param blockComment Block comment AST
+     * @return true if Javadoc is in right place
+     * @see &lt;a href=&quot;https://docs.oracle.com/javase/8/docs/technotes/tools/unix/javadoc.html&quot;&gt;
+     *     Javadoc util documentation&lt;/a&gt;
+     */
+    private static boolean isCorrectJavadocPosition(DetailAST blockComment) {
+        // We must be sure that after this one there are no other documentation comments.
+<span class="fc" id="L385">        DetailAST sibling = blockComment.getNextSibling();</span>
+<span class="fc bfc" id="L386" title="All 2 branches covered.">        while (sibling != null) {</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">            if (sibling.getType() == TokenTypes.BLOCK_COMMENT_BEGIN) {</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">                if (isJavadocComment(getBlockCommentContent(sibling))) {</span>
+                    // Found another javadoc comment, so this one should be ignored.
+<span class="fc" id="L390">                    break;</span>
+                }
+<span class="fc" id="L392">                sibling = sibling.getNextSibling();</span>
+            }
+<span class="fc bfc" id="L394" title="All 2 branches covered.">            else if (sibling.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</span>
+<span class="fc" id="L395">                sibling = sibling.getNextSibling();</span>
+            }
+            else {
+                // Annotation, declaration or modifier is here. Do not check further.
+<span class="fc" id="L399">                sibling = null;</span>
+            }
+        }
+<span class="fc bfc" id="L402" title="All 2 branches covered.">        return sibling == null</span>
+<span class="fc bfc" id="L403" title="All 2 branches covered.">            &amp;&amp; (BlockCommentPosition.isOnType(blockComment)</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">                || BlockCommentPosition.isOnMember(blockComment));</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AbstractImportControl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.imports</a> &gt; <span class="el_source">AbstractImportControl.java</span></div><h1>AbstractImportControl.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.imports;
+
+import java.util.Deque;
+import java.util.LinkedList;
+
+/**
+ * Represents a tree of import rules for controlling whether packages or
+ * classes are allowed to be used. Each instance must have a single parent or
+ * be the root node.
+ */
+abstract class AbstractImportControl {
+
+    /** List of {@link AbstractImportRule} objects to check. */
+<span class="fc" id="L33">    private final Deque&lt;AbstractImportRule&gt; rules = new LinkedList&lt;&gt;();</span>
+    /** The parent. Null indicates we are the root node. */
+    private final AbstractImportControl parent;
+    /** Strategy in a case if matching allow/disallow rule was not found. */
+    private final MismatchStrategy strategyOnMismatch;
+
+    /**
+     * Construct a child node.
+     * @param parent the parent node.
+     * @param strategyOnMismatch strategy in a case if matching allow/disallow rule was not found.
+     */
+<span class="fc" id="L44">    AbstractImportControl(AbstractImportControl parent, MismatchStrategy strategyOnMismatch) {</span>
+<span class="fc" id="L45">        this.parent = parent;</span>
+<span class="fc" id="L46">        this.strategyOnMismatch = strategyOnMismatch;</span>
+<span class="fc" id="L47">    }</span>
+
+    /**
+     * Search down the tree to locate the finest match for a supplied package.
+     * @param forPkg the package to search for.
+     * @param forFileName the file name to search for.
+     * @return the finest match, or null if no match at all.
+     */
+    public abstract AbstractImportControl locateFinest(String forPkg, String forFileName);
+
+    /**
+     * Check for equality of this with pkg.
+     * @param pkg the package to compare with.
+     * @param fileName the file name to compare with.
+     * @return if it matches.
+     */
+    protected abstract boolean matchesExactly(String pkg, String fileName);
+
+    /**
+     * Adds an {@link AbstractImportRule} to the node.
+     * @param rule the rule to be added.
+     */
+    protected void addImportRule(AbstractImportRule rule) {
+<span class="fc" id="L70">        rules.addLast(rule);</span>
+<span class="fc" id="L71">    }</span>
+
+    /**
+     * Returns whether a package or class is allowed to be imported.
+     * The algorithm checks with the current node for a result, and if none is
+     * found then calls its parent looking for a match. This will recurse
+     * looking for match. If there is no clear result then
+     * {@link AccessResult#UNKNOWN} is returned.
+     * @param inPkg the package doing the import.
+     * @param inFileName the file name doing the import.
+     * @param forImport the import to check on.
+     * @return an {@link AccessResult}.
+     */
+    public AccessResult checkAccess(String inPkg, String inFileName, String forImport) {
+        final AccessResult result;
+<span class="fc" id="L86">        final AccessResult returnValue = localCheckAccess(inPkg, inFileName, forImport);</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        if (returnValue != AccessResult.UNKNOWN) {</span>
+<span class="fc" id="L88">            result = returnValue;</span>
+        }
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        else if (parent == null) {</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">            if (strategyOnMismatch == MismatchStrategy.ALLOWED) {</span>
+<span class="fc" id="L92">                result = AccessResult.ALLOWED;</span>
+            }
+            else {
+<span class="fc" id="L95">                result = AccessResult.DISALLOWED;</span>
+            }
+        }
+        else {
+<span class="fc bfc" id="L99" title="All 2 branches covered.">            if (strategyOnMismatch == MismatchStrategy.ALLOWED) {</span>
+<span class="fc" id="L100">                result = AccessResult.ALLOWED;</span>
+            }
+<span class="fc bfc" id="L102" title="All 2 branches covered.">            else if (strategyOnMismatch == MismatchStrategy.DISALLOWED) {</span>
+<span class="fc" id="L103">                result = AccessResult.DISALLOWED;</span>
+            }
+            else {
+<span class="fc" id="L106">                result = parent.checkAccess(inPkg, inFileName, forImport);</span>
+            }
+        }
+<span class="fc" id="L109">        return result;</span>
+    }
+
+    /**
+     * Checks whether any of the rules for this node control access to
+     * a specified package or file.
+     * @param inPkg the package doing the import.
+     * @param inFileName the file name doing the import.
+     * @param forImport the import to check on.
+     * @return an {@link AccessResult}.
+     */
+    private AccessResult localCheckAccess(String inPkg, String inFileName, String forImport) {
+<span class="fc" id="L121">        AccessResult localCheckAccessResult = AccessResult.UNKNOWN;</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        for (AbstractImportRule importRule : rules) {</span>
+            // Check if an import rule is only meant to be applied locally.
+<span class="fc bfc" id="L124" title="All 4 branches covered.">            if (!importRule.isLocalOnly() || matchesExactly(inPkg, inFileName)) {</span>
+<span class="fc" id="L125">                final AccessResult result = importRule.verifyImport(forImport);</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">                if (result != AccessResult.UNKNOWN) {</span>
+<span class="fc" id="L127">                    localCheckAccessResult = result;</span>
+<span class="fc" id="L128">                    break;</span>
+                }
+            }
+<span class="fc" id="L131">        }</span>
+<span class="fc" id="L132">        return localCheckAccessResult;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

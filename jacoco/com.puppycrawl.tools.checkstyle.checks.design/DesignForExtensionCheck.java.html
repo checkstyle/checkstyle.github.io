@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DesignForExtensionCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.design</a> &gt; <span class="el_source">DesignForExtensionCheck.java</span></div><h1>DesignForExtensionCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.design;
+
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.Scope;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
+
+/**
+ * The check finds classes that are designed for extension (subclass creation).
+ *
+ * &lt;p&gt;
+ * Nothing wrong could be with founded classes.
+ * This check makes sense only for library projects (not application projects)
+ * which care of ideal OOP-design to make sure that class works in all cases even misusage.
+ * Even in library projects this check most likely will find classes that are designed for extension
+ * by somebody. User needs to use suppressions extensively to got a benefit from this check,
+ * and keep in suppressions all confirmed/known classes that are deigned for inheritance
+ * intentionally to let the check catch only new classes, and bring this to team/user attention.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * ATTENTION: Only user can decide whether a class is designed for extension or not.
+ * The check just shows all classes which are possibly designed for extension.
+ * If smth inappropriate is found please use suppression.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * ATTENTION: If the method which can be overridden in a subclass has a javadoc comment
+ * (a good practice is to explain its self-use of overridable methods) the check will not
+ * rise a violation. The violation can also be skipped if the method which can be overridden
+ * in a subclass has one or more annotations that are specified in ignoredAnnotations
+ * option. Note, that by default @Override annotation is not included in the
+ * ignoredAnnotations set as in a subclass the method which has the annotation can also be
+ * overridden in its subclass.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * More specifically, the check enforces a programming style where superclasses provide empty
+ * &quot;hooks&quot; that can be implemented by subclasses.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * The check finds classes that have overridable methods (public or protected methods
+ * that are non-static, not-final, non-abstract) and have non-empty implementation.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * This protects superclasses against being broken by subclasses. The downside is that subclasses
+ * are limited in their flexibility, in particular, they cannot prevent execution of code in the
+ * superclass, but that also means that subclasses cannot forget to call their super method.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * The check has the following options:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * ignoredAnnotations - annotations which allow the check to skip the method from validation.
+ * Default value is &lt;b&gt;Test, Before, After, BeforeClass, AfterClass&lt;/b&gt;.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ */
+@StatelessCheck
+<span class="fc" id="L93">public class DesignForExtensionCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;design.forExtension&quot;;
+
+    /**
+     * A set of annotations which allow the check to skip the method from validation.
+     */
+<span class="fc" id="L104">    private Set&lt;String&gt; ignoredAnnotations = Arrays.stream(new String[] {&quot;Test&quot;, &quot;Before&quot;, &quot;After&quot;,</span>
+<span class="fc" id="L105">        &quot;BeforeClass&quot;, &quot;AfterClass&quot;, }).collect(Collectors.toSet());</span>
+
+    /**
+     * Sets annotations which allow the check to skip the method from validation.
+     * @param ignoredAnnotations method annotations.
+     */
+    public void setIgnoredAnnotations(String... ignoredAnnotations) {
+<span class="fc" id="L112">        this.ignoredAnnotations = Arrays.stream(ignoredAnnotations).collect(Collectors.toSet());</span>
+<span class="fc" id="L113">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L117">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L122">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+        // The check does not subscribe to CLASS_DEF token as now it is stateless. If the check
+        // subscribes to CLASS_DEF token it will become stateful, since we need to have additional
+        // stack to hold CLASS_DEF tokens.
+<span class="fc" id="L130">        return new int[] {TokenTypes.METHOD_DEF};</span>
+    }
+
+    @Override
+    public boolean isCommentNodesRequired() {
+<span class="fc" id="L135">        return true;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L140" title="All 2 branches covered.">        if (!hasJavadocComment(ast)</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">                &amp;&amp; canBeOverridden(ast)</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">                &amp;&amp; (isNativeMethod(ast)</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">                    || !hasEmptyImplementation(ast))</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">                &amp;&amp; !hasIgnoredAnnotation(ast, ignoredAnnotations)) {</span>
+<span class="fc" id="L145">            final DetailAST classDef = getNearestClassOrEnumDefinition(ast);</span>
+<span class="fc bfc" id="L146" title="All 2 branches covered.">            if (canBeSubclassed(classDef)) {</span>
+<span class="fc" id="L147">                final String className = classDef.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L148">                final String methodName = ast.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L149">                log(ast, MSG_KEY, className, methodName);</span>
+            }
+        }
+<span class="fc" id="L152">    }</span>
+
+    /**
+     * Checks whether a method has a javadoc comment.
+     * @param methodDef method definition token.
+     * @return true if a method has a javadoc comment.
+     */
+    private static boolean hasJavadocComment(DetailAST methodDef) {
+<span class="fc bfc" id="L160" title="All 2 branches covered.">        return hasJavadocCommentOnToken(methodDef, TokenTypes.MODIFIERS)</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">                || hasJavadocCommentOnToken(methodDef, TokenTypes.TYPE);</span>
+    }
+
+    /**
+     * Checks whether a token has a javadoc comment.
+     *
+     * @param methodDef method definition token.
+     * @param tokenType token type.
+     * @return true if a token has a javadoc comment.
+     */
+    private static boolean hasJavadocCommentOnToken(DetailAST methodDef, int tokenType) {
+<span class="fc" id="L172">        final DetailAST token = methodDef.findFirstToken(tokenType);</span>
+<span class="fc" id="L173">        return token.branchContains(TokenTypes.BLOCK_COMMENT_BEGIN);</span>
+    }
+
+    /**
+     * Checks whether a methods is native.
+     * @param ast method definition token.
+     * @return true if a methods is native.
+     */
+    private static boolean isNativeMethod(DetailAST ast) {
+<span class="fc" id="L182">        final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L183" title="All 2 branches covered.">        return mods.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;</span>
+    }
+
+    /**
+     * Checks whether a method has only comments in the body (has an empty implementation).
+     * Method is OK if its implementation is empty.
+     * @param ast method definition token.
+     * @return true if a method has only comments in the body.
+     */
+    private static boolean hasEmptyImplementation(DetailAST ast) {
+<span class="fc" id="L193">        boolean hasEmptyBody = true;</span>
+<span class="fc" id="L194">        final DetailAST methodImplOpenBrace = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L195">        final DetailAST methodImplCloseBrace = methodImplOpenBrace.getLastChild();</span>
+<span class="fc" id="L196">        final Predicate&lt;DetailAST&gt; predicate = currentNode -&gt; {</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">            return currentNode != methodImplCloseBrace</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">                &amp;&amp; !TokenUtil.isCommentType(currentNode.getType());</span>
+        };
+<span class="fc" id="L200">        final Optional&lt;DetailAST&gt; methodBody =</span>
+<span class="fc" id="L201">            TokenUtil.findFirstTokenByPredicate(methodImplOpenBrace, predicate);</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">        if (methodBody.isPresent()) {</span>
+<span class="fc" id="L203">            hasEmptyBody = false;</span>
+        }
+<span class="fc" id="L205">        return hasEmptyBody;</span>
+    }
+
+    /**
+     * Checks whether a method can be overridden.
+     * Method can be overridden if it is not private, abstract, final or static.
+     * Note that the check has nothing to do for interfaces.
+     * @param methodDef method definition token.
+     * @return true if a method can be overridden in a subclass.
+     */
+    private static boolean canBeOverridden(DetailAST methodDef) {
+<span class="fc" id="L216">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        return ScopeUtil.getSurroundingScope(methodDef).isIn(Scope.PROTECTED)</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">            &amp;&amp; !ScopeUtil.isInInterfaceOrAnnotationBlock(methodDef)</span>
+<span class="fc bfc" id="L219" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.ABSTRACT) == null</span>
+<span class="fc bfc" id="L221" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null;</span>
+    }
+
+    /**
+     * Checks whether a method has any of ignored annotations.
+     * @param methodDef method definition token.
+     * @param annotations a set of ignored annotations.
+     * @return true if a method has any of ignored annotations.
+     */
+    private static boolean hasIgnoredAnnotation(DetailAST methodDef, Set&lt;String&gt; annotations) {
+<span class="fc" id="L232">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L233">        boolean hasIgnoredAnnotation = false;</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">        if (modifiers.findFirstToken(TokenTypes.ANNOTATION) != null) {</span>
+<span class="fc" id="L235">            final Optional&lt;DetailAST&gt; annotation = TokenUtil.findFirstTokenByPredicate(modifiers,</span>
+                currentToken -&gt; {
+<span class="fc bfc" id="L237" title="All 2 branches covered.">                    return currentToken.getType() == TokenTypes.ANNOTATION</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">                        &amp;&amp; annotations.contains(getAnnotationName(currentToken));</span>
+                });
+<span class="fc bfc" id="L240" title="All 2 branches covered.">            if (annotation.isPresent()) {</span>
+<span class="fc" id="L241">                hasIgnoredAnnotation = true;</span>
+            }
+        }
+<span class="fc" id="L244">        return hasIgnoredAnnotation;</span>
+    }
+
+    /**
+     * Gets the name of the annotation.
+     * @param annotation to get name of.
+     * @return the name of the annotation.
+     */
+    private static String getAnnotationName(DetailAST annotation) {
+<span class="fc" id="L253">        final DetailAST dotAst = annotation.findFirstToken(TokenTypes.DOT);</span>
+        final String name;
+<span class="fc bfc" id="L255" title="All 2 branches covered.">        if (dotAst == null) {</span>
+<span class="fc" id="L256">            name = annotation.findFirstToken(TokenTypes.IDENT).getText();</span>
+        }
+        else {
+<span class="fc" id="L259">            name = dotAst.findFirstToken(TokenTypes.IDENT).getText();</span>
+        }
+<span class="fc" id="L261">        return name;</span>
+    }
+
+    /**
+     * Returns CLASS_DEF or ENUM_DEF token which is the nearest to the given ast node.
+     * Searches the tree towards the root until it finds a CLASS_DEF or ENUM_DEF node.
+     * @param ast the start node for searching.
+     * @return the CLASS_DEF or ENUM_DEF token.
+     */
+    private static DetailAST getNearestClassOrEnumDefinition(DetailAST ast) {
+<span class="fc" id="L271">        DetailAST searchAST = ast;</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">        while (searchAST.getType() != TokenTypes.CLASS_DEF</span>
+<span class="fc bfc" id="L273" title="All 2 branches covered.">               &amp;&amp; searchAST.getType() != TokenTypes.ENUM_DEF) {</span>
+<span class="fc" id="L274">            searchAST = searchAST.getParent();</span>
+        }
+<span class="fc" id="L276">        return searchAST;</span>
+    }
+
+    /**
+     * Checks if the given class (given CLASS_DEF node) can be subclassed.
+     * @param classDef class definition token.
+     * @return true if the containing class can be subclassed.
+     */
+    private static boolean canBeSubclassed(DetailAST classDef) {
+<span class="fc" id="L285">        final DetailAST modifiers = classDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L286" title="All 2 branches covered.">        return classDef.getType() != TokenTypes.ENUM_DEF</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null</span>
+<span class="fc bfc" id="L288" title="All 2 branches covered.">            &amp;&amp; hasDefaultOrExplicitNonPrivateCtor(classDef);</span>
+    }
+
+    /**
+     * Checks whether a class has default or explicit non-private constructor.
+     * @param classDef class ast token.
+     * @return true if a class has default or explicit non-private constructor.
+     */
+    private static boolean hasDefaultOrExplicitNonPrivateCtor(DetailAST classDef) {
+        // check if subclassing is prevented by having only private ctors
+<span class="fc" id="L298">        final DetailAST objBlock = classDef.findFirstToken(TokenTypes.OBJBLOCK);</span>
+
+<span class="fc" id="L300">        boolean hasDefaultConstructor = true;</span>
+<span class="fc" id="L301">        boolean hasExplicitNonPrivateCtor = false;</span>
+
+<span class="fc" id="L303">        DetailAST candidate = objBlock.getFirstChild();</span>
+
+<span class="fc bfc" id="L305" title="All 2 branches covered.">        while (candidate != null) {</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">            if (candidate.getType() == TokenTypes.CTOR_DEF) {</span>
+<span class="fc" id="L307">                hasDefaultConstructor = false;</span>
+
+<span class="fc" id="L309">                final DetailAST ctorMods =</span>
+<span class="fc" id="L310">                        candidate.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">                if (ctorMods.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {</span>
+<span class="fc" id="L312">                    hasExplicitNonPrivateCtor = true;</span>
+<span class="fc" id="L313">                    break;</span>
+                }
+            }
+<span class="fc" id="L316">            candidate = candidate.getNextSibling();</span>
+        }
+
+<span class="fc bfc" id="L319" title="All 4 branches covered.">        return hasDefaultConstructor || hasExplicitNonPrivateCtor;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

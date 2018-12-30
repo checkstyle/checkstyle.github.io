@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MutableExceptionCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.design</a> &gt; <span class="el_source">MutableExceptionCheck.java</span></div><h1>MutableExceptionCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.design;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * &lt;p&gt; Ensures that exceptions (classes with names conforming to some regular
+ * expression and explicitly extending classes with names conforming to other
+ * regular expression) are immutable. That is, they have only final fields.&lt;/p&gt;
+ * &lt;p&gt; Rationale: Exception instances should represent an error
+ * condition. Having non final fields not only allows the state to be
+ * modified by accident and therefore mask the original condition but
+ * also allows developers to accidentally forget to initialise state
+ * thereby leading to code catching the exception to draw incorrect
+ * conclusions based on the state.&lt;/p&gt;
+ *
+ */
+@FileStatefulCheck
+<span class="fc" id="L44">public final class MutableExceptionCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;mutable.exception&quot;;
+
+    /** Default value for format and extendedClassNameFormat properties. */
+    private static final String DEFAULT_FORMAT = &quot;^.*Exception$|^.*Error$|^.*Throwable$&quot;;
+    /** Stack of checking information for classes. */
+<span class="fc" id="L55">    private final Deque&lt;Boolean&gt; checkingStack = new ArrayDeque&lt;&gt;();</span>
+    /** Pattern for class name that is being extended. */
+<span class="fc" id="L57">    private Pattern extendedClassNameFormat = Pattern.compile(DEFAULT_FORMAT);</span>
+    /** Should we check current class or not. */
+    private boolean checking;
+    /** The regexp to match against. */
+<span class="fc" id="L61">    private Pattern format = Pattern.compile(DEFAULT_FORMAT);</span>
+
+    /**
+     * Sets the format of extended class name to the specified regular expression.
+     * @param extendedClassNameFormat a {@code String} value
+     */
+    public void setExtendedClassNameFormat(Pattern extendedClassNameFormat) {
+<span class="fc" id="L68">        this.extendedClassNameFormat = extendedClassNameFormat;</span>
+<span class="fc" id="L69">    }</span>
+
+    /**
+     * Set the format for the specified regular expression.
+     * @param pattern the new pattern
+     */
+    public void setFormat(Pattern pattern) {
+<span class="fc" id="L76">        format = pattern;</span>
+<span class="fc" id="L77">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L81">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L86">        return new int[] {TokenTypes.CLASS_DEF, TokenTypes.VARIABLE_DEF};</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L91">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L96" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.CLASS_DEF:
+<span class="fc" id="L98">                visitClassDef(ast);</span>
+<span class="fc" id="L99">                break;</span>
+            case TokenTypes.VARIABLE_DEF:
+<span class="fc" id="L101">                visitVariableDef(ast);</span>
+<span class="fc" id="L102">                break;</span>
+            default:
+<span class="fc" id="L104">                throw new IllegalStateException(ast.toString());</span>
+        }
+<span class="fc" id="L106">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L111">            leaveClassDef();</span>
+        }
+<span class="fc" id="L113">    }</span>
+
+    /**
+     * Called when we start processing class definition.
+     * @param ast class definition node
+     */
+    private void visitClassDef(DetailAST ast) {
+<span class="fc" id="L120">        checkingStack.push(checking);</span>
+<span class="fc bfc" id="L121" title="All 4 branches covered.">        checking = isNamedAsException(ast) &amp;&amp; isExtendedClassNamedAsException(ast);</span>
+<span class="fc" id="L122">    }</span>
+
+    /** Called when we leave class definition. */
+    private void leaveClassDef() {
+<span class="fc" id="L126">        checking = checkingStack.pop();</span>
+<span class="fc" id="L127">    }</span>
+
+    /**
+     * Checks variable definition.
+     * @param ast variable def node for check
+     */
+    private void visitVariableDef(DetailAST ast) {
+<span class="fc bfc" id="L134" title="All 4 branches covered.">        if (checking &amp;&amp; ast.getParent().getType() == TokenTypes.OBJBLOCK) {</span>
+<span class="fc" id="L135">            final DetailAST modifiersAST =</span>
+<span class="fc" id="L136">                ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+
+<span class="fc bfc" id="L138" title="All 2 branches covered.">            if (modifiersAST.findFirstToken(TokenTypes.FINAL) == null) {</span>
+<span class="fc" id="L139">                log(ast, MSG_KEY, ast.findFirstToken(TokenTypes.IDENT).getText());</span>
+            }
+        }
+<span class="fc" id="L142">    }</span>
+
+    /**
+     * Checks that a class name conforms to specified format.
+     * @param ast class definition node
+     * @return true if a class name conforms to specified format
+     */
+    private boolean isNamedAsException(DetailAST ast) {
+<span class="fc" id="L150">        final String className = ast.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L151">        return format.matcher(className).find();</span>
+    }
+
+    /**
+     * Checks that if extended class name conforms to specified format.
+     * @param ast class definition node
+     * @return true if extended class name conforms to specified format
+     */
+    private boolean isExtendedClassNamedAsException(DetailAST ast) {
+<span class="fc" id="L160">        boolean result = false;</span>
+<span class="fc" id="L161">        final DetailAST extendsClause = ast.findFirstToken(TokenTypes.EXTENDS_CLAUSE);</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        if (extendsClause != null) {</span>
+<span class="fc" id="L163">            DetailAST currentNode = extendsClause;</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">            while (currentNode.getLastChild() != null) {</span>
+<span class="fc" id="L165">                currentNode = currentNode.getLastChild();</span>
+            }
+<span class="fc" id="L167">            final String extendedClassName = currentNode.getText();</span>
+<span class="fc" id="L168">            result = extendedClassNameFormat.matcher(extendedClassName).matches();</span>
+        }
+<span class="fc" id="L170">        return result;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

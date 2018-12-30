@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>NeedBracesCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.blocks</a> &gt; <span class="el_source">NeedBracesCheck.java</span></div><h1>NeedBracesCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.blocks;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks for braces around code blocks.
+ * &lt;/p&gt;
+ * &lt;p&gt; By default the check will check the following blocks:
+ *  {@link TokenTypes#LITERAL_DO LITERAL_DO},
+ *  {@link TokenTypes#LITERAL_ELSE LITERAL_ELSE},
+ *  {@link TokenTypes#LITERAL_FOR LITERAL_FOR},
+ *  {@link TokenTypes#LITERAL_IF LITERAL_IF},
+ *  {@link TokenTypes#LITERAL_WHILE LITERAL_WHILE}.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;NeedBraces&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt; An example of how to configure the check for {@code if} and
+ * {@code else} blocks is:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;NeedBraces&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;LITERAL_IF, LITERAL_ELSE&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * Check has the following options:
+ * &lt;p&gt;&lt;b&gt;allowSingleLineStatement&lt;/b&gt; which allows single-line statements without braces, e.g.:&lt;/p&gt;
+ * &lt;p&gt;
+ * {@code
+ * if (obj.isValid()) return true;
+ * }
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * {@code
+ * while (obj.isValid()) return true;
+ * }
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * {@code
+ * do this.notify(); while (o != null);
+ * }
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * {@code
+ * for (int i = 0; ; ) this.notify();
+ * }
+ * &lt;/p&gt;
+ * &lt;p&gt;&lt;b&gt;allowEmptyLoopBody&lt;/b&gt; which allows loops with empty bodies, e.g.:&lt;/p&gt;
+ * &lt;p&gt;
+ * {@code
+ * while (value.incrementValue() &lt; 5);
+ * }
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * {@code
+ * for(int i = 0; i &lt; 10; value.incrementValue());
+ * }
+ * &lt;/p&gt;
+ * &lt;p&gt;Default value for allowEmptyLoopBody option is &lt;b&gt;false&lt;/b&gt;.&lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the Check to allow {@code case, default} single-line statements
+ * without braces:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;NeedBraces&amp;quot;&amp;gt;
+ *     &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;LITERAL_CASE, LITERAL_DEFAULT&amp;quot;/&amp;gt;
+ *     &amp;lt;property name=&amp;quot;allowSingleLineStatement&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * Such statements would be allowed:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * {@code
+ * switch (num) {
+ *     case 1: counter++; break; // OK
+ *     case 6: counter += 10; break; // OK
+ *     default: counter = 100; break; // OK
+ * }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the Check to allow {@code while, for} loops with empty bodies:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;NeedBraces&amp;quot;&amp;gt;
+ *     &amp;lt;property name=&amp;quot;allowEmptyLoopBody&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;
+ * Such statements would be allowed:
+ * &lt;/p&gt;
+ *
+ * &lt;pre&gt;
+ * {@code
+ * while (value.incrementValue() &amp;lt; 5); // OK
+ * for(int i = 0; i &amp;lt; 10; value.incrementValue()); // OK
+ * }
+ * &lt;/pre&gt;
+ *
+ */
+@StatelessCheck
+<span class="fc" id="L135">public class NeedBracesCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY_NEED_BRACES = &quot;needBraces&quot;;
+
+    /**
+     * Check's option for skipping single-line statements.
+     */
+    private boolean allowSingleLineStatement;
+
+    /**
+     * Check's option for allowing loops with empty body.
+     */
+    private boolean allowEmptyLoopBody;
+
+    /**
+     * Setter.
+     * @param allowSingleLineStatement Check's option for skipping single-line statements
+     */
+    public void setAllowSingleLineStatement(boolean allowSingleLineStatement) {
+<span class="fc" id="L158">        this.allowSingleLineStatement = allowSingleLineStatement;</span>
+<span class="fc" id="L159">    }</span>
+
+    /**
+     * Sets whether to allow empty loop body.
+     * @param allowEmptyLoopBody Check's option for allowing loops with empty body.
+     */
+    public void setAllowEmptyLoopBody(boolean allowEmptyLoopBody) {
+<span class="fc" id="L166">        this.allowEmptyLoopBody = allowEmptyLoopBody;</span>
+<span class="fc" id="L167">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L171">        return new int[] {</span>
+            TokenTypes.LITERAL_DO,
+            TokenTypes.LITERAL_ELSE,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.LITERAL_IF,
+            TokenTypes.LITERAL_WHILE,
+        };
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L182">        return new int[] {</span>
+            TokenTypes.LITERAL_DO,
+            TokenTypes.LITERAL_ELSE,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.LITERAL_IF,
+            TokenTypes.LITERAL_WHILE,
+            TokenTypes.LITERAL_CASE,
+            TokenTypes.LITERAL_DEFAULT,
+            TokenTypes.LAMBDA,
+        };
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L196">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc" id="L201">        final DetailAST slistAST = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L202">        boolean isElseIf = false;</span>
+<span class="fc bfc" id="L203" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_ELSE</span>
+<span class="fc bfc" id="L204" title="All 2 branches covered.">            &amp;&amp; ast.findFirstToken(TokenTypes.LITERAL_IF) != null) {</span>
+<span class="fc" id="L205">            isElseIf = true;</span>
+        }
+<span class="fc" id="L207">        final boolean isDefaultInAnnotation = isDefaultInAnnotation(ast);</span>
+<span class="fc" id="L208">        final boolean skipStatement = isSkipStatement(ast);</span>
+<span class="fc bfc" id="L209" title="All 4 branches covered.">        final boolean skipEmptyLoopBody = allowEmptyLoopBody &amp;&amp; isEmptyLoopBody(ast);</span>
+
+<span class="fc bfc" id="L211" title="All 10 branches covered.">        if (slistAST == null &amp;&amp; !isElseIf &amp;&amp; !isDefaultInAnnotation</span>
+                &amp;&amp; !skipStatement &amp;&amp; !skipEmptyLoopBody) {
+<span class="fc" id="L213">            log(ast.getLineNo(), MSG_KEY_NEED_BRACES, ast.getText());</span>
+        }
+<span class="fc" id="L215">    }</span>
+
+    /**
+     * Checks if ast is the default token of an annotation field.
+     * @param ast ast to test.
+     * @return true if current ast is default and it is part of annotation.
+     */
+    private static boolean isDefaultInAnnotation(DetailAST ast) {
+<span class="fc" id="L223">        boolean isDefaultInAnnotation = false;</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_DEFAULT</span>
+<span class="fc bfc" id="L225" title="All 2 branches covered.">                &amp;&amp; ast.getParent().getType() == TokenTypes.ANNOTATION_FIELD_DEF) {</span>
+<span class="fc" id="L226">            isDefaultInAnnotation = true;</span>
+        }
+<span class="fc" id="L228">        return isDefaultInAnnotation;</span>
+    }
+
+    /**
+     * Checks if current statement can be skipped by &quot;need braces&quot; warning.
+     * @param statement if, for, while, do-while, lambda, else, case, default statements.
+     * @return true if current statement can be skipped by Check.
+     */
+    private boolean isSkipStatement(DetailAST statement) {
+<span class="fc bfc" id="L237" title="All 4 branches covered.">        return allowSingleLineStatement &amp;&amp; isSingleLineStatement(statement);</span>
+    }
+
+    /**
+     * Checks if current loop statement does not have body, e.g.:
+     * &lt;p&gt;
+     * {@code
+     *   while (value.incrementValue() &lt; 5);
+     *   ...
+     *   for(int i = 0; i &lt; 10; value.incrementValue());
+     * }
+     * &lt;/p&gt;
+     * @param ast ast token.
+     * @return true if current loop statement does not have body.
+     */
+    private static boolean isEmptyLoopBody(DetailAST ast) {
+<span class="fc" id="L253">        boolean noBodyLoop = false;</span>
+
+<span class="fc bfc" id="L255" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_FOR</span>
+<span class="fc bfc" id="L256" title="All 2 branches covered.">                || ast.getType() == TokenTypes.LITERAL_WHILE) {</span>
+<span class="fc" id="L257">            DetailAST currentToken = ast.getFirstChild();</span>
+<span class="fc bfc" id="L258" title="All 2 branches covered.">            while (currentToken.getNextSibling() != null) {</span>
+<span class="fc" id="L259">                currentToken = currentToken.getNextSibling();</span>
+            }
+<span class="fc bfc" id="L261" title="All 2 branches covered.">            noBodyLoop = currentToken.getType() == TokenTypes.EMPTY_STAT;</span>
+        }
+<span class="fc" id="L263">        return noBodyLoop;</span>
+    }
+
+    /**
+     * Checks if current statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * if (obj.isValid()) return true;
+     * }
+     * &lt;/p&gt;
+     * &lt;p&gt;
+     * {@code
+     * while (obj.isValid()) return true;
+     * }
+     * &lt;/p&gt;
+     * @param statement if, for, while, do-while, lambda, else, case, default statements.
+     * @return true if current statement is single-line statement.
+     */
+    private static boolean isSingleLineStatement(DetailAST statement) {
+        final boolean result;
+
+<span class="fc bfc" id="L284" title="All 8 branches covered.">        switch (statement.getType()) {</span>
+            case TokenTypes.LITERAL_IF:
+<span class="fc" id="L286">                result = isSingleLineIf(statement);</span>
+<span class="fc" id="L287">                break;</span>
+            case TokenTypes.LITERAL_FOR:
+<span class="fc" id="L289">                result = isSingleLineFor(statement);</span>
+<span class="fc" id="L290">                break;</span>
+            case TokenTypes.LITERAL_DO:
+<span class="fc" id="L292">                result = isSingleLineDoWhile(statement);</span>
+<span class="fc" id="L293">                break;</span>
+            case TokenTypes.LITERAL_WHILE:
+<span class="fc" id="L295">                result = isSingleLineWhile(statement);</span>
+<span class="fc" id="L296">                break;</span>
+            case TokenTypes.LAMBDA:
+<span class="fc" id="L298">                result = isSingleLineLambda(statement);</span>
+<span class="fc" id="L299">                break;</span>
+            case TokenTypes.LITERAL_CASE:
+<span class="fc" id="L301">                result = isSingleLineCase(statement);</span>
+<span class="fc" id="L302">                break;</span>
+            case TokenTypes.LITERAL_DEFAULT:
+<span class="fc" id="L304">                result = isSingleLineDefault(statement);</span>
+<span class="fc" id="L305">                break;</span>
+            default:
+<span class="fc" id="L307">                result = isSingleLineElse(statement);</span>
+                break;
+        }
+
+<span class="fc" id="L311">        return result;</span>
+    }
+
+    /**
+     * Checks if current while statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * while (obj.isValid()) return true;
+     * }
+     * &lt;/p&gt;
+     * @param literalWhile {@link TokenTypes#LITERAL_WHILE while statement}.
+     * @return true if current while statement is single-line statement.
+     */
+    private static boolean isSingleLineWhile(DetailAST literalWhile) {
+<span class="fc" id="L325">        boolean result = false;</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">        if (literalWhile.getParent().getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">                &amp;&amp; literalWhile.getLastChild().getType() != TokenTypes.SLIST) {</span>
+<span class="fc" id="L328">            final DetailAST block = literalWhile.getLastChild().getPreviousSibling();</span>
+<span class="fc bfc" id="L329" title="All 2 branches covered.">            result = literalWhile.getLineNo() == block.getLineNo();</span>
+        }
+<span class="fc" id="L331">        return result;</span>
+    }
+
+    /**
+     * Checks if current do-while statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * do this.notify(); while (o != null);
+     * }
+     * &lt;/p&gt;
+     * @param literalDo {@link TokenTypes#LITERAL_DO do-while statement}.
+     * @return true if current do-while statement is single-line statement.
+     */
+    private static boolean isSingleLineDoWhile(DetailAST literalDo) {
+<span class="fc" id="L345">        boolean result = false;</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">        if (literalDo.getParent().getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L347" title="All 2 branches covered.">                &amp;&amp; literalDo.getFirstChild().getType() != TokenTypes.SLIST) {</span>
+<span class="fc" id="L348">            final DetailAST block = literalDo.getFirstChild();</span>
+<span class="fc bfc" id="L349" title="All 2 branches covered.">            result = block.getLineNo() == literalDo.getLineNo();</span>
+        }
+<span class="fc" id="L351">        return result;</span>
+    }
+
+    /**
+     * Checks if current for statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * for (int i = 0; ; ) this.notify();
+     * }
+     * &lt;/p&gt;
+     * @param literalFor {@link TokenTypes#LITERAL_FOR for statement}.
+     * @return true if current for statement is single-line statement.
+     */
+    private static boolean isSingleLineFor(DetailAST literalFor) {
+<span class="fc" id="L365">        boolean result = false;</span>
+<span class="fc bfc" id="L366" title="All 2 branches covered.">        if (literalFor.getLastChild().getType() == TokenTypes.EMPTY_STAT) {</span>
+<span class="fc" id="L367">            result = true;</span>
+        }
+<span class="fc bfc" id="L369" title="All 2 branches covered.">        else if (literalFor.getParent().getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L370" title="All 2 branches covered.">                &amp;&amp; literalFor.getLastChild().getType() != TokenTypes.SLIST) {</span>
+<span class="fc bfc" id="L371" title="All 2 branches covered.">            result = literalFor.getLineNo() == literalFor.getLastChild().getLineNo();</span>
+        }
+<span class="fc" id="L373">        return result;</span>
+    }
+
+    /**
+     * Checks if current if statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * if (obj.isValid()) return true;
+     * }
+     * &lt;/p&gt;
+     * @param literalIf {@link TokenTypes#LITERAL_IF if statement}.
+     * @return true if current if statement is single-line statement.
+     */
+    private static boolean isSingleLineIf(DetailAST literalIf) {
+<span class="fc" id="L387">        boolean result = false;</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">        if (literalIf.getParent().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L389">            final DetailAST literalIfLastChild = literalIf.getLastChild();</span>
+            final DetailAST block;
+<span class="fc bfc" id="L391" title="All 2 branches covered.">            if (literalIfLastChild.getType() == TokenTypes.LITERAL_ELSE) {</span>
+<span class="fc" id="L392">                block = literalIfLastChild.getPreviousSibling();</span>
+            }
+            else {
+<span class="fc" id="L395">                block = literalIfLastChild;</span>
+            }
+<span class="fc" id="L397">            final DetailAST ifCondition = literalIf.findFirstToken(TokenTypes.EXPR);</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">            result = ifCondition.getLineNo() == block.getLineNo();</span>
+        }
+<span class="fc" id="L400">        return result;</span>
+    }
+
+    /**
+     * Checks if current lambda statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * Runnable r = () -&gt; System.out.println(&quot;Hello, world!&quot;);
+     * }
+     * &lt;/p&gt;
+     * @param lambda {@link TokenTypes#LAMBDA lambda statement}.
+     * @return true if current lambda statement is single-line statement.
+     */
+    private static boolean isSingleLineLambda(DetailAST lambda) {
+<span class="fc" id="L414">        boolean result = false;</span>
+<span class="fc" id="L415">        final DetailAST block = lambda.getLastChild();</span>
+<span class="fc bfc" id="L416" title="All 2 branches covered.">        if (block.getType() != TokenTypes.SLIST) {</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">            result = lambda.getLineNo() == block.getLineNo();</span>
+        }
+<span class="fc" id="L419">        return result;</span>
+    }
+
+    /**
+     * Checks if current case statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * case 1: doSomeStuff(); break;
+     * case 2: doSomeStuff(); break;
+     * case 3: ;
+     * }
+     * &lt;/p&gt;
+     * @param literalCase {@link TokenTypes#LITERAL_CASE case statement}.
+     * @return true if current case statement is single-line statement.
+     */
+    private static boolean isSingleLineCase(DetailAST literalCase) {
+<span class="fc" id="L435">        boolean result = false;</span>
+<span class="fc" id="L436">        final DetailAST slist = literalCase.getNextSibling();</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">        if (slist == null) {</span>
+<span class="fc" id="L438">            result = true;</span>
+        }
+        else {
+<span class="fc" id="L441">            final DetailAST block = slist.getFirstChild();</span>
+<span class="fc bfc" id="L442" title="All 2 branches covered.">            if (block.getType() != TokenTypes.SLIST) {</span>
+<span class="fc" id="L443">                final DetailAST caseBreak = slist.findFirstToken(TokenTypes.LITERAL_BREAK);</span>
+<span class="fc bfc" id="L444" title="All 2 branches covered.">                if (caseBreak != null) {</span>
+<span class="fc bfc" id="L445" title="All 2 branches covered.">                    final boolean atOneLine = literalCase.getLineNo() == block.getLineNo();</span>
+<span class="fc bfc" id="L446" title="All 4 branches covered.">                    result = atOneLine &amp;&amp; block.getLineNo() == caseBreak.getLineNo();</span>
+                }
+            }
+        }
+<span class="fc" id="L450">        return result;</span>
+    }
+
+    /**
+     * Checks if current default statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * default: doSomeStuff();
+     * }
+     * &lt;/p&gt;
+     * @param literalDefault {@link TokenTypes#LITERAL_DEFAULT default statement}.
+     * @return true if current default statement is single-line statement.
+     */
+    private static boolean isSingleLineDefault(DetailAST literalDefault) {
+<span class="fc" id="L464">        boolean result = false;</span>
+<span class="fc" id="L465">        final DetailAST slist = literalDefault.getNextSibling();</span>
+<span class="fc bfc" id="L466" title="All 2 branches covered.">        if (slist == null) {</span>
+<span class="fc" id="L467">            result = true;</span>
+        }
+        else {
+<span class="fc" id="L470">            final DetailAST block = slist.getFirstChild();</span>
+<span class="fc bfc" id="L471" title="All 4 branches covered.">            if (block != null &amp;&amp; block.getType() != TokenTypes.SLIST) {</span>
+<span class="fc bfc" id="L472" title="All 2 branches covered.">                result = literalDefault.getLineNo() == block.getLineNo();</span>
+            }
+        }
+<span class="fc" id="L475">        return result;</span>
+    }
+
+    /**
+     * Checks if current else statement is single-line statement, e.g.:
+     * &lt;p&gt;
+     * {@code
+     * else doSomeStuff();
+     * }
+     * &lt;/p&gt;
+     * @param literalElse {@link TokenTypes#LITERAL_ELSE else statement}.
+     * @return true if current else statement is single-line statement.
+     */
+    private static boolean isSingleLineElse(DetailAST literalElse) {
+<span class="fc" id="L489">        boolean result = false;</span>
+<span class="fc" id="L490">        final DetailAST block = literalElse.getFirstChild();</span>
+<span class="fc bfc" id="L491" title="All 2 branches covered.">        if (block.getType() != TokenTypes.SLIST) {</span>
+<span class="fc bfc" id="L492" title="All 2 branches covered.">            result = literalElse.getLineNo() == block.getLineNo();</span>
+        }
+<span class="fc" id="L494">        return result;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

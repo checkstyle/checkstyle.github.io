@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MethodCallHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.indentation</a> &gt; <span class="el_source">MethodCallHandler.java</span></div><h1>MethodCallHandler.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2018 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.indentation;
+
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+
+/**
+ * Handler for method calls.
+ *
+ */
+public class MethodCallHandler extends AbstractExpressionHandler {
+
+    /**
+     * Construct an instance of this handler with the given indentation check,
+     * abstract syntax tree, and parent handler.
+     *
+     * @param indentCheck   the indentation check
+     * @param ast           the abstract syntax tree
+     * @param parent        the parent handler
+     */
+    public MethodCallHandler(IndentationCheck indentCheck,
+        DetailAST ast, AbstractExpressionHandler parent) {
+<span class="fc" id="L41">        super(indentCheck, &quot;method call&quot;, ast, parent);</span>
+<span class="fc" id="L42">    }</span>
+
+    @Override
+    protected IndentLevel getIndentImpl() {
+        final IndentLevel indentLevel;
+        // if inside a method call's params, this could be part of
+        // an expression, so get the previous line's start
+<span class="fc bfc" id="L49" title="All 2 branches covered.">        if (getParent() instanceof MethodCallHandler) {</span>
+<span class="fc" id="L50">            final MethodCallHandler container =</span>
+<span class="fc" id="L51">                    (MethodCallHandler) getParent();</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">            if (areOnSameLine(container.getMainAst(), getMainAst())</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">                    || isChainedMethodCallWrapped()</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">                    || areMethodsChained(container.getMainAst(), getMainAst())) {</span>
+<span class="fc" id="L55">                indentLevel = container.getIndent();</span>
+            }
+            // we should increase indentation only if this is the first
+            // chained method call which was moved to the next line
+            else {
+<span class="fc" id="L60">                indentLevel = new IndentLevel(container.getIndent(), getBasicOffset());</span>
+            }
+<span class="fc" id="L62">        }</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        else if (getMainAst().getFirstChild().getType() == TokenTypes.LITERAL_NEW) {</span>
+<span class="fc" id="L64">            indentLevel = super.getIndentImpl();</span>
+        }
+        else {
+            // if our expression isn't first on the line, just use the start
+            // of the line
+<span class="fc" id="L69">            final LineSet lines = new LineSet();</span>
+<span class="fc" id="L70">            findSubtreeLines(lines, getMainAst().getFirstChild(), true);</span>
+<span class="fc" id="L71">            final int firstCol = lines.firstLineCol();</span>
+<span class="fc" id="L72">            final int lineStart = getLineStart(getFirstAst(getMainAst()));</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">            if (lineStart == firstCol) {</span>
+<span class="fc" id="L74">                indentLevel = super.getIndentImpl();</span>
+            }
+            else {
+<span class="fc" id="L77">                indentLevel = new IndentLevel(lineStart);</span>
+            }
+        }
+<span class="fc" id="L80">        return indentLevel;</span>
+    }
+
+    /**
+     * Checks if ast2 is a chained method call that starts on the same level as ast1 ends.
+     * In other words, if the right paren of ast1 is on the same level as the lparen of ast2:
+     *
+     * {@code
+     *     value.methodOne(
+     *         argument1
+     *     ).methodTwo(
+     *         argument2
+     *     );
+     * }
+     *
+     * @param ast1 Ast1
+     * @param ast2 Ast2
+     * @return True if ast2 begins on the same level that ast1 ends
+     */
+    private static boolean areMethodsChained(DetailAST ast1, DetailAST ast2) {
+<span class="fc" id="L100">        final DetailAST rparen = ast1.findFirstToken(TokenTypes.RPAREN);</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">        return rparen.getLineNo() == ast2.getLineNo();</span>
+    }
+
+    /**
+     * If this is the first chained method call which was moved to the next line.
+     * @return true if chained class are wrapped
+     */
+    private boolean isChainedMethodCallWrapped() {
+<span class="fc" id="L109">        boolean result = false;</span>
+<span class="fc" id="L110">        final DetailAST main = getMainAst();</span>
+<span class="fc" id="L111">        final DetailAST dot = main.getFirstChild();</span>
+<span class="fc" id="L112">        final DetailAST target = dot.getFirstChild();</span>
+
+<span class="fc" id="L114">        final DetailAST dot1 = target.getFirstChild();</span>
+<span class="fc" id="L115">        final DetailAST target1 = dot1.getFirstChild();</span>
+
+<span class="fc bfc" id="L117" title="All 2 branches covered.">        if (dot1.getType() == TokenTypes.DOT</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">            &amp;&amp; target1.getType() == TokenTypes.METHOD_CALL) {</span>
+<span class="fc" id="L119">            result = true;</span>
+        }
+<span class="fc" id="L121">        return result;</span>
+    }
+
+    /**
+     * Get the first AST of the specified method call.
+     *
+     * @param ast
+     *            the method call
+     *
+     * @return the first AST of the specified method call
+     */
+    private static DetailAST getFirstAst(DetailAST ast) {
+        // walk down the first child part of the dots that make up a method
+        // call name
+
+<span class="fc" id="L136">        DetailAST astNode = ast.getFirstChild();</span>
+<span class="fc bfc" id="L137" title="All 2 branches covered.">        while (astNode.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L138">            astNode = astNode.getFirstChild();</span>
+        }
+<span class="fc" id="L140">        return astNode;</span>
+    }
+
+    /**
+     * Returns method or constructor name. For {@code foo(arg)} it is `foo`, for
+     *     {@code foo.bar(arg)} it is `bar` for {@code super(arg)} it is 'super'.
+     *
+     * @return TokenTypes.IDENT node for a method call, TokenTypes.SUPER_CTOR_CALL otherwise.
+     */
+    private DetailAST getMethodIdentAst() {
+<span class="fc" id="L150">        DetailAST ast = getMainAst();</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">        if (ast.getType() != TokenTypes.SUPER_CTOR_CALL) {</span>
+<span class="fc" id="L152">            ast = ast.getFirstChild();</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">            if (ast.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L154">                ast = ast.getLastChild();</span>
+            }
+        }
+<span class="fc" id="L157">        return ast;</span>
+    }
+
+    @Override
+    public IndentLevel getSuggestedChildIndent(AbstractExpressionHandler child) {
+        // for whatever reason a method that crosses lines, like asList
+        // here:
+        //            System.out.println(&quot;methods are: &quot; + Arrays.asList(
+        //                new String[] {&quot;method&quot;}).toString());
+        // will not have the right line num, so just get the child name
+
+<span class="fc" id="L168">        final DetailAST ident = getMethodIdentAst();</span>
+<span class="fc" id="L169">        IndentLevel suggestedLevel = new IndentLevel(getLineStart(ident));</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">        if (!areOnSameLine(child.getMainAst().getFirstChild(), ident)) {</span>
+<span class="fc" id="L171">            suggestedLevel = new IndentLevel(suggestedLevel,</span>
+<span class="fc" id="L172">                    getBasicOffset(),</span>
+<span class="fc" id="L173">                    getIndentCheck().getLineWrappingIndentation());</span>
+        }
+
+        // If the right parenthesis is at the start of a line;
+        // include line wrapping in suggested indent level.
+<span class="fc" id="L178">        final DetailAST rparen = getMainAst().findFirstToken(TokenTypes.RPAREN);</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">        if (getLineStart(rparen) == rparen.getColumnNo()) {</span>
+<span class="fc" id="L180">            suggestedLevel.addAcceptedIndent(new IndentLevel(</span>
+<span class="fc" id="L181">                    getParent().getSuggestedChildIndent(this),</span>
+<span class="fc" id="L182">                    getIndentCheck().getLineWrappingIndentation()</span>
+            ));
+        }
+
+<span class="fc" id="L186">        return suggestedLevel;</span>
+    }
+
+    @Override
+    public void checkIndentation() {
+<span class="fc" id="L191">        DetailAST lparen = null;</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">        if (getMainAst().getType() == TokenTypes.METHOD_CALL) {</span>
+<span class="fc" id="L193">            final DetailAST exprNode = getMainAst().getParent();</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">            if (exprNode.getParent().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L195">                checkExpressionSubtree(getMainAst().getFirstChild(), getIndent(), false, false);</span>
+<span class="fc" id="L196">                lparen = getMainAst();</span>
+            }
+<span class="fc" id="L198">        }</span>
+        else {
+            // TokenTypes.CTOR_CALL|TokenTypes.SUPER_CTOR_CALL
+<span class="fc" id="L201">            lparen = getMainAst().getFirstChild();</span>
+        }
+
+<span class="fc bfc" id="L204" title="All 2 branches covered.">        if (lparen != null) {</span>
+<span class="fc" id="L205">            final DetailAST rparen = getMainAst().findFirstToken(TokenTypes.RPAREN);</span>
+<span class="fc" id="L206">            checkLeftParen(lparen);</span>
+
+<span class="fc bfc" id="L208" title="All 2 branches covered.">            if (rparen.getLineNo() != lparen.getLineNo()) {</span>
+<span class="fc" id="L209">                checkExpressionSubtree(</span>
+<span class="fc" id="L210">                    getMainAst().findFirstToken(TokenTypes.ELIST),</span>
+<span class="fc" id="L211">                    new IndentLevel(getIndent(), getBasicOffset()),</span>
+                    false, true);
+
+<span class="fc" id="L214">                checkRightParen(lparen, rparen);</span>
+<span class="fc" id="L215">                checkWrappingIndentation(getMainAst(), getCallLastNode(getMainAst()));</span>
+            }
+        }
+<span class="fc" id="L218">    }</span>
+
+    @Override
+    protected boolean shouldIncreaseIndent() {
+<span class="fc" id="L222">        return false;</span>
+    }
+
+    /**
+     * Returns method or constructor call right paren.
+     * @param firstNode
+     *          call ast(TokenTypes.METHOD_CALL|TokenTypes.CTOR_CALL|TokenTypes.SUPER_CTOR_CALL)
+     * @return ast node containing right paren for specified method or constructor call. If
+     *     method calls are chained returns right paren for last call.
+     */
+    private static DetailAST getCallLastNode(DetailAST firstNode) {
+<span class="fc" id="L233">        return firstNode.getLastChild();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>
