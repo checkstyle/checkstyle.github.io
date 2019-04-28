@@ -40,34 +40,13 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
- * &lt;p&gt;Checks that code doesn't rely on the &amp;quot;this&amp;quot; default.
- * That is references to instance variables and methods of the present
- * object are explicitly of the form &amp;quot;this.varName&amp;quot; or
- * &amp;quot;this.methodName(args)&amp;quot;.
+ * &lt;p&gt;
+ * Checks that references to instance variables and methods of the present
+ * object are explicitly of the form &quot;this.varName&quot; or &quot;this.methodName(args)&quot;
+ * and that those references don't rely on the default behavior when &quot;this.&quot; is absent.
  * &lt;/p&gt;
- * Check has the following options:
- * &lt;p&gt;&lt;b&gt;checkFields&lt;/b&gt; - whether to check references to fields. Default value is &lt;b&gt;true&lt;/b&gt;.&lt;/p&gt;
- * &lt;p&gt;&lt;b&gt;checkMethods&lt;/b&gt; - whether to check references to methods.
- * Default value is &lt;b&gt;true&lt;/b&gt;.&lt;/p&gt;
- * &lt;p&gt;&lt;b&gt;validateOnlyOverlapping&lt;/b&gt; - whether to check only overlapping by variables or
- * arguments. Default value is &lt;b&gt;true&lt;/b&gt;.&lt;/p&gt;
- *
  * &lt;p&gt;Warning: the Check is very controversial if 'validateOnlyOverlapping' option is set to 'false'
  * and not that actual nowadays.&lt;/p&gt;
- *
- * &lt;p&gt;Examples of use:
- * &lt;pre&gt;
- * &amp;lt;module name=&amp;quot;RequireThis&amp;quot;/&amp;gt;
- * &lt;/pre&gt;
- * An example of how to configure to check {@code this} qualifier for
- * methods only:
- * &lt;pre&gt;
- * &amp;lt;module name=&amp;quot;RequireThis&amp;quot;&amp;gt;
- *   &amp;lt;property name=&amp;quot;checkFields&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
- *   &amp;lt;property name=&amp;quot;checkMethods&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
- * &amp;lt;/module&amp;gt;
- * &lt;/pre&gt;
- *
  * &lt;p&gt;Rationale:&lt;/p&gt;
  * &lt;ol&gt;
  *   &lt;li&gt;
@@ -80,17 +59,161 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  *     static and non-static methods).
  *   &lt;/li&gt;
  * &lt;/ol&gt;
- *
  * &lt;p&gt;Limitations: Nothing is currently done about static variables
  * or catch-blocks.  Static methods invoked on a class name seem to be OK;
  * both the class name and the method name have a DOT parent.
  * Non-static methods invoked on either this or a variable name seem to be
- * OK, likewise.&lt;/p&gt;
+ * OK, likewise.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code checkFields} - Control whether to check references to fields.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code checkMethods} - Control whether to check references to methods.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code validateOnlyOverlapping} - Control whether to check only
+ * overlapping by variables or arguments.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the default check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;RequireThis&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure to check the {@code this} qualifier for fields only:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;RequireThis&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;checkMethods&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Examples of how the check works if validateOnlyOverlapping option is set to true:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public static class A {
+ *   private int field1;
+ *   private int field2;
  *
+ *   public A(int field1) {
+ *     // Overlapping by constructor argument.
+ *     field1 = field1; // violation: Reference to instance variable &quot;field1&quot; needs &quot;this&quot;.
+ *     field2 = 0;
+ *   }
+ *
+ *   void foo3() {
+ *     String field1 = &quot;values&quot;;
+ *     // Overlapping by local variable.
+ *     field1 = field1; // violation:  Reference to instance variable &quot;field1&quot; needs &quot;this&quot;.
+ *   }
+ * }
+ *
+ * public static class B {
+ *   private int field;
+ *
+ *   public A(int f) {
+ *     field = f;
+ *   }
+ *
+ *   String addSuffixToField(String field) {
+ *     // Overlapping by method argument. Equal to &quot;return field = field + &quot;suffix&quot;;&quot;
+ *     return field += &quot;suffix&quot;; // violation: Reference to instance variable &quot;field&quot; needs &quot;this&quot;.
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Please, be aware of the following logic, which is implemented in the check:
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * 1) If you arrange 'this' in your code on your own, the check will not raise violation for
+ * variables which use 'this' to reference a class field, for example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class C {
+ *   private int scale;
+ *   private int x;
+ *   public void foo(int scale) {
+ *     scale = this.scale; // no violation
+ *     if (scale &amp;gt; 0) {
+ *       scale = -scale; // no violation
+ *     }
+ *     x *= scale;
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * 2) If method parameter is returned from the method, the check will not raise violation for
+ * returned variable/parameter, for example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class D {
+ *   private String prefix;
+ *   public String modifyPrefix(String prefix) {
+ *     prefix = &quot;^&quot; + prefix + &quot;$&quot; // no violation (modification of parameter)
+ *     return prefix; // modified method parameter is returned from the method
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Examples of how the check works if validateOnlyOverlapping option is set to false:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public static class A {
+ *   private int field1;
+ *   private int field2;
+ *
+ *   public A(int field1) {
+ *     field1 = field1; // violation: Reference to instance variable &quot;field1&quot; needs &quot;this&quot;.
+ *     field2 = 0; // violation: Reference to instance variable &quot;field2&quot; needs &quot;this&quot;.
+ *     String field2;
+ *     field2 = &quot;0&quot;; // No violation. Local var allowed
+ *   }
+ *
+ *   void foo3() {
+ *     String field1 = &quot;values&quot;;
+ *     field1 = field1; // violation:  Reference to instance variable &quot;field1&quot; needs &quot;this&quot;.
+ *   }
+ * }
+ *
+ * public static class B {
+ *   private int field;
+ *
+ *   public A(int f) {
+ *     field = f; // violation:  Reference to instance variable &quot;field&quot; needs &quot;this&quot;.
+ *   }
+ *
+ *   String addSuffixToField(String field) {
+ *     return field += &quot;suffix&quot;; // violation: Reference to instance variable &quot;field&quot; needs &quot;this&quot;.
+ *   }
+ * }
+ *
+ * // If the variable is locally defined, there won't be a violation provided the variable
+ * // doesn't overlap.
+ * class C {
+ *   private String s1 = &quot;foo1&quot;;
+ *   String s2 = &quot;foo2&quot;;
+ *
+ *   C() {
+ *     s1 = &quot;bar1&quot;; // Violation. Reference to instance variable 's1' needs &quot;this.&quot;.
+ *     String s2;
+ *     s2 = &quot;bar2&quot;; // No violation. Local var allowed.
+ *     s2 += s2; // Violation. Overlapping. Reference to instance variable 's2' needs &quot;this.&quot;.
+ *   }
+ * }
+ * &lt;/pre&gt;
+ *
+ * @since 3.4
  */
 // -@cs[ClassDataAbstractionCoupling] This check requires to work with and identify many frames.
 @FileStatefulCheck
-<span class="fc" id="L93">public class RequireThisCheck extends AbstractCheck {</span>
+<span class="fc" id="L216">public class RequireThisCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -104,91 +227,91 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
     public static final String MSG_VARIABLE = &quot;require.this.variable&quot;;
 
     /** Set of all declaration tokens. */
-<span class="fc" id="L107">    private static final Set&lt;Integer&gt; DECLARATION_TOKENS = Collections.unmodifiableSet(</span>
-<span class="fc" id="L108">        Arrays.stream(new Integer[] {</span>
-<span class="fc" id="L109">            TokenTypes.VARIABLE_DEF,</span>
-<span class="fc" id="L110">            TokenTypes.CTOR_DEF,</span>
-<span class="fc" id="L111">            TokenTypes.METHOD_DEF,</span>
-<span class="fc" id="L112">            TokenTypes.CLASS_DEF,</span>
-<span class="fc" id="L113">            TokenTypes.ENUM_DEF,</span>
-<span class="fc" id="L114">            TokenTypes.ANNOTATION_DEF,</span>
-<span class="fc" id="L115">            TokenTypes.INTERFACE_DEF,</span>
-<span class="fc" id="L116">            TokenTypes.PARAMETER_DEF,</span>
-<span class="fc" id="L117">            TokenTypes.TYPE_ARGUMENT,</span>
-<span class="fc" id="L118">        }).collect(Collectors.toSet()));</span>
+<span class="fc" id="L230">    private static final Set&lt;Integer&gt; DECLARATION_TOKENS = Collections.unmodifiableSet(</span>
+<span class="fc" id="L231">        Arrays.stream(new Integer[] {</span>
+<span class="fc" id="L232">            TokenTypes.VARIABLE_DEF,</span>
+<span class="fc" id="L233">            TokenTypes.CTOR_DEF,</span>
+<span class="fc" id="L234">            TokenTypes.METHOD_DEF,</span>
+<span class="fc" id="L235">            TokenTypes.CLASS_DEF,</span>
+<span class="fc" id="L236">            TokenTypes.ENUM_DEF,</span>
+<span class="fc" id="L237">            TokenTypes.ANNOTATION_DEF,</span>
+<span class="fc" id="L238">            TokenTypes.INTERFACE_DEF,</span>
+<span class="fc" id="L239">            TokenTypes.PARAMETER_DEF,</span>
+<span class="fc" id="L240">            TokenTypes.TYPE_ARGUMENT,</span>
+<span class="fc" id="L241">        }).collect(Collectors.toSet()));</span>
     /** Set of all assign tokens. */
-<span class="fc" id="L120">    private static final Set&lt;Integer&gt; ASSIGN_TOKENS = Collections.unmodifiableSet(</span>
-<span class="fc" id="L121">        Arrays.stream(new Integer[] {</span>
-<span class="fc" id="L122">            TokenTypes.ASSIGN,</span>
-<span class="fc" id="L123">            TokenTypes.PLUS_ASSIGN,</span>
-<span class="fc" id="L124">            TokenTypes.STAR_ASSIGN,</span>
-<span class="fc" id="L125">            TokenTypes.DIV_ASSIGN,</span>
-<span class="fc" id="L126">            TokenTypes.MOD_ASSIGN,</span>
-<span class="fc" id="L127">            TokenTypes.SR_ASSIGN,</span>
-<span class="fc" id="L128">            TokenTypes.BSR_ASSIGN,</span>
-<span class="fc" id="L129">            TokenTypes.SL_ASSIGN,</span>
-<span class="fc" id="L130">            TokenTypes.BAND_ASSIGN,</span>
-<span class="fc" id="L131">            TokenTypes.BXOR_ASSIGN,</span>
-<span class="fc" id="L132">        }).collect(Collectors.toSet()));</span>
+<span class="fc" id="L243">    private static final Set&lt;Integer&gt; ASSIGN_TOKENS = Collections.unmodifiableSet(</span>
+<span class="fc" id="L244">        Arrays.stream(new Integer[] {</span>
+<span class="fc" id="L245">            TokenTypes.ASSIGN,</span>
+<span class="fc" id="L246">            TokenTypes.PLUS_ASSIGN,</span>
+<span class="fc" id="L247">            TokenTypes.STAR_ASSIGN,</span>
+<span class="fc" id="L248">            TokenTypes.DIV_ASSIGN,</span>
+<span class="fc" id="L249">            TokenTypes.MOD_ASSIGN,</span>
+<span class="fc" id="L250">            TokenTypes.SR_ASSIGN,</span>
+<span class="fc" id="L251">            TokenTypes.BSR_ASSIGN,</span>
+<span class="fc" id="L252">            TokenTypes.SL_ASSIGN,</span>
+<span class="fc" id="L253">            TokenTypes.BAND_ASSIGN,</span>
+<span class="fc" id="L254">            TokenTypes.BXOR_ASSIGN,</span>
+<span class="fc" id="L255">        }).collect(Collectors.toSet()));</span>
     /** Set of all compound assign tokens. */
-<span class="fc" id="L134">    private static final Set&lt;Integer&gt; COMPOUND_ASSIGN_TOKENS = Collections.unmodifiableSet(</span>
-<span class="fc" id="L135">        Arrays.stream(new Integer[] {</span>
-<span class="fc" id="L136">            TokenTypes.PLUS_ASSIGN,</span>
-<span class="fc" id="L137">            TokenTypes.STAR_ASSIGN,</span>
-<span class="fc" id="L138">            TokenTypes.DIV_ASSIGN,</span>
-<span class="fc" id="L139">            TokenTypes.MOD_ASSIGN,</span>
-<span class="fc" id="L140">            TokenTypes.SR_ASSIGN,</span>
-<span class="fc" id="L141">            TokenTypes.BSR_ASSIGN,</span>
-<span class="fc" id="L142">            TokenTypes.SL_ASSIGN,</span>
-<span class="fc" id="L143">            TokenTypes.BAND_ASSIGN,</span>
-<span class="fc" id="L144">            TokenTypes.BXOR_ASSIGN,</span>
-<span class="fc" id="L145">        }).collect(Collectors.toSet()));</span>
+<span class="fc" id="L257">    private static final Set&lt;Integer&gt; COMPOUND_ASSIGN_TOKENS = Collections.unmodifiableSet(</span>
+<span class="fc" id="L258">        Arrays.stream(new Integer[] {</span>
+<span class="fc" id="L259">            TokenTypes.PLUS_ASSIGN,</span>
+<span class="fc" id="L260">            TokenTypes.STAR_ASSIGN,</span>
+<span class="fc" id="L261">            TokenTypes.DIV_ASSIGN,</span>
+<span class="fc" id="L262">            TokenTypes.MOD_ASSIGN,</span>
+<span class="fc" id="L263">            TokenTypes.SR_ASSIGN,</span>
+<span class="fc" id="L264">            TokenTypes.BSR_ASSIGN,</span>
+<span class="fc" id="L265">            TokenTypes.SL_ASSIGN,</span>
+<span class="fc" id="L266">            TokenTypes.BAND_ASSIGN,</span>
+<span class="fc" id="L267">            TokenTypes.BXOR_ASSIGN,</span>
+<span class="fc" id="L268">        }).collect(Collectors.toSet()));</span>
 
     /** Frame for the currently processed AST. */
-<span class="fc" id="L148">    private final Deque&lt;AbstractFrame&gt; current = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L271">    private final Deque&lt;AbstractFrame&gt; current = new ArrayDeque&lt;&gt;();</span>
 
     /** Tree of all the parsed frames. */
     private Map&lt;DetailAST, AbstractFrame&gt; frames;
 
-    /** Whether we should check fields usage. */
-<span class="fc" id="L154">    private boolean checkFields = true;</span>
-    /** Whether we should check methods usage. */
-<span class="fc" id="L156">    private boolean checkMethods = true;</span>
-    /** Whether we should check only overlapping by variables or arguments. */
-<span class="fc" id="L158">    private boolean validateOnlyOverlapping = true;</span>
+    /** Control whether to check references to fields. */
+<span class="fc" id="L277">    private boolean checkFields = true;</span>
+    /** Control whether to check references to methods. */
+<span class="fc" id="L279">    private boolean checkMethods = true;</span>
+    /** Control whether to check only overlapping by variables or arguments. */
+<span class="fc" id="L281">    private boolean validateOnlyOverlapping = true;</span>
 
     /**
-     * Setter for checkFields property.
+     * Setter to control whether to check references to fields.
      * @param checkFields should we check fields usage or not.
      */
     public void setCheckFields(boolean checkFields) {
-<span class="fc" id="L165">        this.checkFields = checkFields;</span>
-<span class="fc" id="L166">    }</span>
+<span class="fc" id="L288">        this.checkFields = checkFields;</span>
+<span class="fc" id="L289">    }</span>
 
     /**
-     * Setter for checkMethods property.
+     * Setter to control whether to check references to methods.
      * @param checkMethods should we check methods usage or not.
      */
     public void setCheckMethods(boolean checkMethods) {
-<span class="fc" id="L173">        this.checkMethods = checkMethods;</span>
-<span class="fc" id="L174">    }</span>
+<span class="fc" id="L296">        this.checkMethods = checkMethods;</span>
+<span class="fc" id="L297">    }</span>
 
     /**
-     * Setter for validateOnlyOverlapping property.
+     * Setter to control whether to check only overlapping by variables or arguments.
      * @param validateOnlyOverlapping should we check only overlapping by variables or arguments.
      */
     public void setValidateOnlyOverlapping(boolean validateOnlyOverlapping) {
-<span class="fc" id="L181">        this.validateOnlyOverlapping = validateOnlyOverlapping;</span>
-<span class="fc" id="L182">    }</span>
+<span class="fc" id="L304">        this.validateOnlyOverlapping = validateOnlyOverlapping;</span>
+<span class="fc" id="L305">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L186">        return getRequiredTokens();</span>
+<span class="fc" id="L309">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L191">        return new int[] {</span>
+<span class="fc" id="L314">        return new int[] {</span>
             TokenTypes.CLASS_DEF,
             TokenTypes.INTERFACE_DEF,
             TokenTypes.ENUM_DEF,
@@ -203,36 +326,36 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L206">        return getRequiredTokens();</span>
+<span class="fc" id="L329">        return getRequiredTokens();</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L211">        frames = new HashMap&lt;&gt;();</span>
-<span class="fc" id="L212">        current.clear();</span>
+<span class="fc" id="L334">        frames = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L335">        current.clear();</span>
 
-<span class="fc" id="L214">        final Deque&lt;AbstractFrame&gt; frameStack = new LinkedList&lt;&gt;();</span>
-<span class="fc" id="L215">        DetailAST curNode = rootAST;</span>
-<span class="fc bfc" id="L216" title="All 2 branches covered.">        while (curNode != null) {</span>
-<span class="fc" id="L217">            collectDeclarations(frameStack, curNode);</span>
-<span class="fc" id="L218">            DetailAST toVisit = curNode.getFirstChild();</span>
-<span class="fc bfc" id="L219" title="All 4 branches covered.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
-<span class="fc" id="L220">                endCollectingDeclarations(frameStack, curNode);</span>
-<span class="fc" id="L221">                toVisit = curNode.getNextSibling();</span>
-<span class="fc bfc" id="L222" title="All 2 branches covered.">                if (toVisit == null) {</span>
-<span class="fc" id="L223">                    curNode = curNode.getParent();</span>
+<span class="fc" id="L337">        final Deque&lt;AbstractFrame&gt; frameStack = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L338">        DetailAST curNode = rootAST;</span>
+<span class="fc bfc" id="L339" title="All 2 branches covered.">        while (curNode != null) {</span>
+<span class="fc" id="L340">            collectDeclarations(frameStack, curNode);</span>
+<span class="fc" id="L341">            DetailAST toVisit = curNode.getFirstChild();</span>
+<span class="fc bfc" id="L342" title="All 4 branches covered.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
+<span class="fc" id="L343">                endCollectingDeclarations(frameStack, curNode);</span>
+<span class="fc" id="L344">                toVisit = curNode.getNextSibling();</span>
+<span class="fc bfc" id="L345" title="All 2 branches covered.">                if (toVisit == null) {</span>
+<span class="fc" id="L346">                    curNode = curNode.getParent();</span>
                 }
             }
-<span class="fc" id="L226">            curNode = toVisit;</span>
-<span class="fc" id="L227">        }</span>
-<span class="fc" id="L228">    }</span>
+<span class="fc" id="L349">            curNode = toVisit;</span>
+<span class="fc" id="L350">        }</span>
+<span class="fc" id="L351">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L232" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L355" title="All 3 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.IDENT :
-<span class="fc" id="L234">                processIdent(ast);</span>
-<span class="fc" id="L235">                break;</span>
+<span class="fc" id="L357">                processIdent(ast);</span>
+<span class="fc" id="L358">                break;</span>
             case TokenTypes.CLASS_DEF :
             case TokenTypes.INTERFACE_DEF :
             case TokenTypes.ENUM_DEF :
@@ -241,16 +364,16 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
             case TokenTypes.METHOD_DEF :
             case TokenTypes.CTOR_DEF :
             case TokenTypes.LITERAL_FOR :
-<span class="fc" id="L244">                current.push(frames.get(ast));</span>
-<span class="fc" id="L245">                break;</span>
+<span class="fc" id="L367">                current.push(frames.get(ast));</span>
+<span class="fc" id="L368">                break;</span>
             default :
                 // do nothing
         }
-<span class="fc" id="L249">    }</span>
+<span class="fc" id="L372">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L253" title="All 2 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L376" title="All 2 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.CLASS_DEF :
             case TokenTypes.INTERFACE_DEF :
             case TokenTypes.ENUM_DEF :
@@ -259,12 +382,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
             case TokenTypes.METHOD_DEF :
             case TokenTypes.CTOR_DEF :
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L262">                current.pop();</span>
-<span class="fc" id="L263">                break;</span>
+<span class="fc" id="L385">                current.pop();</span>
+<span class="fc" id="L386">                break;</span>
             default :
                 // do nothing
         }
-<span class="fc" id="L267">    }</span>
+<span class="fc" id="L390">    }</span>
 
     /**
      * Checks if a given IDENT is method call or field name which
@@ -272,36 +395,36 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast IDENT to check.
      */
     private void processIdent(DetailAST ast) {
-<span class="fc" id="L275">        int parentType = ast.getParent().getType();</span>
-<span class="fc bfc" id="L276" title="All 2 branches covered.">        if (parentType == TokenTypes.EXPR</span>
-<span class="fc bfc" id="L277" title="All 2 branches covered.">                &amp;&amp; ast.getParent().getParent().getParent().getType()</span>
+<span class="fc" id="L398">        int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">        if (parentType == TokenTypes.EXPR</span>
+<span class="fc bfc" id="L400" title="All 2 branches covered.">                &amp;&amp; ast.getParent().getParent().getParent().getType()</span>
                     == TokenTypes.ANNOTATION_FIELD_DEF) {
-<span class="fc" id="L279">            parentType = TokenTypes.ANNOTATION_FIELD_DEF;</span>
+<span class="fc" id="L402">            parentType = TokenTypes.ANNOTATION_FIELD_DEF;</span>
         }
-<span class="fc bfc" id="L281" title="All 3 branches covered.">        switch (parentType) {</span>
+<span class="fc bfc" id="L404" title="All 3 branches covered.">        switch (parentType) {</span>
             case TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR:
             case TokenTypes.ANNOTATION:
             case TokenTypes.ANNOTATION_FIELD_DEF:
                 // no need to check annotations content
-<span class="fc" id="L286">                break;</span>
+<span class="fc" id="L409">                break;</span>
             case TokenTypes.METHOD_CALL:
-<span class="fc bfc" id="L288" title="All 2 branches covered.">                if (checkMethods) {</span>
-<span class="fc" id="L289">                    final AbstractFrame frame = getMethodWithoutThis(ast);</span>
-<span class="fc bfc" id="L290" title="All 2 branches covered.">                    if (frame != null) {</span>
-<span class="fc" id="L291">                        logViolation(MSG_METHOD, ast, frame);</span>
+<span class="fc bfc" id="L411" title="All 2 branches covered.">                if (checkMethods) {</span>
+<span class="fc" id="L412">                    final AbstractFrame frame = getMethodWithoutThis(ast);</span>
+<span class="fc bfc" id="L413" title="All 2 branches covered.">                    if (frame != null) {</span>
+<span class="fc" id="L414">                        logViolation(MSG_METHOD, ast, frame);</span>
                     }
-<span class="fc" id="L293">                }</span>
+<span class="fc" id="L416">                }</span>
                 break;
             default:
-<span class="fc bfc" id="L296" title="All 2 branches covered.">                if (checkFields) {</span>
-<span class="fc" id="L297">                    final AbstractFrame frame = getFieldWithoutThis(ast, parentType);</span>
-<span class="fc bfc" id="L298" title="All 2 branches covered.">                    if (frame != null) {</span>
-<span class="fc" id="L299">                        logViolation(MSG_VARIABLE, ast, frame);</span>
+<span class="fc bfc" id="L419" title="All 2 branches covered.">                if (checkFields) {</span>
+<span class="fc" id="L420">                    final AbstractFrame frame = getFieldWithoutThis(ast, parentType);</span>
+<span class="fc bfc" id="L421" title="All 2 branches covered.">                    if (frame != null) {</span>
+<span class="fc" id="L422">                        logViolation(MSG_VARIABLE, ast, frame);</span>
                     }
                 }
                 break;
         }
-<span class="fc" id="L304">    }</span>
+<span class="fc" id="L427">    }</span>
 
     /**
      * Helper method to log a LocalizedMessage.
@@ -310,13 +433,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param frame the class frame where the violation is found.
      */
     private void logViolation(String msgKey, DetailAST ast, AbstractFrame frame) {
-<span class="fc bfc" id="L313" title="All 2 branches covered.">        if (frame.getFrameName().equals(getNearestClassFrameName())) {</span>
-<span class="fc" id="L314">            log(ast, msgKey, ast.getText(), &quot;&quot;);</span>
+<span class="fc bfc" id="L436" title="All 2 branches covered.">        if (frame.getFrameName().equals(getNearestClassFrameName())) {</span>
+<span class="fc" id="L437">            log(ast, msgKey, ast.getText(), &quot;&quot;);</span>
         }
-<span class="fc bfc" id="L316" title="All 2 branches covered.">        else if (!(frame instanceof AnonymousClassFrame)) {</span>
-<span class="fc" id="L317">            log(ast, msgKey, ast.getText(), frame.getFrameName() + '.');</span>
+<span class="fc bfc" id="L439" title="All 2 branches covered.">        else if (!(frame instanceof AnonymousClassFrame)) {</span>
+<span class="fc" id="L440">            log(ast, msgKey, ast.getText(), frame.getFrameName() + '.');</span>
         }
-<span class="fc" id="L319">    }</span>
+<span class="fc" id="L442">    }</span>
 
     /**
      * Returns the frame where the field is declared, if the given field is used without
@@ -327,25 +450,25 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      *         'this' and null otherwise.
      */
     private AbstractFrame getFieldWithoutThis(DetailAST ast, int parentType) {
-<span class="fc bfc" id="L330" title="All 2 branches covered.">        final boolean importOrPackage = ScopeUtil.getSurroundingScope(ast) == null;</span>
-<span class="fc bfc" id="L331" title="All 2 branches covered.">        final boolean methodNameInMethodCall = parentType == TokenTypes.DOT</span>
-<span class="fc bfc" id="L332" title="All 2 branches covered.">                &amp;&amp; ast.getPreviousSibling() != null;</span>
-<span class="fc bfc" id="L333" title="All 4 branches covered.">        final boolean typeName = parentType == TokenTypes.TYPE</span>
+<span class="fc bfc" id="L453" title="All 2 branches covered.">        final boolean importOrPackage = ScopeUtil.getSurroundingScope(ast) == null;</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">        final boolean methodNameInMethodCall = parentType == TokenTypes.DOT</span>
+<span class="fc bfc" id="L455" title="All 2 branches covered.">                &amp;&amp; ast.getPreviousSibling() != null;</span>
+<span class="fc bfc" id="L456" title="All 4 branches covered.">        final boolean typeName = parentType == TokenTypes.TYPE</span>
                 || parentType == TokenTypes.LITERAL_NEW;
-<span class="fc" id="L335">        AbstractFrame frame = null;</span>
+<span class="fc" id="L458">        AbstractFrame frame = null;</span>
 
-<span class="fc bfc" id="L337" title="All 6 branches covered.">        if (!importOrPackage</span>
+<span class="fc bfc" id="L460" title="All 6 branches covered.">        if (!importOrPackage</span>
                 &amp;&amp; !methodNameInMethodCall
                 &amp;&amp; !typeName
-<span class="fc bfc" id="L340" title="All 2 branches covered.">                &amp;&amp; !isDeclarationToken(parentType)</span>
-<span class="fc bfc" id="L341" title="All 2 branches covered.">                &amp;&amp; !isLambdaParameter(ast)) {</span>
-<span class="fc" id="L342">            final AbstractFrame fieldFrame = findClassFrame(ast, false);</span>
+<span class="fc bfc" id="L463" title="All 2 branches covered.">                &amp;&amp; !isDeclarationToken(parentType)</span>
+<span class="fc bfc" id="L464" title="All 2 branches covered.">                &amp;&amp; !isLambdaParameter(ast)) {</span>
+<span class="fc" id="L465">            final AbstractFrame fieldFrame = findClassFrame(ast, false);</span>
 
-<span class="fc bfc" id="L344" title="All 4 branches covered.">            if (fieldFrame != null &amp;&amp; ((ClassFrame) fieldFrame).hasInstanceMember(ast)) {</span>
-<span class="fc" id="L345">                frame = getClassFrameWhereViolationIsFound(ast);</span>
+<span class="fc bfc" id="L467" title="All 4 branches covered.">            if (fieldFrame != null &amp;&amp; ((ClassFrame) fieldFrame).hasInstanceMember(ast)) {</span>
+<span class="fc" id="L468">                frame = getClassFrameWhereViolationIsFound(ast);</span>
             }
         }
-<span class="fc" id="L348">        return frame;</span>
+<span class="fc" id="L471">        return frame;</span>
     }
 
     /**
@@ -355,68 +478,68 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     // -@cs[JavaNCSS] This method is a big switch and is too hard to remove.
     private static void collectDeclarations(Deque&lt;AbstractFrame&gt; frameStack, DetailAST ast) {
-<span class="fc" id="L358">        final AbstractFrame frame = frameStack.peek();</span>
-<span class="fc bfc" id="L359" title="All 11 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc" id="L481">        final AbstractFrame frame = frameStack.peek();</span>
+<span class="fc bfc" id="L482" title="All 11 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.VARIABLE_DEF :
-<span class="fc" id="L361">                collectVariableDeclarations(ast, frame);</span>
-<span class="fc" id="L362">                break;</span>
+<span class="fc" id="L484">                collectVariableDeclarations(ast, frame);</span>
+<span class="fc" id="L485">                break;</span>
             case TokenTypes.PARAMETER_DEF :
-<span class="fc bfc" id="L364" title="All 2 branches covered.">                if (!CheckUtil.isReceiverParameter(ast)</span>
-<span class="fc bfc" id="L365" title="All 2 branches covered.">                        &amp;&amp; !isLambdaParameter(ast)</span>
-<span class="fc bfc" id="L366" title="All 2 branches covered.">                        &amp;&amp; ast.getParent().getType() != TokenTypes.LITERAL_CATCH) {</span>
-<span class="fc" id="L367">                    final DetailAST parameterIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L368">                    frame.addIdent(parameterIdent);</span>
-<span class="fc" id="L369">                }</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">                if (!CheckUtil.isReceiverParameter(ast)</span>
+<span class="fc bfc" id="L488" title="All 2 branches covered.">                        &amp;&amp; !isLambdaParameter(ast)</span>
+<span class="fc bfc" id="L489" title="All 2 branches covered.">                        &amp;&amp; ast.getParent().getType() != TokenTypes.LITERAL_CATCH) {</span>
+<span class="fc" id="L490">                    final DetailAST parameterIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L491">                    frame.addIdent(parameterIdent);</span>
+<span class="fc" id="L492">                }</span>
                 break;
             case TokenTypes.CLASS_DEF :
             case TokenTypes.INTERFACE_DEF :
             case TokenTypes.ENUM_DEF :
             case TokenTypes.ANNOTATION_DEF :
-<span class="fc" id="L375">                final DetailAST classFrameNameIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L376">                frameStack.addFirst(new ClassFrame(frame, classFrameNameIdent));</span>
-<span class="fc" id="L377">                break;</span>
+<span class="fc" id="L498">                final DetailAST classFrameNameIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L499">                frameStack.addFirst(new ClassFrame(frame, classFrameNameIdent));</span>
+<span class="fc" id="L500">                break;</span>
             case TokenTypes.SLIST :
-<span class="fc" id="L379">                frameStack.addFirst(new BlockFrame(frame, ast));</span>
-<span class="fc" id="L380">                break;</span>
+<span class="fc" id="L502">                frameStack.addFirst(new BlockFrame(frame, ast));</span>
+<span class="fc" id="L503">                break;</span>
             case TokenTypes.METHOD_DEF :
-<span class="fc" id="L382">                final DetailAST methodFrameNameIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L383">                final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L384" title="All 2 branches covered.">                if (mods.findFirstToken(TokenTypes.LITERAL_STATIC) == null) {</span>
-<span class="fc" id="L385">                    ((ClassFrame) frame).addInstanceMethod(methodFrameNameIdent);</span>
+<span class="fc" id="L505">                final DetailAST methodFrameNameIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L506">                final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L507" title="All 2 branches covered.">                if (mods.findFirstToken(TokenTypes.LITERAL_STATIC) == null) {</span>
+<span class="fc" id="L508">                    ((ClassFrame) frame).addInstanceMethod(methodFrameNameIdent);</span>
                 }
                 else {
-<span class="fc" id="L388">                    ((ClassFrame) frame).addStaticMethod(methodFrameNameIdent);</span>
+<span class="fc" id="L511">                    ((ClassFrame) frame).addStaticMethod(methodFrameNameIdent);</span>
                 }
-<span class="fc" id="L390">                frameStack.addFirst(new MethodFrame(frame, methodFrameNameIdent));</span>
-<span class="fc" id="L391">                break;</span>
+<span class="fc" id="L513">                frameStack.addFirst(new MethodFrame(frame, methodFrameNameIdent));</span>
+<span class="fc" id="L514">                break;</span>
             case TokenTypes.CTOR_DEF :
-<span class="fc" id="L393">                final DetailAST ctorFrameNameIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L394">                frameStack.addFirst(new ConstructorFrame(frame, ctorFrameNameIdent));</span>
-<span class="fc" id="L395">                break;</span>
+<span class="fc" id="L516">                final DetailAST ctorFrameNameIdent = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L517">                frameStack.addFirst(new ConstructorFrame(frame, ctorFrameNameIdent));</span>
+<span class="fc" id="L518">                break;</span>
             case TokenTypes.ENUM_CONSTANT_DEF :
-<span class="fc" id="L397">                final DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L398">                ((ClassFrame) frame).addStaticMember(ident);</span>
-<span class="fc" id="L399">                break;</span>
+<span class="fc" id="L520">                final DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L521">                ((ClassFrame) frame).addStaticMember(ident);</span>
+<span class="fc" id="L522">                break;</span>
             case TokenTypes.LITERAL_CATCH:
-<span class="fc" id="L401">                final AbstractFrame catchFrame = new CatchFrame(frame, ast);</span>
-<span class="fc" id="L402">                catchFrame.addIdent(ast.findFirstToken(TokenTypes.PARAMETER_DEF).findFirstToken(</span>
+<span class="fc" id="L524">                final AbstractFrame catchFrame = new CatchFrame(frame, ast);</span>
+<span class="fc" id="L525">                catchFrame.addIdent(ast.findFirstToken(TokenTypes.PARAMETER_DEF).findFirstToken(</span>
                         TokenTypes.IDENT));
-<span class="fc" id="L404">                frameStack.addFirst(catchFrame);</span>
-<span class="fc" id="L405">                break;</span>
+<span class="fc" id="L527">                frameStack.addFirst(catchFrame);</span>
+<span class="fc" id="L528">                break;</span>
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L407">                final AbstractFrame forFrame = new ForFrame(frame, ast);</span>
-<span class="fc" id="L408">                frameStack.addFirst(forFrame);</span>
-<span class="fc" id="L409">                break;</span>
+<span class="fc" id="L530">                final AbstractFrame forFrame = new ForFrame(frame, ast);</span>
+<span class="fc" id="L531">                frameStack.addFirst(forFrame);</span>
+<span class="fc" id="L532">                break;</span>
             case TokenTypes.LITERAL_NEW:
-<span class="fc bfc" id="L411" title="All 2 branches covered.">                if (isAnonymousClassDef(ast)) {</span>
-<span class="fc" id="L412">                    frameStack.addFirst(new AnonymousClassFrame(frame,</span>
-<span class="fc" id="L413">                            ast.getFirstChild().toString()));</span>
+<span class="fc bfc" id="L534" title="All 2 branches covered.">                if (isAnonymousClassDef(ast)) {</span>
+<span class="fc" id="L535">                    frameStack.addFirst(new AnonymousClassFrame(frame,</span>
+<span class="fc" id="L536">                            ast.getFirstChild().toString()));</span>
                 }
                 break;
             default:
                 // do nothing
         }
-<span class="fc" id="L419">    }</span>
+<span class="fc" id="L542">    }</span>
 
     /**
      * Collects variable declarations.
@@ -424,22 +547,22 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param frame current frame.
      */
     private static void collectVariableDeclarations(DetailAST ast, AbstractFrame frame) {
-<span class="fc" id="L427">        final DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc bfc" id="L428" title="All 2 branches covered.">        if (frame.getType() == FrameType.CLASS_FRAME) {</span>
-<span class="fc" id="L429">            final DetailAST mods =</span>
-<span class="fc" id="L430">                    ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L431" title="All 2 branches covered.">            if (ScopeUtil.isInInterfaceBlock(ast)</span>
-<span class="fc bfc" id="L432" title="All 2 branches covered.">                    || mods.findFirstToken(TokenTypes.LITERAL_STATIC) != null) {</span>
-<span class="fc" id="L433">                ((ClassFrame) frame).addStaticMember(ident);</span>
+<span class="fc" id="L550">        final DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc bfc" id="L551" title="All 2 branches covered.">        if (frame.getType() == FrameType.CLASS_FRAME) {</span>
+<span class="fc" id="L552">            final DetailAST mods =</span>
+<span class="fc" id="L553">                    ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L554" title="All 2 branches covered.">            if (ScopeUtil.isInInterfaceBlock(ast)</span>
+<span class="fc bfc" id="L555" title="All 2 branches covered.">                    || mods.findFirstToken(TokenTypes.LITERAL_STATIC) != null) {</span>
+<span class="fc" id="L556">                ((ClassFrame) frame).addStaticMember(ident);</span>
             }
             else {
-<span class="fc" id="L436">                ((ClassFrame) frame).addInstanceMember(ident);</span>
+<span class="fc" id="L559">                ((ClassFrame) frame).addInstanceMember(ident);</span>
             }
-<span class="fc" id="L438">        }</span>
+<span class="fc" id="L561">        }</span>
         else {
-<span class="fc" id="L440">            frame.addIdent(ident);</span>
+<span class="fc" id="L563">            frame.addIdent(ident);</span>
         }
-<span class="fc" id="L442">    }</span>
+<span class="fc" id="L565">    }</span>
 
     /**
      * Ends parsing of the AST for declarations.
@@ -447,7 +570,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast AST that was parsed.
      */
     private void endCollectingDeclarations(Queue&lt;AbstractFrame&gt; frameStack, DetailAST ast) {
-<span class="fc bfc" id="L450" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L573" title="All 3 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.CLASS_DEF :
             case TokenTypes.INTERFACE_DEF :
             case TokenTypes.ENUM_DEF :
@@ -457,17 +580,17 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
             case TokenTypes.CTOR_DEF :
             case TokenTypes.LITERAL_CATCH :
             case TokenTypes.LITERAL_FOR :
-<span class="fc" id="L460">                frames.put(ast, frameStack.poll());</span>
-<span class="fc" id="L461">                break;</span>
+<span class="fc" id="L583">                frames.put(ast, frameStack.poll());</span>
+<span class="fc" id="L584">                break;</span>
             case TokenTypes.LITERAL_NEW :
-<span class="fc bfc" id="L463" title="All 2 branches covered.">                if (isAnonymousClassDef(ast)) {</span>
-<span class="fc" id="L464">                    frames.put(ast, frameStack.poll());</span>
+<span class="fc bfc" id="L586" title="All 2 branches covered.">                if (isAnonymousClassDef(ast)) {</span>
+<span class="fc" id="L587">                    frames.put(ast, frameStack.poll());</span>
                 }
                 break;
             default :
                 // do nothing
         }
-<span class="fc" id="L470">    }</span>
+<span class="fc" id="L593">    }</span>
 
     /**
      * Whether the AST is a definition of an anonymous class.
@@ -475,9 +598,9 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if the AST is a definition of an anonymous class.
      */
     private static boolean isAnonymousClassDef(DetailAST ast) {
-<span class="fc" id="L478">        final DetailAST lastChild = ast.getLastChild();</span>
-<span class="fc bfc" id="L479" title="All 2 branches covered.">        return lastChild != null</span>
-<span class="fc bfc" id="L480" title="All 2 branches covered.">            &amp;&amp; lastChild.getType() == TokenTypes.OBJBLOCK;</span>
+<span class="fc" id="L601">        final DetailAST lastChild = ast.getLastChild();</span>
+<span class="fc bfc" id="L602" title="All 2 branches covered.">        return lastChild != null</span>
+<span class="fc bfc" id="L603" title="All 2 branches covered.">            &amp;&amp; lastChild.getType() == TokenTypes.OBJBLOCK;</span>
     }
 
     /**
@@ -489,48 +612,48 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
     // -@cs[CyclomaticComplexity] Method already invokes too many methods that fully explain
     // a logic, additional abstraction will not make logic/algorithm more readable.
     private AbstractFrame getClassFrameWhereViolationIsFound(DetailAST ast) {
-<span class="fc" id="L492">        AbstractFrame frameWhereViolationIsFound = null;</span>
-<span class="fc" id="L493">        final AbstractFrame variableDeclarationFrame = findFrame(ast, false);</span>
-<span class="fc" id="L494">        final FrameType variableDeclarationFrameType = variableDeclarationFrame.getType();</span>
-<span class="fc" id="L495">        final DetailAST prevSibling = ast.getPreviousSibling();</span>
-<span class="fc bfc" id="L496" title="All 6 branches covered.">        if (variableDeclarationFrameType == FrameType.CLASS_FRAME</span>
+<span class="fc" id="L615">        AbstractFrame frameWhereViolationIsFound = null;</span>
+<span class="fc" id="L616">        final AbstractFrame variableDeclarationFrame = findFrame(ast, false);</span>
+<span class="fc" id="L617">        final FrameType variableDeclarationFrameType = variableDeclarationFrame.getType();</span>
+<span class="fc" id="L618">        final DetailAST prevSibling = ast.getPreviousSibling();</span>
+<span class="fc bfc" id="L619" title="All 6 branches covered.">        if (variableDeclarationFrameType == FrameType.CLASS_FRAME</span>
                 &amp;&amp; !validateOnlyOverlapping
                 &amp;&amp; prevSibling == null
-<span class="fc bfc" id="L499" title="All 2 branches covered.">                &amp;&amp; canBeReferencedFromStaticContext(ast)) {</span>
-<span class="fc" id="L500">            frameWhereViolationIsFound = variableDeclarationFrame;</span>
+<span class="fc bfc" id="L622" title="All 2 branches covered.">                &amp;&amp; canBeReferencedFromStaticContext(ast)) {</span>
+<span class="fc" id="L623">            frameWhereViolationIsFound = variableDeclarationFrame;</span>
         }
-<span class="fc bfc" id="L502" title="All 2 branches covered.">        else if (variableDeclarationFrameType == FrameType.METHOD_FRAME) {</span>
-<span class="fc bfc" id="L503" title="All 2 branches covered.">            if (isOverlappingByArgument(ast)) {</span>
-<span class="fc bfc" id="L504" title="All 2 branches covered.">                if (!isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)</span>
-<span class="fc bfc" id="L505" title="All 2 branches covered.">                        &amp;&amp; !isReturnedVariable(variableDeclarationFrame, ast)</span>
-<span class="fc bfc" id="L506" title="All 2 branches covered.">                        &amp;&amp; canBeReferencedFromStaticContext(ast)</span>
-<span class="fc bfc" id="L507" title="All 2 branches covered.">                        &amp;&amp; canAssignValueToClassField(ast)) {</span>
-<span class="fc" id="L508">                    frameWhereViolationIsFound = findFrame(ast, true);</span>
+<span class="fc bfc" id="L625" title="All 2 branches covered.">        else if (variableDeclarationFrameType == FrameType.METHOD_FRAME) {</span>
+<span class="fc bfc" id="L626" title="All 2 branches covered.">            if (isOverlappingByArgument(ast)) {</span>
+<span class="fc bfc" id="L627" title="All 2 branches covered.">                if (!isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)</span>
+<span class="fc bfc" id="L628" title="All 2 branches covered.">                        &amp;&amp; !isReturnedVariable(variableDeclarationFrame, ast)</span>
+<span class="fc bfc" id="L629" title="All 2 branches covered.">                        &amp;&amp; canBeReferencedFromStaticContext(ast)</span>
+<span class="fc bfc" id="L630" title="All 2 branches covered.">                        &amp;&amp; canAssignValueToClassField(ast)) {</span>
+<span class="fc" id="L631">                    frameWhereViolationIsFound = findFrame(ast, true);</span>
                 }
             }
-<span class="fc bfc" id="L511" title="All 4 branches covered.">            else if (!validateOnlyOverlapping</span>
+<span class="fc bfc" id="L634" title="All 4 branches covered.">            else if (!validateOnlyOverlapping</span>
                      &amp;&amp; prevSibling == null
-<span class="fc bfc" id="L513" title="All 2 branches covered.">                     &amp;&amp; isAssignToken(ast.getParent().getType())</span>
-<span class="fc bfc" id="L514" title="All 2 branches covered.">                     &amp;&amp; !isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)</span>
-<span class="fc bfc" id="L515" title="All 2 branches covered.">                     &amp;&amp; canBeReferencedFromStaticContext(ast)</span>
-<span class="fc bfc" id="L516" title="All 2 branches covered.">                     &amp;&amp; canAssignValueToClassField(ast)) {</span>
-<span class="fc" id="L517">                frameWhereViolationIsFound = findFrame(ast, true);</span>
+<span class="fc bfc" id="L636" title="All 2 branches covered.">                     &amp;&amp; isAssignToken(ast.getParent().getType())</span>
+<span class="fc bfc" id="L637" title="All 2 branches covered.">                     &amp;&amp; !isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)</span>
+<span class="fc bfc" id="L638" title="All 2 branches covered.">                     &amp;&amp; canBeReferencedFromStaticContext(ast)</span>
+<span class="fc bfc" id="L639" title="All 2 branches covered.">                     &amp;&amp; canAssignValueToClassField(ast)) {</span>
+<span class="fc" id="L640">                frameWhereViolationIsFound = findFrame(ast, true);</span>
             }
         }
-<span class="fc bfc" id="L520" title="All 2 branches covered.">        else if (variableDeclarationFrameType == FrameType.CTOR_FRAME</span>
-<span class="fc bfc" id="L521" title="All 2 branches covered.">                 &amp;&amp; isOverlappingByArgument(ast)</span>
-<span class="fc bfc" id="L522" title="All 2 branches covered.">                 &amp;&amp; !isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)) {</span>
-<span class="fc" id="L523">            frameWhereViolationIsFound = findFrame(ast, true);</span>
+<span class="fc bfc" id="L643" title="All 2 branches covered.">        else if (variableDeclarationFrameType == FrameType.CTOR_FRAME</span>
+<span class="fc bfc" id="L644" title="All 2 branches covered.">                 &amp;&amp; isOverlappingByArgument(ast)</span>
+<span class="fc bfc" id="L645" title="All 2 branches covered.">                 &amp;&amp; !isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)) {</span>
+<span class="fc" id="L646">            frameWhereViolationIsFound = findFrame(ast, true);</span>
         }
-<span class="fc bfc" id="L525" title="All 2 branches covered.">        else if (variableDeclarationFrameType == FrameType.BLOCK_FRAME</span>
-<span class="fc bfc" id="L526" title="All 2 branches covered.">                    &amp;&amp; isOverlappingByLocalVariable(ast)</span>
-<span class="fc bfc" id="L527" title="All 2 branches covered.">                    &amp;&amp; canAssignValueToClassField(ast)</span>
-<span class="fc bfc" id="L528" title="All 2 branches covered.">                    &amp;&amp; !isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)</span>
-<span class="fc bfc" id="L529" title="All 2 branches covered.">                    &amp;&amp; !isReturnedVariable(variableDeclarationFrame, ast)</span>
-<span class="fc bfc" id="L530" title="All 2 branches covered.">                    &amp;&amp; canBeReferencedFromStaticContext(ast)) {</span>
-<span class="fc" id="L531">            frameWhereViolationIsFound = findFrame(ast, true);</span>
+<span class="fc bfc" id="L648" title="All 2 branches covered.">        else if (variableDeclarationFrameType == FrameType.BLOCK_FRAME</span>
+<span class="fc bfc" id="L649" title="All 2 branches covered.">                    &amp;&amp; isOverlappingByLocalVariable(ast)</span>
+<span class="fc bfc" id="L650" title="All 2 branches covered.">                    &amp;&amp; canAssignValueToClassField(ast)</span>
+<span class="fc bfc" id="L651" title="All 2 branches covered.">                    &amp;&amp; !isUserDefinedArrangementOfThis(variableDeclarationFrame, ast)</span>
+<span class="fc bfc" id="L652" title="All 2 branches covered.">                    &amp;&amp; !isReturnedVariable(variableDeclarationFrame, ast)</span>
+<span class="fc bfc" id="L653" title="All 2 branches covered.">                    &amp;&amp; canBeReferencedFromStaticContext(ast)) {</span>
+<span class="fc" id="L654">            frameWhereViolationIsFound = findFrame(ast, true);</span>
         }
-<span class="fc" id="L533">        return frameWhereViolationIsFound;</span>
+<span class="fc" id="L656">        return frameWhereViolationIsFound;</span>
     }
 
     /**
@@ -542,26 +665,26 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static boolean isUserDefinedArrangementOfThis(AbstractFrame currentFrame,
                                                           DetailAST ident) {
-<span class="fc" id="L545">        final DetailAST blockFrameNameIdent = currentFrame.getFrameNameIdent();</span>
-<span class="fc" id="L546">        final DetailAST definitionToken = blockFrameNameIdent.getParent();</span>
-<span class="fc" id="L547">        final DetailAST blockStartToken = definitionToken.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc" id="L548">        final DetailAST blockEndToken = getBlockEndToken(blockFrameNameIdent, blockStartToken);</span>
+<span class="fc" id="L668">        final DetailAST blockFrameNameIdent = currentFrame.getFrameNameIdent();</span>
+<span class="fc" id="L669">        final DetailAST definitionToken = blockFrameNameIdent.getParent();</span>
+<span class="fc" id="L670">        final DetailAST blockStartToken = definitionToken.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L671">        final DetailAST blockEndToken = getBlockEndToken(blockFrameNameIdent, blockStartToken);</span>
 
-<span class="fc" id="L550">        boolean userDefinedArrangementOfThis = false;</span>
+<span class="fc" id="L673">        boolean userDefinedArrangementOfThis = false;</span>
 
-<span class="fc" id="L552">        final Set&lt;DetailAST&gt; variableUsagesInsideBlock =</span>
-<span class="fc" id="L553">            getAllTokensWhichAreEqualToCurrent(definitionToken, ident,</span>
-<span class="fc" id="L554">                blockEndToken.getLineNo());</span>
+<span class="fc" id="L675">        final Set&lt;DetailAST&gt; variableUsagesInsideBlock =</span>
+<span class="fc" id="L676">            getAllTokensWhichAreEqualToCurrent(definitionToken, ident,</span>
+<span class="fc" id="L677">                blockEndToken.getLineNo());</span>
 
-<span class="fc bfc" id="L556" title="All 2 branches covered.">        for (DetailAST variableUsage : variableUsagesInsideBlock) {</span>
-<span class="fc" id="L557">            final DetailAST prevSibling = variableUsage.getPreviousSibling();</span>
-<span class="fc bfc" id="L558" title="All 2 branches covered.">            if (prevSibling != null</span>
-<span class="fc bfc" id="L559" title="All 2 branches covered.">                    &amp;&amp; prevSibling.getType() == TokenTypes.LITERAL_THIS) {</span>
-<span class="fc" id="L560">                userDefinedArrangementOfThis = true;</span>
-<span class="fc" id="L561">                break;</span>
+<span class="fc bfc" id="L679" title="All 2 branches covered.">        for (DetailAST variableUsage : variableUsagesInsideBlock) {</span>
+<span class="fc" id="L680">            final DetailAST prevSibling = variableUsage.getPreviousSibling();</span>
+<span class="fc bfc" id="L681" title="All 2 branches covered.">            if (prevSibling != null</span>
+<span class="fc bfc" id="L682" title="All 2 branches covered.">                    &amp;&amp; prevSibling.getType() == TokenTypes.LITERAL_THIS) {</span>
+<span class="fc" id="L683">                userDefinedArrangementOfThis = true;</span>
+<span class="fc" id="L684">                break;</span>
             }
-<span class="fc" id="L563">        }</span>
-<span class="fc" id="L564">        return userDefinedArrangementOfThis;</span>
+<span class="fc" id="L686">        }</span>
+<span class="fc" id="L687">        return userDefinedArrangementOfThis;</span>
     }
 
     /**
@@ -571,22 +694,22 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return the token which ends the code block.
      */
     private static DetailAST getBlockEndToken(DetailAST blockNameIdent, DetailAST blockStartToken) {
-<span class="fc" id="L574">        DetailAST blockEndToken = null;</span>
-<span class="fc" id="L575">        final DetailAST blockNameIdentParent = blockNameIdent.getParent();</span>
-<span class="fc bfc" id="L576" title="All 2 branches covered.">        if (blockNameIdentParent.getType() == TokenTypes.CASE_GROUP) {</span>
-<span class="fc" id="L577">            blockEndToken = blockNameIdentParent.getNextSibling();</span>
+<span class="fc" id="L697">        DetailAST blockEndToken = null;</span>
+<span class="fc" id="L698">        final DetailAST blockNameIdentParent = blockNameIdent.getParent();</span>
+<span class="fc bfc" id="L699" title="All 2 branches covered.">        if (blockNameIdentParent.getType() == TokenTypes.CASE_GROUP) {</span>
+<span class="fc" id="L700">            blockEndToken = blockNameIdentParent.getNextSibling();</span>
         }
         else {
-<span class="fc" id="L580">            final Set&lt;DetailAST&gt; rcurlyTokens = getAllTokensOfType(blockNameIdent,</span>
+<span class="fc" id="L703">            final Set&lt;DetailAST&gt; rcurlyTokens = getAllTokensOfType(blockNameIdent,</span>
                     TokenTypes.RCURLY);
-<span class="fc bfc" id="L582" title="All 2 branches covered.">            for (DetailAST currentRcurly : rcurlyTokens) {</span>
-<span class="fc" id="L583">                final DetailAST parent = currentRcurly.getParent();</span>
-<span class="fc bfc" id="L584" title="All 2 branches covered.">                if (blockStartToken.getLineNo() == parent.getLineNo()) {</span>
-<span class="fc" id="L585">                    blockEndToken = currentRcurly;</span>
+<span class="fc bfc" id="L705" title="All 2 branches covered.">            for (DetailAST currentRcurly : rcurlyTokens) {</span>
+<span class="fc" id="L706">                final DetailAST parent = currentRcurly.getParent();</span>
+<span class="fc bfc" id="L707" title="All 2 branches covered.">                if (blockStartToken.getLineNo() == parent.getLineNo()) {</span>
+<span class="fc" id="L708">                    blockEndToken = currentRcurly;</span>
                 }
-<span class="fc" id="L587">            }</span>
+<span class="fc" id="L710">            }</span>
         }
-<span class="fc" id="L589">        return blockEndToken;</span>
+<span class="fc" id="L712">        return blockEndToken;</span>
     }
 
     /**
@@ -596,22 +719,22 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if the current variable is returned from the method.
      */
     private static boolean isReturnedVariable(AbstractFrame currentFrame, DetailAST ident) {
-<span class="fc" id="L599">        final DetailAST blockFrameNameIdent = currentFrame.getFrameNameIdent();</span>
-<span class="fc" id="L600">        final DetailAST definitionToken = blockFrameNameIdent.getParent();</span>
-<span class="fc" id="L601">        final DetailAST blockStartToken = definitionToken.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc" id="L602">        final DetailAST blockEndToken = getBlockEndToken(blockFrameNameIdent, blockStartToken);</span>
+<span class="fc" id="L722">        final DetailAST blockFrameNameIdent = currentFrame.getFrameNameIdent();</span>
+<span class="fc" id="L723">        final DetailAST definitionToken = blockFrameNameIdent.getParent();</span>
+<span class="fc" id="L724">        final DetailAST blockStartToken = definitionToken.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L725">        final DetailAST blockEndToken = getBlockEndToken(blockFrameNameIdent, blockStartToken);</span>
 
-<span class="fc" id="L604">        final Set&lt;DetailAST&gt; returnsInsideBlock = getAllTokensOfType(definitionToken,</span>
-<span class="fc" id="L605">            TokenTypes.LITERAL_RETURN, blockEndToken.getLineNo());</span>
+<span class="fc" id="L727">        final Set&lt;DetailAST&gt; returnsInsideBlock = getAllTokensOfType(definitionToken,</span>
+<span class="fc" id="L728">            TokenTypes.LITERAL_RETURN, blockEndToken.getLineNo());</span>
 
-<span class="fc" id="L607">        boolean returnedVariable = false;</span>
-<span class="fc bfc" id="L608" title="All 2 branches covered.">        for (DetailAST returnToken : returnsInsideBlock) {</span>
-<span class="fc" id="L609">            returnedVariable = isAstInside(returnToken, ident);</span>
-<span class="fc bfc" id="L610" title="All 2 branches covered.">            if (returnedVariable) {</span>
-<span class="fc" id="L611">                break;</span>
+<span class="fc" id="L730">        boolean returnedVariable = false;</span>
+<span class="fc bfc" id="L731" title="All 2 branches covered.">        for (DetailAST returnToken : returnsInsideBlock) {</span>
+<span class="fc" id="L732">            returnedVariable = isAstInside(returnToken, ident);</span>
+<span class="fc bfc" id="L733" title="All 2 branches covered.">            if (returnedVariable) {</span>
+<span class="fc" id="L734">                break;</span>
             }
-<span class="fc" id="L613">        }</span>
-<span class="fc" id="L614">        return returnedVariable;</span>
+<span class="fc" id="L736">        }</span>
+<span class="fc" id="L737">        return returnedVariable;</span>
     }
 
     /**
@@ -621,19 +744,19 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return {@code true} if the {@code ast} was found.
      */
     private static boolean isAstInside(DetailAST tree, DetailAST ast) {
-<span class="fc" id="L624">        boolean result = false;</span>
+<span class="fc" id="L747">        boolean result = false;</span>
 
-<span class="fc bfc" id="L626" title="All 2 branches covered.">        if (tree.equals(ast)) {</span>
-<span class="fc" id="L627">            result = true;</span>
+<span class="fc bfc" id="L749" title="All 2 branches covered.">        if (tree.equals(ast)) {</span>
+<span class="fc" id="L750">            result = true;</span>
         }
         else {
-<span class="fc" id="L630">            for (DetailAST child = tree.getFirstChild(); child != null</span>
-<span class="fc bfc" id="L631" title="All 4 branches covered.">                    &amp;&amp; !result; child = child.getNextSibling()) {</span>
-<span class="fc" id="L632">                result = isAstInside(child, ast);</span>
+<span class="fc" id="L753">            for (DetailAST child = tree.getFirstChild(); child != null</span>
+<span class="fc bfc" id="L754" title="All 4 branches covered.">                    &amp;&amp; !result; child = child.getNextSibling()) {</span>
+<span class="fc" id="L755">                result = isAstInside(child, ast);</span>
             }
         }
 
-<span class="fc" id="L636">        return result;</span>
+<span class="fc" id="L759">        return result;</span>
     }
 
     /**
@@ -642,40 +765,40 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if field can be referenced from a static context.
      */
     private boolean canBeReferencedFromStaticContext(DetailAST ident) {
-<span class="fc" id="L645">        AbstractFrame variableDeclarationFrame = findFrame(ident, false);</span>
-<span class="fc" id="L646">        boolean staticInitializationBlock = false;</span>
-<span class="fc bfc" id="L647" title="All 2 branches covered.">        while (variableDeclarationFrame.getType() == FrameType.BLOCK_FRAME</span>
-<span class="fc bfc" id="L648" title="All 2 branches covered.">                || variableDeclarationFrame.getType() == FrameType.FOR_FRAME) {</span>
-<span class="fc" id="L649">            final DetailAST blockFrameNameIdent = variableDeclarationFrame.getFrameNameIdent();</span>
-<span class="fc" id="L650">            final DetailAST definitionToken = blockFrameNameIdent.getParent();</span>
-<span class="fc bfc" id="L651" title="All 2 branches covered.">            if (definitionToken.getType() == TokenTypes.STATIC_INIT) {</span>
-<span class="fc" id="L652">                staticInitializationBlock = true;</span>
-<span class="fc" id="L653">                break;</span>
+<span class="fc" id="L768">        AbstractFrame variableDeclarationFrame = findFrame(ident, false);</span>
+<span class="fc" id="L769">        boolean staticInitializationBlock = false;</span>
+<span class="fc bfc" id="L770" title="All 2 branches covered.">        while (variableDeclarationFrame.getType() == FrameType.BLOCK_FRAME</span>
+<span class="fc bfc" id="L771" title="All 2 branches covered.">                || variableDeclarationFrame.getType() == FrameType.FOR_FRAME) {</span>
+<span class="fc" id="L772">            final DetailAST blockFrameNameIdent = variableDeclarationFrame.getFrameNameIdent();</span>
+<span class="fc" id="L773">            final DetailAST definitionToken = blockFrameNameIdent.getParent();</span>
+<span class="fc bfc" id="L774" title="All 2 branches covered.">            if (definitionToken.getType() == TokenTypes.STATIC_INIT) {</span>
+<span class="fc" id="L775">                staticInitializationBlock = true;</span>
+<span class="fc" id="L776">                break;</span>
             }
-<span class="fc" id="L655">            variableDeclarationFrame = variableDeclarationFrame.getParent();</span>
-<span class="fc" id="L656">        }</span>
+<span class="fc" id="L778">            variableDeclarationFrame = variableDeclarationFrame.getParent();</span>
+<span class="fc" id="L779">        }</span>
 
-<span class="fc" id="L658">        boolean staticContext = false;</span>
-<span class="fc bfc" id="L659" title="All 2 branches covered.">        if (staticInitializationBlock) {</span>
-<span class="fc" id="L660">            staticContext = true;</span>
+<span class="fc" id="L781">        boolean staticContext = false;</span>
+<span class="fc bfc" id="L782" title="All 2 branches covered.">        if (staticInitializationBlock) {</span>
+<span class="fc" id="L783">            staticContext = true;</span>
         }
         else {
-<span class="fc bfc" id="L663" title="All 2 branches covered.">            if (variableDeclarationFrame.getType() == FrameType.CLASS_FRAME) {</span>
-<span class="fc" id="L664">                final DetailAST codeBlockDefinition = getCodeBlockDefinitionToken(ident);</span>
-<span class="fc bfc" id="L665" title="All 2 branches covered.">                if (codeBlockDefinition != null) {</span>
-<span class="fc" id="L666">                    final DetailAST modifiers = codeBlockDefinition.getFirstChild();</span>
-<span class="fc bfc" id="L667" title="All 2 branches covered.">                    staticContext = codeBlockDefinition.getType() == TokenTypes.STATIC_INIT</span>
-<span class="fc bfc" id="L668" title="All 2 branches covered.">                        || modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+<span class="fc bfc" id="L786" title="All 2 branches covered.">            if (variableDeclarationFrame.getType() == FrameType.CLASS_FRAME) {</span>
+<span class="fc" id="L787">                final DetailAST codeBlockDefinition = getCodeBlockDefinitionToken(ident);</span>
+<span class="fc bfc" id="L788" title="All 2 branches covered.">                if (codeBlockDefinition != null) {</span>
+<span class="fc" id="L789">                    final DetailAST modifiers = codeBlockDefinition.getFirstChild();</span>
+<span class="fc bfc" id="L790" title="All 2 branches covered.">                    staticContext = codeBlockDefinition.getType() == TokenTypes.STATIC_INIT</span>
+<span class="fc bfc" id="L791" title="All 2 branches covered.">                        || modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
                 }
-<span class="fc" id="L670">            }</span>
+<span class="fc" id="L793">            }</span>
             else {
-<span class="fc" id="L672">                final DetailAST frameNameIdent = variableDeclarationFrame.getFrameNameIdent();</span>
-<span class="fc" id="L673">                final DetailAST definitionToken = frameNameIdent.getParent();</span>
-<span class="fc" id="L674">                staticContext = definitionToken.findFirstToken(TokenTypes.MODIFIERS)</span>
-<span class="fc bfc" id="L675" title="All 2 branches covered.">                        .findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+<span class="fc" id="L795">                final DetailAST frameNameIdent = variableDeclarationFrame.getFrameNameIdent();</span>
+<span class="fc" id="L796">                final DetailAST definitionToken = frameNameIdent.getParent();</span>
+<span class="fc" id="L797">                staticContext = definitionToken.findFirstToken(TokenTypes.MODIFIERS)</span>
+<span class="fc bfc" id="L798" title="All 2 branches covered.">                        .findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
             }
         }
-<span class="fc bfc" id="L678" title="All 2 branches covered.">        return !staticContext;</span>
+<span class="fc bfc" id="L801" title="All 2 branches covered.">        return !staticContext;</span>
     }
 
     /**
@@ -685,14 +808,14 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      *         definition was not found.
      */
     private static DetailAST getCodeBlockDefinitionToken(DetailAST ident) {
-<span class="fc" id="L688">        DetailAST parent = ident.getParent();</span>
-<span class="fc bfc" id="L689" title="All 2 branches covered.">        while (parent != null</span>
-<span class="fc bfc" id="L690" title="All 2 branches covered.">               &amp;&amp; parent.getType() != TokenTypes.METHOD_DEF</span>
-<span class="fc bfc" id="L691" title="All 2 branches covered.">               &amp;&amp; parent.getType() != TokenTypes.CTOR_DEF</span>
-<span class="fc bfc" id="L692" title="All 2 branches covered.">               &amp;&amp; parent.getType() != TokenTypes.STATIC_INIT) {</span>
-<span class="fc" id="L693">            parent = parent.getParent();</span>
+<span class="fc" id="L811">        DetailAST parent = ident.getParent();</span>
+<span class="fc bfc" id="L812" title="All 2 branches covered.">        while (parent != null</span>
+<span class="fc bfc" id="L813" title="All 2 branches covered.">               &amp;&amp; parent.getType() != TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L814" title="All 2 branches covered.">               &amp;&amp; parent.getType() != TokenTypes.CTOR_DEF</span>
+<span class="fc bfc" id="L815" title="All 2 branches covered.">               &amp;&amp; parent.getType() != TokenTypes.STATIC_INIT) {</span>
+<span class="fc" id="L816">            parent = parent.getParent();</span>
         }
-<span class="fc" id="L695">        return parent;</span>
+<span class="fc" id="L818">        return parent;</span>
     }
 
     /**
@@ -703,13 +826,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if a value can be assigned to a field.
      */
     private boolean canAssignValueToClassField(DetailAST ast) {
-<span class="fc" id="L706">        final AbstractFrame fieldUsageFrame = findFrame(ast, false);</span>
-<span class="fc" id="L707">        final boolean fieldUsageInConstructor = isInsideConstructorFrame(fieldUsageFrame);</span>
+<span class="fc" id="L829">        final AbstractFrame fieldUsageFrame = findFrame(ast, false);</span>
+<span class="fc" id="L830">        final boolean fieldUsageInConstructor = isInsideConstructorFrame(fieldUsageFrame);</span>
 
-<span class="fc" id="L709">        final AbstractFrame declarationFrame = findFrame(ast, true);</span>
-<span class="fc" id="L710">        final boolean finalField = ((ClassFrame) declarationFrame).hasFinalField(ast);</span>
+<span class="fc" id="L832">        final AbstractFrame declarationFrame = findFrame(ast, true);</span>
+<span class="fc" id="L833">        final boolean finalField = ((ClassFrame) declarationFrame).hasFinalField(ast);</span>
 
-<span class="fc bfc" id="L712" title="All 4 branches covered.">        return fieldUsageInConstructor || !finalField;</span>
+<span class="fc bfc" id="L835" title="All 4 branches covered.">        return fieldUsageInConstructor || !finalField;</span>
     }
 
     /**
@@ -718,17 +841,17 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if the field usage frame is inside constructor frame.
      */
     private static boolean isInsideConstructorFrame(AbstractFrame frame) {
-<span class="fc" id="L721">        boolean assignmentInConstructor = false;</span>
-<span class="fc" id="L722">        AbstractFrame fieldUsageFrame = frame;</span>
-<span class="fc bfc" id="L723" title="All 2 branches covered.">        if (fieldUsageFrame.getType() == FrameType.BLOCK_FRAME) {</span>
-<span class="fc bfc" id="L724" title="All 2 branches covered.">            while (fieldUsageFrame.getType() == FrameType.BLOCK_FRAME) {</span>
-<span class="fc" id="L725">                fieldUsageFrame = fieldUsageFrame.getParent();</span>
+<span class="fc" id="L844">        boolean assignmentInConstructor = false;</span>
+<span class="fc" id="L845">        AbstractFrame fieldUsageFrame = frame;</span>
+<span class="fc bfc" id="L846" title="All 2 branches covered.">        if (fieldUsageFrame.getType() == FrameType.BLOCK_FRAME) {</span>
+<span class="fc bfc" id="L847" title="All 2 branches covered.">            while (fieldUsageFrame.getType() == FrameType.BLOCK_FRAME) {</span>
+<span class="fc" id="L848">                fieldUsageFrame = fieldUsageFrame.getParent();</span>
             }
-<span class="fc bfc" id="L727" title="All 2 branches covered.">            if (fieldUsageFrame.getType() == FrameType.CTOR_FRAME) {</span>
-<span class="fc" id="L728">                assignmentInConstructor = true;</span>
+<span class="fc bfc" id="L850" title="All 2 branches covered.">            if (fieldUsageFrame.getType() == FrameType.CTOR_FRAME) {</span>
+<span class="fc" id="L851">                assignmentInConstructor = true;</span>
             }
         }
-<span class="fc" id="L731">        return assignmentInConstructor;</span>
+<span class="fc" id="L854">        return assignmentInConstructor;</span>
     }
 
     /**
@@ -737,20 +860,20 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if an overlapping by method or constructor argument takes place.
      */
     private boolean isOverlappingByArgument(DetailAST ast) {
-<span class="fc" id="L740">        boolean overlapping = false;</span>
-<span class="fc" id="L741">        final DetailAST parent = ast.getParent();</span>
-<span class="fc" id="L742">        final DetailAST sibling = ast.getNextSibling();</span>
-<span class="fc bfc" id="L743" title="All 4 branches covered.">        if (sibling != null &amp;&amp; isAssignToken(parent.getType())) {</span>
-<span class="fc bfc" id="L744" title="All 2 branches covered.">            if (isCompoundAssignToken(parent.getType())) {</span>
-<span class="fc" id="L745">                overlapping = true;</span>
+<span class="fc" id="L863">        boolean overlapping = false;</span>
+<span class="fc" id="L864">        final DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L865">        final DetailAST sibling = ast.getNextSibling();</span>
+<span class="fc bfc" id="L866" title="All 4 branches covered.">        if (sibling != null &amp;&amp; isAssignToken(parent.getType())) {</span>
+<span class="fc bfc" id="L867" title="All 2 branches covered.">            if (isCompoundAssignToken(parent.getType())) {</span>
+<span class="fc" id="L868">                overlapping = true;</span>
             }
             else {
-<span class="fc" id="L748">                final ClassFrame classFrame = (ClassFrame) findFrame(ast, true);</span>
-<span class="fc" id="L749">                final Set&lt;DetailAST&gt; exprIdents = getAllTokensOfType(sibling, TokenTypes.IDENT);</span>
-<span class="fc" id="L750">                overlapping = classFrame.containsFieldOrVariableDef(exprIdents, ast);</span>
+<span class="fc" id="L871">                final ClassFrame classFrame = (ClassFrame) findFrame(ast, true);</span>
+<span class="fc" id="L872">                final Set&lt;DetailAST&gt; exprIdents = getAllTokensOfType(sibling, TokenTypes.IDENT);</span>
+<span class="fc" id="L873">                overlapping = classFrame.containsFieldOrVariableDef(exprIdents, ast);</span>
             }
         }
-<span class="fc" id="L753">        return overlapping;</span>
+<span class="fc" id="L876">        return overlapping;</span>
     }
 
     /**
@@ -759,15 +882,15 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if an overlapping by local variable takes place.
      */
     private boolean isOverlappingByLocalVariable(DetailAST ast) {
-<span class="fc" id="L762">        boolean overlapping = false;</span>
-<span class="fc" id="L763">        final DetailAST parent = ast.getParent();</span>
-<span class="fc" id="L764">        final DetailAST sibling = ast.getNextSibling();</span>
-<span class="fc bfc" id="L765" title="All 4 branches covered.">        if (sibling != null &amp;&amp; isAssignToken(parent.getType())) {</span>
-<span class="fc" id="L766">            final ClassFrame classFrame = (ClassFrame) findFrame(ast, true);</span>
-<span class="fc" id="L767">            final Set&lt;DetailAST&gt; exprIdents = getAllTokensOfType(sibling, TokenTypes.IDENT);</span>
-<span class="fc" id="L768">            overlapping = classFrame.containsFieldOrVariableDef(exprIdents, ast);</span>
+<span class="fc" id="L885">        boolean overlapping = false;</span>
+<span class="fc" id="L886">        final DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L887">        final DetailAST sibling = ast.getNextSibling();</span>
+<span class="fc bfc" id="L888" title="All 4 branches covered.">        if (sibling != null &amp;&amp; isAssignToken(parent.getType())) {</span>
+<span class="fc" id="L889">            final ClassFrame classFrame = (ClassFrame) findFrame(ast, true);</span>
+<span class="fc" id="L890">            final Set&lt;DetailAST&gt; exprIdents = getAllTokensOfType(sibling, TokenTypes.IDENT);</span>
+<span class="fc" id="L891">            overlapping = classFrame.containsFieldOrVariableDef(exprIdents, ast);</span>
         }
-<span class="fc" id="L770">        return overlapping;</span>
+<span class="fc" id="L893">        return overlapping;</span>
     }
 
     /**
@@ -777,24 +900,24 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return a set of all tokens of specific type starting with the current ast node.
      */
     private static Set&lt;DetailAST&gt; getAllTokensOfType(DetailAST ast, int tokenType) {
-<span class="fc" id="L780">        DetailAST vertex = ast;</span>
-<span class="fc" id="L781">        final Set&lt;DetailAST&gt; result = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L782">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
-<span class="fc bfc" id="L783" title="All 4 branches covered.">        while (vertex != null || !stack.isEmpty()) {</span>
-<span class="fc bfc" id="L784" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
-<span class="fc" id="L785">                vertex = stack.pop();</span>
+<span class="fc" id="L903">        DetailAST vertex = ast;</span>
+<span class="fc" id="L904">        final Set&lt;DetailAST&gt; result = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L905">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc bfc" id="L906" title="All 4 branches covered.">        while (vertex != null || !stack.isEmpty()) {</span>
+<span class="fc bfc" id="L907" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
+<span class="fc" id="L908">                vertex = stack.pop();</span>
             }
-<span class="fc bfc" id="L787" title="All 2 branches covered.">            while (vertex != null) {</span>
-<span class="fc bfc" id="L788" title="All 2 branches covered.">                if (vertex.getType() == tokenType) {</span>
-<span class="fc" id="L789">                    result.add(vertex);</span>
+<span class="fc bfc" id="L910" title="All 2 branches covered.">            while (vertex != null) {</span>
+<span class="fc bfc" id="L911" title="All 2 branches covered.">                if (vertex.getType() == tokenType) {</span>
+<span class="fc" id="L912">                    result.add(vertex);</span>
                 }
-<span class="fc bfc" id="L791" title="All 2 branches covered.">                if (vertex.getNextSibling() != null) {</span>
-<span class="fc" id="L792">                    stack.push(vertex.getNextSibling());</span>
+<span class="fc bfc" id="L914" title="All 2 branches covered.">                if (vertex.getNextSibling() != null) {</span>
+<span class="fc" id="L915">                    stack.push(vertex.getNextSibling());</span>
                 }
-<span class="fc" id="L794">                vertex = vertex.getFirstChild();</span>
+<span class="fc" id="L917">                vertex = vertex.getFirstChild();</span>
             }
         }
-<span class="fc" id="L797">        return result;</span>
+<span class="fc" id="L920">        return result;</span>
     }
 
     /**
@@ -808,25 +931,25 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static Set&lt;DetailAST&gt; getAllTokensOfType(DetailAST ast, int tokenType,
                                                      int endLineNumber) {
-<span class="fc" id="L811">        DetailAST vertex = ast;</span>
-<span class="fc" id="L812">        final Set&lt;DetailAST&gt; result = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L813">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
-<span class="fc bfc" id="L814" title="All 4 branches covered.">        while (vertex != null || !stack.isEmpty()) {</span>
-<span class="fc bfc" id="L815" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
-<span class="fc" id="L816">                vertex = stack.pop();</span>
+<span class="fc" id="L934">        DetailAST vertex = ast;</span>
+<span class="fc" id="L935">        final Set&lt;DetailAST&gt; result = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L936">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc bfc" id="L937" title="All 4 branches covered.">        while (vertex != null || !stack.isEmpty()) {</span>
+<span class="fc bfc" id="L938" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
+<span class="fc" id="L939">                vertex = stack.pop();</span>
             }
-<span class="fc bfc" id="L818" title="All 2 branches covered.">            while (vertex != null) {</span>
-<span class="fc bfc" id="L819" title="All 2 branches covered.">                if (tokenType == vertex.getType()</span>
-<span class="fc bfc" id="L820" title="All 2 branches covered.">                    &amp;&amp; vertex.getLineNo() &lt;= endLineNumber) {</span>
-<span class="fc" id="L821">                    result.add(vertex);</span>
+<span class="fc bfc" id="L941" title="All 2 branches covered.">            while (vertex != null) {</span>
+<span class="fc bfc" id="L942" title="All 2 branches covered.">                if (tokenType == vertex.getType()</span>
+<span class="fc bfc" id="L943" title="All 2 branches covered.">                    &amp;&amp; vertex.getLineNo() &lt;= endLineNumber) {</span>
+<span class="fc" id="L944">                    result.add(vertex);</span>
                 }
-<span class="fc bfc" id="L823" title="All 2 branches covered.">                if (vertex.getNextSibling() != null) {</span>
-<span class="fc" id="L824">                    stack.push(vertex.getNextSibling());</span>
+<span class="fc bfc" id="L946" title="All 2 branches covered.">                if (vertex.getNextSibling() != null) {</span>
+<span class="fc" id="L947">                    stack.push(vertex.getNextSibling());</span>
                 }
-<span class="fc" id="L826">                vertex = vertex.getFirstChild();</span>
+<span class="fc" id="L949">                vertex = vertex.getFirstChild();</span>
             }
         }
-<span class="fc" id="L829">        return result;</span>
+<span class="fc" id="L952">        return result;</span>
     }
 
     /**
@@ -840,25 +963,25 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static Set&lt;DetailAST&gt; getAllTokensWhichAreEqualToCurrent(DetailAST ast, DetailAST token,
                                                                      int endLineNumber) {
-<span class="fc" id="L843">        DetailAST vertex = ast;</span>
-<span class="fc" id="L844">        final Set&lt;DetailAST&gt; result = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L845">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
-<span class="fc bfc" id="L846" title="All 4 branches covered.">        while (vertex != null || !stack.isEmpty()) {</span>
-<span class="fc bfc" id="L847" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
-<span class="fc" id="L848">                vertex = stack.pop();</span>
+<span class="fc" id="L966">        DetailAST vertex = ast;</span>
+<span class="fc" id="L967">        final Set&lt;DetailAST&gt; result = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L968">        final Deque&lt;DetailAST&gt; stack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc bfc" id="L969" title="All 4 branches covered.">        while (vertex != null || !stack.isEmpty()) {</span>
+<span class="fc bfc" id="L970" title="All 2 branches covered.">            if (!stack.isEmpty()) {</span>
+<span class="fc" id="L971">                vertex = stack.pop();</span>
             }
-<span class="fc bfc" id="L850" title="All 2 branches covered.">            while (vertex != null) {</span>
-<span class="fc bfc" id="L851" title="All 2 branches covered.">                if (token.equals(vertex)</span>
-<span class="fc bfc" id="L852" title="All 2 branches covered.">                        &amp;&amp; vertex.getLineNo() &lt;= endLineNumber) {</span>
-<span class="fc" id="L853">                    result.add(vertex);</span>
+<span class="fc bfc" id="L973" title="All 2 branches covered.">            while (vertex != null) {</span>
+<span class="fc bfc" id="L974" title="All 2 branches covered.">                if (token.equals(vertex)</span>
+<span class="fc bfc" id="L975" title="All 2 branches covered.">                        &amp;&amp; vertex.getLineNo() &lt;= endLineNumber) {</span>
+<span class="fc" id="L976">                    result.add(vertex);</span>
                 }
-<span class="fc bfc" id="L855" title="All 2 branches covered.">                if (vertex.getNextSibling() != null) {</span>
-<span class="fc" id="L856">                    stack.push(vertex.getNextSibling());</span>
+<span class="fc bfc" id="L978" title="All 2 branches covered.">                if (vertex.getNextSibling() != null) {</span>
+<span class="fc" id="L979">                    stack.push(vertex.getNextSibling());</span>
                 }
-<span class="fc" id="L858">                vertex = vertex.getFirstChild();</span>
+<span class="fc" id="L981">                vertex = vertex.getFirstChild();</span>
             }
         }
-<span class="fc" id="L861">        return result;</span>
+<span class="fc" id="L984">        return result;</span>
     }
 
     /**
@@ -869,16 +992,16 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      *         'this' and null otherwise.
      */
     private AbstractFrame getMethodWithoutThis(DetailAST ast) {
-<span class="fc" id="L872">        AbstractFrame result = null;</span>
-<span class="fc bfc" id="L873" title="All 2 branches covered.">        if (!validateOnlyOverlapping) {</span>
-<span class="fc" id="L874">            final AbstractFrame frame = findFrame(ast, true);</span>
-<span class="fc bfc" id="L875" title="All 2 branches covered.">            if (frame != null</span>
-<span class="fc bfc" id="L876" title="All 2 branches covered.">                    &amp;&amp; ((ClassFrame) frame).hasInstanceMethod(ast)</span>
-<span class="fc bfc" id="L877" title="All 2 branches covered.">                    &amp;&amp; !((ClassFrame) frame).hasStaticMethod(ast)) {</span>
-<span class="fc" id="L878">                result = frame;</span>
+<span class="fc" id="L995">        AbstractFrame result = null;</span>
+<span class="fc bfc" id="L996" title="All 2 branches covered.">        if (!validateOnlyOverlapping) {</span>
+<span class="fc" id="L997">            final AbstractFrame frame = findFrame(ast, true);</span>
+<span class="fc bfc" id="L998" title="All 2 branches covered.">            if (frame != null</span>
+<span class="fc bfc" id="L999" title="All 2 branches covered.">                    &amp;&amp; ((ClassFrame) frame).hasInstanceMethod(ast)</span>
+<span class="fc bfc" id="L1000" title="All 2 branches covered.">                    &amp;&amp; !((ClassFrame) frame).hasStaticMethod(ast)) {</span>
+<span class="fc" id="L1001">                result = frame;</span>
             }
         }
-<span class="fc" id="L881">        return result;</span>
+<span class="fc" id="L1004">        return result;</span>
     }
 
     /**
@@ -888,19 +1011,19 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return AbstractFrame containing declaration or null.
      */
     private AbstractFrame findClassFrame(DetailAST name, boolean lookForMethod) {
-<span class="fc" id="L891">        AbstractFrame frame = current.peek();</span>
+<span class="fc" id="L1014">        AbstractFrame frame = current.peek();</span>
 
         while (true) {
-<span class="fc" id="L894">            frame = findFrame(frame, name, lookForMethod);</span>
+<span class="fc" id="L1017">            frame = findFrame(frame, name, lookForMethod);</span>
 
-<span class="fc bfc" id="L896" title="All 4 branches covered.">            if (frame == null || frame instanceof ClassFrame) {</span>
-<span class="fc" id="L897">                break;</span>
+<span class="fc bfc" id="L1019" title="All 4 branches covered.">            if (frame == null || frame instanceof ClassFrame) {</span>
+<span class="fc" id="L1020">                break;</span>
             }
 
-<span class="fc" id="L900">            frame = frame.getParent();</span>
+<span class="fc" id="L1023">            frame = frame.getParent();</span>
         }
 
-<span class="fc" id="L903">        return frame;</span>
+<span class="fc" id="L1026">        return frame;</span>
     }
 
     /**
@@ -910,7 +1033,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return AbstractFrame containing declaration or null.
      */
     private AbstractFrame findFrame(DetailAST name, boolean lookForMethod) {
-<span class="fc" id="L913">        return findFrame(current.peek(), name, lookForMethod);</span>
+<span class="fc" id="L1036">        return findFrame(current.peek(), name, lookForMethod);</span>
     }
 
     /**
@@ -922,7 +1045,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static AbstractFrame findFrame(AbstractFrame frame, DetailAST name,
             boolean lookForMethod) {
-<span class="fc" id="L925">        return frame.getIfContains(name, lookForMethod);</span>
+<span class="fc" id="L1048">        return frame.getIfContains(name, lookForMethod);</span>
     }
 
     /**
@@ -931,7 +1054,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if token is related to Definition Tokens.
      */
     private static boolean isDeclarationToken(int parentType) {
-<span class="fc" id="L934">        return DECLARATION_TOKENS.contains(parentType);</span>
+<span class="fc" id="L1057">        return DECLARATION_TOKENS.contains(parentType);</span>
     }
 
     /**
@@ -940,7 +1063,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if token is related to assign tokens.
      */
     private static boolean isAssignToken(int tokenType) {
-<span class="fc" id="L943">        return ASSIGN_TOKENS.contains(tokenType);</span>
+<span class="fc" id="L1066">        return ASSIGN_TOKENS.contains(tokenType);</span>
     }
 
     /**
@@ -949,7 +1072,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if token is related to compound assign tokens.
      */
     private static boolean isCompoundAssignToken(int tokenType) {
-<span class="fc" id="L952">        return COMPOUND_ASSIGN_TOKENS.contains(tokenType);</span>
+<span class="fc" id="L1075">        return COMPOUND_ASSIGN_TOKENS.contains(tokenType);</span>
     }
 
     /**
@@ -957,11 +1080,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return the name of the nearest parent ClassFrame.
      */
     private String getNearestClassFrameName() {
-<span class="fc" id="L960">        AbstractFrame frame = current.peek();</span>
-<span class="fc bfc" id="L961" title="All 2 branches covered.">        while (frame.getType() != FrameType.CLASS_FRAME) {</span>
-<span class="fc" id="L962">            frame = frame.getParent();</span>
+<span class="fc" id="L1083">        AbstractFrame frame = current.peek();</span>
+<span class="fc bfc" id="L1084" title="All 2 branches covered.">        while (frame.getType() != FrameType.CLASS_FRAME) {</span>
+<span class="fc" id="L1085">            frame = frame.getParent();</span>
         }
-<span class="fc" id="L964">        return frame.getFrameName();</span>
+<span class="fc" id="L1087">        return frame.getFrameName();</span>
     }
 
     /**
@@ -971,49 +1094,49 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static boolean isLambdaParameter(DetailAST ast) {
         DetailAST parent;
-<span class="fc bfc" id="L974" title="All 2 branches covered.">        for (parent = ast.getParent(); parent != null; parent = parent.getParent()) {</span>
-<span class="fc bfc" id="L975" title="All 2 branches covered.">            if (parent.getType() == TokenTypes.LAMBDA) {</span>
-<span class="fc" id="L976">                break;</span>
+<span class="fc bfc" id="L1097" title="All 2 branches covered.">        for (parent = ast.getParent(); parent != null; parent = parent.getParent()) {</span>
+<span class="fc bfc" id="L1098" title="All 2 branches covered.">            if (parent.getType() == TokenTypes.LAMBDA) {</span>
+<span class="fc" id="L1099">                break;</span>
             }
         }
         final boolean isLambdaParameter;
-<span class="fc bfc" id="L980" title="All 2 branches covered.">        if (parent == null) {</span>
-<span class="fc" id="L981">            isLambdaParameter = false;</span>
+<span class="fc bfc" id="L1103" title="All 2 branches covered.">        if (parent == null) {</span>
+<span class="fc" id="L1104">            isLambdaParameter = false;</span>
         }
-<span class="fc bfc" id="L983" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.PARAMETER_DEF) {</span>
-<span class="fc" id="L984">            isLambdaParameter = true;</span>
+<span class="fc bfc" id="L1106" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.PARAMETER_DEF) {</span>
+<span class="fc" id="L1107">            isLambdaParameter = true;</span>
         }
         else {
-<span class="fc" id="L987">            final DetailAST lambdaParameters = parent.findFirstToken(TokenTypes.PARAMETERS);</span>
-<span class="fc bfc" id="L988" title="All 2 branches covered.">            if (lambdaParameters == null) {</span>
-<span class="fc" id="L989">                isLambdaParameter = parent.getFirstChild().getText().equals(ast.getText());</span>
+<span class="fc" id="L1110">            final DetailAST lambdaParameters = parent.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc bfc" id="L1111" title="All 2 branches covered.">            if (lambdaParameters == null) {</span>
+<span class="fc" id="L1112">                isLambdaParameter = parent.getFirstChild().getText().equals(ast.getText());</span>
             }
             else {
-<span class="fc" id="L992">                isLambdaParameter = TokenUtil.findFirstTokenByPredicate(lambdaParameters,</span>
+<span class="fc" id="L1115">                isLambdaParameter = TokenUtil.findFirstTokenByPredicate(lambdaParameters,</span>
                     paramDef -&gt; {
-<span class="fc" id="L994">                        final DetailAST param = paramDef.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc bfc" id="L995" title="All 4 branches covered.">                        return param != null &amp;&amp; param.getText().equals(ast.getText());</span>
-<span class="fc" id="L996">                    }).isPresent();</span>
+<span class="fc" id="L1117">                        final DetailAST param = paramDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc bfc" id="L1118" title="All 4 branches covered.">                        return param != null &amp;&amp; param.getText().equals(ast.getText());</span>
+<span class="fc" id="L1119">                    }).isPresent();</span>
             }
         }
-<span class="fc" id="L999">        return isLambdaParameter;</span>
+<span class="fc" id="L1122">        return isLambdaParameter;</span>
     }
 
     /** An AbstractFrame type. */
-<span class="fc" id="L1003">    private enum FrameType {</span>
+<span class="fc" id="L1126">    private enum FrameType {</span>
 
         /** Class frame type. */
-<span class="fc" id="L1006">        CLASS_FRAME,</span>
+<span class="fc" id="L1129">        CLASS_FRAME,</span>
         /** Constructor frame type. */
-<span class="fc" id="L1008">        CTOR_FRAME,</span>
+<span class="fc" id="L1131">        CTOR_FRAME,</span>
         /** Method frame type. */
-<span class="fc" id="L1010">        METHOD_FRAME,</span>
+<span class="fc" id="L1133">        METHOD_FRAME,</span>
         /** Block frame type. */
-<span class="fc" id="L1012">        BLOCK_FRAME,</span>
+<span class="fc" id="L1135">        BLOCK_FRAME,</span>
         /** Catch frame type. */
-<span class="fc" id="L1014">        CATCH_FRAME,</span>
+<span class="fc" id="L1137">        CATCH_FRAME,</span>
         /** Lambda frame type. */
-<span class="fc" id="L1016">        FOR_FRAME,</span>
+<span class="fc" id="L1139">        FOR_FRAME,</span>
 
     }
 
@@ -1036,11 +1159,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param parent parent frame.
          * @param ident frame name ident.
          */
-<span class="fc" id="L1039">        protected AbstractFrame(AbstractFrame parent, DetailAST ident) {</span>
-<span class="fc" id="L1040">            this.parent = parent;</span>
-<span class="fc" id="L1041">            frameNameIdent = ident;</span>
-<span class="fc" id="L1042">            varIdents = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L1043">        }</span>
+<span class="fc" id="L1162">        protected AbstractFrame(AbstractFrame parent, DetailAST ident) {</span>
+<span class="fc" id="L1163">            this.parent = parent;</span>
+<span class="fc" id="L1164">            frameNameIdent = ident;</span>
+<span class="fc" id="L1165">            varIdents = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L1166">        }</span>
 
         /**
          * Get the type of the frame.
@@ -1053,19 +1176,19 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param identToAdd the name we're adding.
          */
         private void addIdent(DetailAST identToAdd) {
-<span class="fc" id="L1056">            varIdents.add(identToAdd);</span>
-<span class="fc" id="L1057">        }</span>
+<span class="fc" id="L1179">            varIdents.add(identToAdd);</span>
+<span class="fc" id="L1180">        }</span>
 
         protected AbstractFrame getParent() {
-<span class="fc" id="L1060">            return parent;</span>
+<span class="fc" id="L1183">            return parent;</span>
         }
 
         protected String getFrameName() {
-<span class="fc" id="L1064">            return frameNameIdent.getText();</span>
+<span class="fc" id="L1187">            return frameNameIdent.getText();</span>
         }
 
         public DetailAST getFrameNameIdent() {
-<span class="fc" id="L1068">            return frameNameIdent;</span>
+<span class="fc" id="L1191">            return frameNameIdent;</span>
         }
 
         /**
@@ -1074,7 +1197,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return whether it was found.
          */
         protected boolean containsFieldOrVariable(DetailAST nameToFind) {
-<span class="fc" id="L1077">            return containsFieldOrVariableDef(varIdents, nameToFind);</span>
+<span class="fc" id="L1200">            return containsFieldOrVariableDef(varIdents, nameToFind);</span>
         }
 
         /**
@@ -1086,14 +1209,14 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
         protected AbstractFrame getIfContains(DetailAST nameToFind, boolean lookForMethod) {
             final AbstractFrame frame;
 
-<span class="fc bfc" id="L1089" title="All 2 branches covered.">            if (!lookForMethod</span>
-<span class="fc bfc" id="L1090" title="All 2 branches covered.">                &amp;&amp; containsFieldOrVariable(nameToFind)) {</span>
-<span class="fc" id="L1091">                frame = this;</span>
+<span class="fc bfc" id="L1212" title="All 2 branches covered.">            if (!lookForMethod</span>
+<span class="fc bfc" id="L1213" title="All 2 branches covered.">                &amp;&amp; containsFieldOrVariable(nameToFind)) {</span>
+<span class="fc" id="L1214">                frame = this;</span>
             }
             else {
-<span class="fc" id="L1094">                frame = parent.getIfContains(nameToFind, lookForMethod);</span>
+<span class="fc" id="L1217">                frame = parent.getIfContains(nameToFind, lookForMethod);</span>
             }
-<span class="fc" id="L1096">            return frame;</span>
+<span class="fc" id="L1219">            return frame;</span>
         }
 
         /**
@@ -1105,14 +1228,14 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *         IDENT ast and it is declared in a proper position.
          */
         protected boolean containsFieldOrVariableDef(Set&lt;DetailAST&gt; set, DetailAST ident) {
-<span class="fc" id="L1108">            boolean result = false;</span>
-<span class="fc bfc" id="L1109" title="All 2 branches covered.">            for (DetailAST ast: set) {</span>
-<span class="fc bfc" id="L1110" title="All 2 branches covered.">                if (isProperDefinition(ident, ast)) {</span>
-<span class="fc" id="L1111">                    result = true;</span>
-<span class="fc" id="L1112">                    break;</span>
+<span class="fc" id="L1231">            boolean result = false;</span>
+<span class="fc bfc" id="L1232" title="All 2 branches covered.">            for (DetailAST ast: set) {</span>
+<span class="fc bfc" id="L1233" title="All 2 branches covered.">                if (isProperDefinition(ident, ast)) {</span>
+<span class="fc" id="L1234">                    result = true;</span>
+<span class="fc" id="L1235">                    break;</span>
                 }
-<span class="fc" id="L1114">            }</span>
-<span class="fc" id="L1115">            return result;</span>
+<span class="fc" id="L1237">            }</span>
+<span class="fc" id="L1238">            return result;</span>
         }
 
         /**
@@ -1122,9 +1245,9 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return true if ast is correspondent to ident.
          */
         protected boolean isProperDefinition(DetailAST ident, DetailAST ast) {
-<span class="fc" id="L1125">            final String nameToFind = ident.getText();</span>
-<span class="fc bfc" id="L1126" title="All 2 branches covered.">            return nameToFind.equals(ast.getText())</span>
-<span class="fc bfc" id="L1127" title="All 2 branches covered.">                &amp;&amp; checkPosition(ast, ident);</span>
+<span class="fc" id="L1248">            final String nameToFind = ident.getText();</span>
+<span class="fc bfc" id="L1249" title="All 2 branches covered.">            return nameToFind.equals(ast.getText())</span>
+<span class="fc bfc" id="L1250" title="All 2 branches covered.">                &amp;&amp; checkPosition(ast, ident);</span>
         }
 
         /**
@@ -1134,13 +1257,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return true, if the declaration is located before the checked ast.
          */
         private static boolean checkPosition(DetailAST ast1, DetailAST ast2) {
-<span class="fc" id="L1137">            boolean result = false;</span>
-<span class="fc bfc" id="L1138" title="All 2 branches covered.">            if (ast1.getLineNo() &lt; ast2.getLineNo()</span>
-<span class="fc bfc" id="L1139" title="All 2 branches covered.">                    || ast1.getLineNo() == ast2.getLineNo()</span>
-<span class="fc bfc" id="L1140" title="All 2 branches covered.">                    &amp;&amp; ast1.getColumnNo() &lt; ast2.getColumnNo()) {</span>
-<span class="fc" id="L1141">                result = true;</span>
+<span class="fc" id="L1260">            boolean result = false;</span>
+<span class="fc bfc" id="L1261" title="All 2 branches covered.">            if (ast1.getLineNo() &lt; ast2.getLineNo()</span>
+<span class="fc bfc" id="L1262" title="All 2 branches covered.">                    || ast1.getLineNo() == ast2.getLineNo()</span>
+<span class="fc bfc" id="L1263" title="All 2 branches covered.">                    &amp;&amp; ast1.getColumnNo() &lt; ast2.getColumnNo()) {</span>
+<span class="fc" id="L1264">                result = true;</span>
             }
-<span class="fc" id="L1143">            return result;</span>
+<span class="fc" id="L1266">            return result;</span>
         }
 
     }
@@ -1156,12 +1279,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident method name identifier token.
          */
         protected MethodFrame(AbstractFrame parent, DetailAST ident) {
-<span class="fc" id="L1159">            super(parent, ident);</span>
-<span class="fc" id="L1160">        }</span>
+<span class="fc" id="L1282">            super(parent, ident);</span>
+<span class="fc" id="L1283">        }</span>
 
         @Override
         protected FrameType getType() {
-<span class="fc" id="L1164">            return FrameType.METHOD_FRAME;</span>
+<span class="fc" id="L1287">            return FrameType.METHOD_FRAME;</span>
         }
 
     }
@@ -1177,12 +1300,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident frame name ident.
          */
         protected ConstructorFrame(AbstractFrame parent, DetailAST ident) {
-<span class="fc" id="L1180">            super(parent, ident);</span>
-<span class="fc" id="L1181">        }</span>
+<span class="fc" id="L1303">            super(parent, ident);</span>
+<span class="fc" id="L1304">        }</span>
 
         @Override
         protected FrameType getType() {
-<span class="fc" id="L1185">            return FrameType.CTOR_FRAME;</span>
+<span class="fc" id="L1308">            return FrameType.CTOR_FRAME;</span>
         }
 
     }
@@ -1207,16 +1330,16 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident frame name ident.
          */
         /* package */ ClassFrame(AbstractFrame parent, DetailAST ident) {
-<span class="fc" id="L1210">            super(parent, ident);</span>
-<span class="fc" id="L1211">            instanceMembers = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L1212">            instanceMethods = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L1213">            staticMembers = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L1214">            staticMethods = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L1215">        }</span>
+<span class="fc" id="L1333">            super(parent, ident);</span>
+<span class="fc" id="L1334">            instanceMembers = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L1335">            instanceMethods = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L1336">            staticMembers = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L1337">            staticMethods = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L1338">        }</span>
 
         @Override
         protected FrameType getType() {
-<span class="fc" id="L1219">            return FrameType.CLASS_FRAME;</span>
+<span class="fc" id="L1342">            return FrameType.CLASS_FRAME;</span>
         }
 
         /**
@@ -1224,32 +1347,32 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident an ident of static member of the class.
          */
         public void addStaticMember(final DetailAST ident) {
-<span class="fc" id="L1227">            staticMembers.add(ident);</span>
-<span class="fc" id="L1228">        }</span>
+<span class="fc" id="L1350">            staticMembers.add(ident);</span>
+<span class="fc" id="L1351">        }</span>
 
         /**
          * Adds static method's name.
          * @param ident an ident of static method of the class.
          */
         public void addStaticMethod(final DetailAST ident) {
-<span class="fc" id="L1235">            staticMethods.add(ident);</span>
-<span class="fc" id="L1236">        }</span>
+<span class="fc" id="L1358">            staticMethods.add(ident);</span>
+<span class="fc" id="L1359">        }</span>
 
         /**
          * Adds instance member's ident.
          * @param ident an ident of instance member of the class.
          */
         public void addInstanceMember(final DetailAST ident) {
-<span class="fc" id="L1243">            instanceMembers.add(ident);</span>
-<span class="fc" id="L1244">        }</span>
+<span class="fc" id="L1366">            instanceMembers.add(ident);</span>
+<span class="fc" id="L1367">        }</span>
 
         /**
          * Adds instance method's name.
          * @param ident an ident of instance method of the class.
          */
         public void addInstanceMethod(final DetailAST ident) {
-<span class="fc" id="L1251">            instanceMethods.add(ident);</span>
-<span class="fc" id="L1252">        }</span>
+<span class="fc" id="L1374">            instanceMethods.add(ident);</span>
+<span class="fc" id="L1375">        }</span>
 
         /**
          * Checks if a given name is a known instance member of the class.
@@ -1258,7 +1381,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *         instance member of the class.
          */
         public boolean hasInstanceMember(final DetailAST ident) {
-<span class="fc" id="L1261">            return containsFieldOrVariableDef(instanceMembers, ident);</span>
+<span class="fc" id="L1384">            return containsFieldOrVariableDef(instanceMembers, ident);</span>
         }
 
         /**
@@ -1268,7 +1391,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *         instance method of the class.
          */
         public boolean hasInstanceMethod(final DetailAST ident) {
-<span class="fc" id="L1271">            return containsMethodDef(instanceMethods, ident);</span>
+<span class="fc" id="L1394">            return containsMethodDef(instanceMethods, ident);</span>
         }
 
         /**
@@ -1278,7 +1401,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *         instance method of the class.
          */
         public boolean hasStaticMethod(final DetailAST ident) {
-<span class="fc" id="L1281">            return containsMethodDef(staticMethods, ident);</span>
+<span class="fc" id="L1404">            return containsMethodDef(staticMethods, ident);</span>
         }
 
         /**
@@ -1287,42 +1410,42 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return true if given instance member has final modifier.
          */
         public boolean hasFinalField(final DetailAST instanceMember) {
-<span class="fc" id="L1290">            boolean result = false;</span>
-<span class="fc bfc" id="L1291" title="All 2 branches covered.">            for (DetailAST member : instanceMembers) {</span>
-<span class="fc" id="L1292">                final DetailAST mods = member.getParent().findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L1293" title="All 2 branches covered.">                final boolean finalMod = mods.findFirstToken(TokenTypes.FINAL) != null;</span>
-<span class="fc bfc" id="L1294" title="All 4 branches covered.">                if (finalMod &amp;&amp; member.equals(instanceMember)) {</span>
-<span class="fc" id="L1295">                    result = true;</span>
-<span class="fc" id="L1296">                    break;</span>
+<span class="fc" id="L1413">            boolean result = false;</span>
+<span class="fc bfc" id="L1414" title="All 2 branches covered.">            for (DetailAST member : instanceMembers) {</span>
+<span class="fc" id="L1415">                final DetailAST mods = member.getParent().findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L1416" title="All 2 branches covered.">                final boolean finalMod = mods.findFirstToken(TokenTypes.FINAL) != null;</span>
+<span class="fc bfc" id="L1417" title="All 4 branches covered.">                if (finalMod &amp;&amp; member.equals(instanceMember)) {</span>
+<span class="fc" id="L1418">                    result = true;</span>
+<span class="fc" id="L1419">                    break;</span>
                 }
-<span class="fc" id="L1298">            }</span>
-<span class="fc" id="L1299">            return result;</span>
+<span class="fc" id="L1421">            }</span>
+<span class="fc" id="L1422">            return result;</span>
         }
 
         @Override
         protected boolean containsFieldOrVariable(DetailAST nameToFind) {
-<span class="fc bfc" id="L1304" title="All 2 branches covered.">            return containsFieldOrVariableDef(instanceMembers, nameToFind)</span>
-<span class="fc bfc" id="L1305" title="All 2 branches covered.">                    || containsFieldOrVariableDef(staticMembers, nameToFind);</span>
+<span class="fc bfc" id="L1427" title="All 2 branches covered.">            return containsFieldOrVariableDef(instanceMembers, nameToFind)</span>
+<span class="fc bfc" id="L1428" title="All 2 branches covered.">                    || containsFieldOrVariableDef(staticMembers, nameToFind);</span>
         }
 
         @Override
         protected boolean isProperDefinition(DetailAST ident, DetailAST ast) {
-<span class="fc" id="L1310">            final String nameToFind = ident.getText();</span>
-<span class="fc" id="L1311">            return nameToFind.equals(ast.getText());</span>
+<span class="fc" id="L1433">            final String nameToFind = ident.getText();</span>
+<span class="fc" id="L1434">            return nameToFind.equals(ast.getText());</span>
         }
 
         @Override
         protected AbstractFrame getIfContains(DetailAST nameToFind, boolean lookForMethod) {
-<span class="fc" id="L1316">            AbstractFrame frame = null;</span>
+<span class="fc" id="L1439">            AbstractFrame frame = null;</span>
 
-<span class="fc bfc" id="L1318" title="All 4 branches covered.">            if (lookForMethod &amp;&amp; containsMethod(nameToFind)</span>
-<span class="fc bfc" id="L1319" title="All 2 branches covered.">                || containsFieldOrVariable(nameToFind)) {</span>
-<span class="fc" id="L1320">                frame = this;</span>
+<span class="fc bfc" id="L1441" title="All 4 branches covered.">            if (lookForMethod &amp;&amp; containsMethod(nameToFind)</span>
+<span class="fc bfc" id="L1442" title="All 2 branches covered.">                || containsFieldOrVariable(nameToFind)) {</span>
+<span class="fc" id="L1443">                frame = this;</span>
             }
-<span class="fc bfc" id="L1322" title="All 2 branches covered.">            else if (getParent() != null) {</span>
-<span class="fc" id="L1323">                frame = getParent().getIfContains(nameToFind, lookForMethod);</span>
+<span class="fc bfc" id="L1445" title="All 2 branches covered.">            else if (getParent() != null) {</span>
+<span class="fc" id="L1446">                frame = getParent().getIfContains(nameToFind, lookForMethod);</span>
             }
-<span class="fc" id="L1325">            return frame;</span>
+<span class="fc" id="L1448">            return frame;</span>
         }
 
         /**
@@ -1331,8 +1454,8 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return true, if a method with the same name and number of parameters is found.
          */
         private boolean containsMethod(DetailAST methodToFind) {
-<span class="fc bfc" id="L1334" title="All 2 branches covered.">            return containsMethodDef(instanceMethods, methodToFind)</span>
-<span class="fc bfc" id="L1335" title="All 2 branches covered.">                || containsMethodDef(staticMethods, methodToFind);</span>
+<span class="fc bfc" id="L1457" title="All 2 branches covered.">            return containsMethodDef(instanceMethods, methodToFind)</span>
+<span class="fc bfc" id="L1458" title="All 2 branches covered.">                || containsMethodDef(staticMethods, methodToFind);</span>
         }
 
         /**
@@ -1344,14 +1467,14 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *     same name and number of parameters.
          */
         private static boolean containsMethodDef(Set&lt;DetailAST&gt; set, DetailAST ident) {
-<span class="fc" id="L1347">            boolean result = false;</span>
-<span class="fc bfc" id="L1348" title="All 2 branches covered.">            for (DetailAST ast: set) {</span>
-<span class="fc bfc" id="L1349" title="All 2 branches covered.">                if (isSimilarSignature(ident, ast)) {</span>
-<span class="fc" id="L1350">                    result = true;</span>
-<span class="fc" id="L1351">                    break;</span>
+<span class="fc" id="L1470">            boolean result = false;</span>
+<span class="fc bfc" id="L1471" title="All 2 branches covered.">            for (DetailAST ast: set) {</span>
+<span class="fc bfc" id="L1472" title="All 2 branches covered.">                if (isSimilarSignature(ident, ast)) {</span>
+<span class="fc" id="L1473">                    result = true;</span>
+<span class="fc" id="L1474">                    break;</span>
                 }
-<span class="fc" id="L1353">            }</span>
-<span class="fc" id="L1354">            return result;</span>
+<span class="fc" id="L1476">            }</span>
+<span class="fc" id="L1477">            return result;</span>
         }
 
         /**
@@ -1362,15 +1485,15 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *     as the method call.
          */
         private static boolean isSimilarSignature(DetailAST ident, DetailAST ast) {
-<span class="fc" id="L1365">            boolean result = false;</span>
-<span class="fc" id="L1366">            final DetailAST elistToken = ident.getParent().findFirstToken(TokenTypes.ELIST);</span>
-<span class="fc bfc" id="L1367" title="All 4 branches covered.">            if (elistToken != null &amp;&amp; ident.getText().equals(ast.getText())) {</span>
-<span class="fc" id="L1368">                final int paramsNumber =</span>
-<span class="fc" id="L1369">                    ast.getParent().findFirstToken(TokenTypes.PARAMETERS).getChildCount();</span>
-<span class="fc" id="L1370">                final int argsNumber = elistToken.getChildCount();</span>
-<span class="fc bfc" id="L1371" title="All 2 branches covered.">                result = paramsNumber == argsNumber;</span>
+<span class="fc" id="L1488">            boolean result = false;</span>
+<span class="fc" id="L1489">            final DetailAST elistToken = ident.getParent().findFirstToken(TokenTypes.ELIST);</span>
+<span class="fc bfc" id="L1490" title="All 4 branches covered.">            if (elistToken != null &amp;&amp; ident.getText().equals(ast.getText())) {</span>
+<span class="fc" id="L1491">                final int paramsNumber =</span>
+<span class="fc" id="L1492">                    ast.getParent().findFirstToken(TokenTypes.PARAMETERS).getChildCount();</span>
+<span class="fc" id="L1493">                final int argsNumber = elistToken.getChildCount();</span>
+<span class="fc bfc" id="L1494" title="All 2 branches covered.">                result = paramsNumber == argsNumber;</span>
             }
-<span class="fc" id="L1373">            return result;</span>
+<span class="fc" id="L1496">            return result;</span>
         }
 
     }
@@ -1389,13 +1512,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param frameName name of the frame.
          */
         protected AnonymousClassFrame(AbstractFrame parent, String frameName) {
-<span class="fc" id="L1392">            super(parent, null);</span>
-<span class="fc" id="L1393">            this.frameName = frameName;</span>
-<span class="fc" id="L1394">        }</span>
+<span class="fc" id="L1515">            super(parent, null);</span>
+<span class="fc" id="L1516">            this.frameName = frameName;</span>
+<span class="fc" id="L1517">        }</span>
 
         @Override
         protected String getFrameName() {
-<span class="fc" id="L1398">            return frameName;</span>
+<span class="fc" id="L1521">            return frameName;</span>
         }
 
     }
@@ -1411,12 +1534,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident ident frame name ident.
          */
         protected BlockFrame(AbstractFrame parent, DetailAST ident) {
-<span class="fc" id="L1414">            super(parent, ident);</span>
-<span class="fc" id="L1415">        }</span>
+<span class="fc" id="L1537">            super(parent, ident);</span>
+<span class="fc" id="L1538">        }</span>
 
         @Override
         protected FrameType getType() {
-<span class="fc" id="L1419">            return FrameType.BLOCK_FRAME;</span>
+<span class="fc" id="L1542">            return FrameType.BLOCK_FRAME;</span>
         }
 
     }
@@ -1432,12 +1555,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident ident frame name ident.
          */
         protected CatchFrame(AbstractFrame parent, DetailAST ident) {
-<span class="fc" id="L1435">            super(parent, ident);</span>
-<span class="fc" id="L1436">        }</span>
+<span class="fc" id="L1558">            super(parent, ident);</span>
+<span class="fc" id="L1559">        }</span>
 
         @Override
         public FrameType getType() {
-<span class="fc" id="L1440">            return FrameType.CATCH_FRAME;</span>
+<span class="fc" id="L1563">            return FrameType.CATCH_FRAME;</span>
         }
 
     }
@@ -1453,12 +1576,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @param ident ident frame name ident.
          */
         protected ForFrame(AbstractFrame parent, DetailAST ident) {
-<span class="fc" id="L1456">            super(parent, ident);</span>
-<span class="fc" id="L1457">        }</span>
+<span class="fc" id="L1579">            super(parent, ident);</span>
+<span class="fc" id="L1580">        }</span>
 
         @Override
         public FrameType getType() {
-<span class="fc" id="L1461">            return FrameType.FOR_FRAME;</span>
+<span class="fc" id="L1584">            return FrameType.FOR_FRAME;</span>
         }
 
     }

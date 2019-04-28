@@ -29,14 +29,42 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
 /**
- * Checks for fall through in switch statements
- * Finds locations where a case &lt;b&gt;contains&lt;/b&gt; Java code -
- * but lacks a break, return, throw or continue statement.
- *
  * &lt;p&gt;
- * The check honors special comments to suppress warnings about
- * the fall through. By default the comments &quot;fallthru&quot;,
- * &quot;fall through&quot;, &quot;falls through&quot; and &quot;fallthrough&quot; are recognized.
+ * Checks for fall-through in {@code switch} statements.
+ * Finds locations where a {@code case} &lt;b&gt;contains&lt;/b&gt; Java code but lacks a
+ * {@code break}, {@code return}, {@code throw} or {@code continue} statement.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The check honors special comments to suppress the warning.
+ * By default the text &quot;fallthru&quot;, &quot;fall through&quot;, &quot;fallthrough&quot;,
+ * &quot;falls through&quot; and &quot;fallsthrough&quot; are recognized (case sensitive).
+ * The comment containing these words must be all on one line,
+ * and must be on the last non-empty line before the {@code case} triggering
+ * the warning or on the same line before the {@code case}(ugly, but possible).
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * switch (i) {
+ * case 0:
+ *   i++; // fall through
+ *
+ * case 1:
+ *   i++;
+ *   // falls through
+ * case 2:
+ * case 3:
+ * case 4: {
+ *   i++;
+ * }
+ * // fallthrough
+ * case 5:
+ *   i++;
+ * &amp;#47;* fallthru *&amp;#47;case 6:
+ *   i++
+ *   break;
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Note: The check assumes that there is no unreachable code in the {@code case}.
  * &lt;/p&gt;
  * &lt;p&gt;
  * The following fragment of code will NOT trigger the check,
@@ -52,24 +80,36 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * case 6:
  *     break;
  * &lt;/pre&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code checkLastCaseGroup} - Control whether the last case group must be checked.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code reliefPattern} - Define the RegExp to match the relief comment that suppresses
+ * the warning about a fall through.
+ * Default value is {@code &quot;fallthru|falls? ?through&quot;}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
  * &lt;p&gt;
- * The recognized relief comment can be configured with the property
- * {@code reliefPattern}. Default value of this regular expression
- * is &quot;fallthru|fall through|fallthrough|falls through&quot;.
- * &lt;/p&gt;
- * &lt;p&gt;
- * An example of how to configure the check is:
+ * To configure the check:
  * &lt;/p&gt;
  * &lt;pre&gt;
- * &amp;lt;module name=&quot;FallThrough&quot;&amp;gt;
- *     &amp;lt;property name=&amp;quot;reliefPattern&amp;quot;
- *                  value=&amp;quot;Fall Through&amp;quot;/&amp;gt;
+ * &amp;lt;module name=&amp;quot;FallThrough&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * or
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;FallThrough&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;reliefPattern&amp;quot; value=&amp;quot;continue in next case&amp;quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  *
+ * @since 3.4
  */
 @StatelessCheck
-<span class="fc" id="L72">public class FallThroughCheck extends AbstractCheck {</span>
+<span class="fc" id="L112">public class FallThroughCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -83,63 +123,67 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     public static final String MSG_FALL_THROUGH_LAST = &quot;fall.through.last&quot;;
 
-    /** Do we need to check last case group. */
+    /** Control whether the last case group must be checked. */
     private boolean checkLastCaseGroup;
 
-    /** Relief regexp to allow fall through to the next case branch. */
-<span class="fc" id="L90">    private Pattern reliefPattern = Pattern.compile(&quot;fallthru|falls? ?through&quot;);</span>
+    /**
+     * Define the RegExp to match the relief comment that suppresses
+     * the warning about a fall through.
+     */
+<span class="fc" id="L133">    private Pattern reliefPattern = Pattern.compile(&quot;fallthru|falls? ?through&quot;);</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L94">        return getRequiredTokens();</span>
+<span class="fc" id="L137">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L99">        return new int[] {TokenTypes.CASE_GROUP};</span>
+<span class="fc" id="L142">        return new int[] {TokenTypes.CASE_GROUP};</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L104">        return getRequiredTokens();</span>
+<span class="fc" id="L147">        return getRequiredTokens();</span>
     }
 
     /**
-     * Set the relief pattern.
+     * Setter to define the RegExp to match the relief comment that suppresses
+     * the warning about a fall through.
      *
      * @param pattern
      *            The regular expression pattern.
      */
     public void setReliefPattern(Pattern pattern) {
-<span class="fc" id="L114">        reliefPattern = pattern;</span>
-<span class="fc" id="L115">    }</span>
+<span class="fc" id="L158">        reliefPattern = pattern;</span>
+<span class="fc" id="L159">    }</span>
 
     /**
-     * Configures whether we need to check last case group or not.
+     * Setter to control whether the last case group must be checked.
      * @param value new value of the property.
      */
     public void setCheckLastCaseGroup(boolean value) {
-<span class="fc" id="L122">        checkLastCaseGroup = value;</span>
-<span class="fc" id="L123">    }</span>
+<span class="fc" id="L166">        checkLastCaseGroup = value;</span>
+<span class="fc" id="L167">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L127">        final DetailAST nextGroup = ast.getNextSibling();</span>
-<span class="fc bfc" id="L128" title="All 2 branches covered.">        final boolean isLastGroup = nextGroup.getType() != TokenTypes.CASE_GROUP;</span>
-<span class="fc bfc" id="L129" title="All 4 branches covered.">        if (!isLastGroup || checkLastCaseGroup) {</span>
-<span class="fc" id="L130">            final DetailAST slist = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L171">        final DetailAST nextGroup = ast.getNextSibling();</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">        final boolean isLastGroup = nextGroup.getType() != TokenTypes.CASE_GROUP;</span>
+<span class="fc bfc" id="L173" title="All 4 branches covered.">        if (!isLastGroup || checkLastCaseGroup) {</span>
+<span class="fc" id="L174">            final DetailAST slist = ast.findFirstToken(TokenTypes.SLIST);</span>
 
-<span class="fc bfc" id="L132" title="All 4 branches covered.">            if (slist != null &amp;&amp; !isTerminated(slist, true, true)</span>
-<span class="fc bfc" id="L133" title="All 2 branches covered.">                &amp;&amp; !hasFallThroughComment(ast, nextGroup)) {</span>
-<span class="fc bfc" id="L134" title="All 2 branches covered.">                if (isLastGroup) {</span>
-<span class="fc" id="L135">                    log(ast, MSG_FALL_THROUGH_LAST);</span>
+<span class="fc bfc" id="L176" title="All 4 branches covered.">            if (slist != null &amp;&amp; !isTerminated(slist, true, true)</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">                &amp;&amp; !hasFallThroughComment(ast, nextGroup)) {</span>
+<span class="fc bfc" id="L178" title="All 2 branches covered.">                if (isLastGroup) {</span>
+<span class="fc" id="L179">                    log(ast, MSG_FALL_THROUGH_LAST);</span>
                 }
                 else {
-<span class="fc" id="L138">                    log(nextGroup, MSG_FALL_THROUGH);</span>
+<span class="fc" id="L182">                    log(nextGroup, MSG_FALL_THROUGH);</span>
                 }
             }
         }
-<span class="fc" id="L142">    }</span>
+<span class="fc" id="L186">    }</span>
 
     /**
      * Checks if a given subtree terminated by return, throw or,
@@ -153,41 +197,41 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
                                  boolean useContinue) {
         final boolean terminated;
 
-<span class="fc bfc" id="L156" title="All 10 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L200" title="All 10 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.LITERAL_RETURN:
             case TokenTypes.LITERAL_THROW:
-<span class="fc" id="L159">                terminated = true;</span>
-<span class="fc" id="L160">                break;</span>
+<span class="fc" id="L203">                terminated = true;</span>
+<span class="fc" id="L204">                break;</span>
             case TokenTypes.LITERAL_BREAK:
-<span class="fc" id="L162">                terminated = useBreak;</span>
-<span class="fc" id="L163">                break;</span>
+<span class="fc" id="L206">                terminated = useBreak;</span>
+<span class="fc" id="L207">                break;</span>
             case TokenTypes.LITERAL_CONTINUE:
-<span class="fc" id="L165">                terminated = useContinue;</span>
-<span class="fc" id="L166">                break;</span>
+<span class="fc" id="L209">                terminated = useContinue;</span>
+<span class="fc" id="L210">                break;</span>
             case TokenTypes.SLIST:
-<span class="fc" id="L168">                terminated = checkSlist(ast, useBreak, useContinue);</span>
-<span class="fc" id="L169">                break;</span>
+<span class="fc" id="L212">                terminated = checkSlist(ast, useBreak, useContinue);</span>
+<span class="fc" id="L213">                break;</span>
             case TokenTypes.LITERAL_IF:
-<span class="fc" id="L171">                terminated = checkIf(ast, useBreak, useContinue);</span>
-<span class="fc" id="L172">                break;</span>
+<span class="fc" id="L215">                terminated = checkIf(ast, useBreak, useContinue);</span>
+<span class="fc" id="L216">                break;</span>
             case TokenTypes.LITERAL_FOR:
             case TokenTypes.LITERAL_WHILE:
             case TokenTypes.LITERAL_DO:
-<span class="fc" id="L176">                terminated = checkLoop(ast);</span>
-<span class="fc" id="L177">                break;</span>
+<span class="fc" id="L220">                terminated = checkLoop(ast);</span>
+<span class="fc" id="L221">                break;</span>
             case TokenTypes.LITERAL_TRY:
-<span class="fc" id="L179">                terminated = checkTry(ast, useBreak, useContinue);</span>
-<span class="fc" id="L180">                break;</span>
+<span class="fc" id="L223">                terminated = checkTry(ast, useBreak, useContinue);</span>
+<span class="fc" id="L224">                break;</span>
             case TokenTypes.LITERAL_SWITCH:
-<span class="fc" id="L182">                terminated = checkSwitch(ast, useContinue);</span>
-<span class="fc" id="L183">                break;</span>
+<span class="fc" id="L226">                terminated = checkSwitch(ast, useContinue);</span>
+<span class="fc" id="L227">                break;</span>
             case TokenTypes.LITERAL_SYNCHRONIZED:
-<span class="fc" id="L185">                terminated = checkSynchronized(ast, useBreak, useContinue);</span>
-<span class="fc" id="L186">                break;</span>
+<span class="fc" id="L229">                terminated = checkSynchronized(ast, useBreak, useContinue);</span>
+<span class="fc" id="L230">                break;</span>
             default:
-<span class="fc" id="L188">                terminated = false;</span>
+<span class="fc" id="L232">                terminated = false;</span>
         }
-<span class="fc" id="L190">        return terminated;</span>
+<span class="fc" id="L234">        return terminated;</span>
     }
 
     /**
@@ -200,14 +244,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private boolean checkSlist(final DetailAST slistAst, boolean useBreak,
                                boolean useContinue) {
-<span class="fc" id="L203">        DetailAST lastStmt = slistAst.getLastChild();</span>
+<span class="fc" id="L247">        DetailAST lastStmt = slistAst.getLastChild();</span>
 
-<span class="fc bfc" id="L205" title="All 2 branches covered.">        if (lastStmt.getType() == TokenTypes.RCURLY) {</span>
-<span class="fc" id="L206">            lastStmt = lastStmt.getPreviousSibling();</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">        if (lastStmt.getType() == TokenTypes.RCURLY) {</span>
+<span class="fc" id="L250">            lastStmt = lastStmt.getPreviousSibling();</span>
         }
 
-<span class="fc bfc" id="L209" title="All 2 branches covered.">        return lastStmt != null</span>
-<span class="fc bfc" id="L210" title="All 2 branches covered.">            &amp;&amp; isTerminated(lastStmt, useBreak, useContinue);</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">        return lastStmt != null</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">            &amp;&amp; isTerminated(lastStmt, useBreak, useContinue);</span>
     }
 
     /**
@@ -220,19 +264,19 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private boolean checkIf(final DetailAST ast, boolean useBreak,
                             boolean useContinue) {
-<span class="fc" id="L223">        final DetailAST thenStmt = ast.findFirstToken(TokenTypes.RPAREN)</span>
-<span class="fc" id="L224">                .getNextSibling();</span>
-<span class="fc" id="L225">        final DetailAST elseStmt = thenStmt.getNextSibling();</span>
-<span class="fc" id="L226">        boolean isTerminated = isTerminated(thenStmt, useBreak, useContinue);</span>
+<span class="fc" id="L267">        final DetailAST thenStmt = ast.findFirstToken(TokenTypes.RPAREN)</span>
+<span class="fc" id="L268">                .getNextSibling();</span>
+<span class="fc" id="L269">        final DetailAST elseStmt = thenStmt.getNextSibling();</span>
+<span class="fc" id="L270">        boolean isTerminated = isTerminated(thenStmt, useBreak, useContinue);</span>
 
-<span class="fc bfc" id="L228" title="All 4 branches covered.">        if (isTerminated &amp;&amp; elseStmt != null) {</span>
-<span class="fc" id="L229">            isTerminated = isTerminated(elseStmt.getFirstChild(),</span>
+<span class="fc bfc" id="L272" title="All 4 branches covered.">        if (isTerminated &amp;&amp; elseStmt != null) {</span>
+<span class="fc" id="L273">            isTerminated = isTerminated(elseStmt.getFirstChild(),</span>
                 useBreak, useContinue);
         }
-<span class="fc bfc" id="L232" title="All 2 branches covered.">        else if (elseStmt == null) {</span>
-<span class="fc" id="L233">            isTerminated = false;</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">        else if (elseStmt == null) {</span>
+<span class="fc" id="L277">            isTerminated = false;</span>
         }
-<span class="fc" id="L235">        return isTerminated;</span>
+<span class="fc" id="L279">        return isTerminated;</span>
     }
 
     /**
@@ -243,15 +287,15 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private boolean checkLoop(final DetailAST ast) {
         final DetailAST loopBody;
-<span class="fc bfc" id="L246" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_DO) {</span>
-<span class="fc" id="L247">            final DetailAST lparen = ast.findFirstToken(TokenTypes.DO_WHILE);</span>
-<span class="fc" id="L248">            loopBody = lparen.getPreviousSibling();</span>
-<span class="fc" id="L249">        }</span>
+<span class="fc bfc" id="L290" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_DO) {</span>
+<span class="fc" id="L291">            final DetailAST lparen = ast.findFirstToken(TokenTypes.DO_WHILE);</span>
+<span class="fc" id="L292">            loopBody = lparen.getPreviousSibling();</span>
+<span class="fc" id="L293">        }</span>
         else {
-<span class="fc" id="L251">            final DetailAST rparen = ast.findFirstToken(TokenTypes.RPAREN);</span>
-<span class="fc" id="L252">            loopBody = rparen.getNextSibling();</span>
+<span class="fc" id="L295">            final DetailAST rparen = ast.findFirstToken(TokenTypes.RPAREN);</span>
+<span class="fc" id="L296">            loopBody = rparen.getNextSibling();</span>
         }
-<span class="fc" id="L254">        return isTerminated(loopBody, false, false);</span>
+<span class="fc" id="L298">        return isTerminated(loopBody, false, false);</span>
     }
 
     /**
@@ -264,34 +308,34 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private boolean checkTry(final DetailAST ast, boolean useBreak,
                              boolean useContinue) {
-<span class="fc" id="L267">        final DetailAST finalStmt = ast.getLastChild();</span>
-<span class="fc" id="L268">        boolean isTerminated = false;</span>
-<span class="fc bfc" id="L269" title="All 2 branches covered.">        if (finalStmt.getType() == TokenTypes.LITERAL_FINALLY) {</span>
-<span class="fc" id="L270">            isTerminated = isTerminated(finalStmt.findFirstToken(TokenTypes.SLIST),</span>
+<span class="fc" id="L311">        final DetailAST finalStmt = ast.getLastChild();</span>
+<span class="fc" id="L312">        boolean isTerminated = false;</span>
+<span class="fc bfc" id="L313" title="All 2 branches covered.">        if (finalStmt.getType() == TokenTypes.LITERAL_FINALLY) {</span>
+<span class="fc" id="L314">            isTerminated = isTerminated(finalStmt.findFirstToken(TokenTypes.SLIST),</span>
                                 useBreak, useContinue);
         }
 
-<span class="fc bfc" id="L274" title="All 2 branches covered.">        if (!isTerminated) {</span>
-<span class="fc" id="L275">            DetailAST firstChild = ast.getFirstChild();</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">        if (!isTerminated) {</span>
+<span class="fc" id="L319">            DetailAST firstChild = ast.getFirstChild();</span>
 
-<span class="fc bfc" id="L277" title="All 2 branches covered.">            if (firstChild.getType() == TokenTypes.RESOURCE_SPECIFICATION) {</span>
-<span class="fc" id="L278">                firstChild = firstChild.getNextSibling();</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">            if (firstChild.getType() == TokenTypes.RESOURCE_SPECIFICATION) {</span>
+<span class="fc" id="L322">                firstChild = firstChild.getNextSibling();</span>
             }
 
-<span class="fc" id="L281">            isTerminated = isTerminated(firstChild,</span>
+<span class="fc" id="L325">            isTerminated = isTerminated(firstChild,</span>
                     useBreak, useContinue);
 
-<span class="fc" id="L284">            DetailAST catchStmt = ast.findFirstToken(TokenTypes.LITERAL_CATCH);</span>
-<span class="fc bfc" id="L285" title="All 4 branches covered.">            while (catchStmt != null</span>
+<span class="fc" id="L328">            DetailAST catchStmt = ast.findFirstToken(TokenTypes.LITERAL_CATCH);</span>
+<span class="fc bfc" id="L329" title="All 4 branches covered.">            while (catchStmt != null</span>
                     &amp;&amp; isTerminated
-<span class="fc bfc" id="L287" title="All 2 branches covered.">                    &amp;&amp; catchStmt.getType() == TokenTypes.LITERAL_CATCH) {</span>
-<span class="fc" id="L288">                final DetailAST catchBody =</span>
-<span class="fc" id="L289">                        catchStmt.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc" id="L290">                isTerminated = isTerminated(catchBody, useBreak, useContinue);</span>
-<span class="fc" id="L291">                catchStmt = catchStmt.getNextSibling();</span>
-<span class="fc" id="L292">            }</span>
+<span class="fc bfc" id="L331" title="All 2 branches covered.">                    &amp;&amp; catchStmt.getType() == TokenTypes.LITERAL_CATCH) {</span>
+<span class="fc" id="L332">                final DetailAST catchBody =</span>
+<span class="fc" id="L333">                        catchStmt.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L334">                isTerminated = isTerminated(catchBody, useBreak, useContinue);</span>
+<span class="fc" id="L335">                catchStmt = catchStmt.getNextSibling();</span>
+<span class="fc" id="L336">            }</span>
         }
-<span class="fc" id="L294">        return isTerminated;</span>
+<span class="fc" id="L338">        return isTerminated;</span>
     }
 
     /**
@@ -302,15 +346,15 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if switch is terminated.
      */
     private boolean checkSwitch(final DetailAST literalSwitchAst, boolean useContinue) {
-<span class="fc" id="L305">        DetailAST caseGroup = literalSwitchAst.findFirstToken(TokenTypes.CASE_GROUP);</span>
-<span class="fc bfc" id="L306" title="All 2 branches covered.">        boolean isTerminated = caseGroup != null;</span>
-<span class="fc bfc" id="L307" title="All 4 branches covered.">        while (isTerminated &amp;&amp; caseGroup.getType() != TokenTypes.RCURLY) {</span>
-<span class="fc" id="L308">            final DetailAST caseBody =</span>
-<span class="fc" id="L309">                caseGroup.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc bfc" id="L310" title="All 4 branches covered.">            isTerminated = caseBody != null &amp;&amp; isTerminated(caseBody, false, useContinue);</span>
-<span class="fc" id="L311">            caseGroup = caseGroup.getNextSibling();</span>
-<span class="fc" id="L312">        }</span>
-<span class="fc" id="L313">        return isTerminated;</span>
+<span class="fc" id="L349">        DetailAST caseGroup = literalSwitchAst.findFirstToken(TokenTypes.CASE_GROUP);</span>
+<span class="fc bfc" id="L350" title="All 2 branches covered.">        boolean isTerminated = caseGroup != null;</span>
+<span class="fc bfc" id="L351" title="All 4 branches covered.">        while (isTerminated &amp;&amp; caseGroup.getType() != TokenTypes.RCURLY) {</span>
+<span class="fc" id="L352">            final DetailAST caseBody =</span>
+<span class="fc" id="L353">                caseGroup.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc bfc" id="L354" title="All 4 branches covered.">            isTerminated = caseBody != null &amp;&amp; isTerminated(caseBody, false, useContinue);</span>
+<span class="fc" id="L355">            caseGroup = caseGroup.getNextSibling();</span>
+<span class="fc" id="L356">        }</span>
+<span class="fc" id="L357">        return isTerminated;</span>
     }
 
     /**
@@ -323,8 +367,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private boolean checkSynchronized(final DetailAST synchronizedAst, boolean useBreak,
                                       boolean useContinue) {
-<span class="fc" id="L326">        return isTerminated(</span>
-<span class="fc" id="L327">            synchronizedAst.findFirstToken(TokenTypes.SLIST), useBreak, useContinue);</span>
+<span class="fc" id="L370">        return isTerminated(</span>
+<span class="fc" id="L371">            synchronizedAst.findFirstToken(TokenTypes.SLIST), useBreak, useContinue);</span>
     }
 
     /**
@@ -336,14 +380,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return True if a relief comment was found
      */
     private boolean hasFallThroughComment(DetailAST currentCase, DetailAST nextCase) {
-<span class="fc" id="L339">        boolean allThroughComment = false;</span>
-<span class="fc" id="L340">        final int endLineNo = nextCase.getLineNo();</span>
-<span class="fc" id="L341">        final int endColNo = nextCase.getColumnNo();</span>
+<span class="fc" id="L383">        boolean allThroughComment = false;</span>
+<span class="fc" id="L384">        final int endLineNo = nextCase.getLineNo();</span>
+<span class="fc" id="L385">        final int endColNo = nextCase.getColumnNo();</span>
 
         // Remember: The lines number returned from the AST is 1-based, but
         // the lines number in this array are 0-based. So you will often
         // see a &quot;lineNo-1&quot; etc.
-<span class="fc" id="L346">        final String[] lines = getLines();</span>
+<span class="fc" id="L390">        final String[] lines = getLines();</span>
 
         // Handle:
         //    case 1:
@@ -354,9 +398,9 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
         //    default:
         //    /+ FALLTHRU +/}
         //
-<span class="fc" id="L357">        final String linePart = lines[endLineNo - 1].substring(0, endColNo);</span>
-<span class="fc bfc" id="L358" title="All 2 branches covered.">        if (matchesComment(reliefPattern, linePart, endLineNo)) {</span>
-<span class="fc" id="L359">            allThroughComment = true;</span>
+<span class="fc" id="L401">        final String linePart = lines[endLineNo - 1].substring(0, endColNo);</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">        if (matchesComment(reliefPattern, linePart, endLineNo)) {</span>
+<span class="fc" id="L403">            allThroughComment = true;</span>
         }
         else {
             // Handle:
@@ -370,15 +414,15 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
             //    default:
             //    // FALLTHRU
             //    }
-<span class="fc" id="L373">            final int startLineNo = currentCase.getLineNo();</span>
-<span class="fc bfc" id="L374" title="All 2 branches covered.">            for (int i = endLineNo - 2; i &gt; startLineNo - 1; i--) {</span>
-<span class="fc bfc" id="L375" title="All 2 branches covered.">                if (!CommonUtil.isBlank(lines[i])) {</span>
-<span class="fc" id="L376">                    allThroughComment = matchesComment(reliefPattern, lines[i], i + 1);</span>
-<span class="fc" id="L377">                    break;</span>
+<span class="fc" id="L417">            final int startLineNo = currentCase.getLineNo();</span>
+<span class="fc bfc" id="L418" title="All 2 branches covered.">            for (int i = endLineNo - 2; i &gt; startLineNo - 1; i--) {</span>
+<span class="fc bfc" id="L419" title="All 2 branches covered.">                if (!CommonUtil.isBlank(lines[i])) {</span>
+<span class="fc" id="L420">                    allThroughComment = matchesComment(reliefPattern, lines[i], i + 1);</span>
+<span class="fc" id="L421">                    break;</span>
                 }
             }
         }
-<span class="fc" id="L381">        return allThroughComment;</span>
+<span class="fc" id="L425">        return allThroughComment;</span>
     }
 
     /**
@@ -390,14 +434,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return True if a match was found inside a comment.
      */
     private boolean matchesComment(Pattern pattern, String line, int lineNo) {
-<span class="fc" id="L393">        final Matcher matcher = pattern.matcher(line);</span>
-<span class="fc" id="L394">        boolean matches = false;</span>
+<span class="fc" id="L437">        final Matcher matcher = pattern.matcher(line);</span>
+<span class="fc" id="L438">        boolean matches = false;</span>
 
-<span class="fc bfc" id="L396" title="All 2 branches covered.">        if (matcher.find()) {</span>
-<span class="fc" id="L397">            matches = getFileContents().hasIntersectionWithComment(lineNo, matcher.start(),</span>
-<span class="fc" id="L398">                    lineNo, matcher.end());</span>
+<span class="fc bfc" id="L440" title="All 2 branches covered.">        if (matcher.find()) {</span>
+<span class="fc" id="L441">            matches = getFileContents().hasIntersectionWithComment(lineNo, matcher.start(),</span>
+<span class="fc" id="L442">                    lineNo, matcher.end());</span>
         }
-<span class="fc" id="L400">        return matches;</span>
+<span class="fc" id="L444">        return matches;</span>
     }
 
 }

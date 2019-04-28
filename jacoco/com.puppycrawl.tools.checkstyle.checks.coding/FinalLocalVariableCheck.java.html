@@ -36,21 +36,45 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
 /**
  * &lt;p&gt;
- * Ensures that local variables that never get their values changed,
- * must be declared final.
+ * Checks that local variables that never have their values changed are declared final.
+ * The check can be configured to also check that unchanged parameters are declared final.
  * &lt;/p&gt;
  * &lt;p&gt;
- * An example of how to configure the check to validate variable definition is:
+ * When configured to check parameters, the check ignores parameters of interface
+ * methods and abstract methods.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code validateEnhancedForLoopVariable} - Control whether to check
+ * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2&quot;&gt;
+ * enhanced for-loop&lt;/a&gt; variable.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code tokens} - tokens to check
+ * Default value is:
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#VARIABLE_DEF&quot;&gt;
+ * VARIABLE_DEF&lt;/a&gt;.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the check:
  * &lt;/p&gt;
  * &lt;pre&gt;
- * &amp;lt;module name=&quot;FinalLocalVariable&quot;&amp;gt;
- *     &amp;lt;property name=&quot;tokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
+ * &amp;lt;module name=&amp;quot;FinalLocalVariable&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check so that it checks local variables and parameters:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;FinalLocalVariable&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;VARIABLE_DEF,PARAMETER_DEF&amp;quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
  * By default, this Check skip final validation on
- *  &lt;a href = &quot;https://docs.oracle.com/javase/specs/jls/se8/html/jls-14.html#jls-14.14.2&quot;&gt;
- * Enhanced For-Loop&lt;/a&gt;
+ *  &lt;a href = &quot;https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2&quot;&gt;
+ * Enhanced For-Loop&lt;/a&gt;.
  * &lt;/p&gt;
  * &lt;p&gt;
  * Option 'validateEnhancedForLoopVariable' could be used to make Check to validate even variable
@@ -60,22 +84,48 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  * An example of how to configure the check so that it also validates enhanced For Loop Variable is:
  * &lt;/p&gt;
  * &lt;pre&gt;
- * &amp;lt;module name=&quot;FinalLocalVariable&quot;&amp;gt;
- *     &amp;lt;property name=&quot;tokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
- *     &amp;lt;property name=&quot;validateEnhancedForLoopVariable&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;module name=&amp;quot;FinalLocalVariable&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;VARIABLE_DEF&amp;quot;/&amp;gt;
+ *   &amp;lt;property name=&amp;quot;validateEnhancedForLoopVariable&amp;quot; value=&amp;quot;true&amp;quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;Example:&lt;/p&gt;
- * &lt;p&gt;
- * {@code
+ * &lt;pre&gt;
  * for (int number : myNumbers) { // violation
- *    System.out.println(number);
+ *   System.out.println(number);
  * }
- * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure check on local variables and parameters
+ * but do not validate loop variables:
  * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;FinalLocalVariable&amp;quot;&amp;gt;
+ *    &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;VARIABLE_DEF,PARAMETER_DEF&amp;quot;/&amp;gt;
+ *    &amp;lt;property name=&amp;quot;validateEnhancedForLoopVariable&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
+ *  &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyClass {
+ *   static int foo(int x, int y) { //violations, parameters should be final
+ *     return x+y;
+ *   }
+ *   public static void main (String []args) { //violation, parameters should be final
+ *     for (String i : args) {
+ *       System.out.println(i);
+ *     }
+ *     int result=foo(1,2); // violation
+ *   }
+ * }
+ * &lt;/pre&gt;
+ *
+ * @since 3.2
  */
 @FileStatefulCheck
-<span class="fc" id="L78">public class FinalLocalVariableCheck extends AbstractCheck {</span>
+<span class="fc" id="L128">public class FinalLocalVariableCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -86,7 +136,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     /**
      * Assign operator types.
      */
-<span class="fc" id="L89">    private static final int[] ASSIGN_OPERATOR_TYPES = {</span>
+<span class="fc" id="L139">    private static final int[] ASSIGN_OPERATOR_TYPES = {</span>
         TokenTypes.POST_INC,
         TokenTypes.POST_DEC,
         TokenTypes.ASSIGN,
@@ -108,43 +158,49 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     /**
      * Loop types.
      */
-<span class="fc" id="L111">    private static final int[] LOOP_TYPES = {</span>
+<span class="fc" id="L161">    private static final int[] LOOP_TYPES = {</span>
         TokenTypes.LITERAL_FOR,
         TokenTypes.LITERAL_WHILE,
         TokenTypes.LITERAL_DO,
     };
 
     /** Scope Deque. */
-<span class="fc" id="L118">    private final Deque&lt;ScopeData&gt; scopeStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L168">    private final Deque&lt;ScopeData&gt; scopeStack = new ArrayDeque&lt;&gt;();</span>
 
     /** Uninitialized variables of previous scope. */
-<span class="fc" id="L121">    private final Deque&lt;Deque&lt;DetailAST&gt;&gt; prevScopeUninitializedVariables =</span>
+<span class="fc" id="L171">    private final Deque&lt;Deque&lt;DetailAST&gt;&gt; prevScopeUninitializedVariables =</span>
             new ArrayDeque&lt;&gt;();
 
     /** Assigned variables of current scope. */
-<span class="fc" id="L125">    private final Deque&lt;Deque&lt;DetailAST&gt;&gt; currentScopeAssignedVariables =</span>
+<span class="fc" id="L175">    private final Deque&lt;Deque&lt;DetailAST&gt;&gt; currentScopeAssignedVariables =</span>
             new ArrayDeque&lt;&gt;();
 
-    /** Controls whether to check enhanced for-loop variable. */
+    /**
+     * Control whether to check
+     * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2&quot;&gt;
+     * enhanced for-loop&lt;/a&gt; variable.
+     */
     private boolean validateEnhancedForLoopVariable;
 
     static {
         // Array sorting for binary search
-<span class="fc" id="L133">        Arrays.sort(ASSIGN_OPERATOR_TYPES);</span>
-<span class="fc" id="L134">        Arrays.sort(LOOP_TYPES);</span>
-<span class="fc" id="L135">    }</span>
+<span class="fc" id="L187">        Arrays.sort(ASSIGN_OPERATOR_TYPES);</span>
+<span class="fc" id="L188">        Arrays.sort(LOOP_TYPES);</span>
+<span class="fc" id="L189">    }</span>
 
     /**
-     * Whether to check enhanced for-loop variable or not.
+     * Setter to control whether to check
+     * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2&quot;&gt;
+     * enhanced for-loop&lt;/a&gt; variable.
      * @param validateEnhancedForLoopVariable whether to check for-loop variable
      */
     public final void setValidateEnhancedForLoopVariable(boolean validateEnhancedForLoopVariable) {
-<span class="fc" id="L142">        this.validateEnhancedForLoopVariable = validateEnhancedForLoopVariable;</span>
-<span class="fc" id="L143">    }</span>
+<span class="fc" id="L198">        this.validateEnhancedForLoopVariable = validateEnhancedForLoopVariable;</span>
+<span class="fc" id="L199">    }</span>
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L147">        return new int[] {</span>
+<span class="fc" id="L203">        return new int[] {</span>
             TokenTypes.IDENT,
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
@@ -157,7 +213,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L160">        return new int[] {</span>
+<span class="fc" id="L216">        return new int[] {</span>
             TokenTypes.IDENT,
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
@@ -171,7 +227,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L174">        return new int[] {</span>
+<span class="fc" id="L230">        return new int[] {</span>
             TokenTypes.IDENT,
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
@@ -188,114 +244,114 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     // expressions to separate methods, but that will not increase readability.
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L191" title="All 7 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L247" title="All 7 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.OBJBLOCK:
             case TokenTypes.METHOD_DEF:
             case TokenTypes.CTOR_DEF:
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L196">                scopeStack.push(new ScopeData());</span>
-<span class="fc" id="L197">                break;</span>
+<span class="fc" id="L252">                scopeStack.push(new ScopeData());</span>
+<span class="fc" id="L253">                break;</span>
             case TokenTypes.SLIST:
-<span class="fc" id="L199">                currentScopeAssignedVariables.push(new ArrayDeque&lt;&gt;());</span>
-<span class="fc bfc" id="L200" title="All 2 branches covered.">                if (ast.getParent().getType() != TokenTypes.CASE_GROUP</span>
-<span class="fc" id="L201">                    || ast.getParent().getParent().findFirstToken(TokenTypes.CASE_GROUP)</span>
-<span class="fc bfc" id="L202" title="All 2 branches covered.">                    == ast.getParent()) {</span>
-<span class="fc" id="L203">                    storePrevScopeUninitializedVariableData();</span>
-<span class="fc" id="L204">                    scopeStack.push(new ScopeData());</span>
+<span class="fc" id="L255">                currentScopeAssignedVariables.push(new ArrayDeque&lt;&gt;());</span>
+<span class="fc bfc" id="L256" title="All 2 branches covered.">                if (ast.getParent().getType() != TokenTypes.CASE_GROUP</span>
+<span class="fc" id="L257">                    || ast.getParent().getParent().findFirstToken(TokenTypes.CASE_GROUP)</span>
+<span class="fc bfc" id="L258" title="All 2 branches covered.">                    == ast.getParent()) {</span>
+<span class="fc" id="L259">                    storePrevScopeUninitializedVariableData();</span>
+<span class="fc" id="L260">                    scopeStack.push(new ScopeData());</span>
                 }
                 break;
             case TokenTypes.PARAMETER_DEF:
-<span class="fc bfc" id="L208" title="All 2 branches covered.">                if (!isInLambda(ast)</span>
-<span class="fc" id="L209">                        &amp;&amp; ast.findFirstToken(TokenTypes.MODIFIERS)</span>
-<span class="fc bfc" id="L210" title="All 2 branches covered.">                            .findFirstToken(TokenTypes.FINAL) == null</span>
-<span class="fc bfc" id="L211" title="All 2 branches covered.">                        &amp;&amp; !isInAbstractOrNativeMethod(ast)</span>
-<span class="fc bfc" id="L212" title="All 2 branches covered.">                        &amp;&amp; !ScopeUtil.isInInterfaceBlock(ast)</span>
-<span class="fc bfc" id="L213" title="All 2 branches covered.">                        &amp;&amp; !isMultipleTypeCatch(ast)</span>
-<span class="fc bfc" id="L214" title="All 2 branches covered.">                        &amp;&amp; !CheckUtil.isReceiverParameter(ast)) {</span>
-<span class="fc" id="L215">                    insertParameter(ast);</span>
+<span class="fc bfc" id="L264" title="All 2 branches covered.">                if (!isInLambda(ast)</span>
+<span class="fc" id="L265">                        &amp;&amp; ast.findFirstToken(TokenTypes.MODIFIERS)</span>
+<span class="fc bfc" id="L266" title="All 2 branches covered.">                            .findFirstToken(TokenTypes.FINAL) == null</span>
+<span class="fc bfc" id="L267" title="All 2 branches covered.">                        &amp;&amp; !isInAbstractOrNativeMethod(ast)</span>
+<span class="fc bfc" id="L268" title="All 2 branches covered.">                        &amp;&amp; !ScopeUtil.isInInterfaceBlock(ast)</span>
+<span class="fc bfc" id="L269" title="All 2 branches covered.">                        &amp;&amp; !isMultipleTypeCatch(ast)</span>
+<span class="fc bfc" id="L270" title="All 2 branches covered.">                        &amp;&amp; !CheckUtil.isReceiverParameter(ast)) {</span>
+<span class="fc" id="L271">                    insertParameter(ast);</span>
                 }
                 break;
             case TokenTypes.VARIABLE_DEF:
-<span class="fc bfc" id="L219" title="All 2 branches covered.">                if (ast.getParent().getType() != TokenTypes.OBJBLOCK</span>
-<span class="fc" id="L220">                        &amp;&amp; ast.findFirstToken(TokenTypes.MODIFIERS)</span>
-<span class="fc bfc" id="L221" title="All 2 branches covered.">                            .findFirstToken(TokenTypes.FINAL) == null</span>
-<span class="fc bfc" id="L222" title="All 2 branches covered.">                        &amp;&amp; !isVariableInForInit(ast)</span>
-<span class="fc bfc" id="L223" title="All 2 branches covered.">                        &amp;&amp; shouldCheckEnhancedForLoopVariable(ast)) {</span>
-<span class="fc" id="L224">                    insertVariable(ast);</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">                if (ast.getParent().getType() != TokenTypes.OBJBLOCK</span>
+<span class="fc" id="L276">                        &amp;&amp; ast.findFirstToken(TokenTypes.MODIFIERS)</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">                            .findFirstToken(TokenTypes.FINAL) == null</span>
+<span class="fc bfc" id="L278" title="All 2 branches covered.">                        &amp;&amp; !isVariableInForInit(ast)</span>
+<span class="fc bfc" id="L279" title="All 2 branches covered.">                        &amp;&amp; shouldCheckEnhancedForLoopVariable(ast)) {</span>
+<span class="fc" id="L280">                    insertVariable(ast);</span>
                 }
                 break;
             case TokenTypes.IDENT:
-<span class="fc" id="L228">                final int parentType = ast.getParent().getType();</span>
-<span class="fc bfc" id="L229" title="All 4 branches covered.">                if (isAssignOperator(parentType) &amp;&amp; isFirstChild(ast)) {</span>
-<span class="fc" id="L230">                    final Optional&lt;FinalVariableCandidate&gt; candidate = getFinalCandidate(ast);</span>
-<span class="fc bfc" id="L231" title="All 2 branches covered.">                    if (candidate.isPresent()) {</span>
-<span class="fc" id="L232">                        determineAssignmentConditions(ast, candidate.get());</span>
-<span class="fc" id="L233">                        currentScopeAssignedVariables.peek().add(ast);</span>
+<span class="fc" id="L284">                final int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L285" title="All 4 branches covered.">                if (isAssignOperator(parentType) &amp;&amp; isFirstChild(ast)) {</span>
+<span class="fc" id="L286">                    final Optional&lt;FinalVariableCandidate&gt; candidate = getFinalCandidate(ast);</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">                    if (candidate.isPresent()) {</span>
+<span class="fc" id="L288">                        determineAssignmentConditions(ast, candidate.get());</span>
+<span class="fc" id="L289">                        currentScopeAssignedVariables.peek().add(ast);</span>
                     }
-<span class="fc" id="L235">                    removeFinalVariableCandidateFromStack(ast);</span>
-<span class="fc" id="L236">                }</span>
+<span class="fc" id="L291">                    removeFinalVariableCandidateFromStack(ast);</span>
+<span class="fc" id="L292">                }</span>
                 break;
             case TokenTypes.LITERAL_BREAK:
-<span class="fc" id="L239">                scopeStack.peek().containsBreak = true;</span>
-<span class="fc" id="L240">                break;</span>
+<span class="fc" id="L295">                scopeStack.peek().containsBreak = true;</span>
+<span class="fc" id="L296">                break;</span>
             default:
-<span class="fc" id="L242">                throw new IllegalStateException(&quot;Incorrect token type&quot;);</span>
+<span class="fc" id="L298">                throw new IllegalStateException(&quot;Incorrect token type&quot;);</span>
         }
-<span class="fc" id="L244">    }</span>
+<span class="fc" id="L300">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc" id="L248">        Map&lt;String, FinalVariableCandidate&gt; scope = null;</span>
-<span class="fc bfc" id="L249" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc" id="L304">        Map&lt;String, FinalVariableCandidate&gt; scope = null;</span>
+<span class="fc bfc" id="L305" title="All 3 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.OBJBLOCK:
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L254">                scope = scopeStack.pop().scope;</span>
-<span class="fc" id="L255">                break;</span>
+<span class="fc" id="L310">                scope = scopeStack.pop().scope;</span>
+<span class="fc" id="L311">                break;</span>
             case TokenTypes.SLIST:
                 // -@cs[MoveVariableInsideIf] assignment value is modified later so it can't be
                 // moved
-<span class="fc" id="L259">                final Deque&lt;DetailAST&gt; prevScopeUninitializedVariableData =</span>
-<span class="fc" id="L260">                    prevScopeUninitializedVariables.peek();</span>
-<span class="fc" id="L261">                boolean containsBreak = false;</span>
-<span class="fc bfc" id="L262" title="All 2 branches covered.">                if (ast.getParent().getType() != TokenTypes.CASE_GROUP</span>
-<span class="fc" id="L263">                    || findLastChildWhichContainsSpecifiedToken(ast.getParent().getParent(),</span>
-<span class="fc bfc" id="L264" title="All 2 branches covered.">                            TokenTypes.CASE_GROUP, TokenTypes.SLIST) == ast.getParent()) {</span>
-<span class="fc" id="L265">                    containsBreak = scopeStack.peek().containsBreak;</span>
-<span class="fc" id="L266">                    scope = scopeStack.pop().scope;</span>
-<span class="fc" id="L267">                    prevScopeUninitializedVariables.pop();</span>
+<span class="fc" id="L315">                final Deque&lt;DetailAST&gt; prevScopeUninitializedVariableData =</span>
+<span class="fc" id="L316">                    prevScopeUninitializedVariables.peek();</span>
+<span class="fc" id="L317">                boolean containsBreak = false;</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">                if (ast.getParent().getType() != TokenTypes.CASE_GROUP</span>
+<span class="fc" id="L319">                    || findLastChildWhichContainsSpecifiedToken(ast.getParent().getParent(),</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">                            TokenTypes.CASE_GROUP, TokenTypes.SLIST) == ast.getParent()) {</span>
+<span class="fc" id="L321">                    containsBreak = scopeStack.peek().containsBreak;</span>
+<span class="fc" id="L322">                    scope = scopeStack.pop().scope;</span>
+<span class="fc" id="L323">                    prevScopeUninitializedVariables.pop();</span>
                 }
-<span class="fc" id="L269">                final DetailAST parent = ast.getParent();</span>
-<span class="fc bfc" id="L270" title="All 4 branches covered.">                if (containsBreak || shouldUpdateUninitializedVariables(parent)) {</span>
-<span class="fc" id="L271">                    updateAllUninitializedVariables(prevScopeUninitializedVariableData);</span>
+<span class="fc" id="L325">                final DetailAST parent = ast.getParent();</span>
+<span class="fc bfc" id="L326" title="All 4 branches covered.">                if (containsBreak || shouldUpdateUninitializedVariables(parent)) {</span>
+<span class="fc" id="L327">                    updateAllUninitializedVariables(prevScopeUninitializedVariableData);</span>
                 }
-<span class="fc" id="L273">                updateCurrentScopeAssignedVariables();</span>
-<span class="fc" id="L274">                break;</span>
+<span class="fc" id="L329">                updateCurrentScopeAssignedVariables();</span>
+<span class="fc" id="L330">                break;</span>
             default:
                 // do nothing
         }
-<span class="fc bfc" id="L278" title="All 2 branches covered.">        if (scope != null) {</span>
-<span class="fc bfc" id="L279" title="All 2 branches covered.">            for (FinalVariableCandidate candidate : scope.values()) {</span>
-<span class="fc" id="L280">                final DetailAST ident = candidate.variableIdent;</span>
-<span class="fc" id="L281">                log(ident, MSG_KEY, ident.getText());</span>
-<span class="fc" id="L282">            }</span>
+<span class="fc bfc" id="L334" title="All 2 branches covered.">        if (scope != null) {</span>
+<span class="fc bfc" id="L335" title="All 2 branches covered.">            for (FinalVariableCandidate candidate : scope.values()) {</span>
+<span class="fc" id="L336">                final DetailAST ident = candidate.variableIdent;</span>
+<span class="fc" id="L337">                log(ident, MSG_KEY, ident.getText());</span>
+<span class="fc" id="L338">            }</span>
         }
-<span class="fc" id="L284">    }</span>
+<span class="fc" id="L340">    }</span>
 
     /**
      * Update assigned variables in a temporary stack.
      */
     private void updateCurrentScopeAssignedVariables() {
         // -@cs[MoveVariableInsideIf] assignment value is a modification call so it can't be moved
-<span class="fc" id="L291">        final Deque&lt;DetailAST&gt; poppedScopeAssignedVariableData =</span>
-<span class="fc" id="L292">                currentScopeAssignedVariables.pop();</span>
-<span class="fc" id="L293">        final Deque&lt;DetailAST&gt; currentScopeAssignedVariableData =</span>
-<span class="fc" id="L294">                currentScopeAssignedVariables.peek();</span>
-<span class="fc bfc" id="L295" title="All 2 branches covered.">        if (currentScopeAssignedVariableData != null) {</span>
-<span class="fc" id="L296">            currentScopeAssignedVariableData.addAll(poppedScopeAssignedVariableData);</span>
+<span class="fc" id="L347">        final Deque&lt;DetailAST&gt; poppedScopeAssignedVariableData =</span>
+<span class="fc" id="L348">                currentScopeAssignedVariables.pop();</span>
+<span class="fc" id="L349">        final Deque&lt;DetailAST&gt; currentScopeAssignedVariableData =</span>
+<span class="fc" id="L350">                currentScopeAssignedVariables.peek();</span>
+<span class="fc bfc" id="L351" title="All 2 branches covered.">        if (currentScopeAssignedVariableData != null) {</span>
+<span class="fc" id="L352">            currentScopeAssignedVariableData.addAll(poppedScopeAssignedVariableData);</span>
         }
-<span class="fc" id="L298">    }</span>
+<span class="fc" id="L354">    }</span>
 
     /**
      * Determines identifier assignment conditions (assigned or already assigned).
@@ -304,16 +360,16 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     private static void determineAssignmentConditions(DetailAST ident,
                                                       FinalVariableCandidate candidate) {
-<span class="fc bfc" id="L307" title="All 2 branches covered.">        if (candidate.assigned) {</span>
-<span class="fc bfc" id="L308" title="All 2 branches covered.">            if (!isInSpecificCodeBlock(ident, TokenTypes.LITERAL_ELSE)</span>
-<span class="fc bfc" id="L309" title="All 2 branches covered.">                    &amp;&amp; !isInSpecificCodeBlock(ident, TokenTypes.CASE_GROUP)) {</span>
-<span class="fc" id="L310">                candidate.alreadyAssigned = true;</span>
+<span class="fc bfc" id="L363" title="All 2 branches covered.">        if (candidate.assigned) {</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">            if (!isInSpecificCodeBlock(ident, TokenTypes.LITERAL_ELSE)</span>
+<span class="fc bfc" id="L365" title="All 2 branches covered.">                    &amp;&amp; !isInSpecificCodeBlock(ident, TokenTypes.CASE_GROUP)) {</span>
+<span class="fc" id="L366">                candidate.alreadyAssigned = true;</span>
             }
         }
         else {
-<span class="fc" id="L314">            candidate.assigned = true;</span>
+<span class="fc" id="L370">            candidate.assigned = true;</span>
         }
-<span class="fc" id="L316">    }</span>
+<span class="fc" id="L372">    }</span>
 
     /**
      * Checks whether the scope of a node is restricted to a specific code block.
@@ -322,15 +378,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if the scope of a node is restricted to a specific code block.
      */
     private static boolean isInSpecificCodeBlock(DetailAST node, int blockType) {
-<span class="fc" id="L325">        boolean returnValue = false;</span>
-<span class="fc bfc" id="L326" title="All 2 branches covered.">        for (DetailAST token = node.getParent(); token != null; token = token.getParent()) {</span>
-<span class="fc" id="L327">            final int type = token.getType();</span>
-<span class="fc bfc" id="L328" title="All 2 branches covered.">            if (type == blockType) {</span>
-<span class="fc" id="L329">                returnValue = true;</span>
-<span class="fc" id="L330">                break;</span>
+<span class="fc" id="L381">        boolean returnValue = false;</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">        for (DetailAST token = node.getParent(); token != null; token = token.getParent()) {</span>
+<span class="fc" id="L383">            final int type = token.getType();</span>
+<span class="fc bfc" id="L384" title="All 2 branches covered.">            if (type == blockType) {</span>
+<span class="fc" id="L385">                returnValue = true;</span>
+<span class="fc" id="L386">                break;</span>
             }
         }
-<span class="fc" id="L333">        return returnValue;</span>
+<span class="fc" id="L389">        return returnValue;</span>
     }
 
     /**
@@ -339,25 +395,25 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return Optional of {@link FinalVariableCandidate} for ast from scopeStack.
      */
     private Optional&lt;FinalVariableCandidate&gt; getFinalCandidate(DetailAST ast) {
-<span class="fc" id="L342">        Optional&lt;FinalVariableCandidate&gt; result = Optional.empty();</span>
-<span class="fc" id="L343">        final Iterator&lt;ScopeData&gt; iterator = scopeStack.descendingIterator();</span>
-<span class="fc bfc" id="L344" title="All 4 branches covered.">        while (iterator.hasNext() &amp;&amp; !result.isPresent()) {</span>
-<span class="fc" id="L345">            final ScopeData scopeData = iterator.next();</span>
-<span class="fc" id="L346">            result = scopeData.findFinalVariableCandidateForAst(ast);</span>
-<span class="fc" id="L347">        }</span>
-<span class="fc" id="L348">        return result;</span>
+<span class="fc" id="L398">        Optional&lt;FinalVariableCandidate&gt; result = Optional.empty();</span>
+<span class="fc" id="L399">        final Iterator&lt;ScopeData&gt; iterator = scopeStack.descendingIterator();</span>
+<span class="fc bfc" id="L400" title="All 4 branches covered.">        while (iterator.hasNext() &amp;&amp; !result.isPresent()) {</span>
+<span class="fc" id="L401">            final ScopeData scopeData = iterator.next();</span>
+<span class="fc" id="L402">            result = scopeData.findFinalVariableCandidateForAst(ast);</span>
+<span class="fc" id="L403">        }</span>
+<span class="fc" id="L404">        return result;</span>
     }
 
     /**
      * Store un-initialized variables in a temporary stack for future use.
      */
     private void storePrevScopeUninitializedVariableData() {
-<span class="fc" id="L355">        final ScopeData scopeData = scopeStack.peek();</span>
-<span class="fc" id="L356">        final Deque&lt;DetailAST&gt; prevScopeUninitializedVariableData =</span>
+<span class="fc" id="L411">        final ScopeData scopeData = scopeStack.peek();</span>
+<span class="fc" id="L412">        final Deque&lt;DetailAST&gt; prevScopeUninitializedVariableData =</span>
                 new ArrayDeque&lt;&gt;();
-<span class="fc" id="L358">        scopeData.uninitializedVariables.forEach(prevScopeUninitializedVariableData::push);</span>
-<span class="fc" id="L359">        prevScopeUninitializedVariables.push(prevScopeUninitializedVariableData);</span>
-<span class="fc" id="L360">    }</span>
+<span class="fc" id="L414">        scopeData.uninitializedVariables.forEach(prevScopeUninitializedVariableData::push);</span>
+<span class="fc" id="L415">        prevScopeUninitializedVariables.push(prevScopeUninitializedVariableData);</span>
+<span class="fc" id="L416">    }</span>
 
     /**
      * Update current scope data uninitialized variable according to the whole scope data.
@@ -368,41 +424,41 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     private void updateAllUninitializedVariables(
             Deque&lt;DetailAST&gt; prevScopeUninitializedVariableData) {
         // Check for only previous scope
-<span class="fc" id="L371">        updateUninitializedVariables(prevScopeUninitializedVariableData);</span>
+<span class="fc" id="L427">        updateUninitializedVariables(prevScopeUninitializedVariableData);</span>
         // Check for rest of the scope
-<span class="fc" id="L373">        prevScopeUninitializedVariables.forEach(this::updateUninitializedVariables);</span>
-<span class="fc" id="L374">    }</span>
+<span class="fc" id="L429">        prevScopeUninitializedVariables.forEach(this::updateUninitializedVariables);</span>
+<span class="fc" id="L430">    }</span>
 
     /**
      * Update current scope data uninitialized variable according to the specific scope data.
      * @param scopeUninitializedVariableData variable for specific stack of uninitialized variables
      */
     private void updateUninitializedVariables(Deque&lt;DetailAST&gt; scopeUninitializedVariableData) {
-<span class="fc" id="L381">        final Iterator&lt;DetailAST&gt; iterator = currentScopeAssignedVariables.peek().iterator();</span>
-<span class="fc bfc" id="L382" title="All 2 branches covered.">        while (iterator.hasNext()) {</span>
-<span class="fc" id="L383">            final DetailAST assignedVariable = iterator.next();</span>
-<span class="fc" id="L384">            boolean shouldRemove = false;</span>
-<span class="fc bfc" id="L385" title="All 2 branches covered.">            for (DetailAST variable : scopeUninitializedVariableData) {</span>
-<span class="fc bfc" id="L386" title="All 2 branches covered.">                for (ScopeData scopeData : scopeStack) {</span>
-<span class="fc" id="L387">                    final FinalVariableCandidate candidate =</span>
-<span class="fc" id="L388">                        scopeData.scope.get(variable.getText());</span>
-<span class="fc" id="L389">                    DetailAST storedVariable = null;</span>
-<span class="fc bfc" id="L390" title="All 2 branches covered.">                    if (candidate != null) {</span>
-<span class="fc" id="L391">                        storedVariable = candidate.variableIdent;</span>
+<span class="fc" id="L437">        final Iterator&lt;DetailAST&gt; iterator = currentScopeAssignedVariables.peek().iterator();</span>
+<span class="fc bfc" id="L438" title="All 2 branches covered.">        while (iterator.hasNext()) {</span>
+<span class="fc" id="L439">            final DetailAST assignedVariable = iterator.next();</span>
+<span class="fc" id="L440">            boolean shouldRemove = false;</span>
+<span class="fc bfc" id="L441" title="All 2 branches covered.">            for (DetailAST variable : scopeUninitializedVariableData) {</span>
+<span class="fc bfc" id="L442" title="All 2 branches covered.">                for (ScopeData scopeData : scopeStack) {</span>
+<span class="fc" id="L443">                    final FinalVariableCandidate candidate =</span>
+<span class="fc" id="L444">                        scopeData.scope.get(variable.getText());</span>
+<span class="fc" id="L445">                    DetailAST storedVariable = null;</span>
+<span class="fc bfc" id="L446" title="All 2 branches covered.">                    if (candidate != null) {</span>
+<span class="fc" id="L447">                        storedVariable = candidate.variableIdent;</span>
                     }
-<span class="fc bfc" id="L393" title="All 2 branches covered.">                    if (storedVariable != null</span>
-<span class="fc bfc" id="L394" title="All 2 branches covered.">                            &amp;&amp; isSameVariables(storedVariable, variable)</span>
-<span class="fc bfc" id="L395" title="All 2 branches covered.">                            &amp;&amp; isSameVariables(assignedVariable, variable)) {</span>
-<span class="fc" id="L396">                        scopeData.uninitializedVariables.push(variable);</span>
-<span class="fc" id="L397">                        shouldRemove = true;</span>
+<span class="fc bfc" id="L449" title="All 2 branches covered.">                    if (storedVariable != null</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">                            &amp;&amp; isSameVariables(storedVariable, variable)</span>
+<span class="fc bfc" id="L451" title="All 2 branches covered.">                            &amp;&amp; isSameVariables(assignedVariable, variable)) {</span>
+<span class="fc" id="L452">                        scopeData.uninitializedVariables.push(variable);</span>
+<span class="fc" id="L453">                        shouldRemove = true;</span>
                     }
-<span class="fc" id="L399">                }</span>
-<span class="fc" id="L400">            }</span>
-<span class="fc bfc" id="L401" title="All 2 branches covered.">            if (shouldRemove) {</span>
-<span class="fc" id="L402">                iterator.remove();</span>
+<span class="fc" id="L455">                }</span>
+<span class="fc" id="L456">            }</span>
+<span class="fc bfc" id="L457" title="All 2 branches covered.">            if (shouldRemove) {</span>
+<span class="fc" id="L458">                iterator.remove();</span>
             }
-<span class="fc" id="L404">        }</span>
-<span class="fc" id="L405">    }</span>
+<span class="fc" id="L460">        }</span>
+<span class="fc" id="L461">    }</span>
 
     /**
      * If token is LITERAL_IF and there is an {@code else} following or token is CASE_GROUP and
@@ -411,7 +467,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if should be updated, else false
      */
     private static boolean shouldUpdateUninitializedVariables(DetailAST ast) {
-<span class="fc bfc" id="L414" title="All 4 branches covered.">        return isIfTokenWithAnElseFollowing(ast) || isCaseTokenWithAnotherCaseFollowing(ast);</span>
+<span class="fc bfc" id="L470" title="All 4 branches covered.">        return isIfTokenWithAnElseFollowing(ast) || isCaseTokenWithAnotherCaseFollowing(ast);</span>
     }
 
     /**
@@ -420,8 +476,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if token is LITERAL_IF and there is an {@code else} following, else false
      */
     private static boolean isIfTokenWithAnElseFollowing(DetailAST ast) {
-<span class="fc bfc" id="L423" title="All 2 branches covered.">        return ast.getType() == TokenTypes.LITERAL_IF</span>
-<span class="fc bfc" id="L424" title="All 2 branches covered.">                &amp;&amp; ast.getLastChild().getType() == TokenTypes.LITERAL_ELSE;</span>
+<span class="fc bfc" id="L479" title="All 2 branches covered.">        return ast.getType() == TokenTypes.LITERAL_IF</span>
+<span class="fc bfc" id="L480" title="All 2 branches covered.">                &amp;&amp; ast.getLastChild().getType() == TokenTypes.LITERAL_ELSE;</span>
     }
 
     /**
@@ -430,9 +486,9 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if token is CASE_GROUP and there is another {@code case} following, else false
      */
     private static boolean isCaseTokenWithAnotherCaseFollowing(DetailAST ast) {
-<span class="fc bfc" id="L433" title="All 2 branches covered.">        return ast.getType() == TokenTypes.CASE_GROUP</span>
-<span class="fc bfc" id="L434" title="All 2 branches covered.">                &amp;&amp; findLastChildWhichContainsSpecifiedToken(</span>
-<span class="fc" id="L435">                        ast.getParent(), TokenTypes.CASE_GROUP, TokenTypes.SLIST) != ast;</span>
+<span class="fc bfc" id="L489" title="All 2 branches covered.">        return ast.getType() == TokenTypes.CASE_GROUP</span>
+<span class="fc bfc" id="L490" title="All 2 branches covered.">                &amp;&amp; findLastChildWhichContainsSpecifiedToken(</span>
+<span class="fc" id="L491">                        ast.getParent(), TokenTypes.CASE_GROUP, TokenTypes.SLIST) != ast;</span>
     }
 
     /**
@@ -445,15 +501,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     private static DetailAST findLastChildWhichContainsSpecifiedToken(DetailAST ast, int childType,
                                                               int containType) {
-<span class="fc" id="L448">        DetailAST returnValue = null;</span>
-<span class="fc bfc" id="L449" title="All 2 branches covered.">        for (DetailAST astIterator = ast.getFirstChild(); astIterator != null;</span>
-<span class="fc" id="L450">                astIterator = astIterator.getNextSibling()) {</span>
-<span class="fc bfc" id="L451" title="All 2 branches covered.">            if (astIterator.getType() == childType</span>
-<span class="fc bfc" id="L452" title="All 2 branches covered.">                    &amp;&amp; astIterator.findFirstToken(containType) != null) {</span>
-<span class="fc" id="L453">                returnValue = astIterator;</span>
+<span class="fc" id="L504">        DetailAST returnValue = null;</span>
+<span class="fc bfc" id="L505" title="All 2 branches covered.">        for (DetailAST astIterator = ast.getFirstChild(); astIterator != null;</span>
+<span class="fc" id="L506">                astIterator = astIterator.getNextSibling()) {</span>
+<span class="fc bfc" id="L507" title="All 2 branches covered.">            if (astIterator.getType() == childType</span>
+<span class="fc bfc" id="L508" title="All 2 branches covered.">                    &amp;&amp; astIterator.findFirstToken(containType) != null) {</span>
+<span class="fc" id="L509">                returnValue = astIterator;</span>
             }
         }
-<span class="fc" id="L456">        return returnValue;</span>
+<span class="fc" id="L512">        return returnValue;</span>
     }
 
     /**
@@ -462,8 +518,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if enhanced for-loop variable should be checked.
      */
     private boolean shouldCheckEnhancedForLoopVariable(DetailAST ast) {
-<span class="fc bfc" id="L465" title="All 2 branches covered.">        return validateEnhancedForLoopVariable</span>
-<span class="fc bfc" id="L466" title="All 2 branches covered.">                || ast.getParent().getType() != TokenTypes.FOR_EACH_CLAUSE;</span>
+<span class="fc bfc" id="L521" title="All 2 branches covered.">        return validateEnhancedForLoopVariable</span>
+<span class="fc bfc" id="L522" title="All 2 branches covered.">                || ast.getParent().getType() != TokenTypes.FOR_EACH_CLAUSE;</span>
     }
 
     /**
@@ -471,26 +527,26 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param ast the variable to insert.
      */
     private void insertParameter(DetailAST ast) {
-<span class="fc" id="L474">        final Map&lt;String, FinalVariableCandidate&gt; scope = scopeStack.peek().scope;</span>
-<span class="fc" id="L475">        final DetailAST astNode = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L476">        scope.put(astNode.getText(), new FinalVariableCandidate(astNode));</span>
-<span class="fc" id="L477">    }</span>
+<span class="fc" id="L530">        final Map&lt;String, FinalVariableCandidate&gt; scope = scopeStack.peek().scope;</span>
+<span class="fc" id="L531">        final DetailAST astNode = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L532">        scope.put(astNode.getText(), new FinalVariableCandidate(astNode));</span>
+<span class="fc" id="L533">    }</span>
 
     /**
      * Insert a variable at the topmost scope stack.
      * @param ast the variable to insert.
      */
     private void insertVariable(DetailAST ast) {
-<span class="fc" id="L484">        final Map&lt;String, FinalVariableCandidate&gt; scope = scopeStack.peek().scope;</span>
-<span class="fc" id="L485">        final DetailAST astNode = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L486">        final FinalVariableCandidate candidate = new FinalVariableCandidate(astNode);</span>
+<span class="fc" id="L540">        final Map&lt;String, FinalVariableCandidate&gt; scope = scopeStack.peek().scope;</span>
+<span class="fc" id="L541">        final DetailAST astNode = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L542">        final FinalVariableCandidate candidate = new FinalVariableCandidate(astNode);</span>
         // for-each variables are implicitly assigned
-<span class="fc bfc" id="L488" title="All 2 branches covered.">        candidate.assigned = ast.getParent().getType() == TokenTypes.FOR_EACH_CLAUSE;</span>
-<span class="fc" id="L489">        scope.put(astNode.getText(), candidate);</span>
-<span class="fc bfc" id="L490" title="All 2 branches covered.">        if (!isInitialized(astNode)) {</span>
-<span class="fc" id="L491">            scopeStack.peek().uninitializedVariables.add(astNode);</span>
+<span class="fc bfc" id="L544" title="All 2 branches covered.">        candidate.assigned = ast.getParent().getType() == TokenTypes.FOR_EACH_CLAUSE;</span>
+<span class="fc" id="L545">        scope.put(astNode.getText(), candidate);</span>
+<span class="fc bfc" id="L546" title="All 2 branches covered.">        if (!isInitialized(astNode)) {</span>
+<span class="fc" id="L547">            scopeStack.peek().uninitializedVariables.add(astNode);</span>
         }
-<span class="fc" id="L493">    }</span>
+<span class="fc" id="L549">    }</span>
 
     /**
      * Check if VARIABLE_DEF is initialized or not.
@@ -498,7 +554,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if initialized
      */
     private static boolean isInitialized(DetailAST ast) {
-<span class="fc bfc" id="L501" title="All 2 branches covered.">        return ast.getParent().getLastChild().getType() == TokenTypes.ASSIGN;</span>
+<span class="fc bfc" id="L557" title="All 2 branches covered.">        return ast.getParent().getLastChild().getType() == TokenTypes.ASSIGN;</span>
     }
 
     /**
@@ -507,7 +563,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if the ast is the first child of its parent.
      */
     private static boolean isFirstChild(DetailAST ast) {
-<span class="fc bfc" id="L510" title="All 2 branches covered.">        return ast.getPreviousSibling() == null;</span>
+<span class="fc bfc" id="L566" title="All 2 branches covered.">        return ast.getPreviousSibling() == null;</span>
     }
 
     /**
@@ -515,23 +571,23 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param ast variable to remove.
      */
     private void removeFinalVariableCandidateFromStack(DetailAST ast) {
-<span class="fc" id="L518">        final Iterator&lt;ScopeData&gt; iterator = scopeStack.descendingIterator();</span>
-<span class="fc bfc" id="L519" title="All 2 branches covered.">        while (iterator.hasNext()) {</span>
-<span class="fc" id="L520">            final ScopeData scopeData = iterator.next();</span>
-<span class="fc" id="L521">            final Map&lt;String, FinalVariableCandidate&gt; scope = scopeData.scope;</span>
-<span class="fc" id="L522">            final FinalVariableCandidate candidate = scope.get(ast.getText());</span>
-<span class="fc" id="L523">            DetailAST storedVariable = null;</span>
-<span class="fc bfc" id="L524" title="All 2 branches covered.">            if (candidate != null) {</span>
-<span class="fc" id="L525">                storedVariable = candidate.variableIdent;</span>
+<span class="fc" id="L574">        final Iterator&lt;ScopeData&gt; iterator = scopeStack.descendingIterator();</span>
+<span class="fc bfc" id="L575" title="All 2 branches covered.">        while (iterator.hasNext()) {</span>
+<span class="fc" id="L576">            final ScopeData scopeData = iterator.next();</span>
+<span class="fc" id="L577">            final Map&lt;String, FinalVariableCandidate&gt; scope = scopeData.scope;</span>
+<span class="fc" id="L578">            final FinalVariableCandidate candidate = scope.get(ast.getText());</span>
+<span class="fc" id="L579">            DetailAST storedVariable = null;</span>
+<span class="fc bfc" id="L580" title="All 2 branches covered.">            if (candidate != null) {</span>
+<span class="fc" id="L581">                storedVariable = candidate.variableIdent;</span>
             }
-<span class="fc bfc" id="L527" title="All 4 branches covered.">            if (storedVariable != null &amp;&amp; isSameVariables(storedVariable, ast)) {</span>
-<span class="fc bfc" id="L528" title="All 2 branches covered.">                if (shouldRemoveFinalVariableCandidate(scopeData, ast)) {</span>
-<span class="fc" id="L529">                    scope.remove(ast.getText());</span>
+<span class="fc bfc" id="L583" title="All 4 branches covered.">            if (storedVariable != null &amp;&amp; isSameVariables(storedVariable, ast)) {</span>
+<span class="fc bfc" id="L584" title="All 2 branches covered.">                if (shouldRemoveFinalVariableCandidate(scopeData, ast)) {</span>
+<span class="fc" id="L585">                    scope.remove(ast.getText());</span>
                 }
                 break;
             }
-<span class="fc" id="L533">        }</span>
-<span class="fc" id="L534">    }</span>
+<span class="fc" id="L589">        }</span>
+<span class="fc" id="L590">    }</span>
 
     /**
      * Check if given parameter definition is a multiple type catch.
@@ -539,8 +595,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if it is a multiple type catch, false otherwise
      */
     private static boolean isMultipleTypeCatch(DetailAST parameterDefAst) {
-<span class="fc" id="L542">        final DetailAST typeAst = parameterDefAst.findFirstToken(TokenTypes.TYPE);</span>
-<span class="fc bfc" id="L543" title="All 2 branches covered.">        return typeAst.getFirstChild().getType() == TokenTypes.BOR;</span>
+<span class="fc" id="L598">        final DetailAST typeAst = parameterDefAst.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc bfc" id="L599" title="All 2 branches covered.">        return typeAst.getFirstChild().getType() == TokenTypes.BOR;</span>
     }
 
     /**
@@ -551,21 +607,21 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true, if the variable should be removed.
      */
     private static boolean shouldRemoveFinalVariableCandidate(ScopeData scopeData, DetailAST ast) {
-<span class="fc" id="L554">        boolean shouldRemove = true;</span>
-<span class="fc bfc" id="L555" title="All 2 branches covered.">        for (DetailAST variable : scopeData.uninitializedVariables) {</span>
-<span class="fc bfc" id="L556" title="All 2 branches covered.">            if (variable.getText().equals(ast.getText())) {</span>
+<span class="fc" id="L610">        boolean shouldRemove = true;</span>
+<span class="fc bfc" id="L611" title="All 2 branches covered.">        for (DetailAST variable : scopeData.uninitializedVariables) {</span>
+<span class="fc bfc" id="L612" title="All 2 branches covered.">            if (variable.getText().equals(ast.getText())) {</span>
                 // if the variable is declared outside the loop and initialized inside
                 // the loop, then it cannot be declared final, as it can be initialized
                 // more than once in this case
-<span class="fc bfc" id="L560" title="All 4 branches covered.">                if (isInTheSameLoop(variable, ast) || !isUseOfExternalVariableInsideLoop(ast)) {</span>
-<span class="fc" id="L561">                    final FinalVariableCandidate candidate = scopeData.scope.get(ast.getText());</span>
-<span class="fc" id="L562">                    shouldRemove = candidate.alreadyAssigned;</span>
+<span class="fc bfc" id="L616" title="All 4 branches covered.">                if (isInTheSameLoop(variable, ast) || !isUseOfExternalVariableInsideLoop(ast)) {</span>
+<span class="fc" id="L617">                    final FinalVariableCandidate candidate = scopeData.scope.get(ast.getText());</span>
+<span class="fc" id="L618">                    shouldRemove = candidate.alreadyAssigned;</span>
                 }
-<span class="fc" id="L564">                scopeData.uninitializedVariables.remove(variable);</span>
-<span class="fc" id="L565">                break;</span>
+<span class="fc" id="L620">                scopeData.uninitializedVariables.remove(variable);</span>
+<span class="fc" id="L621">                break;</span>
             }
-<span class="fc" id="L567">        }</span>
-<span class="fc" id="L568">        return shouldRemove;</span>
+<span class="fc" id="L623">        }</span>
+<span class="fc" id="L624">        return shouldRemove;</span>
     }
 
     /**
@@ -583,12 +639,12 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if a variable which is declared outside loop is used inside loop.
      */
     private static boolean isUseOfExternalVariableInsideLoop(DetailAST variable) {
-<span class="fc" id="L586">        DetailAST loop2 = variable.getParent();</span>
-<span class="fc bfc" id="L587" title="All 2 branches covered.">        while (loop2 != null</span>
-<span class="fc bfc" id="L588" title="All 2 branches covered.">            &amp;&amp; !isLoopAst(loop2.getType())) {</span>
-<span class="fc" id="L589">            loop2 = loop2.getParent();</span>
+<span class="fc" id="L642">        DetailAST loop2 = variable.getParent();</span>
+<span class="fc bfc" id="L643" title="All 2 branches covered.">        while (loop2 != null</span>
+<span class="fc bfc" id="L644" title="All 2 branches covered.">            &amp;&amp; !isLoopAst(loop2.getType())) {</span>
+<span class="fc" id="L645">            loop2 = loop2.getParent();</span>
         }
-<span class="fc bfc" id="L591" title="All 2 branches covered.">        return loop2 != null;</span>
+<span class="fc bfc" id="L647" title="All 2 branches covered.">        return loop2 != null;</span>
     }
 
     /**
@@ -597,7 +653,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true is token type is in arithmetic operator
      */
     private static boolean isAssignOperator(int parentType) {
-<span class="fc bfc" id="L600" title="All 2 branches covered.">        return Arrays.binarySearch(ASSIGN_OPERATOR_TYPES, parentType) &gt;= 0;</span>
+<span class="fc bfc" id="L656" title="All 2 branches covered.">        return Arrays.binarySearch(ASSIGN_OPERATOR_TYPES, parentType) &gt;= 0;</span>
     }
 
     /**
@@ -613,7 +669,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if variable is defined in {@link TokenTypes#FOR_INIT for-loop init}
      */
     private static boolean isVariableInForInit(DetailAST variableDef) {
-<span class="fc bfc" id="L616" title="All 2 branches covered.">        return variableDef.getParent().getType() == TokenTypes.FOR_INIT;</span>
+<span class="fc bfc" id="L672" title="All 2 branches covered.">        return variableDef.getParent().getType() == TokenTypes.FOR_INIT;</span>
     }
 
     /**
@@ -622,18 +678,18 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if ast is a descendant of an abstract or native method.
      */
     private static boolean isInAbstractOrNativeMethod(DetailAST ast) {
-<span class="fc" id="L625">        boolean abstractOrNative = false;</span>
-<span class="fc" id="L626">        DetailAST parent = ast.getParent();</span>
-<span class="fc bfc" id="L627" title="All 4 branches covered.">        while (parent != null &amp;&amp; !abstractOrNative) {</span>
-<span class="fc bfc" id="L628" title="All 2 branches covered.">            if (parent.getType() == TokenTypes.METHOD_DEF) {</span>
-<span class="fc" id="L629">                final DetailAST modifiers =</span>
-<span class="fc" id="L630">                    parent.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L631" title="All 2 branches covered.">                abstractOrNative = modifiers.findFirstToken(TokenTypes.ABSTRACT) != null</span>
-<span class="fc bfc" id="L632" title="All 2 branches covered.">                        || modifiers.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;</span>
+<span class="fc" id="L681">        boolean abstractOrNative = false;</span>
+<span class="fc" id="L682">        DetailAST parent = ast.getParent();</span>
+<span class="fc bfc" id="L683" title="All 4 branches covered.">        while (parent != null &amp;&amp; !abstractOrNative) {</span>
+<span class="fc bfc" id="L684" title="All 2 branches covered.">            if (parent.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="fc" id="L685">                final DetailAST modifiers =</span>
+<span class="fc" id="L686">                    parent.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L687" title="All 2 branches covered.">                abstractOrNative = modifiers.findFirstToken(TokenTypes.ABSTRACT) != null</span>
+<span class="fc bfc" id="L688" title="All 2 branches covered.">                        || modifiers.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;</span>
             }
-<span class="fc" id="L634">            parent = parent.getParent();</span>
+<span class="fc" id="L690">            parent = parent.getParent();</span>
         }
-<span class="fc" id="L636">        return abstractOrNative;</span>
+<span class="fc" id="L692">        return abstractOrNative;</span>
     }
 
     /**
@@ -642,7 +698,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if current param is lambda's param.
      */
     private static boolean isInLambda(DetailAST paramDef) {
-<span class="fc bfc" id="L645" title="All 2 branches covered.">        return paramDef.getParent().getParent().getType() == TokenTypes.LAMBDA;</span>
+<span class="fc bfc" id="L701" title="All 2 branches covered.">        return paramDef.getParent().getParent().getType() == TokenTypes.LAMBDA;</span>
     }
 
     /**
@@ -651,15 +707,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return ast The Class or Constructor or Method in which it is defined.
      */
     private static DetailAST findFirstUpperNamedBlock(DetailAST ast) {
-<span class="fc" id="L654">        DetailAST astTraverse = ast;</span>
-<span class="fc bfc" id="L655" title="All 2 branches covered.">        while (astTraverse.getType() != TokenTypes.METHOD_DEF</span>
-<span class="fc bfc" id="L656" title="All 2 branches covered.">                &amp;&amp; astTraverse.getType() != TokenTypes.CLASS_DEF</span>
-<span class="fc bfc" id="L657" title="All 2 branches covered.">                &amp;&amp; astTraverse.getType() != TokenTypes.ENUM_DEF</span>
-<span class="fc bfc" id="L658" title="All 2 branches covered.">                &amp;&amp; astTraverse.getType() != TokenTypes.CTOR_DEF</span>
-<span class="fc bfc" id="L659" title="All 2 branches covered.">                &amp;&amp; !ScopeUtil.isClassFieldDef(astTraverse)) {</span>
-<span class="fc" id="L660">            astTraverse = astTraverse.getParent();</span>
+<span class="fc" id="L710">        DetailAST astTraverse = ast;</span>
+<span class="fc bfc" id="L711" title="All 2 branches covered.">        while (astTraverse.getType() != TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L712" title="All 2 branches covered.">                &amp;&amp; astTraverse.getType() != TokenTypes.CLASS_DEF</span>
+<span class="fc bfc" id="L713" title="All 2 branches covered.">                &amp;&amp; astTraverse.getType() != TokenTypes.ENUM_DEF</span>
+<span class="fc bfc" id="L714" title="All 2 branches covered.">                &amp;&amp; astTraverse.getType() != TokenTypes.CTOR_DEF</span>
+<span class="fc bfc" id="L715" title="All 2 branches covered.">                &amp;&amp; !ScopeUtil.isClassFieldDef(astTraverse)) {</span>
+<span class="fc" id="L716">            astTraverse = astTraverse.getParent();</span>
         }
-<span class="fc" id="L662">        return astTraverse;</span>
+<span class="fc" id="L718">        return astTraverse;</span>
     }
 
     /**
@@ -669,11 +725,11 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if both the variables are same, otherwise false
      */
     private static boolean isSameVariables(DetailAST ast1, DetailAST ast2) {
-<span class="fc" id="L672">        final DetailAST classOrMethodOfAst1 =</span>
-<span class="fc" id="L673">            findFirstUpperNamedBlock(ast1);</span>
-<span class="fc" id="L674">        final DetailAST classOrMethodOfAst2 =</span>
-<span class="fc" id="L675">            findFirstUpperNamedBlock(ast2);</span>
-<span class="fc bfc" id="L676" title="All 4 branches covered.">        return classOrMethodOfAst1 == classOrMethodOfAst2 &amp;&amp; ast1.getText().equals(ast2.getText());</span>
+<span class="fc" id="L728">        final DetailAST classOrMethodOfAst1 =</span>
+<span class="fc" id="L729">            findFirstUpperNamedBlock(ast1);</span>
+<span class="fc" id="L730">        final DetailAST classOrMethodOfAst2 =</span>
+<span class="fc" id="L731">            findFirstUpperNamedBlock(ast2);</span>
+<span class="fc bfc" id="L732" title="All 4 branches covered.">        return classOrMethodOfAst1 == classOrMethodOfAst2 &amp;&amp; ast1.getText().equals(ast2.getText());</span>
     }
 
     /**
@@ -683,15 +739,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if both the variables are in the same loop.
      */
     private static boolean isInTheSameLoop(DetailAST ast1, DetailAST ast2) {
-<span class="fc" id="L686">        DetailAST loop1 = ast1.getParent();</span>
-<span class="fc bfc" id="L687" title="All 4 branches covered.">        while (loop1 != null &amp;&amp; !isLoopAst(loop1.getType())) {</span>
-<span class="fc" id="L688">            loop1 = loop1.getParent();</span>
+<span class="fc" id="L742">        DetailAST loop1 = ast1.getParent();</span>
+<span class="fc bfc" id="L743" title="All 4 branches covered.">        while (loop1 != null &amp;&amp; !isLoopAst(loop1.getType())) {</span>
+<span class="fc" id="L744">            loop1 = loop1.getParent();</span>
         }
-<span class="fc" id="L690">        DetailAST loop2 = ast2.getParent();</span>
-<span class="fc bfc" id="L691" title="All 4 branches covered.">        while (loop2 != null &amp;&amp; !isLoopAst(loop2.getType())) {</span>
-<span class="fc" id="L692">            loop2 = loop2.getParent();</span>
+<span class="fc" id="L746">        DetailAST loop2 = ast2.getParent();</span>
+<span class="fc bfc" id="L747" title="All 4 branches covered.">        while (loop2 != null &amp;&amp; !isLoopAst(loop2.getType())) {</span>
+<span class="fc" id="L748">            loop2 = loop2.getParent();</span>
         }
-<span class="fc bfc" id="L694" title="All 4 branches covered.">        return loop1 != null &amp;&amp; loop1 == loop2;</span>
+<span class="fc bfc" id="L750" title="All 4 branches covered.">        return loop1 != null &amp;&amp; loop1 == loop2;</span>
     }
 
     /**
@@ -700,19 +756,19 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if the ast is a loop.
      */
     private static boolean isLoopAst(int ast) {
-<span class="fc bfc" id="L703" title="All 2 branches covered.">        return Arrays.binarySearch(LOOP_TYPES, ast) &gt;= 0;</span>
+<span class="fc bfc" id="L759" title="All 2 branches covered.">        return Arrays.binarySearch(LOOP_TYPES, ast) &gt;= 0;</span>
     }
 
     /**
      * Holder for the scope data.
      */
-<span class="fc" id="L709">    private static class ScopeData {</span>
+<span class="fc" id="L765">    private static class ScopeData {</span>
 
         /** Contains variable definitions. */
-<span class="fc" id="L712">        private final Map&lt;String, FinalVariableCandidate&gt; scope = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L768">        private final Map&lt;String, FinalVariableCandidate&gt; scope = new HashMap&lt;&gt;();</span>
 
         /** Contains definitions of uninitialized variables. */
-<span class="fc" id="L715">        private final Deque&lt;DetailAST&gt; uninitializedVariables = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L771">        private final Deque&lt;DetailAST&gt; uninitializedVariables = new ArrayDeque&lt;&gt;();</span>
 
         /** Whether there is a {@code break} in the scope. */
         private boolean containsBreak;
@@ -723,17 +779,17 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return Optional of {@link FinalVariableCandidate}.
          */
         public Optional&lt;FinalVariableCandidate&gt; findFinalVariableCandidateForAst(DetailAST ast) {
-<span class="fc" id="L726">            Optional&lt;FinalVariableCandidate&gt; result = Optional.empty();</span>
-<span class="fc" id="L727">            DetailAST storedVariable = null;</span>
-<span class="fc" id="L728">            final Optional&lt;FinalVariableCandidate&gt; candidate =</span>
-<span class="fc" id="L729">                Optional.ofNullable(scope.get(ast.getText()));</span>
-<span class="fc bfc" id="L730" title="All 2 branches covered.">            if (candidate.isPresent()) {</span>
-<span class="fc" id="L731">                storedVariable = candidate.get().variableIdent;</span>
+<span class="fc" id="L782">            Optional&lt;FinalVariableCandidate&gt; result = Optional.empty();</span>
+<span class="fc" id="L783">            DetailAST storedVariable = null;</span>
+<span class="fc" id="L784">            final Optional&lt;FinalVariableCandidate&gt; candidate =</span>
+<span class="fc" id="L785">                Optional.ofNullable(scope.get(ast.getText()));</span>
+<span class="fc bfc" id="L786" title="All 2 branches covered.">            if (candidate.isPresent()) {</span>
+<span class="fc" id="L787">                storedVariable = candidate.get().variableIdent;</span>
             }
-<span class="fc bfc" id="L733" title="All 4 branches covered.">            if (storedVariable != null &amp;&amp; isSameVariables(storedVariable, ast)) {</span>
-<span class="fc" id="L734">                result = candidate;</span>
+<span class="fc bfc" id="L789" title="All 4 branches covered.">            if (storedVariable != null &amp;&amp; isSameVariables(storedVariable, ast)) {</span>
+<span class="fc" id="L790">                result = candidate;</span>
             }
-<span class="fc" id="L736">            return result;</span>
+<span class="fc" id="L792">            return result;</span>
         }
 
     }
@@ -752,9 +808,9 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * Creates new instance.
          * @param variableIdent variable identifier.
          */
-<span class="fc" id="L755">        /* package */ FinalVariableCandidate(DetailAST variableIdent) {</span>
-<span class="fc" id="L756">            this.variableIdent = variableIdent;</span>
-<span class="fc" id="L757">        }</span>
+<span class="fc" id="L811">        /* package */ FinalVariableCandidate(DetailAST variableIdent) {</span>
+<span class="fc" id="L812">            this.variableIdent = variableIdent;</span>
+<span class="fc" id="L813">        }</span>
 
     }
 
