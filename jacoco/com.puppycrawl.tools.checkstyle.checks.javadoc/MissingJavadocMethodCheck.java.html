@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MissingJavadocMethodCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.javadoc</a> &gt; <span class="el_source">MissingJavadocMethodCheck.java</span></div><h1>MissingJavadocMethodCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2019 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.javadoc;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FileContents;
+import com.puppycrawl.tools.checkstyle.api.Scope;
+import com.puppycrawl.tools.checkstyle.api.TextBlock;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.AnnotationUtil;
+import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks for missing Javadoc comments for a method or constructor. The scope to verify is
+ * specified using the {@code Scope} class and defaults to {@code Scope.PUBLIC}. To verify
+ * another scope, set property scope to a different &lt;a href=&quot;property_types.html#scope&quot;&gt;scope&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Javadoc is not required on a method that is tagged with the {@code @Override} annotation.
+ * However under Java 5 it is not possible to mark a method required for an interface (this
+ * was &lt;i&gt;corrected&lt;/i&gt; under Java 6). Hence Checkstyle supports using the convention of using
+ * a single {@code {@inheritDoc}} tag instead of all the other tags.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * For getters and setters for the property {@code allowMissingPropertyJavadoc}, the methods must
+ * match exactly the structures below.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public void setNumber(final int number)
+ * {
+ *     mNumber = number;
+ * }
+ *
+ * public int getNumber()
+ * {
+ *     return mNumber;
+ * }
+ *
+ * public boolean isSomething()
+ * {
+ *     return false;
+ * }
+ * &lt;/pre&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code minLineCount} - Control the minimal amount of lines in method to allow no
+ * documentation. Default value is {@code -1}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code allowedAnnotations} - Configure the list of annotations that allow missed
+ * documentation. Default value is {@code Override}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code scope} - Specify the visibility scope where Javadoc comments are checked.
+ * Default value is {@code public}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code excludeScope} - Specify the visibility scope where Javadoc comments are
+ * not checked. Default value is {@code null}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code allowMissingPropertyJavadoc} - Control whether to allow missing Javadoc on
+ * accessor methods for properties (setters and getters). Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code ignoreMethodNamesRegex} - ignore method whose names are matching specified
+ * regex. Default value is {@code null}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code tokens} - tokens to check Default value is:
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#METHOD_DEF&quot;&gt;METHOD_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#CTOR_DEF&quot;&gt;CTOR_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ANNOTATION_FIELD_DEF&quot;&gt;ANNOTATION_FIELD_DEF&lt;/a&gt;.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the default check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MissingJavadocMethod&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check for {@code private} scope:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MissingJavadocMethod&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;scope&quot; value=&quot;private&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check for methods which are in {@code private}, but not in {@code protected}
+ * scope:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MissingJavadocMethod&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;scope&quot; value=&quot;private&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;excludeScope&quot; value=&quot;protected&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check for ignoring methods named {@code foo(),foo1(),foo2()}, etc.:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MissingJavadocMethod&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;ignoreMethodNamesRegex&quot; value=&quot;^foo.*$&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * @since 8.21
+ */
+@FileStatefulCheck
+<span class="fc" id="L139">public class MissingJavadocMethodCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_JAVADOC_MISSING = &quot;javadoc.missing&quot;;
+
+    /** Default value of minimal amount of lines in method to allow no documentation.*/
+    private static final int DEFAULT_MIN_LINE_COUNT = -1;
+
+    /** Specify the visibility scope where Javadoc comments are checked. */
+<span class="fc" id="L151">    private Scope scope = Scope.PUBLIC;</span>
+
+    /** Specify the visibility scope where Javadoc comments are not checked. */
+    private Scope excludeScope;
+
+    /** Control the minimal amount of lines in method to allow no documentation.*/
+<span class="fc" id="L157">    private int minLineCount = DEFAULT_MIN_LINE_COUNT;</span>
+
+    /**
+     * Control whether to allow missing Javadoc on accessor methods for
+     * properties (setters and getters).
+     */
+    private boolean allowMissingPropertyJavadoc;
+
+    /** Ignore method whose names are matching specified regex. */
+    private Pattern ignoreMethodNamesRegex;
+
+    /** Configure the list of annotations that allow missed documentation. */
+<span class="fc" id="L169">    private List&lt;String&gt; allowedAnnotations = Collections.singletonList(&quot;Override&quot;);</span>
+
+    /**
+     * Setter to configure the list of annotations that allow missed documentation.
+     * @param userAnnotations user's value.
+     */
+    public void setAllowedAnnotations(String... userAnnotations) {
+<span class="fc" id="L176">        allowedAnnotations = Arrays.asList(userAnnotations);</span>
+<span class="fc" id="L177">    }</span>
+
+    /**
+     * Setter to ignore method whose names are matching specified regex.
+     * @param pattern a pattern.
+     */
+    public void setIgnoreMethodNamesRegex(Pattern pattern) {
+<span class="fc" id="L184">        ignoreMethodNamesRegex = pattern;</span>
+<span class="fc" id="L185">    }</span>
+
+    /**
+     * Setter to control the minimal amount of lines in method to allow no documentation.
+     * @param value user's value.
+     */
+    public void setMinLineCount(int value) {
+<span class="fc" id="L192">        minLineCount = value;</span>
+<span class="fc" id="L193">    }</span>
+
+    /**
+     * Setter to control whether to allow missing Javadoc on accessor methods for properties
+     * (setters and getters).
+     *
+     * @param flag a {@code Boolean} value
+     */
+    public void setAllowMissingPropertyJavadoc(final boolean flag) {
+<span class="fc" id="L202">        allowMissingPropertyJavadoc = flag;</span>
+<span class="fc" id="L203">    }</span>
+
+    /**
+     * Setter to specify the visibility scope where Javadoc comments are checked.
+     *
+     * @param scope a scope.
+     */
+    public void setScope(Scope scope) {
+<span class="fc" id="L211">        this.scope = scope;</span>
+<span class="fc" id="L212">    }</span>
+
+    /**
+     * Setter to specify the visibility scope where Javadoc comments are not checked.
+     *
+     * @param excludeScope a scope.
+     */
+    public void setExcludeScope(Scope excludeScope) {
+<span class="fc" id="L220">        this.excludeScope = excludeScope;</span>
+<span class="fc" id="L221">    }</span>
+
+    @Override
+    public final int[] getRequiredTokens() {
+<span class="fc" id="L225">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L230">        return getAcceptableTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L235">        return new int[] {</span>
+            TokenTypes.METHOD_DEF,
+            TokenTypes.CTOR_DEF,
+            TokenTypes.ANNOTATION_FIELD_DEF,
+        };
+    }
+
+    @Override
+    public final void visitToken(DetailAST ast) {
+<span class="fc" id="L244">        final Scope theScope = calculateScope(ast);</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">        if (shouldCheck(ast, theScope)) {</span>
+<span class="fc" id="L246">            final FileContents contents = getFileContents();</span>
+<span class="fc" id="L247">            final TextBlock textBlock = contents.getJavadocBefore(ast.getLineNo());</span>
+
+<span class="fc bfc" id="L249" title="All 4 branches covered.">            if (textBlock == null &amp;&amp; !isMissingJavadocAllowed(ast)) {</span>
+<span class="fc" id="L250">                log(ast, MSG_JAVADOC_MISSING);</span>
+            }
+        }
+<span class="fc" id="L253">    }</span>
+
+    /**
+     * Some javadoc.
+     * @param methodDef Some javadoc.
+     * @return Some javadoc.
+     */
+    private static int getMethodsNumberOfLine(DetailAST methodDef) {
+        final int numberOfLines;
+<span class="fc" id="L262">        final DetailAST lcurly = methodDef.getLastChild();</span>
+<span class="fc" id="L263">        final DetailAST rcurly = lcurly.getLastChild();</span>
+
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        if (lcurly.getFirstChild() == rcurly) {</span>
+<span class="fc" id="L266">            numberOfLines = 1;</span>
+        }
+        else {
+<span class="fc" id="L269">            numberOfLines = rcurly.getLineNo() - lcurly.getLineNo() - 1;</span>
+        }
+<span class="fc" id="L271">        return numberOfLines;</span>
+    }
+
+    /**
+     * Checks if a missing Javadoc is allowed by the check's configuration.
+     * @param ast the tree node for the method or constructor.
+     * @return True if this method or constructor doesn't need Javadoc.
+     */
+    private boolean isMissingJavadocAllowed(final DetailAST ast) {
+<span class="fc bfc" id="L280" title="All 2 branches covered.">        return allowMissingPropertyJavadoc</span>
+<span class="fc bfc" id="L281" title="All 4 branches covered.">                &amp;&amp; (CheckUtil.isSetterMethod(ast) || CheckUtil.isGetterMethod(ast))</span>
+<span class="fc bfc" id="L282" title="All 2 branches covered.">            || matchesSkipRegex(ast)</span>
+<span class="fc bfc" id="L283" title="All 2 branches covered.">            || isContentsAllowMissingJavadoc(ast);</span>
+    }
+
+    /**
+     * Checks if the Javadoc can be missing if the method or constructor is
+     * below the minimum line count or has a special annotation.
+     *
+     * @param ast the tree node for the method or constructor.
+     * @return True if this method or constructor doesn't need Javadoc.
+     */
+    private boolean isContentsAllowMissingJavadoc(DetailAST ast) {
+<span class="fc bfc" id="L294" title="All 4 branches covered.">        return (ast.getType() == TokenTypes.METHOD_DEF || ast.getType() == TokenTypes.CTOR_DEF)</span>
+<span class="fc bfc" id="L295" title="All 2 branches covered.">                &amp;&amp; (getMethodsNumberOfLine(ast) &lt;= minLineCount</span>
+<span class="fc bfc" id="L296" title="All 2 branches covered.">                    || AnnotationUtil.containsAnnotation(ast, allowedAnnotations));</span>
+    }
+
+    /**
+     * Checks if the given method name matches the regex. In that case
+     * we skip enforcement of javadoc for this method
+     * @param methodDef {@link TokenTypes#METHOD_DEF METHOD_DEF}
+     * @return true if given method name matches the regex.
+     */
+    private boolean matchesSkipRegex(DetailAST methodDef) {
+<span class="fc" id="L306">        boolean result = false;</span>
+<span class="fc bfc" id="L307" title="All 2 branches covered.">        if (ignoreMethodNamesRegex != null) {</span>
+<span class="fc" id="L308">            final DetailAST ident = methodDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L309">            final String methodName = ident.getText();</span>
+
+<span class="fc" id="L311">            final Matcher matcher = ignoreMethodNamesRegex.matcher(methodName);</span>
+<span class="fc bfc" id="L312" title="All 2 branches covered.">            if (matcher.matches()) {</span>
+<span class="fc" id="L313">                result = true;</span>
+            }
+        }
+<span class="fc" id="L316">        return result;</span>
+    }
+
+    /**
+     * Whether we should check this node.
+     *
+     * @param ast a given node.
+     * @param nodeScope the scope of the node.
+     * @return whether we should check a given node.
+     */
+    private boolean shouldCheck(final DetailAST ast, final Scope nodeScope) {
+<span class="fc" id="L327">        final Scope surroundingScope = ScopeUtil.getSurroundingScope(ast);</span>
+
+<span class="fc bfc" id="L329" title="All 6 branches covered.">        return (excludeScope == null</span>
+                || nodeScope != excludeScope
+                &amp;&amp; surroundingScope != excludeScope)
+<span class="fc bfc" id="L332" title="All 2 branches covered.">            &amp;&amp; nodeScope.isIn(scope)</span>
+<span class="fc bfc" id="L333" title="All 2 branches covered.">            &amp;&amp; surroundingScope.isIn(scope);</span>
+    }
+
+    /**
+     * Returns the scope for the method/constructor at the specified AST. If
+     * the method is in an interface or annotation block, the scope is assumed
+     * to be public.
+     *
+     * @param ast the token of the method/constructor
+     * @return the scope of the method/constructor
+     */
+    private static Scope calculateScope(final DetailAST ast) {
+        final Scope scope;
+
+<span class="fc bfc" id="L347" title="All 2 branches covered.">        if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
+<span class="fc" id="L348">            scope = Scope.PUBLIC;</span>
+        }
+        else {
+<span class="fc" id="L351">            final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L352">            scope = ScopeUtil.getScopeFromMods(mods);</span>
+        }
+<span class="fc" id="L354">        return scope;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>

@@ -44,7 +44,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * variable declaration statements, empty statements, import statements,
  * assignment statements, expression statements, increment statements,
  * object creation statements, 'for loop' statements, 'break' statements,
- * 'continue' statements, 'return' statements.
+ * 'continue' statements, 'return' statements, resources statements.
  * &lt;/p&gt;
  * &lt;p&gt;
  * The following examples will be flagged as a violation:
@@ -66,6 +66,25 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * r = 5; int t; //violation here
  * &lt;/pre&gt;
  * &lt;p&gt;
+ * Note: resource declarations can contain variable definitions
+ * and variable references (from java9).
+ * This check is only applied to variable definitions.
+ * If there are one or more variable references
+ * and one variable definition on the same line in resources declaration,
+ * there is no violation.
+ * The following examples will illustrate difference:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * OutputStream s1 = new PipedOutputStream();
+ * OutputStream s2 = new PipedOutputStream();
+ * // only one statement(variable definition) with two variable references
+ * try (s1; s2; OutputStream s3 = new PipedOutputStream();) // OK
+ * {}
+ * // two statements with variable definitions
+ * try (Reader r = new PipedReader(); s2; Reader s3 = new PipedReader() // violation
+ * ) {}
+ * &lt;/pre&gt;
+ * &lt;p&gt;
  * An example of how to configure this Check:
  * &lt;/p&gt;
  * &lt;pre&gt;
@@ -75,7 +94,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * @since 5.3
  */
 @FileStatefulCheck
-<span class="fc" id="L78">public final class OneStatementPerLineCheck extends AbstractCheck {</span>
+<span class="fc" id="L97">public final class OneStatementPerLineCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -86,17 +105,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     /**
      * Counts number of semicolons in nested lambdas.
      */
-<span class="fc" id="L89">    private final Deque&lt;Integer&gt; countOfSemiInLambda = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L108">    private final Deque&lt;Integer&gt; countOfSemiInLambda = new ArrayDeque&lt;&gt;();</span>
 
     /**
      * Hold the line-number where the last statement ended.
      */
-<span class="fc" id="L94">    private int lastStatementEnd = -1;</span>
+<span class="fc" id="L113">    private int lastStatementEnd = -1;</span>
 
     /**
      * Hold the line-number where the last 'for-loop' statement ended.
      */
-<span class="fc" id="L99">    private int forStatementEnd = -1;</span>
+<span class="fc" id="L118">    private int forStatementEnd = -1;</span>
 
     /**
      * The for-header usually has 3 statements on one line, but THIS IS OK.
@@ -111,21 +130,26 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     /**
      * Hold the line-number where the last lambda statement ended.
      */
-<span class="fc" id="L114">    private int lambdaStatementEnd = -1;</span>
+<span class="fc" id="L133">    private int lambdaStatementEnd = -1;</span>
+
+    /**
+     * Hold the line-number where the last resource variable statement ended.
+     */
+<span class="fc" id="L138">    private int lastVariableResourceStatementEnd = -1;</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L118">        return getRequiredTokens();</span>
+<span class="fc" id="L142">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L123">        return getRequiredTokens();</span>
+<span class="fc" id="L147">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L128">        return new int[] {</span>
+<span class="fc" id="L152">        return new int[] {</span>
             TokenTypes.SEMI,
             TokenTypes.FOR_INIT,
             TokenTypes.FOR_ITERATOR,
@@ -135,82 +159,107 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L138">        inForHeader = false;</span>
-<span class="fc" id="L139">        lastStatementEnd = -1;</span>
-<span class="fc" id="L140">        forStatementEnd = -1;</span>
-<span class="fc" id="L141">        isInLambda = false;</span>
-<span class="fc" id="L142">    }</span>
+<span class="fc" id="L162">        inForHeader = false;</span>
+<span class="fc" id="L163">        lastStatementEnd = -1;</span>
+<span class="fc" id="L164">        forStatementEnd = -1;</span>
+<span class="fc" id="L165">        isInLambda = false;</span>
+<span class="fc" id="L166">        lastVariableResourceStatementEnd = -1;</span>
+<span class="fc" id="L167">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L146" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L171" title="All 4 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.SEMI:
-<span class="fc" id="L148">                checkIfSemicolonIsInDifferentLineThanPrevious(ast);</span>
-<span class="fc" id="L149">                break;</span>
+<span class="fc" id="L173">                checkIfSemicolonIsInDifferentLineThanPrevious(ast);</span>
+<span class="fc" id="L174">                break;</span>
             case TokenTypes.FOR_ITERATOR:
-<span class="fc" id="L151">                forStatementEnd = ast.getLineNo();</span>
-<span class="fc" id="L152">                break;</span>
+<span class="fc" id="L176">                forStatementEnd = ast.getLineNo();</span>
+<span class="fc" id="L177">                break;</span>
             case TokenTypes.LAMBDA:
-<span class="fc" id="L154">                isInLambda = true;</span>
-<span class="fc" id="L155">                countOfSemiInLambda.push(0);</span>
-<span class="fc" id="L156">                break;</span>
+<span class="fc" id="L179">                isInLambda = true;</span>
+<span class="fc" id="L180">                countOfSemiInLambda.push(0);</span>
+<span class="fc" id="L181">                break;</span>
             default:
-<span class="fc" id="L158">                inForHeader = true;</span>
+<span class="fc" id="L183">                inForHeader = true;</span>
                 break;
         }
-<span class="fc" id="L161">    }</span>
+<span class="fc" id="L186">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L165" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L190" title="All 4 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.SEMI:
-<span class="fc" id="L167">                lastStatementEnd = ast.getLineNo();</span>
-<span class="fc" id="L168">                forStatementEnd = -1;</span>
-<span class="fc" id="L169">                lambdaStatementEnd = -1;</span>
-<span class="fc" id="L170">                break;</span>
+<span class="fc" id="L192">                lastStatementEnd = ast.getLineNo();</span>
+<span class="fc" id="L193">                forStatementEnd = -1;</span>
+<span class="fc" id="L194">                lambdaStatementEnd = -1;</span>
+<span class="fc" id="L195">                break;</span>
             case TokenTypes.FOR_ITERATOR:
-<span class="fc" id="L172">                inForHeader = false;</span>
-<span class="fc" id="L173">                break;</span>
+<span class="fc" id="L197">                inForHeader = false;</span>
+<span class="fc" id="L198">                break;</span>
             case TokenTypes.LAMBDA:
-<span class="fc" id="L175">                countOfSemiInLambda.pop();</span>
-<span class="fc bfc" id="L176" title="All 2 branches covered.">                if (countOfSemiInLambda.isEmpty()) {</span>
-<span class="fc" id="L177">                    isInLambda = false;</span>
+<span class="fc" id="L200">                countOfSemiInLambda.pop();</span>
+<span class="fc bfc" id="L201" title="All 2 branches covered.">                if (countOfSemiInLambda.isEmpty()) {</span>
+<span class="fc" id="L202">                    isInLambda = false;</span>
                 }
-<span class="fc" id="L179">                lambdaStatementEnd = ast.getLineNo();</span>
-<span class="fc" id="L180">                break;</span>
+<span class="fc" id="L204">                lambdaStatementEnd = ast.getLineNo();</span>
+<span class="fc" id="L205">                break;</span>
             default:
                 break;
         }
-<span class="fc" id="L184">    }</span>
+<span class="fc" id="L209">    }</span>
 
     /**
      * Checks if given semicolon is in different line than previous.
      * @param ast semicolon to check
      */
     private void checkIfSemicolonIsInDifferentLineThanPrevious(DetailAST ast) {
-<span class="fc" id="L191">        DetailAST currentStatement = ast;</span>
-<span class="fc" id="L192">        final boolean hasResourcesPrevSibling =</span>
-<span class="fc bfc" id="L193" title="All 2 branches covered.">                currentStatement.getPreviousSibling() != null</span>
-<span class="fc bfc" id="L194" title="All 2 branches covered.">                        &amp;&amp; currentStatement.getPreviousSibling().getType() == TokenTypes.RESOURCES;</span>
-<span class="fc bfc" id="L195" title="All 4 branches covered.">        if (!hasResourcesPrevSibling &amp;&amp; isMultilineStatement(currentStatement)) {</span>
-<span class="fc" id="L196">            currentStatement = ast.getPreviousSibling();</span>
+<span class="fc" id="L216">        DetailAST currentStatement = ast;</span>
+<span class="fc" id="L217">        final boolean hasResourcesPrevSibling =</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">                currentStatement.getPreviousSibling() != null</span>
+<span class="fc bfc" id="L219" title="All 2 branches covered.">                        &amp;&amp; currentStatement.getPreviousSibling().getType() == TokenTypes.RESOURCES;</span>
+<span class="fc bfc" id="L220" title="All 4 branches covered.">        if (!hasResourcesPrevSibling &amp;&amp; isMultilineStatement(currentStatement)) {</span>
+<span class="fc" id="L221">            currentStatement = ast.getPreviousSibling();</span>
         }
-<span class="fc bfc" id="L198" title="All 2 branches covered.">        if (isInLambda) {</span>
-<span class="fc" id="L199">            int countOfSemiInCurrentLambda = countOfSemiInLambda.pop();</span>
-<span class="fc" id="L200">            countOfSemiInCurrentLambda++;</span>
-<span class="fc" id="L201">            countOfSemiInLambda.push(countOfSemiInCurrentLambda);</span>
-<span class="fc bfc" id="L202" title="All 4 branches covered.">            if (!inForHeader &amp;&amp; countOfSemiInCurrentLambda &gt; 1</span>
-<span class="fc bfc" id="L203" title="All 2 branches covered.">                    &amp;&amp; isOnTheSameLine(currentStatement,</span>
-                    lastStatementEnd, forStatementEnd,
-                    lambdaStatementEnd)) {
-<span class="fc" id="L206">                log(ast, MSG_KEY);</span>
-            }
-<span class="fc" id="L208">        }</span>
-<span class="fc bfc" id="L209" title="All 4 branches covered.">        else if (!inForHeader &amp;&amp; isOnTheSameLine(currentStatement, lastStatementEnd,</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (isInLambda) {</span>
+<span class="fc" id="L224">            checkLambda(ast, currentStatement);</span>
+        }
+<span class="fc bfc" id="L226" title="All 2 branches covered.">        else if (isResource(ast.getParent())) {</span>
+<span class="fc" id="L227">            checkResourceVariable(ast);</span>
+        }
+<span class="fc bfc" id="L229" title="All 4 branches covered.">        else if (!inForHeader &amp;&amp; isOnTheSameLine(currentStatement, lastStatementEnd,</span>
                 forStatementEnd, lambdaStatementEnd)) {
-<span class="fc" id="L211">            log(ast, MSG_KEY);</span>
+<span class="fc" id="L231">            log(ast, MSG_KEY);</span>
         }
-<span class="fc" id="L213">    }</span>
+<span class="fc" id="L233">    }</span>
+
+    private void checkLambda(DetailAST ast, DetailAST currentStatement) {
+<span class="fc" id="L236">        int countOfSemiInCurrentLambda = countOfSemiInLambda.pop();</span>
+<span class="fc" id="L237">        countOfSemiInCurrentLambda++;</span>
+<span class="fc" id="L238">        countOfSemiInLambda.push(countOfSemiInCurrentLambda);</span>
+<span class="fc bfc" id="L239" title="All 4 branches covered.">        if (!inForHeader &amp;&amp; countOfSemiInCurrentLambda &gt; 1</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">                &amp;&amp; isOnTheSameLine(currentStatement,</span>
+                lastStatementEnd, forStatementEnd,
+                lambdaStatementEnd)) {
+<span class="fc" id="L243">            log(ast, MSG_KEY);</span>
+        }
+<span class="fc" id="L245">    }</span>
+
+    private static boolean isResource(DetailAST ast) {
+<span class="fc bfc" id="L248" title="All 2 branches covered.">        return ast != null</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">            &amp;&amp; (ast.getType() == TokenTypes.RESOURCES</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">                 || ast.getType() == TokenTypes.RESOURCE_SPECIFICATION);</span>
+    }
+
+    private void checkResourceVariable(DetailAST currentStatement) {
+<span class="fc" id="L254">        final DetailAST nextNode = currentStatement.getNextSibling();</span>
+<span class="fc bfc" id="L255" title="All 2 branches covered.">        if (currentStatement.getPreviousSibling().branchContains(TokenTypes.ASSIGN)) {</span>
+<span class="fc" id="L256">            lastVariableResourceStatementEnd = currentStatement.getLineNo();</span>
+        }
+<span class="fc bfc" id="L258" title="All 2 branches covered.">        if (nextNode.branchContains(TokenTypes.ASSIGN)</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">                &amp;&amp; nextNode.getLineNo() == lastVariableResourceStatementEnd) {</span>
+<span class="fc" id="L260">            log(currentStatement, MSG_KEY);</span>
+        }
+<span class="fc" id="L262">    }</span>
 
     /**
      * Checks whether two statements are on the same line.
@@ -224,8 +273,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static boolean isOnTheSameLine(DetailAST ast, int lastStatementEnd,
                                            int forStatementEnd, int lambdaStatementEnd) {
-<span class="fc bfc" id="L227" title="All 4 branches covered.">        return lastStatementEnd == ast.getLineNo() &amp;&amp; forStatementEnd != ast.getLineNo()</span>
-<span class="fc bfc" id="L228" title="All 2 branches covered.">                &amp;&amp; lambdaStatementEnd != ast.getLineNo();</span>
+<span class="fc bfc" id="L276" title="All 4 branches covered.">        return lastStatementEnd == ast.getLineNo() &amp;&amp; forStatementEnd != ast.getLineNo()</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">                &amp;&amp; lambdaStatementEnd != ast.getLineNo();</span>
     }
 
     /**
@@ -235,15 +284,15 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static boolean isMultilineStatement(DetailAST ast) {
         final boolean multiline;
-<span class="fc bfc" id="L238" title="All 2 branches covered.">        if (ast.getPreviousSibling() == null) {</span>
-<span class="fc" id="L239">            multiline = false;</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        if (ast.getPreviousSibling() == null) {</span>
+<span class="fc" id="L288">            multiline = false;</span>
         }
         else {
-<span class="fc" id="L242">            final DetailAST prevSibling = ast.getPreviousSibling();</span>
-<span class="fc bfc" id="L243" title="All 2 branches covered.">            multiline = prevSibling.getLineNo() != ast.getLineNo()</span>
-<span class="fc bfc" id="L244" title="All 2 branches covered.">                    &amp;&amp; ast.getParent() != null;</span>
+<span class="fc" id="L291">            final DetailAST prevSibling = ast.getPreviousSibling();</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">            multiline = prevSibling.getLineNo() != ast.getLineNo()</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">                    &amp;&amp; ast.getParent() != null;</span>
         }
-<span class="fc" id="L246">        return multiline;</span>
+<span class="fc" id="L295">        return multiline;</span>
     }
 
 }
