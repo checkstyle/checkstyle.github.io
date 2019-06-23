@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MissingJavadocPackageCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.javadoc</a> &gt; <span class="el_source">MissingJavadocPackageCheck.java</span></div><h1>MissingJavadocPackageCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2019 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.javadoc;
+
+import java.util.Optional;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FileContents;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks for missing Javadoc comments in package-info.java files.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Rationale: description and other related documentation for a package can be written up
+ * in the package-info.java file and it gets used in the production of the Javadocs.
+ * See &lt;a
+ * href=&quot;https://docs.oracle.com/javase/8/docs/technotes/tools/windows/javadoc.html#packagecomment&quot;
+ * &gt;link&lt;/a&gt; for more info.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MissingJavadocPackage&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * /**
+ * * Provides API classes
+ * *&amp;#47;
+ * package com.checkstyle.api; // no violation
+ * /*
+ * * Block comment is not a javadoc
+ * *&amp;#47;
+ * package com.checkstyle.api; // violation
+ * &lt;/pre&gt;
+ *
+ * @since 8.22
+ */
+@StatelessCheck
+<span class="fc" id="L63">public class MissingJavadocPackageCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_PKG_JAVADOC_MISSING = &quot;package.javadoc.missing&quot;;
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L73">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L78">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L83">        return new int[] {TokenTypes.PACKAGE_DEF};</span>
+    }
+
+    @Override
+    public boolean isCommentNodesRequired() {
+<span class="fc" id="L88">        return true;</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc" id="L93">        final FileContents contents = getFileContents();</span>
+<span class="fc bfc" id="L94" title="All 4 branches covered.">        if (contents.inPackageInfo() &amp;&amp; !hasJavadoc(ast)) {</span>
+<span class="fc" id="L95">            log(ast.getLineNo(), MSG_PKG_JAVADOC_MISSING);</span>
+        }
+<span class="fc" id="L97">    }</span>
+
+    /**
+     * Checks that there is javadoc before ast.
+     * Because of &lt;a href=&quot;https://github.com/checkstyle/checkstyle/issues/4392&quot;&gt;parser bug&lt;/a&gt;
+     * parser can place javadoc comment either as previous sibling of package definition
+     * or (if there is annotation between package def and javadoc) inside package definition tree.
+     * So we should look for javadoc in both places.
+     *
+     * @param ast {@link TokenTypes#PACKAGE_DEF} token to check
+     * @return true if there is javadoc, false otherwise
+     */
+    private static boolean hasJavadoc(DetailAST ast) {
+<span class="fc" id="L110">        final boolean hasBefore = isJavadocComment(ast.getPreviousSibling());</span>
+        // need to go 3 levels down the tree for annotation case
+<span class="fc" id="L112">        final boolean hasWithAnnotation = Optional.of(ast.getFirstChild())</span>
+<span class="fc" id="L113">            .map(DetailAST::getFirstChild)</span>
+<span class="fc" id="L114">            .map(DetailAST::getFirstChild)</span>
+<span class="fc" id="L115">            .map(MissingJavadocPackageCheck::isJavadocComment)</span>
+<span class="fc" id="L116">            .orElse(false);</span>
+<span class="fc bfc" id="L117" title="All 4 branches covered.">        return hasBefore || hasWithAnnotation;</span>
+    }
+
+    /**
+     * Checks that ast is a javadoc comment.
+     * @param ast token to check
+     * @return true if ast is a javadoc comment, false otherwise
+     */
+    private static boolean isJavadocComment(DetailAST ast) {
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        return ast != null</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">                &amp;&amp; ast.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
+<span class="fc bfc" id="L128" title="All 2 branches covered.">                &amp;&amp; JavadocUtil.isJavadocComment(ast);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>

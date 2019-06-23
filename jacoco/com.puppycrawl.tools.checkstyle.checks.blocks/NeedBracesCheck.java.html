@@ -19,6 +19,8 @@
 
 package com.puppycrawl.tools.checkstyle.checks.blocks;
 
+import java.util.Optional;
+
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
@@ -123,7 +125,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 3.0
  */
 @StatelessCheck
-<span class="fc" id="L126">public class NeedBracesCheck extends AbstractCheck {</span>
+<span class="fc" id="L128">public class NeedBracesCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -146,20 +148,20 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param allowSingleLineStatement Check's option for skipping single-line statements
      */
     public void setAllowSingleLineStatement(boolean allowSingleLineStatement) {
-<span class="fc" id="L149">        this.allowSingleLineStatement = allowSingleLineStatement;</span>
-<span class="fc" id="L150">    }</span>
+<span class="fc" id="L151">        this.allowSingleLineStatement = allowSingleLineStatement;</span>
+<span class="fc" id="L152">    }</span>
 
     /**
      * Setter to allow loops with empty bodies.
      * @param allowEmptyLoopBody Check's option for allowing loops with empty body.
      */
     public void setAllowEmptyLoopBody(boolean allowEmptyLoopBody) {
-<span class="fc" id="L157">        this.allowEmptyLoopBody = allowEmptyLoopBody;</span>
-<span class="fc" id="L158">    }</span>
+<span class="fc" id="L159">        this.allowEmptyLoopBody = allowEmptyLoopBody;</span>
+<span class="fc" id="L160">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L162">        return new int[] {</span>
+<span class="fc" id="L164">        return new int[] {</span>
             TokenTypes.LITERAL_DO,
             TokenTypes.LITERAL_ELSE,
             TokenTypes.LITERAL_FOR,
@@ -170,7 +172,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L173">        return new int[] {</span>
+<span class="fc" id="L175">        return new int[] {</span>
             TokenTypes.LITERAL_DO,
             TokenTypes.LITERAL_ELSE,
             TokenTypes.LITERAL_FOR,
@@ -184,38 +186,72 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L187">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L189">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L192">        final DetailAST slistAST = ast.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc" id="L193">        boolean isElseIf = false;</span>
-<span class="fc bfc" id="L194" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_ELSE</span>
-<span class="fc bfc" id="L195" title="All 2 branches covered.">            &amp;&amp; ast.findFirstToken(TokenTypes.LITERAL_IF) != null) {</span>
-<span class="fc" id="L196">            isElseIf = true;</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">        final boolean hasNoSlist = ast.findFirstToken(TokenTypes.SLIST) == null;</span>
+<span class="fc bfc" id="L195" title="All 6 branches covered.">        if (hasNoSlist &amp;&amp; !isSkipStatement(ast) &amp;&amp; isBracesNeeded(ast)) {</span>
+<span class="fc" id="L196">            log(ast.getLineNo(), MSG_KEY_NEED_BRACES, ast.getText());</span>
         }
-<span class="fc" id="L198">        final boolean isInAnnotationField = isInAnnotationField(ast);</span>
-<span class="fc" id="L199">        final boolean skipStatement = isSkipStatement(ast);</span>
-<span class="fc bfc" id="L200" title="All 4 branches covered.">        final boolean skipEmptyLoopBody = allowEmptyLoopBody &amp;&amp; isEmptyLoopBody(ast);</span>
-
-<span class="fc bfc" id="L202" title="All 10 branches covered.">        if (slistAST == null &amp;&amp; !isElseIf &amp;&amp; !isInAnnotationField</span>
-                &amp;&amp; !skipStatement &amp;&amp; !skipEmptyLoopBody) {
-<span class="fc" id="L204">            log(ast.getLineNo(), MSG_KEY_NEED_BRACES, ast.getText());</span>
-        }
-<span class="fc" id="L206">    }</span>
+<span class="fc" id="L198">    }</span>
 
     /**
-     * Checks if ast is in an annotation field.
-     * @param ast ast to test.
-     * @return true if current ast is part of an annotation field.
+     * Checks if token needs braces.
+     * Some tokens have additional conditions:
+     * &lt;ul&gt;
+     *     &lt;li&gt;{@link TokenTypes#LITERAL_FOR}&lt;/li&gt;
+     *     &lt;li&gt;{@link TokenTypes#LITERAL_WHILE}&lt;/li&gt;
+     *     &lt;li&gt;{@link TokenTypes#LITERAL_CASE}&lt;/li&gt;
+     *     &lt;li&gt;{@link TokenTypes#LITERAL_DEFAULT}&lt;/li&gt;
+     *     &lt;li&gt;{@link TokenTypes#LITERAL_ELSE}&lt;/li&gt;
+     * &lt;/ul&gt;
+     * For all others default value {@code true} is returned.
+     * @param ast token to check
+     * @return result of additional checks for specific token types,
+     * {@code true} if there is no additional checks for token
      */
-    private static boolean isInAnnotationField(DetailAST ast) {
-<span class="fc" id="L214">        boolean isDefaultInAnnotation = false;</span>
-<span class="fc bfc" id="L215" title="All 2 branches covered.">        if (ast.getParent().getType() == TokenTypes.ANNOTATION_FIELD_DEF) {</span>
-<span class="fc" id="L216">            isDefaultInAnnotation = true;</span>
+    private boolean isBracesNeeded(DetailAST ast) {
+        final boolean result;
+<span class="fc bfc" id="L217" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.LITERAL_FOR:
+            case TokenTypes.LITERAL_WHILE:
+<span class="fc bfc" id="L220" title="All 2 branches covered.">                result = !isEmptyLoopBodyAllowed(ast);</span>
+<span class="fc" id="L221">                break;</span>
+            case TokenTypes.LITERAL_CASE:
+            case TokenTypes.LITERAL_DEFAULT:
+<span class="fc" id="L224">                result = hasUnbracedStatements(ast);</span>
+<span class="fc" id="L225">                break;</span>
+            case TokenTypes.LITERAL_ELSE:
+<span class="fc bfc" id="L227" title="All 2 branches covered.">                result = ast.findFirstToken(TokenTypes.LITERAL_IF) == null;</span>
+<span class="fc" id="L228">                break;</span>
+            default:
+<span class="fc" id="L230">                result = true;</span>
+                break;
         }
-<span class="fc" id="L218">        return isDefaultInAnnotation;</span>
+<span class="fc" id="L233">        return result;</span>
+    }
+
+    /**
+     * Checks if current loop has empty body and can be skipped by this check.
+     * @param ast for, while statements.
+     * @return true if current loop can be skipped by check.
+     */
+    private boolean isEmptyLoopBodyAllowed(DetailAST ast) {
+<span class="fc bfc" id="L242" title="All 4 branches covered.">        return allowEmptyLoopBody &amp;&amp; ast.findFirstToken(TokenTypes.EMPTY_STAT) != null;</span>
+    }
+
+    /**
+     * Checks if switch member (case, default statements) has statements without curly braces.
+     * @param ast case, default statements.
+     * @return true if switch member has unbraced statements, false otherwise.
+     */
+    private static boolean hasUnbracedStatements(DetailAST ast) {
+<span class="fc" id="L251">        final DetailAST nextSibling = ast.getNextSibling();</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">        return nextSibling != null</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">            &amp;&amp; nextSibling.getType() == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">            &amp;&amp; nextSibling.getFirstChild().getType() != TokenTypes.SLIST;</span>
     }
 
     /**
@@ -224,33 +260,17 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current statement can be skipped by Check.
      */
     private boolean isSkipStatement(DetailAST statement) {
-<span class="fc bfc" id="L227" title="All 4 branches covered.">        return allowSingleLineStatement &amp;&amp; isSingleLineStatement(statement);</span>
+<span class="fc bfc" id="L263" title="All 4 branches covered.">        return allowSingleLineStatement &amp;&amp; isSingleLineStatement(statement);</span>
     }
 
     /**
-     * Checks if current loop statement does not have body, e.g.:
-     * &lt;p&gt;
-     * {@code
-     *   while (value.incrementValue() &lt; 5);
-     *   ...
-     *   for(int i = 0; i &lt; 10; value.incrementValue());
-     * }
-     * &lt;/p&gt;
-     * @param ast ast token.
-     * @return true if current loop statement does not have body.
+     * Checks if two ast nodes are on the same line.
+     * @param first ast to check
+     * @param second ast to check
+     * @return true if elements on same line, false otherwise
      */
-    private static boolean isEmptyLoopBody(DetailAST ast) {
-<span class="fc" id="L243">        boolean noBodyLoop = false;</span>
-
-<span class="fc bfc" id="L245" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.LITERAL_FOR</span>
-<span class="fc bfc" id="L246" title="All 2 branches covered.">                || ast.getType() == TokenTypes.LITERAL_WHILE) {</span>
-<span class="fc" id="L247">            DetailAST currentToken = ast.getFirstChild();</span>
-<span class="fc bfc" id="L248" title="All 2 branches covered.">            while (currentToken.getNextSibling() != null) {</span>
-<span class="fc" id="L249">                currentToken = currentToken.getNextSibling();</span>
-            }
-<span class="fc bfc" id="L251" title="All 2 branches covered.">            noBodyLoop = currentToken.getType() == TokenTypes.EMPTY_STAT;</span>
-        }
-<span class="fc" id="L253">        return noBodyLoop;</span>
+    private static boolean isOnSameLine(DetailAST first, DetailAST second) {
+<span class="fc bfc" id="L273" title="All 2 branches covered.">        return first.getLineNo() == second.getLineNo();</span>
     }
 
     /**
@@ -271,34 +291,32 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     private static boolean isSingleLineStatement(DetailAST statement) {
         final boolean result;
 
-<span class="fc bfc" id="L274" title="All 8 branches covered.">        switch (statement.getType()) {</span>
+<span class="fc bfc" id="L294" title="All 7 branches covered.">        switch (statement.getType()) {</span>
             case TokenTypes.LITERAL_IF:
-<span class="fc" id="L276">                result = isSingleLineIf(statement);</span>
-<span class="fc" id="L277">                break;</span>
+<span class="fc" id="L296">                result = isSingleLineIf(statement);</span>
+<span class="fc" id="L297">                break;</span>
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L279">                result = isSingleLineFor(statement);</span>
-<span class="fc" id="L280">                break;</span>
+<span class="fc" id="L299">                result = isSingleLineFor(statement);</span>
+<span class="fc" id="L300">                break;</span>
             case TokenTypes.LITERAL_DO:
-<span class="fc" id="L282">                result = isSingleLineDoWhile(statement);</span>
-<span class="fc" id="L283">                break;</span>
+<span class="fc" id="L302">                result = isSingleLineDoWhile(statement);</span>
+<span class="fc" id="L303">                break;</span>
             case TokenTypes.LITERAL_WHILE:
-<span class="fc" id="L285">                result = isSingleLineWhile(statement);</span>
-<span class="fc" id="L286">                break;</span>
+<span class="fc" id="L305">                result = isSingleLineWhile(statement);</span>
+<span class="fc" id="L306">                break;</span>
             case TokenTypes.LAMBDA:
-<span class="fc" id="L288">                result = isSingleLineLambda(statement);</span>
-<span class="fc" id="L289">                break;</span>
+<span class="fc" id="L308">                result = isSingleLineLambda(statement);</span>
+<span class="fc" id="L309">                break;</span>
             case TokenTypes.LITERAL_CASE:
-<span class="fc" id="L291">                result = isSingleLineCase(statement);</span>
-<span class="fc" id="L292">                break;</span>
             case TokenTypes.LITERAL_DEFAULT:
-<span class="fc" id="L294">                result = isSingleLineDefault(statement);</span>
-<span class="fc" id="L295">                break;</span>
+<span class="fc" id="L312">                result = isSingleLineSwitchMember(statement);</span>
+<span class="fc" id="L313">                break;</span>
             default:
-<span class="fc" id="L297">                result = isSingleLineElse(statement);</span>
+<span class="fc" id="L315">                result = isSingleLineElse(statement);</span>
                 break;
         }
 
-<span class="fc" id="L301">        return result;</span>
+<span class="fc" id="L319">        return result;</span>
     }
 
     /**
@@ -312,12 +330,12 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current while statement is single-line statement.
      */
     private static boolean isSingleLineWhile(DetailAST literalWhile) {
-<span class="fc" id="L315">        boolean result = false;</span>
-<span class="fc bfc" id="L316" title="All 2 branches covered.">        if (literalWhile.getParent().getType() == TokenTypes.SLIST) {</span>
-<span class="fc" id="L317">            final DetailAST block = literalWhile.getLastChild().getPreviousSibling();</span>
-<span class="fc bfc" id="L318" title="All 2 branches covered.">            result = literalWhile.getLineNo() == block.getLineNo();</span>
+<span class="fc" id="L333">        boolean result = false;</span>
+<span class="fc bfc" id="L334" title="All 2 branches covered.">        if (literalWhile.getParent().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L335">            final DetailAST block = literalWhile.getLastChild().getPreviousSibling();</span>
+<span class="fc" id="L336">            result = isOnSameLine(literalWhile, block);</span>
         }
-<span class="fc" id="L320">        return result;</span>
+<span class="fc" id="L338">        return result;</span>
     }
 
     /**
@@ -331,12 +349,12 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current do-while statement is single-line statement.
      */
     private static boolean isSingleLineDoWhile(DetailAST literalDo) {
-<span class="fc" id="L334">        boolean result = false;</span>
-<span class="fc bfc" id="L335" title="All 2 branches covered.">        if (literalDo.getParent().getType() == TokenTypes.SLIST) {</span>
-<span class="fc" id="L336">            final DetailAST block = literalDo.getFirstChild();</span>
-<span class="fc bfc" id="L337" title="All 2 branches covered.">            result = block.getLineNo() == literalDo.getLineNo();</span>
+<span class="fc" id="L352">        boolean result = false;</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">        if (literalDo.getParent().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L354">            final DetailAST block = literalDo.getFirstChild();</span>
+<span class="fc" id="L355">            result = isOnSameLine(block, literalDo);</span>
         }
-<span class="fc" id="L339">        return result;</span>
+<span class="fc" id="L357">        return result;</span>
     }
 
     /**
@@ -350,14 +368,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current for statement is single-line statement.
      */
     private static boolean isSingleLineFor(DetailAST literalFor) {
-<span class="fc" id="L353">        boolean result = false;</span>
-<span class="fc bfc" id="L354" title="All 2 branches covered.">        if (literalFor.getLastChild().getType() == TokenTypes.EMPTY_STAT) {</span>
-<span class="fc" id="L355">            result = true;</span>
+<span class="fc" id="L371">        boolean result = false;</span>
+<span class="fc bfc" id="L372" title="All 2 branches covered.">        if (literalFor.getLastChild().getType() == TokenTypes.EMPTY_STAT) {</span>
+<span class="fc" id="L373">            result = true;</span>
         }
-<span class="fc bfc" id="L357" title="All 2 branches covered.">        else if (literalFor.getParent().getType() == TokenTypes.SLIST) {</span>
-<span class="fc bfc" id="L358" title="All 2 branches covered.">            result = literalFor.getLineNo() == literalFor.getLastChild().getLineNo();</span>
+<span class="fc bfc" id="L375" title="All 2 branches covered.">        else if (literalFor.getParent().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L376">            result = isOnSameLine(literalFor, literalFor.getLastChild());</span>
         }
-<span class="fc" id="L360">        return result;</span>
+<span class="fc" id="L378">        return result;</span>
     }
 
     /**
@@ -371,20 +389,20 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current if statement is single-line statement.
      */
     private static boolean isSingleLineIf(DetailAST literalIf) {
-<span class="fc" id="L374">        boolean result = false;</span>
-<span class="fc bfc" id="L375" title="All 2 branches covered.">        if (literalIf.getParent().getType() == TokenTypes.SLIST) {</span>
-<span class="fc" id="L376">            final DetailAST literalIfLastChild = literalIf.getLastChild();</span>
+<span class="fc" id="L392">        boolean result = false;</span>
+<span class="fc bfc" id="L393" title="All 2 branches covered.">        if (literalIf.getParent().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L394">            final DetailAST literalIfLastChild = literalIf.getLastChild();</span>
             final DetailAST block;
-<span class="fc bfc" id="L378" title="All 2 branches covered.">            if (literalIfLastChild.getType() == TokenTypes.LITERAL_ELSE) {</span>
-<span class="fc" id="L379">                block = literalIfLastChild.getPreviousSibling();</span>
+<span class="fc bfc" id="L396" title="All 2 branches covered.">            if (literalIfLastChild.getType() == TokenTypes.LITERAL_ELSE) {</span>
+<span class="fc" id="L397">                block = literalIfLastChild.getPreviousSibling();</span>
             }
             else {
-<span class="fc" id="L382">                block = literalIfLastChild;</span>
+<span class="fc" id="L400">                block = literalIfLastChild;</span>
             }
-<span class="fc" id="L384">            final DetailAST ifCondition = literalIf.findFirstToken(TokenTypes.EXPR);</span>
-<span class="fc bfc" id="L385" title="All 2 branches covered.">            result = ifCondition.getLineNo() == block.getLineNo();</span>
+<span class="fc" id="L402">            final DetailAST ifCondition = literalIf.findFirstToken(TokenTypes.EXPR);</span>
+<span class="fc" id="L403">            result = isOnSameLine(ifCondition, block);</span>
         }
-<span class="fc" id="L387">        return result;</span>
+<span class="fc" id="L405">        return result;</span>
     }
 
     /**
@@ -398,62 +416,30 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current lambda statement is single-line statement.
      */
     private static boolean isSingleLineLambda(DetailAST lambda) {
-<span class="fc" id="L401">        final DetailAST block = lambda.getLastChild();</span>
-<span class="fc bfc" id="L402" title="All 2 branches covered.">        return lambda.getLineNo() == block.getLineNo();</span>
+<span class="fc" id="L419">        final DetailAST block = lambda.getLastChild();</span>
+<span class="fc" id="L420">        return isOnSameLine(lambda, block);</span>
     }
 
     /**
-     * Checks if current case statement is single-line statement, e.g.:
+     * Checks if switch member (case or default statement) is single-line statement, e.g.:
      * &lt;p&gt;
      * {@code
      * case 1: doSomeStuff(); break;
      * case 2: doSomeStuff(); break;
      * case 3: ;
+     * default: doSomeStuff();break;
      * }
      * &lt;/p&gt;
-     * @param literalCase {@link TokenTypes#LITERAL_CASE case statement}.
-     * @return true if current case statement is single-line statement.
+     * @param ast {@link TokenTypes#LITERAL_CASE case statement} or
+     * {@link TokenTypes#LITERAL_DEFAULT default statement}.
+     * @return true if current switch member is single-line statement.
      */
-    private static boolean isSingleLineCase(DetailAST literalCase) {
-<span class="fc" id="L418">        boolean result = false;</span>
-<span class="fc" id="L419">        final DetailAST slist = literalCase.getNextSibling();</span>
-<span class="fc bfc" id="L420" title="All 2 branches covered.">        if (slist == null) {</span>
-<span class="fc" id="L421">            result = true;</span>
-        }
-        else {
-<span class="fc" id="L424">            final DetailAST caseBreak = slist.findFirstToken(TokenTypes.LITERAL_BREAK);</span>
-<span class="fc bfc" id="L425" title="All 2 branches covered.">            if (caseBreak != null) {</span>
-<span class="fc" id="L426">                final DetailAST block = slist.getFirstChild();</span>
-<span class="fc bfc" id="L427" title="All 2 branches covered.">                final boolean atOneLine = literalCase.getLineNo() == block.getLineNo();</span>
-<span class="fc bfc" id="L428" title="All 4 branches covered.">                result = atOneLine &amp;&amp; block.getLineNo() == caseBreak.getLineNo();</span>
-            }
-        }
-<span class="fc" id="L431">        return result;</span>
-    }
-
-    /**
-     * Checks if current default statement is single-line statement, e.g.:
-     * &lt;p&gt;
-     * {@code
-     * default: doSomeStuff();
-     * }
-     * &lt;/p&gt;
-     * @param literalDefault {@link TokenTypes#LITERAL_DEFAULT default statement}.
-     * @return true if current default statement is single-line statement.
-     */
-    private static boolean isSingleLineDefault(DetailAST literalDefault) {
-<span class="fc" id="L445">        boolean result = false;</span>
-<span class="fc" id="L446">        final DetailAST slist = literalDefault.getNextSibling();</span>
-<span class="fc bfc" id="L447" title="All 2 branches covered.">        if (slist == null) {</span>
-<span class="fc" id="L448">            result = true;</span>
-        }
-        else {
-<span class="fc" id="L451">            final DetailAST block = slist.getFirstChild();</span>
-<span class="fc bfc" id="L452" title="All 4 branches covered.">            if (block != null &amp;&amp; block.getType() != TokenTypes.SLIST) {</span>
-<span class="fc bfc" id="L453" title="All 2 branches covered.">                result = literalDefault.getLineNo() == block.getLineNo();</span>
-            }
-        }
-<span class="fc" id="L456">        return result;</span>
+    private static boolean isSingleLineSwitchMember(DetailAST ast) {
+<span class="fc" id="L438">        return Optional.of(ast)</span>
+<span class="fc" id="L439">                .map(DetailAST::getNextSibling)</span>
+<span class="fc" id="L440">                .map(DetailAST::getLastChild)</span>
+<span class="fc" id="L441">                .map(lastToken -&gt; isOnSameLine(ast, lastToken))</span>
+<span class="fc" id="L442">                .orElse(true);</span>
     }
 
     /**
@@ -467,9 +453,9 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if current else statement is single-line statement.
      */
     private static boolean isSingleLineElse(DetailAST literalElse) {
-<span class="fc" id="L470">        final DetailAST block = literalElse.getFirstChild();</span>
-<span class="fc bfc" id="L471" title="All 2 branches covered.">        return literalElse.getLineNo() == block.getLineNo();</span>
+<span class="fc" id="L456">        final DetailAST block = literalElse.getFirstChild();</span>
+<span class="fc" id="L457">        return isOnSameLine(literalElse, block);</span>
     }
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>

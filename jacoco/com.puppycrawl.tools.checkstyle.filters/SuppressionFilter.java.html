@@ -32,61 +32,243 @@ import com.puppycrawl.tools.checkstyle.utils.FilterUtil;
 
 /**
  * &lt;p&gt;
- * This filter accepts AuditEvents according to file, check, line, and
- * column, as specified in a suppression file.
+ * Filter {@code SuppressionFilter} rejects audit events for Check errors according to a
+ * &lt;a href=&quot;https://checkstyle.org/dtds/suppressions_1_2.dtd&quot;&gt;suppressions XML document&lt;/a&gt;
+ * in a file. If there is no configured suppressions file or the optional is set to true and
+ * suppressions file was not found the Filter accepts all audit events.
  * &lt;/p&gt;
+ * &lt;p&gt;
+ * A &lt;a href=&quot;https://checkstyle.org/dtds/suppressions_1_2.dtd&quot;&gt;suppressions XML document&lt;/a&gt;
+ * contains a set of {@code suppress} elements, where each {@code suppress}
+ * element can have the following attributes:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code files} - a &lt;a href=&quot;https://checkstyle.org/property_types.html#regexp&quot;&gt;
+ * Regular Expression&lt;/a&gt; matched against the file name associated with an audit event.
+ * It is optional.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code checks} - a &lt;a href=&quot;https://checkstyle.org/property_types.html#regexp&quot;&gt;
+ * Regular Expression&lt;/a&gt; matched against the name of the check associated with an audit event.
+ * Optional as long as {@code id} or {@code message} is specified.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code message} - a &lt;a href=&quot;https://checkstyle.org/property_types.html#regexp&quot;&gt;
+ * Regular Expression&lt;/a&gt; matched against the message of the check associated with an audit event.
+ * Optional as long as {@code checks} or {@code id} is specified.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code id} - a &lt;a href=&quot;https://checkstyle.org/property_types.html#string&quot;&gt;string&lt;/a&gt;
+ * matched against the &lt;a href=&quot;config.html#Id&quot;&gt;check id&lt;/a&gt; associated with an audit event.
+ * Optional as long as {@code checks} or {@code message} is specified.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code lines} - a comma-separated list of values, where each value is an
+ * &lt;a href=&quot;https://checkstyle.org/property_types.html#integer&quot;&gt;integer&lt;/a&gt;
+ * or a range of integers denoted by integer-integer.
+ * It is optional.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code columns} - a comma-separated list of values, where each value is an
+ * &lt;a href=&quot;https://checkstyle.org/property_types.html#integer&quot;&gt;integer&lt;/a&gt;
+ * or a range of integers denoted by integer-integer.
+ * It is optional.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * Each audit event is checked against each {@code suppress} element.
+ * It is suppressed if all specified attributes match against the audit event.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * ATTENTION: filtering by message is dependant on runtime locale.
+ * If project is running in different languages it is better to avoid filtering by message.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * You can download template of empty suppression filter
+ * &lt;a href=&quot;https://checkstyle.org/files/suppressions_none.xml&quot;&gt;here&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Location of the file defined in {@code file} property is checked in the following order:
+ * &lt;/p&gt;
+ * &lt;ol&gt;
+ * &lt;li&gt;
+ * as a filesystem location
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * if no file found, and the location starts with either {@code http://} or {@code https://},
+ * then it is interpreted as a URL
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * if no file found, then passed to the {@code ClassLoader.getResource()} method.
+ * &lt;/li&gt;
+ * &lt;/ol&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code file} - Specify the location of the &lt;em&gt;suppressions XML document&lt;/em&gt; file.
+ * Default value is {@code null}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code optional} - Control what to do when the file is not existing.
+ * If {@code optional} is set to {@code false} the file must exist, or else it
+ * ends with error. On the other hand if optional is {@code true} and file is
+ * not found, the filter accept all audit events.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * For example, the following configuration fragment directs the Checker to use
+ * a {@code SuppressionFilter} with suppressions file {@code config/suppressions.xml}:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;SuppressionFilter&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;file&amp;quot; value=&amp;quot;config/suppressions.xml&amp;quot;/&amp;gt;
+ *   &amp;lt;property name=&amp;quot;optional&amp;quot; value=&amp;quot;false&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * The following suppressions XML document directs a {@code SuppressionFilter} to
+ * reject {@code JavadocStyleCheck} errors for lines 82 and 108 to 122 of file
+ * {@code AbstractComplexityCheck.java}, and {@code MagicNumberCheck} errors for
+ * line 221 of file {@code JavadocStyleCheck.java}, and
+ * {@code 'Missing a Javadoc comment'} errors for all lines and files:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;?xml version=&amp;quot;1.0&amp;quot;?&amp;gt;
+ *
+ * &amp;lt;!DOCTYPE suppressions PUBLIC
+ *   &amp;quot;-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN&amp;quot;
+ *   &amp;quot;https://checkstyle.org/dtds/suppressions_1_2.dtd&amp;quot;&amp;gt;
+ *
+ * &amp;lt;suppressions&amp;gt;
+ *   &amp;lt;suppress checks=&amp;quot;JavadocStyleCheck&amp;quot;
+ *     files=&amp;quot;AbstractComplexityCheck.java&amp;quot;
+ *     lines=&amp;quot;82,108-122&amp;quot;/&amp;gt;
+ *   &amp;lt;suppress checks=&amp;quot;MagicNumberCheck&amp;quot;
+ *     files=&amp;quot;JavadocStyleCheck.java&amp;quot;
+ *     lines=&amp;quot;221&amp;quot;/&amp;gt;
+ *   &amp;lt;suppress message=&amp;quot;Missing a Javadoc comment&amp;quot;/&amp;gt;
+ * &amp;lt;/suppressions&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress check by &lt;a href=&quot;https://checkstyle.org/config.html#Id&quot;&gt;module id&lt;/a&gt;
+ * when config have two instances on the same check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress id=&amp;quot;stringEqual&amp;quot; files=&amp;quot;SomeTestCode.java&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress all checks for hidden files and folders:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress files=&amp;quot;[/\\]\..+&amp;quot; checks=&amp;quot;.*&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress all checks for Maven-generated code:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress files=&amp;quot;[/\\]target[/\\]&amp;quot; checks=&amp;quot;.*&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress all checks for archives, classes and other binary files:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress files=&amp;quot;.+\.(?:jar|zip|war|class|tar|bin)$&amp;quot; checks=&amp;quot;.*&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress all checks for image files:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress files=&quot;.+\.(?:png|gif|jpg|jpeg)$&quot; checks=&quot;.*&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress all checks for non-java files:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress files=&amp;quot;.+\.(?:txt|xml|csv|sh|thrift|html|sql|eot|ttf|woff|css|png)$&amp;quot;
+ *     checks=&amp;quot;.*&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress all checks in generated sources:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress checks=&amp;quot;.*&amp;quot; files=&amp;quot;com[\\/]mycompany[\\/]app[\\/]gen[\\/]&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress FileLength check on integration tests in certain folder:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress checks=&amp;quot;FileLength&amp;quot;
+ *   files=&amp;quot;com[\\/]mycompany[\\/]app[\\/].*IT.java&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Suppress naming errors on variable named 'log' in all files:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;suppress message=&amp;quot;Name 'log' must match pattern&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @since 3.2
  */
-<span class="fc" id="L39">public class SuppressionFilter extends AutomaticBean implements Filter, ExternalResourceHolder {</span>
+<span class="fc" id="L213">public class SuppressionFilter extends AutomaticBean implements Filter, ExternalResourceHolder {</span>
 
-    /** Filename of suppression file. */
+    /** Specify the location of the &lt;em&gt;suppressions XML document&lt;/em&gt; file. */
     private String file;
-    /** Tells whether config file existence is optional. */
+    /**
+     * Control what to do when the file is not existing. If {@code optional} is
+     * set to {@code false} the file must exist, or else it ends with error.
+     * On the other hand if optional is {@code true} and file is not found,
+     * the filter accept all audit events.
+     */
     private boolean optional;
     /** Set of individual suppresses. */
-<span class="fc" id="L46">    private FilterSet filters = new FilterSet();</span>
+<span class="fc" id="L225">    private FilterSet filters = new FilterSet();</span>
 
     /**
-     * Sets name of the suppression file.
+     * Setter to specify the location of the &lt;em&gt;suppressions XML document&lt;/em&gt; file.
      * @param fileName name of the suppressions file.
      */
     public void setFile(String fileName) {
-<span class="fc" id="L53">        file = fileName;</span>
-<span class="fc" id="L54">    }</span>
+<span class="fc" id="L232">        file = fileName;</span>
+<span class="fc" id="L233">    }</span>
 
     /**
-     * Sets whether config file existence is optional.
+     * Setter to control what to do when the file is not existing.
+     * If {@code optional} is set to {@code false} the file must exist, or else
+     * it ends with error. On the other hand if optional is {@code true}
+     * and file is not found, the filter accept all audit events.
      * @param optional tells if config file existence is optional.
      */
     public void setOptional(boolean optional) {
-<span class="fc" id="L61">        this.optional = optional;</span>
-<span class="fc" id="L62">    }</span>
+<span class="fc" id="L243">        this.optional = optional;</span>
+<span class="fc" id="L244">    }</span>
 
     @Override
     public boolean accept(AuditEvent event) {
-<span class="fc" id="L66">        return filters.accept(event);</span>
+<span class="fc" id="L248">        return filters.accept(event);</span>
     }
 
     @Override
     protected void finishLocalSetup() throws CheckstyleException {
-<span class="fc bfc" id="L71" title="All 2 branches covered.">        if (file != null) {</span>
-<span class="fc bfc" id="L72" title="All 2 branches covered.">            if (optional) {</span>
-<span class="fc bfc" id="L73" title="All 2 branches covered.">                if (FilterUtil.isFileExists(file)) {</span>
-<span class="fc" id="L74">                    filters = SuppressionsLoader.loadSuppressions(file);</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">        if (file != null) {</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">            if (optional) {</span>
+<span class="fc bfc" id="L255" title="All 2 branches covered.">                if (FilterUtil.isFileExists(file)) {</span>
+<span class="fc" id="L256">                    filters = SuppressionsLoader.loadSuppressions(file);</span>
                 }
                 else {
-<span class="fc" id="L77">                    filters = new FilterSet();</span>
+<span class="fc" id="L259">                    filters = new FilterSet();</span>
                 }
             }
             else {
-<span class="fc" id="L81">                filters = SuppressionsLoader.loadSuppressions(file);</span>
+<span class="fc" id="L263">                filters = SuppressionsLoader.loadSuppressions(file);</span>
             }
         }
-<span class="fc" id="L84">    }</span>
+<span class="fc" id="L266">    }</span>
 
     @Override
     public Set&lt;String&gt; getExternalResourceLocations() {
-<span class="fc" id="L88">        return Collections.singleton(file);</span>
+<span class="fc" id="L270">        return Collections.singleton(file);</span>
     }
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.3.201901230119</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>
