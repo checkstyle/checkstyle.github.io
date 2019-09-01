@@ -163,7 +163,7 @@
 <span class="sourceLineNo">155</span> * &lt;li&gt;<a name="line.155"></a>
 <span class="sourceLineNo">156</span> * Property {@code ignoredAnnotations} - Specify annotations which allow the check to<a name="line.156"></a>
 <span class="sourceLineNo">157</span> * skip the method from validation.<a name="line.157"></a>
-<span class="sourceLineNo">158</span> * Default value is {@code Before, BeforeClass, Test, After, AfterClass}.<a name="line.158"></a>
+<span class="sourceLineNo">158</span> * Default value is {@code After, AfterClass, Before, BeforeClass, Test}.<a name="line.158"></a>
 <span class="sourceLineNo">159</span> * &lt;/li&gt;<a name="line.159"></a>
 <span class="sourceLineNo">160</span> * &lt;/ul&gt;<a name="line.160"></a>
 <span class="sourceLineNo">161</span> * &lt;p&gt;<a name="line.161"></a>
@@ -297,150 +297,181 @@
 <span class="sourceLineNo">289</span>     */<a name="line.289"></a>
 <span class="sourceLineNo">290</span>    private static boolean hasJavadocCommentOnToken(DetailAST methodDef, int tokenType) {<a name="line.290"></a>
 <span class="sourceLineNo">291</span>        final DetailAST token = methodDef.findFirstToken(tokenType);<a name="line.291"></a>
-<span class="sourceLineNo">292</span>        return token.branchContains(TokenTypes.BLOCK_COMMENT_BEGIN);<a name="line.292"></a>
+<span class="sourceLineNo">292</span>        return branchContains(token, TokenTypes.BLOCK_COMMENT_BEGIN);<a name="line.292"></a>
 <span class="sourceLineNo">293</span>    }<a name="line.293"></a>
 <span class="sourceLineNo">294</span><a name="line.294"></a>
 <span class="sourceLineNo">295</span>    /**<a name="line.295"></a>
-<span class="sourceLineNo">296</span>     * Checks whether a methods is native.<a name="line.296"></a>
-<span class="sourceLineNo">297</span>     * @param ast method definition token.<a name="line.297"></a>
-<span class="sourceLineNo">298</span>     * @return true if a methods is native.<a name="line.298"></a>
-<span class="sourceLineNo">299</span>     */<a name="line.299"></a>
-<span class="sourceLineNo">300</span>    private static boolean isNativeMethod(DetailAST ast) {<a name="line.300"></a>
-<span class="sourceLineNo">301</span>        final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);<a name="line.301"></a>
-<span class="sourceLineNo">302</span>        return mods.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;<a name="line.302"></a>
-<span class="sourceLineNo">303</span>    }<a name="line.303"></a>
-<span class="sourceLineNo">304</span><a name="line.304"></a>
-<span class="sourceLineNo">305</span>    /**<a name="line.305"></a>
-<span class="sourceLineNo">306</span>     * Checks whether a method has only comments in the body (has an empty implementation).<a name="line.306"></a>
-<span class="sourceLineNo">307</span>     * Method is OK if its implementation is empty.<a name="line.307"></a>
-<span class="sourceLineNo">308</span>     * @param ast method definition token.<a name="line.308"></a>
-<span class="sourceLineNo">309</span>     * @return true if a method has only comments in the body.<a name="line.309"></a>
-<span class="sourceLineNo">310</span>     */<a name="line.310"></a>
-<span class="sourceLineNo">311</span>    private static boolean hasEmptyImplementation(DetailAST ast) {<a name="line.311"></a>
-<span class="sourceLineNo">312</span>        boolean hasEmptyBody = true;<a name="line.312"></a>
-<span class="sourceLineNo">313</span>        final DetailAST methodImplOpenBrace = ast.findFirstToken(TokenTypes.SLIST);<a name="line.313"></a>
-<span class="sourceLineNo">314</span>        final DetailAST methodImplCloseBrace = methodImplOpenBrace.getLastChild();<a name="line.314"></a>
-<span class="sourceLineNo">315</span>        final Predicate&lt;DetailAST&gt; predicate = currentNode -&gt; {<a name="line.315"></a>
-<span class="sourceLineNo">316</span>            return currentNode != methodImplCloseBrace<a name="line.316"></a>
-<span class="sourceLineNo">317</span>                &amp;&amp; !TokenUtil.isCommentType(currentNode.getType());<a name="line.317"></a>
-<span class="sourceLineNo">318</span>        };<a name="line.318"></a>
-<span class="sourceLineNo">319</span>        final Optional&lt;DetailAST&gt; methodBody =<a name="line.319"></a>
-<span class="sourceLineNo">320</span>            TokenUtil.findFirstTokenByPredicate(methodImplOpenBrace, predicate);<a name="line.320"></a>
-<span class="sourceLineNo">321</span>        if (methodBody.isPresent()) {<a name="line.321"></a>
-<span class="sourceLineNo">322</span>            hasEmptyBody = false;<a name="line.322"></a>
-<span class="sourceLineNo">323</span>        }<a name="line.323"></a>
-<span class="sourceLineNo">324</span>        return hasEmptyBody;<a name="line.324"></a>
-<span class="sourceLineNo">325</span>    }<a name="line.325"></a>
-<span class="sourceLineNo">326</span><a name="line.326"></a>
-<span class="sourceLineNo">327</span>    /**<a name="line.327"></a>
-<span class="sourceLineNo">328</span>     * Checks whether a method can be overridden.<a name="line.328"></a>
-<span class="sourceLineNo">329</span>     * Method can be overridden if it is not private, abstract, final or static.<a name="line.329"></a>
-<span class="sourceLineNo">330</span>     * Note that the check has nothing to do for interfaces.<a name="line.330"></a>
-<span class="sourceLineNo">331</span>     * @param methodDef method definition token.<a name="line.331"></a>
-<span class="sourceLineNo">332</span>     * @return true if a method can be overridden in a subclass.<a name="line.332"></a>
-<span class="sourceLineNo">333</span>     */<a name="line.333"></a>
-<span class="sourceLineNo">334</span>    private static boolean canBeOverridden(DetailAST methodDef) {<a name="line.334"></a>
-<span class="sourceLineNo">335</span>        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);<a name="line.335"></a>
-<span class="sourceLineNo">336</span>        return ScopeUtil.getSurroundingScope(methodDef).isIn(Scope.PROTECTED)<a name="line.336"></a>
-<span class="sourceLineNo">337</span>            &amp;&amp; !ScopeUtil.isInInterfaceOrAnnotationBlock(methodDef)<a name="line.337"></a>
-<span class="sourceLineNo">338</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null<a name="line.338"></a>
-<span class="sourceLineNo">339</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.ABSTRACT) == null<a name="line.339"></a>
-<span class="sourceLineNo">340</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null<a name="line.340"></a>
-<span class="sourceLineNo">341</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null;<a name="line.341"></a>
-<span class="sourceLineNo">342</span>    }<a name="line.342"></a>
-<span class="sourceLineNo">343</span><a name="line.343"></a>
-<span class="sourceLineNo">344</span>    /**<a name="line.344"></a>
-<span class="sourceLineNo">345</span>     * Checks whether a method has any of ignored annotations.<a name="line.345"></a>
-<span class="sourceLineNo">346</span>     * @param methodDef method definition token.<a name="line.346"></a>
-<span class="sourceLineNo">347</span>     * @param annotations a set of ignored annotations.<a name="line.347"></a>
-<span class="sourceLineNo">348</span>     * @return true if a method has any of ignored annotations.<a name="line.348"></a>
-<span class="sourceLineNo">349</span>     */<a name="line.349"></a>
-<span class="sourceLineNo">350</span>    private static boolean hasIgnoredAnnotation(DetailAST methodDef, Set&lt;String&gt; annotations) {<a name="line.350"></a>
-<span class="sourceLineNo">351</span>        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);<a name="line.351"></a>
-<span class="sourceLineNo">352</span>        final Optional&lt;DetailAST&gt; annotation = TokenUtil.findFirstTokenByPredicate(modifiers,<a name="line.352"></a>
-<span class="sourceLineNo">353</span>            currentToken -&gt; {<a name="line.353"></a>
-<span class="sourceLineNo">354</span>                return currentToken.getType() == TokenTypes.ANNOTATION<a name="line.354"></a>
-<span class="sourceLineNo">355</span>                    &amp;&amp; annotations.contains(getAnnotationName(currentToken));<a name="line.355"></a>
-<span class="sourceLineNo">356</span>            });<a name="line.356"></a>
-<span class="sourceLineNo">357</span>        return annotation.isPresent();<a name="line.357"></a>
-<span class="sourceLineNo">358</span>    }<a name="line.358"></a>
-<span class="sourceLineNo">359</span><a name="line.359"></a>
-<span class="sourceLineNo">360</span>    /**<a name="line.360"></a>
-<span class="sourceLineNo">361</span>     * Gets the name of the annotation.<a name="line.361"></a>
-<span class="sourceLineNo">362</span>     * @param annotation to get name of.<a name="line.362"></a>
-<span class="sourceLineNo">363</span>     * @return the name of the annotation.<a name="line.363"></a>
+<span class="sourceLineNo">296</span>     * Checks whether a specified token type exist under token.<a name="line.296"></a>
+<span class="sourceLineNo">297</span>     *<a name="line.297"></a>
+<span class="sourceLineNo">298</span>     * @param token tree token.<a name="line.298"></a>
+<span class="sourceLineNo">299</span>     * @param tokenType token type.<a name="line.299"></a>
+<span class="sourceLineNo">300</span>     * @return true if a tokenType exists under token.<a name="line.300"></a>
+<span class="sourceLineNo">301</span>     */<a name="line.301"></a>
+<span class="sourceLineNo">302</span>    private static boolean branchContains(DetailAST token, int tokenType) {<a name="line.302"></a>
+<span class="sourceLineNo">303</span>        boolean result = false;<a name="line.303"></a>
+<span class="sourceLineNo">304</span>        DetailAST curNode = token;<a name="line.304"></a>
+<span class="sourceLineNo">305</span>        while (curNode != null) {<a name="line.305"></a>
+<span class="sourceLineNo">306</span>            if (curNode.getType() == tokenType) {<a name="line.306"></a>
+<span class="sourceLineNo">307</span>                result = true;<a name="line.307"></a>
+<span class="sourceLineNo">308</span>                break;<a name="line.308"></a>
+<span class="sourceLineNo">309</span>            }<a name="line.309"></a>
+<span class="sourceLineNo">310</span><a name="line.310"></a>
+<span class="sourceLineNo">311</span>            DetailAST toVisit = curNode.getFirstChild();<a name="line.311"></a>
+<span class="sourceLineNo">312</span>            while (toVisit == null) {<a name="line.312"></a>
+<span class="sourceLineNo">313</span>                if (curNode == token) {<a name="line.313"></a>
+<span class="sourceLineNo">314</span>                    break;<a name="line.314"></a>
+<span class="sourceLineNo">315</span>                }<a name="line.315"></a>
+<span class="sourceLineNo">316</span><a name="line.316"></a>
+<span class="sourceLineNo">317</span>                toVisit = curNode.getNextSibling();<a name="line.317"></a>
+<span class="sourceLineNo">318</span>                curNode = curNode.getParent();<a name="line.318"></a>
+<span class="sourceLineNo">319</span>            }<a name="line.319"></a>
+<span class="sourceLineNo">320</span>            curNode = toVisit;<a name="line.320"></a>
+<span class="sourceLineNo">321</span>        }<a name="line.321"></a>
+<span class="sourceLineNo">322</span><a name="line.322"></a>
+<span class="sourceLineNo">323</span>        return result;<a name="line.323"></a>
+<span class="sourceLineNo">324</span>    }<a name="line.324"></a>
+<span class="sourceLineNo">325</span><a name="line.325"></a>
+<span class="sourceLineNo">326</span>    /**<a name="line.326"></a>
+<span class="sourceLineNo">327</span>     * Checks whether a methods is native.<a name="line.327"></a>
+<span class="sourceLineNo">328</span>     * @param ast method definition token.<a name="line.328"></a>
+<span class="sourceLineNo">329</span>     * @return true if a methods is native.<a name="line.329"></a>
+<span class="sourceLineNo">330</span>     */<a name="line.330"></a>
+<span class="sourceLineNo">331</span>    private static boolean isNativeMethod(DetailAST ast) {<a name="line.331"></a>
+<span class="sourceLineNo">332</span>        final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);<a name="line.332"></a>
+<span class="sourceLineNo">333</span>        return mods.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;<a name="line.333"></a>
+<span class="sourceLineNo">334</span>    }<a name="line.334"></a>
+<span class="sourceLineNo">335</span><a name="line.335"></a>
+<span class="sourceLineNo">336</span>    /**<a name="line.336"></a>
+<span class="sourceLineNo">337</span>     * Checks whether a method has only comments in the body (has an empty implementation).<a name="line.337"></a>
+<span class="sourceLineNo">338</span>     * Method is OK if its implementation is empty.<a name="line.338"></a>
+<span class="sourceLineNo">339</span>     * @param ast method definition token.<a name="line.339"></a>
+<span class="sourceLineNo">340</span>     * @return true if a method has only comments in the body.<a name="line.340"></a>
+<span class="sourceLineNo">341</span>     */<a name="line.341"></a>
+<span class="sourceLineNo">342</span>    private static boolean hasEmptyImplementation(DetailAST ast) {<a name="line.342"></a>
+<span class="sourceLineNo">343</span>        boolean hasEmptyBody = true;<a name="line.343"></a>
+<span class="sourceLineNo">344</span>        final DetailAST methodImplOpenBrace = ast.findFirstToken(TokenTypes.SLIST);<a name="line.344"></a>
+<span class="sourceLineNo">345</span>        final DetailAST methodImplCloseBrace = methodImplOpenBrace.getLastChild();<a name="line.345"></a>
+<span class="sourceLineNo">346</span>        final Predicate&lt;DetailAST&gt; predicate = currentNode -&gt; {<a name="line.346"></a>
+<span class="sourceLineNo">347</span>            return currentNode != methodImplCloseBrace<a name="line.347"></a>
+<span class="sourceLineNo">348</span>                &amp;&amp; !TokenUtil.isCommentType(currentNode.getType());<a name="line.348"></a>
+<span class="sourceLineNo">349</span>        };<a name="line.349"></a>
+<span class="sourceLineNo">350</span>        final Optional&lt;DetailAST&gt; methodBody =<a name="line.350"></a>
+<span class="sourceLineNo">351</span>            TokenUtil.findFirstTokenByPredicate(methodImplOpenBrace, predicate);<a name="line.351"></a>
+<span class="sourceLineNo">352</span>        if (methodBody.isPresent()) {<a name="line.352"></a>
+<span class="sourceLineNo">353</span>            hasEmptyBody = false;<a name="line.353"></a>
+<span class="sourceLineNo">354</span>        }<a name="line.354"></a>
+<span class="sourceLineNo">355</span>        return hasEmptyBody;<a name="line.355"></a>
+<span class="sourceLineNo">356</span>    }<a name="line.356"></a>
+<span class="sourceLineNo">357</span><a name="line.357"></a>
+<span class="sourceLineNo">358</span>    /**<a name="line.358"></a>
+<span class="sourceLineNo">359</span>     * Checks whether a method can be overridden.<a name="line.359"></a>
+<span class="sourceLineNo">360</span>     * Method can be overridden if it is not private, abstract, final or static.<a name="line.360"></a>
+<span class="sourceLineNo">361</span>     * Note that the check has nothing to do for interfaces.<a name="line.361"></a>
+<span class="sourceLineNo">362</span>     * @param methodDef method definition token.<a name="line.362"></a>
+<span class="sourceLineNo">363</span>     * @return true if a method can be overridden in a subclass.<a name="line.363"></a>
 <span class="sourceLineNo">364</span>     */<a name="line.364"></a>
-<span class="sourceLineNo">365</span>    private static String getAnnotationName(DetailAST annotation) {<a name="line.365"></a>
-<span class="sourceLineNo">366</span>        final DetailAST dotAst = annotation.findFirstToken(TokenTypes.DOT);<a name="line.366"></a>
-<span class="sourceLineNo">367</span>        final String name;<a name="line.367"></a>
-<span class="sourceLineNo">368</span>        if (dotAst == null) {<a name="line.368"></a>
-<span class="sourceLineNo">369</span>            name = annotation.findFirstToken(TokenTypes.IDENT).getText();<a name="line.369"></a>
-<span class="sourceLineNo">370</span>        }<a name="line.370"></a>
-<span class="sourceLineNo">371</span>        else {<a name="line.371"></a>
-<span class="sourceLineNo">372</span>            name = dotAst.findFirstToken(TokenTypes.IDENT).getText();<a name="line.372"></a>
-<span class="sourceLineNo">373</span>        }<a name="line.373"></a>
-<span class="sourceLineNo">374</span>        return name;<a name="line.374"></a>
-<span class="sourceLineNo">375</span>    }<a name="line.375"></a>
-<span class="sourceLineNo">376</span><a name="line.376"></a>
-<span class="sourceLineNo">377</span>    /**<a name="line.377"></a>
-<span class="sourceLineNo">378</span>     * Returns CLASS_DEF or ENUM_DEF token which is the nearest to the given ast node.<a name="line.378"></a>
-<span class="sourceLineNo">379</span>     * Searches the tree towards the root until it finds a CLASS_DEF or ENUM_DEF node.<a name="line.379"></a>
-<span class="sourceLineNo">380</span>     * @param ast the start node for searching.<a name="line.380"></a>
-<span class="sourceLineNo">381</span>     * @return the CLASS_DEF or ENUM_DEF token.<a name="line.381"></a>
-<span class="sourceLineNo">382</span>     */<a name="line.382"></a>
-<span class="sourceLineNo">383</span>    private static DetailAST getNearestClassOrEnumDefinition(DetailAST ast) {<a name="line.383"></a>
-<span class="sourceLineNo">384</span>        DetailAST searchAST = ast;<a name="line.384"></a>
-<span class="sourceLineNo">385</span>        while (searchAST.getType() != TokenTypes.CLASS_DEF<a name="line.385"></a>
-<span class="sourceLineNo">386</span>               &amp;&amp; searchAST.getType() != TokenTypes.ENUM_DEF) {<a name="line.386"></a>
-<span class="sourceLineNo">387</span>            searchAST = searchAST.getParent();<a name="line.387"></a>
-<span class="sourceLineNo">388</span>        }<a name="line.388"></a>
-<span class="sourceLineNo">389</span>        return searchAST;<a name="line.389"></a>
-<span class="sourceLineNo">390</span>    }<a name="line.390"></a>
-<span class="sourceLineNo">391</span><a name="line.391"></a>
-<span class="sourceLineNo">392</span>    /**<a name="line.392"></a>
-<span class="sourceLineNo">393</span>     * Checks if the given class (given CLASS_DEF node) can be subclassed.<a name="line.393"></a>
-<span class="sourceLineNo">394</span>     * @param classDef class definition token.<a name="line.394"></a>
-<span class="sourceLineNo">395</span>     * @return true if the containing class can be subclassed.<a name="line.395"></a>
-<span class="sourceLineNo">396</span>     */<a name="line.396"></a>
-<span class="sourceLineNo">397</span>    private static boolean canBeSubclassed(DetailAST classDef) {<a name="line.397"></a>
-<span class="sourceLineNo">398</span>        final DetailAST modifiers = classDef.findFirstToken(TokenTypes.MODIFIERS);<a name="line.398"></a>
-<span class="sourceLineNo">399</span>        return classDef.getType() != TokenTypes.ENUM_DEF<a name="line.399"></a>
-<span class="sourceLineNo">400</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null<a name="line.400"></a>
-<span class="sourceLineNo">401</span>            &amp;&amp; hasDefaultOrExplicitNonPrivateCtor(classDef);<a name="line.401"></a>
-<span class="sourceLineNo">402</span>    }<a name="line.402"></a>
-<span class="sourceLineNo">403</span><a name="line.403"></a>
-<span class="sourceLineNo">404</span>    /**<a name="line.404"></a>
-<span class="sourceLineNo">405</span>     * Checks whether a class has default or explicit non-private constructor.<a name="line.405"></a>
-<span class="sourceLineNo">406</span>     * @param classDef class ast token.<a name="line.406"></a>
-<span class="sourceLineNo">407</span>     * @return true if a class has default or explicit non-private constructor.<a name="line.407"></a>
-<span class="sourceLineNo">408</span>     */<a name="line.408"></a>
-<span class="sourceLineNo">409</span>    private static boolean hasDefaultOrExplicitNonPrivateCtor(DetailAST classDef) {<a name="line.409"></a>
-<span class="sourceLineNo">410</span>        // check if subclassing is prevented by having only private ctors<a name="line.410"></a>
-<span class="sourceLineNo">411</span>        final DetailAST objBlock = classDef.findFirstToken(TokenTypes.OBJBLOCK);<a name="line.411"></a>
-<span class="sourceLineNo">412</span><a name="line.412"></a>
-<span class="sourceLineNo">413</span>        boolean hasDefaultConstructor = true;<a name="line.413"></a>
-<span class="sourceLineNo">414</span>        boolean hasExplicitNonPrivateCtor = false;<a name="line.414"></a>
-<span class="sourceLineNo">415</span><a name="line.415"></a>
-<span class="sourceLineNo">416</span>        DetailAST candidate = objBlock.getFirstChild();<a name="line.416"></a>
-<span class="sourceLineNo">417</span><a name="line.417"></a>
-<span class="sourceLineNo">418</span>        while (candidate != null) {<a name="line.418"></a>
-<span class="sourceLineNo">419</span>            if (candidate.getType() == TokenTypes.CTOR_DEF) {<a name="line.419"></a>
-<span class="sourceLineNo">420</span>                hasDefaultConstructor = false;<a name="line.420"></a>
-<span class="sourceLineNo">421</span><a name="line.421"></a>
-<span class="sourceLineNo">422</span>                final DetailAST ctorMods =<a name="line.422"></a>
-<span class="sourceLineNo">423</span>                        candidate.findFirstToken(TokenTypes.MODIFIERS);<a name="line.423"></a>
-<span class="sourceLineNo">424</span>                if (ctorMods.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {<a name="line.424"></a>
-<span class="sourceLineNo">425</span>                    hasExplicitNonPrivateCtor = true;<a name="line.425"></a>
-<span class="sourceLineNo">426</span>                    break;<a name="line.426"></a>
-<span class="sourceLineNo">427</span>                }<a name="line.427"></a>
-<span class="sourceLineNo">428</span>            }<a name="line.428"></a>
-<span class="sourceLineNo">429</span>            candidate = candidate.getNextSibling();<a name="line.429"></a>
-<span class="sourceLineNo">430</span>        }<a name="line.430"></a>
-<span class="sourceLineNo">431</span><a name="line.431"></a>
-<span class="sourceLineNo">432</span>        return hasDefaultConstructor || hasExplicitNonPrivateCtor;<a name="line.432"></a>
+<span class="sourceLineNo">365</span>    private static boolean canBeOverridden(DetailAST methodDef) {<a name="line.365"></a>
+<span class="sourceLineNo">366</span>        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);<a name="line.366"></a>
+<span class="sourceLineNo">367</span>        return ScopeUtil.getSurroundingScope(methodDef).isIn(Scope.PROTECTED)<a name="line.367"></a>
+<span class="sourceLineNo">368</span>            &amp;&amp; !ScopeUtil.isInInterfaceOrAnnotationBlock(methodDef)<a name="line.368"></a>
+<span class="sourceLineNo">369</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null<a name="line.369"></a>
+<span class="sourceLineNo">370</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.ABSTRACT) == null<a name="line.370"></a>
+<span class="sourceLineNo">371</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null<a name="line.371"></a>
+<span class="sourceLineNo">372</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null;<a name="line.372"></a>
+<span class="sourceLineNo">373</span>    }<a name="line.373"></a>
+<span class="sourceLineNo">374</span><a name="line.374"></a>
+<span class="sourceLineNo">375</span>    /**<a name="line.375"></a>
+<span class="sourceLineNo">376</span>     * Checks whether a method has any of ignored annotations.<a name="line.376"></a>
+<span class="sourceLineNo">377</span>     * @param methodDef method definition token.<a name="line.377"></a>
+<span class="sourceLineNo">378</span>     * @param annotations a set of ignored annotations.<a name="line.378"></a>
+<span class="sourceLineNo">379</span>     * @return true if a method has any of ignored annotations.<a name="line.379"></a>
+<span class="sourceLineNo">380</span>     */<a name="line.380"></a>
+<span class="sourceLineNo">381</span>    private static boolean hasIgnoredAnnotation(DetailAST methodDef, Set&lt;String&gt; annotations) {<a name="line.381"></a>
+<span class="sourceLineNo">382</span>        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);<a name="line.382"></a>
+<span class="sourceLineNo">383</span>        final Optional&lt;DetailAST&gt; annotation = TokenUtil.findFirstTokenByPredicate(modifiers,<a name="line.383"></a>
+<span class="sourceLineNo">384</span>            currentToken -&gt; {<a name="line.384"></a>
+<span class="sourceLineNo">385</span>                return currentToken.getType() == TokenTypes.ANNOTATION<a name="line.385"></a>
+<span class="sourceLineNo">386</span>                    &amp;&amp; annotations.contains(getAnnotationName(currentToken));<a name="line.386"></a>
+<span class="sourceLineNo">387</span>            });<a name="line.387"></a>
+<span class="sourceLineNo">388</span>        return annotation.isPresent();<a name="line.388"></a>
+<span class="sourceLineNo">389</span>    }<a name="line.389"></a>
+<span class="sourceLineNo">390</span><a name="line.390"></a>
+<span class="sourceLineNo">391</span>    /**<a name="line.391"></a>
+<span class="sourceLineNo">392</span>     * Gets the name of the annotation.<a name="line.392"></a>
+<span class="sourceLineNo">393</span>     * @param annotation to get name of.<a name="line.393"></a>
+<span class="sourceLineNo">394</span>     * @return the name of the annotation.<a name="line.394"></a>
+<span class="sourceLineNo">395</span>     */<a name="line.395"></a>
+<span class="sourceLineNo">396</span>    private static String getAnnotationName(DetailAST annotation) {<a name="line.396"></a>
+<span class="sourceLineNo">397</span>        final DetailAST dotAst = annotation.findFirstToken(TokenTypes.DOT);<a name="line.397"></a>
+<span class="sourceLineNo">398</span>        final String name;<a name="line.398"></a>
+<span class="sourceLineNo">399</span>        if (dotAst == null) {<a name="line.399"></a>
+<span class="sourceLineNo">400</span>            name = annotation.findFirstToken(TokenTypes.IDENT).getText();<a name="line.400"></a>
+<span class="sourceLineNo">401</span>        }<a name="line.401"></a>
+<span class="sourceLineNo">402</span>        else {<a name="line.402"></a>
+<span class="sourceLineNo">403</span>            name = dotAst.findFirstToken(TokenTypes.IDENT).getText();<a name="line.403"></a>
+<span class="sourceLineNo">404</span>        }<a name="line.404"></a>
+<span class="sourceLineNo">405</span>        return name;<a name="line.405"></a>
+<span class="sourceLineNo">406</span>    }<a name="line.406"></a>
+<span class="sourceLineNo">407</span><a name="line.407"></a>
+<span class="sourceLineNo">408</span>    /**<a name="line.408"></a>
+<span class="sourceLineNo">409</span>     * Returns CLASS_DEF or ENUM_DEF token which is the nearest to the given ast node.<a name="line.409"></a>
+<span class="sourceLineNo">410</span>     * Searches the tree towards the root until it finds a CLASS_DEF or ENUM_DEF node.<a name="line.410"></a>
+<span class="sourceLineNo">411</span>     * @param ast the start node for searching.<a name="line.411"></a>
+<span class="sourceLineNo">412</span>     * @return the CLASS_DEF or ENUM_DEF token.<a name="line.412"></a>
+<span class="sourceLineNo">413</span>     */<a name="line.413"></a>
+<span class="sourceLineNo">414</span>    private static DetailAST getNearestClassOrEnumDefinition(DetailAST ast) {<a name="line.414"></a>
+<span class="sourceLineNo">415</span>        DetailAST searchAST = ast;<a name="line.415"></a>
+<span class="sourceLineNo">416</span>        while (searchAST.getType() != TokenTypes.CLASS_DEF<a name="line.416"></a>
+<span class="sourceLineNo">417</span>               &amp;&amp; searchAST.getType() != TokenTypes.ENUM_DEF) {<a name="line.417"></a>
+<span class="sourceLineNo">418</span>            searchAST = searchAST.getParent();<a name="line.418"></a>
+<span class="sourceLineNo">419</span>        }<a name="line.419"></a>
+<span class="sourceLineNo">420</span>        return searchAST;<a name="line.420"></a>
+<span class="sourceLineNo">421</span>    }<a name="line.421"></a>
+<span class="sourceLineNo">422</span><a name="line.422"></a>
+<span class="sourceLineNo">423</span>    /**<a name="line.423"></a>
+<span class="sourceLineNo">424</span>     * Checks if the given class (given CLASS_DEF node) can be subclassed.<a name="line.424"></a>
+<span class="sourceLineNo">425</span>     * @param classDef class definition token.<a name="line.425"></a>
+<span class="sourceLineNo">426</span>     * @return true if the containing class can be subclassed.<a name="line.426"></a>
+<span class="sourceLineNo">427</span>     */<a name="line.427"></a>
+<span class="sourceLineNo">428</span>    private static boolean canBeSubclassed(DetailAST classDef) {<a name="line.428"></a>
+<span class="sourceLineNo">429</span>        final DetailAST modifiers = classDef.findFirstToken(TokenTypes.MODIFIERS);<a name="line.429"></a>
+<span class="sourceLineNo">430</span>        return classDef.getType() != TokenTypes.ENUM_DEF<a name="line.430"></a>
+<span class="sourceLineNo">431</span>            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null<a name="line.431"></a>
+<span class="sourceLineNo">432</span>            &amp;&amp; hasDefaultOrExplicitNonPrivateCtor(classDef);<a name="line.432"></a>
 <span class="sourceLineNo">433</span>    }<a name="line.433"></a>
 <span class="sourceLineNo">434</span><a name="line.434"></a>
-<span class="sourceLineNo">435</span>}<a name="line.435"></a>
+<span class="sourceLineNo">435</span>    /**<a name="line.435"></a>
+<span class="sourceLineNo">436</span>     * Checks whether a class has default or explicit non-private constructor.<a name="line.436"></a>
+<span class="sourceLineNo">437</span>     * @param classDef class ast token.<a name="line.437"></a>
+<span class="sourceLineNo">438</span>     * @return true if a class has default or explicit non-private constructor.<a name="line.438"></a>
+<span class="sourceLineNo">439</span>     */<a name="line.439"></a>
+<span class="sourceLineNo">440</span>    private static boolean hasDefaultOrExplicitNonPrivateCtor(DetailAST classDef) {<a name="line.440"></a>
+<span class="sourceLineNo">441</span>        // check if subclassing is prevented by having only private ctors<a name="line.441"></a>
+<span class="sourceLineNo">442</span>        final DetailAST objBlock = classDef.findFirstToken(TokenTypes.OBJBLOCK);<a name="line.442"></a>
+<span class="sourceLineNo">443</span><a name="line.443"></a>
+<span class="sourceLineNo">444</span>        boolean hasDefaultConstructor = true;<a name="line.444"></a>
+<span class="sourceLineNo">445</span>        boolean hasExplicitNonPrivateCtor = false;<a name="line.445"></a>
+<span class="sourceLineNo">446</span><a name="line.446"></a>
+<span class="sourceLineNo">447</span>        DetailAST candidate = objBlock.getFirstChild();<a name="line.447"></a>
+<span class="sourceLineNo">448</span><a name="line.448"></a>
+<span class="sourceLineNo">449</span>        while (candidate != null) {<a name="line.449"></a>
+<span class="sourceLineNo">450</span>            if (candidate.getType() == TokenTypes.CTOR_DEF) {<a name="line.450"></a>
+<span class="sourceLineNo">451</span>                hasDefaultConstructor = false;<a name="line.451"></a>
+<span class="sourceLineNo">452</span><a name="line.452"></a>
+<span class="sourceLineNo">453</span>                final DetailAST ctorMods =<a name="line.453"></a>
+<span class="sourceLineNo">454</span>                        candidate.findFirstToken(TokenTypes.MODIFIERS);<a name="line.454"></a>
+<span class="sourceLineNo">455</span>                if (ctorMods.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {<a name="line.455"></a>
+<span class="sourceLineNo">456</span>                    hasExplicitNonPrivateCtor = true;<a name="line.456"></a>
+<span class="sourceLineNo">457</span>                    break;<a name="line.457"></a>
+<span class="sourceLineNo">458</span>                }<a name="line.458"></a>
+<span class="sourceLineNo">459</span>            }<a name="line.459"></a>
+<span class="sourceLineNo">460</span>            candidate = candidate.getNextSibling();<a name="line.460"></a>
+<span class="sourceLineNo">461</span>        }<a name="line.461"></a>
+<span class="sourceLineNo">462</span><a name="line.462"></a>
+<span class="sourceLineNo">463</span>        return hasDefaultConstructor || hasExplicitNonPrivateCtor;<a name="line.463"></a>
+<span class="sourceLineNo">464</span>    }<a name="line.464"></a>
+<span class="sourceLineNo">465</span><a name="line.465"></a>
+<span class="sourceLineNo">466</span>}<a name="line.466"></a>
 
 
 

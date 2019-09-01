@@ -29,58 +29,129 @@ import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 
 /**
- * Checks correct indentation of Java Code.
- *
  * &lt;p&gt;
- * The basic idea behind this is that while
- * pretty printers are sometimes convenient for reformatting of
+ * Checks correct indentation of Java code.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The idea behind this is that while
+ * pretty printers are sometimes convenient for bulk reformats of
  * legacy code, they often either aren't configurable enough or
- * just can't anticipate how format should be done.  Sometimes this is
- * personal preference, other times it is practical experience.  In any
+ * just can't anticipate how format should be done. Sometimes this is
+ * personal preference, other times it is practical experience. In any
  * case, this check should just ensure that a minimal set of indentation
- * rules are followed.
+ * rules is followed.
  * &lt;/p&gt;
- *
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code basicOffset} - Specify how far new indentation level should be
+ * indented when on the next line.
+ * Default value is {@code 4}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code braceAdjustment} - Specify how far a braces should be indented
+ * when on the next line.
+ * Default value is {@code 0}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code caseIndent} - Specify how far a case label should be indented
+ * when on next line.
+ * Default value is {@code 4}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code throwsIndent} - Specify how far a throws clause should be
+ * indented when on next line.
+ * Default value is {@code 4}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code arrayInitIndent} - Specify how far an array initialisation
+ * should be indented when on next line. Default value is {@code 4}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code lineWrappingIndentation} - Specify how far continuation line
+ * should be indented when line-wrapping is present.
+ * Default value is {@code 4}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code forceStrictCondition} - Force strict indent level in line
+ * wrapping case. If value is true, line wrap indent have to be same as
+ * lineWrappingIndentation parameter. If value is false, line wrap indent
+ * could be bigger on any value user would like.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
  * &lt;p&gt;
- * Implementation --
- *  Basically, this check requests visitation for all handled token
- *  types (those tokens registered in the HandlerFactory).  When visitToken
- *  is called, a new ExpressionHandler is created for the AST and pushed
- *  onto the handlers stack.  The new handler then checks the indentation
- *  for the currently visiting AST.  When leaveToken is called, the
- *  ExpressionHandler is popped from the stack.
- * &lt;/p&gt;
- *
- * &lt;p&gt;
- *  While on the stack the ExpressionHandler can be queried for the
- *  indentation level it suggests for children as well as for other
- *  values.
- * &lt;/p&gt;
- *
- * &lt;p&gt;
- *  While an ExpressionHandler checks the indentation level of its own
- *  AST, it typically also checks surrounding ASTs.  For instance, a
- *  while loop handler checks the while loop as well as the braces
- *  and immediate children.
+ * To configure the check:
  * &lt;/p&gt;
  * &lt;pre&gt;
- *   - handler class -to-&amp;gt; ID mapping kept in Map
- *   - parent passed in during construction
- *   - suggest child indent level
- *   - allows for some tokens to be on same line (ie inner classes OBJBLOCK)
- *     and not increase indentation level
- *   - looked at using double dispatch for getSuggestedChildIndent(), but it
- *     doesn't seem worthwhile, at least now
- *   - both tabs and spaces are considered whitespace in front of the line...
- *     tabs are converted to spaces
- *   - block parents with parens -- for, while, if, etc... -- are checked that
- *     they match the level of the parent
+ * &amp;lt;module name=&quot;Indentation&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to enforce the indentation style recommended by Oracle:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Indentation&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;caseIndent&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the Check to enforce strict condition in line-wrapping validation.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Indentation&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;forceStrictCondition&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Such config doesn't allow next cases:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * void foo(String aFooString,
+ *         int aFooInt) {} // indent:8 ; expected: 4; warn, because 8 != 4
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * But if forceStrictCondition = false, this code is valid:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * void foo(String aFooString,
+ *         int aFooInt) {} // indent:8 ; expected: &amp;gt; 4; ok, because 8 &amp;gt; 4
  * &lt;/pre&gt;
  *
  * @noinspection ThisEscapedInObjectConstruction
+ * @since 3.1
  */
 @FileStatefulCheck
-<span class="fc" id="L83">public class IndentationCheck extends AbstractCheck {</span>
+<span class="fc" id="L123">public class IndentationCheck extends AbstractCheck {</span>
+
+    /*  -- Implementation --
+     *
+     *  Basically, this check requests visitation for all handled token
+     *  types (those tokens registered in the HandlerFactory).  When visitToken
+     *  is called, a new ExpressionHandler is created for the AST and pushed
+     *  onto the handlers stack.  The new handler then checks the indentation
+     *  for the currently visiting AST.  When leaveToken is called, the
+     *  ExpressionHandler is popped from the stack.
+     *
+     *  While on the stack the ExpressionHandler can be queried for the
+     *  indentation level it suggests for children as well as for other
+     *  values.
+     *
+     *  While an ExpressionHandler checks the indentation level of its own
+     *  AST, it typically also checks surrounding ASTs.  For instance, a
+     *  while loop handler checks the while loop as well as the braces
+     *  and immediate children.
+     *
+     *   - handler class -to-&amp;gt; ID mapping kept in Map
+     *   - parent passed in during construction
+     *   - suggest child indent level
+     *   - allows for some tokens to be on same line (ie inner classes OBJBLOCK)
+     *     and not increase indentation level
+     *   - looked at using double dispatch for getSuggestedChildIndent(), but it
+     *     doesn't seem worthwhile, at least now
+     *   - both tabs and spaces are considered whitespace in front of the line...
+     *     tabs are converted to spaces
+     *   - block parents with parens -- for, while, if, etc... -- are checked that
+     *     they match the level of the parent
+     */
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -110,181 +181,187 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
     private static final int DEFAULT_INDENTATION = 4;
 
     /** Handlers currently in use. */
-<span class="fc" id="L113">    private final Deque&lt;AbstractExpressionHandler&gt; handlers = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L184">    private final Deque&lt;AbstractExpressionHandler&gt; handlers = new ArrayDeque&lt;&gt;();</span>
 
     /** Instance of line wrapping handler to use. */
-<span class="fc" id="L116">    private final LineWrappingHandler lineWrappingHandler = new LineWrappingHandler(this);</span>
+<span class="fc" id="L187">    private final LineWrappingHandler lineWrappingHandler = new LineWrappingHandler(this);</span>
 
     /** Factory from which handlers are distributed. */
-<span class="fc" id="L119">    private final HandlerFactory handlerFactory = new HandlerFactory();</span>
+<span class="fc" id="L190">    private final HandlerFactory handlerFactory = new HandlerFactory();</span>
 
     /** Lines logged as having incorrect indentation. */
     private Set&lt;Integer&gt; incorrectIndentationLines;
 
-    /** How many tabs or spaces to use. */
-<span class="fc" id="L125">    private int basicOffset = DEFAULT_INDENTATION;</span>
+    /** Specify how far new indentation level should be indented when on the next line. */
+<span class="fc" id="L196">    private int basicOffset = DEFAULT_INDENTATION;</span>
 
-    /** How much to indent a case label. */
-<span class="fc" id="L128">    private int caseIndent = DEFAULT_INDENTATION;</span>
+    /** Specify how far a case label should be indented when on next line. */
+<span class="fc" id="L199">    private int caseIndent = DEFAULT_INDENTATION;</span>
 
-    /** How far brace should be indented when on next line. */
+    /** Specify how far a braces should be indented when on the next line. */
     private int braceAdjustment;
 
-    /** How far throws should be indented when on next line. */
-<span class="fc" id="L134">    private int throwsIndent = DEFAULT_INDENTATION;</span>
+    /** Specify how far a throws clause should be indented when on next line. */
+<span class="fc" id="L205">    private int throwsIndent = DEFAULT_INDENTATION;</span>
 
-    /** How much to indent an array initialization when on next line. */
-<span class="fc" id="L137">    private int arrayInitIndent = DEFAULT_INDENTATION;</span>
+    /** Specify how far an array initialisation should be indented when on next line. */
+<span class="fc" id="L208">    private int arrayInitIndent = DEFAULT_INDENTATION;</span>
 
-    /** How far continuation line should be indented when line-wrapping is present. */
-<span class="fc" id="L140">    private int lineWrappingIndentation = DEFAULT_INDENTATION;</span>
+    /** Specify how far continuation line should be indented when line-wrapping is present. */
+<span class="fc" id="L211">    private int lineWrappingIndentation = DEFAULT_INDENTATION;</span>
 
     /**
-     * Force strict condition in line wrapping case. If value is true, line wrap indent
-     * have to be same as lineWrappingIndentation parameter, if value is false, line wrap indent
-     * have to be not less than lineWrappingIndentation parameter.
+     * Force strict indent level in line wrapping case. If value is true, line wrap indent
+     * have to be same as lineWrappingIndentation parameter. If value is false, line wrap indent
+     * could be bigger on any value user would like.
      */
     private boolean forceStrictCondition;
 
     /**
-     * Get forcing strict condition.
+     * Getter to query strict indent level in line wrapping case. If value is true, line wrap indent
+     * have to be same as lineWrappingIndentation parameter. If value is false, line wrap indent
+     * could be bigger on any value user would like.
+     *
      * @return forceStrictCondition value.
      */
     public boolean isForceStrictCondition() {
-<span class="fc" id="L154">        return forceStrictCondition;</span>
+<span class="fc" id="L228">        return forceStrictCondition;</span>
     }
 
     /**
-     * Set forcing strict condition.
+     * Setter to force strict indent level in line wrapping case. If value is true, line wrap indent
+     * have to be same as lineWrappingIndentation parameter. If value is false, line wrap indent
+     * could be bigger on any value user would like.
+     *
      * @param value user's value of forceStrictCondition.
      */
     public void setForceStrictCondition(boolean value) {
-<span class="fc" id="L162">        forceStrictCondition = value;</span>
-<span class="fc" id="L163">    }</span>
+<span class="fc" id="L239">        forceStrictCondition = value;</span>
+<span class="fc" id="L240">    }</span>
 
     /**
-     * Set the basic offset.
+     * Setter to specify how far new indentation level should be indented when on the next line.
      *
      * @param basicOffset   the number of tabs or spaces to indent
      */
     public void setBasicOffset(int basicOffset) {
-<span class="fc" id="L171">        this.basicOffset = basicOffset;</span>
-<span class="fc" id="L172">    }</span>
+<span class="fc" id="L248">        this.basicOffset = basicOffset;</span>
+<span class="fc" id="L249">    }</span>
 
     /**
-     * Get the basic offset.
+     * Getter to query how far new indentation level should be indented when on the next line.
      *
      * @return the number of tabs or spaces to indent
      */
     public int getBasicOffset() {
-<span class="fc" id="L180">        return basicOffset;</span>
+<span class="fc" id="L257">        return basicOffset;</span>
     }
 
     /**
-     * Adjusts brace indentation (positive offset).
+     * Setter to specify how far a braces should be indented when on the next line.
      *
      * @param adjustmentAmount   the brace offset
      */
     public void setBraceAdjustment(int adjustmentAmount) {
-<span class="fc" id="L189">        braceAdjustment = adjustmentAmount;</span>
-<span class="fc" id="L190">    }</span>
+<span class="fc" id="L266">        braceAdjustment = adjustmentAmount;</span>
+<span class="fc" id="L267">    }</span>
 
     /**
-     * Get the brace adjustment amount.
+     * Getter to query how far a braces should be indented when on the next line.
      *
      * @return the positive offset to adjust braces
      */
     public int getBraceAdjustment() {
-<span class="fc" id="L198">        return braceAdjustment;</span>
+<span class="fc" id="L275">        return braceAdjustment;</span>
     }
 
     /**
-     * Set the case indentation level.
+     * Setter to specify how far a case label should be indented when on next line.
      *
      * @param amount   the case indentation level
      */
     public void setCaseIndent(int amount) {
-<span class="fc" id="L207">        caseIndent = amount;</span>
-<span class="fc" id="L208">    }</span>
+<span class="fc" id="L284">        caseIndent = amount;</span>
+<span class="fc" id="L285">    }</span>
 
     /**
-     * Get the case indentation level.
+     * Getter to query how far a case label should be indented when on next line.
      *
      * @return the case indentation level
      */
     public int getCaseIndent() {
-<span class="fc" id="L216">        return caseIndent;</span>
+<span class="fc" id="L293">        return caseIndent;</span>
     }
 
     /**
-     * Set the throws indentation level.
+     * Setter to specify how far a throws clause should be indented when on next line.
      *
      * @param throwsIndent the throws indentation level
      */
     public void setThrowsIndent(int throwsIndent) {
-<span class="fc" id="L225">        this.throwsIndent = throwsIndent;</span>
-<span class="fc" id="L226">    }</span>
+<span class="fc" id="L302">        this.throwsIndent = throwsIndent;</span>
+<span class="fc" id="L303">    }</span>
 
     /**
-     * Get the throws indentation level.
+     * Getter to query how far a throws clause should be indented when on next line.
      *
      * @return the throws indentation level
      */
     public int getThrowsIndent() {
-<span class="fc" id="L234">        return throwsIndent;</span>
+<span class="fc" id="L311">        return throwsIndent;</span>
     }
 
     /**
-     * Set the array initialisation indentation level.
+     * Setter to specify how far an array initialisation should be indented when on next line.
      *
      * @param arrayInitIndent the array initialisation indentation level
      */
     public void setArrayInitIndent(int arrayInitIndent) {
-<span class="fc" id="L243">        this.arrayInitIndent = arrayInitIndent;</span>
-<span class="fc" id="L244">    }</span>
+<span class="fc" id="L320">        this.arrayInitIndent = arrayInitIndent;</span>
+<span class="fc" id="L321">    }</span>
 
     /**
-     * Get the line-wrapping indentation level.
+     * Getter to query how far an array initialisation should be indented when on next line.
      *
      * @return the initialisation indentation level
      */
     public int getArrayInitIndent() {
-<span class="fc" id="L252">        return arrayInitIndent;</span>
+<span class="fc" id="L329">        return arrayInitIndent;</span>
     }
 
     /**
-     * Get the array line-wrapping indentation level.
+     * Getter to query how far continuation line should be indented when line-wrapping is present.
      *
      * @return the line-wrapping indentation level
      */
     public int getLineWrappingIndentation() {
-<span class="fc" id="L261">        return lineWrappingIndentation;</span>
+<span class="fc" id="L338">        return lineWrappingIndentation;</span>
     }
 
     /**
-     * Set the line-wrapping indentation level.
+     * Setter to specify how far continuation line should be indented when line-wrapping is present.
      *
      * @param lineWrappingIndentation the line-wrapping indentation level
      */
     public void setLineWrappingIndentation(int lineWrappingIndentation) {
-<span class="fc" id="L270">        this.lineWrappingIndentation = lineWrappingIndentation;</span>
-<span class="fc" id="L271">    }</span>
+<span class="fc" id="L347">        this.lineWrappingIndentation = lineWrappingIndentation;</span>
+<span class="fc" id="L348">    }</span>
 
     /**
-     * Log an error message.
+     * Log a violation message.
      *
-     * @param line the line number where the error was found
-     * @param key the message that describes the error
+     * @param line the line number where the violation was found
+     * @param key the message that describes the violation
      * @param args the details of the message
      *
      * @see java.text.MessageFormat
      */
     public void indentationLog(int line, String key, Object... args) {
-<span class="fc bfc" id="L283" title="All 2 branches covered.">        if (!incorrectIndentationLines.contains(line)) {</span>
-<span class="fc" id="L284">            incorrectIndentationLines.add(line);</span>
-<span class="fc" id="L285">            log(line, key, args);</span>
+<span class="fc bfc" id="L360" title="All 2 branches covered.">        if (!incorrectIndentationLines.contains(line)) {</span>
+<span class="fc" id="L361">            incorrectIndentationLines.add(line);</span>
+<span class="fc" id="L362">            log(line, key, args);</span>
         }
-<span class="fc" id="L287">    }</span>
+<span class="fc" id="L364">    }</span>
 
     /**
      * Get the width of a tab.
@@ -292,46 +369,46 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the width of a tab
      */
     public int getIndentationTabWidth() {
-<span class="fc" id="L295">        return getTabWidth();</span>
+<span class="fc" id="L372">        return getTabWidth();</span>
     }
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L300">        return getRequiredTokens();</span>
+<span class="fc" id="L377">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L305">        return getRequiredTokens();</span>
+<span class="fc" id="L382">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L310">        return handlerFactory.getHandledTypes();</span>
+<span class="fc" id="L387">        return handlerFactory.getHandledTypes();</span>
     }
 
     @Override
     public void beginTree(DetailAST ast) {
-<span class="fc" id="L315">        handlerFactory.clearCreatedHandlers();</span>
-<span class="fc" id="L316">        handlers.clear();</span>
-<span class="fc" id="L317">        final PrimordialHandler primordialHandler = new PrimordialHandler(this);</span>
-<span class="fc" id="L318">        handlers.push(primordialHandler);</span>
-<span class="fc" id="L319">        primordialHandler.checkIndentation();</span>
-<span class="fc" id="L320">        incorrectIndentationLines = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L321">    }</span>
+<span class="fc" id="L392">        handlerFactory.clearCreatedHandlers();</span>
+<span class="fc" id="L393">        handlers.clear();</span>
+<span class="fc" id="L394">        final PrimordialHandler primordialHandler = new PrimordialHandler(this);</span>
+<span class="fc" id="L395">        handlers.push(primordialHandler);</span>
+<span class="fc" id="L396">        primordialHandler.checkIndentation();</span>
+<span class="fc" id="L397">        incorrectIndentationLines = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L398">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L325">        final AbstractExpressionHandler handler = handlerFactory.getHandler(this, ast,</span>
-<span class="fc" id="L326">            handlers.peek());</span>
-<span class="fc" id="L327">        handlers.push(handler);</span>
-<span class="fc" id="L328">        handler.checkIndentation();</span>
-<span class="fc" id="L329">    }</span>
+<span class="fc" id="L402">        final AbstractExpressionHandler handler = handlerFactory.getHandler(this, ast,</span>
+<span class="fc" id="L403">            handlers.peek());</span>
+<span class="fc" id="L404">        handlers.push(handler);</span>
+<span class="fc" id="L405">        handler.checkIndentation();</span>
+<span class="fc" id="L406">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc" id="L333">        handlers.pop();</span>
-<span class="fc" id="L334">    }</span>
+<span class="fc" id="L410">        handlers.pop();</span>
+<span class="fc" id="L411">    }</span>
 
     /**
      * Accessor for the line wrapping handler.
@@ -339,7 +416,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the line wrapping handler
      */
     public LineWrappingHandler getLineWrappingHandler() {
-<span class="fc" id="L342">        return lineWrappingHandler;</span>
+<span class="fc" id="L419">        return lineWrappingHandler;</span>
     }
 
     /**
@@ -348,7 +425,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the handler factory
      */
     public final HandlerFactory getHandlerFactory() {
-<span class="fc" id="L351">        return handlerFactory;</span>
+<span class="fc" id="L428">        return handlerFactory;</span>
     }
 
 }
