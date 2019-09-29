@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Filter;
@@ -49,6 +50,7 @@ import com.puppycrawl.tools.checkstyle.api.Configuration;
 import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
 import com.puppycrawl.tools.checkstyle.api.RootModule;
 import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+import com.puppycrawl.tools.checkstyle.utils.XpathUtil;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -78,7 +80,7 @@ public final class Main {
     public static final String CREATE_LISTENER_EXCEPTION = &quot;Main.createListener&quot;;
 
     /** Logger for Main. */
-<span class="fc" id="L81">    private static final Log LOG = LogFactory.getLog(Main.class);</span>
+<span class="fc" id="L83">    private static final Log LOG = LogFactory.getLog(Main.class);</span>
 
     /** Exit code returned when user specified invalid command line arguments. */
     private static final int EXIT_WITH_INVALID_USER_INPUT_CODE = -1;
@@ -86,8 +88,10 @@ public final class Main {
     /** Exit code returned when execution finishes with {@link CheckstyleException}. */
     private static final int EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE = -2;
 
-    /** Client code should not create instances of this class, but use
-     * {@link #main(String[])} method instead. */
+    /**
+     * Client code should not create instances of this class, but use
+     * {@link #main(String[])} method instead.
+     */
     private Main() {
     }
 
@@ -100,60 +104,60 @@ public final class Main {
      **/
     public static void main(String... args) throws IOException {
 
-<span class="fc" id="L103">        final CliOptions cliOptions = new CliOptions();</span>
-<span class="fc" id="L104">        final CommandLine commandLine = new CommandLine(cliOptions);</span>
-<span class="fc" id="L105">        commandLine.setUsageHelpWidth(CliOptions.HELP_WIDTH);</span>
-<span class="fc" id="L106">        commandLine.setCaseInsensitiveEnumValuesAllowed(true);</span>
+<span class="fc" id="L107">        final CliOptions cliOptions = new CliOptions();</span>
+<span class="fc" id="L108">        final CommandLine commandLine = new CommandLine(cliOptions);</span>
+<span class="fc" id="L109">        commandLine.setUsageHelpWidth(CliOptions.HELP_WIDTH);</span>
+<span class="fc" id="L110">        commandLine.setCaseInsensitiveEnumValuesAllowed(true);</span>
 
         // provide proper exit code based on results.
-<span class="fc" id="L109">        int exitStatus = 0;</span>
-<span class="fc" id="L110">        int errorCounter = 0;</span>
+<span class="fc" id="L113">        int exitStatus = 0;</span>
+<span class="fc" id="L114">        int errorCounter = 0;</span>
         try {
-<span class="fc" id="L112">            final ParseResult parseResult = commandLine.parseArgs(args);</span>
-<span class="fc bfc" id="L113" title="All 2 branches covered.">            if (parseResult.isVersionHelpRequested()) {</span>
-<span class="fc" id="L114">                System.out.println(getVersionString());</span>
+<span class="fc" id="L116">            final ParseResult parseResult = commandLine.parseArgs(args);</span>
+<span class="fc bfc" id="L117" title="All 2 branches covered.">            if (parseResult.isVersionHelpRequested()) {</span>
+<span class="fc" id="L118">                System.out.println(getVersionString());</span>
             }
-<span class="fc bfc" id="L116" title="All 2 branches covered.">            else if (parseResult.isUsageHelpRequested()) {</span>
-<span class="fc" id="L117">                commandLine.usage(System.out);</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">            else if (parseResult.isUsageHelpRequested()) {</span>
+<span class="fc" id="L121">                commandLine.usage(System.out);</span>
             }
             else {
-<span class="fc" id="L120">                exitStatus = execute(parseResult, cliOptions);</span>
-<span class="fc" id="L121">                errorCounter = exitStatus;</span>
+<span class="fc" id="L124">                exitStatus = execute(parseResult, cliOptions);</span>
+<span class="fc" id="L125">                errorCounter = exitStatus;</span>
             }
         }
-<span class="fc" id="L124">        catch (ParameterException ex) {</span>
-<span class="fc" id="L125">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</span>
-<span class="fc" id="L126">            System.err.println(ex.getMessage());</span>
-<span class="fc" id="L127">            System.err.println(&quot;Usage: checkstyle [OPTIONS]... FILES...&quot;);</span>
-<span class="fc" id="L128">            System.err.println(&quot;Try 'checkstyle --help' for more information.&quot;);</span>
+<span class="fc" id="L128">        catch (ParameterException ex) {</span>
+<span class="fc" id="L129">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</span>
+<span class="fc" id="L130">            System.err.println(ex.getMessage());</span>
+<span class="fc" id="L131">            System.err.println(&quot;Usage: checkstyle [OPTIONS]... FILES...&quot;);</span>
+<span class="fc" id="L132">            System.err.println(&quot;Try 'checkstyle --help' for more information.&quot;);</span>
         }
-<span class="fc" id="L130">        catch (CheckstyleException ex) {</span>
-<span class="fc" id="L131">            exitStatus = EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE;</span>
-<span class="fc" id="L132">            errorCounter = 1;</span>
-<span class="fc" id="L133">            ex.printStackTrace();</span>
+<span class="fc" id="L134">        catch (CheckstyleException ex) {</span>
+<span class="fc" id="L135">            exitStatus = EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE;</span>
+<span class="fc" id="L136">            errorCounter = 1;</span>
+<span class="fc" id="L137">            ex.printStackTrace();</span>
         }
         finally {
             // return exit code base on validation of Checker
-<span class="fc bfc" id="L137" title="All 2 branches covered.">            if (errorCounter &gt; 0) {</span>
-<span class="fc" id="L138">                final LocalizedMessage errorCounterMessage = new LocalizedMessage(1,</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">            if (errorCounter &gt; 0) {</span>
+<span class="fc" id="L142">                final LocalizedMessage errorCounterMessage = new LocalizedMessage(1,</span>
                         Definitions.CHECKSTYLE_BUNDLE, ERROR_COUNTER,
-<span class="fc" id="L140">                        new String[] {String.valueOf(errorCounter)}, null, Main.class, null);</span>
+<span class="fc" id="L144">                        new String[] {String.valueOf(errorCounter)}, null, Main.class, null);</span>
                 // print error count statistic to error output stream,
                 // output stream might be used by validation report content
-<span class="fc" id="L143">                System.err.println(errorCounterMessage.getMessage());</span>
+<span class="fc" id="L147">                System.err.println(errorCounterMessage.getMessage());</span>
             }
-<span class="fc bfc" id="L145" title="All 2 branches covered.">            if (exitStatus != 0) {</span>
-<span class="fc" id="L146">                System.exit(exitStatus);</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">            if (exitStatus != 0) {</span>
+<span class="fc" id="L150">                System.exit(exitStatus);</span>
             }
         }
-<span class="fc" id="L149">    }</span>
+<span class="fc" id="L153">    }</span>
 
     /**
      * Returns the version string printed when the user requests version help (--version or -V).
      * @return a version string based on the package implementation version
      */
     private static String getVersionString() {
-<span class="fc" id="L156">        return &quot;Checkstyle version: &quot; + Main.class.getPackage().getImplementationVersion();</span>
+<span class="fc" id="L160">        return &quot;Checkstyle version: &quot; + Main.class.getPackage().getImplementationVersion();</span>
     }
 
     /**
@@ -172,17 +176,17 @@ public final class Main {
         final int exitStatus;
 
         // return error if something is wrong in arguments
-<span class="fc" id="L175">        final List&lt;File&gt; filesToProcess = getFilesToProcess(options);</span>
-<span class="fc" id="L176">        final List&lt;String&gt; messages = options.validateCli(parseResult, filesToProcess);</span>
-<span class="fc bfc" id="L177" title="All 2 branches covered.">        final boolean hasMessages = !messages.isEmpty();</span>
-<span class="fc bfc" id="L178" title="All 2 branches covered.">        if (hasMessages) {</span>
-<span class="fc" id="L179">            messages.forEach(System.out::println);</span>
-<span class="fc" id="L180">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</span>
+<span class="fc" id="L179">        final List&lt;File&gt; filesToProcess = getFilesToProcess(options);</span>
+<span class="fc" id="L180">        final List&lt;String&gt; messages = options.validateCli(parseResult, filesToProcess);</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">        final boolean hasMessages = !messages.isEmpty();</span>
+<span class="fc bfc" id="L182" title="All 2 branches covered.">        if (hasMessages) {</span>
+<span class="fc" id="L183">            messages.forEach(System.out::println);</span>
+<span class="fc" id="L184">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</span>
         }
         else {
-<span class="fc" id="L183">            exitStatus = runCli(options, filesToProcess);</span>
+<span class="fc" id="L187">            exitStatus = runCli(options, filesToProcess);</span>
         }
-<span class="fc" id="L185">        return exitStatus;</span>
+<span class="fc" id="L189">        return exitStatus;</span>
     }
 
     /**
@@ -191,13 +195,13 @@ public final class Main {
      * @return list of files to process
      */
     private static List&lt;File&gt; getFilesToProcess(CliOptions options) {
-<span class="fc" id="L194">        final List&lt;Pattern&gt; patternsToExclude = options.getExclusions();</span>
+<span class="fc" id="L198">        final List&lt;Pattern&gt; patternsToExclude = options.getExclusions();</span>
 
-<span class="fc" id="L196">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</span>
-<span class="fc bfc" id="L197" title="All 2 branches covered.">        for (File file : options.files) {</span>
-<span class="fc" id="L198">            result.addAll(listFiles(file, patternsToExclude));</span>
-<span class="fc" id="L199">        }</span>
-<span class="fc" id="L200">        return result;</span>
+<span class="fc" id="L200">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</span>
+<span class="fc bfc" id="L201" title="All 2 branches covered.">        for (File file : options.files) {</span>
+<span class="fc" id="L202">            result.addAll(listFiles(file, patternsToExclude));</span>
+<span class="fc" id="L203">        }</span>
+<span class="fc" id="L204">        return result;</span>
     }
 
     /**
@@ -212,25 +216,25 @@ public final class Main {
     private static List&lt;File&gt; listFiles(File node, List&lt;Pattern&gt; patternsToExclude) {
         // could be replaced with org.apache.commons.io.FileUtils.list() method
         // if only we add commons-io library
-<span class="fc" id="L215">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L219">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</span>
 
-<span class="fc bfc" id="L217" title="All 2 branches covered.">        if (node.canRead()) {</span>
-<span class="fc bfc" id="L218" title="All 2 branches covered.">            if (!isPathExcluded(node.getAbsolutePath(), patternsToExclude)) {</span>
-<span class="fc bfc" id="L219" title="All 2 branches covered.">                if (node.isDirectory()) {</span>
-<span class="fc" id="L220">                    final File[] files = node.listFiles();</span>
+<span class="fc bfc" id="L221" title="All 2 branches covered.">        if (node.canRead()) {</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">            if (!isPathExcluded(node.getAbsolutePath(), patternsToExclude)) {</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">                if (node.isDirectory()) {</span>
+<span class="fc" id="L224">                    final File[] files = node.listFiles();</span>
                     // listFiles() can return null, so we need to check it
-<span class="fc bfc" id="L222" title="All 2 branches covered.">                    if (files != null) {</span>
-<span class="fc bfc" id="L223" title="All 2 branches covered.">                        for (File element : files) {</span>
-<span class="fc" id="L224">                            result.addAll(listFiles(element, patternsToExclude));</span>
+<span class="fc bfc" id="L226" title="All 2 branches covered.">                    if (files != null) {</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">                        for (File element : files) {</span>
+<span class="fc" id="L228">                            result.addAll(listFiles(element, patternsToExclude));</span>
                         }
                     }
-<span class="fc" id="L227">                }</span>
-<span class="fc bfc" id="L228" title="All 2 branches covered.">                else if (node.isFile()) {</span>
-<span class="fc" id="L229">                    result.add(node);</span>
+<span class="fc" id="L231">                }</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">                else if (node.isFile()) {</span>
+<span class="fc" id="L233">                    result.add(node);</span>
                 }
             }
         }
-<span class="fc" id="L233">        return result;</span>
+<span class="fc" id="L237">        return result;</span>
     }
 
     /**
@@ -242,16 +246,16 @@ public final class Main {
      * @return True if the directory/file matches one of the patterns.
      */
     private static boolean isPathExcluded(String path, List&lt;Pattern&gt; patternsToExclude) {
-<span class="fc" id="L245">        boolean result = false;</span>
+<span class="fc" id="L249">        boolean result = false;</span>
 
-<span class="fc bfc" id="L247" title="All 2 branches covered.">        for (Pattern pattern : patternsToExclude) {</span>
-<span class="fc bfc" id="L248" title="All 2 branches covered.">            if (pattern.matcher(path).find()) {</span>
-<span class="fc" id="L249">                result = true;</span>
-<span class="fc" id="L250">                break;</span>
+<span class="fc bfc" id="L251" title="All 2 branches covered.">        for (Pattern pattern : patternsToExclude) {</span>
+<span class="fc bfc" id="L252" title="All 2 branches covered.">            if (pattern.matcher(path).find()) {</span>
+<span class="fc" id="L253">                result = true;</span>
+<span class="fc" id="L254">                break;</span>
             }
-<span class="fc" id="L252">        }</span>
+<span class="fc" id="L256">        }</span>
 
-<span class="fc" id="L254">        return result;</span>
+<span class="fc" id="L258">        return result;</span>
     }
 
     /**
@@ -265,60 +269,64 @@ public final class Main {
      */
     private static int runCli(CliOptions options, List&lt;File&gt; filesToProcess)
             throws IOException, CheckstyleException {
-<span class="fc" id="L268">        int result = 0;</span>
-<span class="fc bfc" id="L269" title="All 2 branches covered.">        final boolean hasSuppressionLineColumnNumber = options.suppressionLineColumnNumber != null;</span>
+<span class="fc" id="L272">        int result = 0;</span>
+<span class="fc bfc" id="L273" title="All 2 branches covered.">        final boolean hasSuppressionLineColumnNumber = options.suppressionLineColumnNumber != null;</span>
 
         // create config helper object
-<span class="fc bfc" id="L272" title="All 2 branches covered.">        if (options.printAst) {</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">        if (options.printAst) {</span>
             // print AST
-<span class="fc" id="L274">            final File file = filesToProcess.get(0);</span>
-<span class="fc" id="L275">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</span>
+<span class="fc" id="L278">            final File file = filesToProcess.get(0);</span>
+<span class="fc" id="L279">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</span>
                     JavaParser.Options.WITHOUT_COMMENTS);
-<span class="fc" id="L277">            System.out.print(stringAst);</span>
-<span class="fc" id="L278">        }</span>
-<span class="fc bfc" id="L279" title="All 2 branches covered.">        else if (options.printAstWithComments) {</span>
-<span class="fc" id="L280">            final File file = filesToProcess.get(0);</span>
-<span class="fc" id="L281">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</span>
+<span class="fc" id="L281">            System.out.print(stringAst);</span>
+<span class="fc" id="L282">        }</span>
+<span class="fc bfc" id="L283" title="All 2 branches covered.">        else if (Objects.nonNull(options.xpath)) {</span>
+<span class="fc" id="L284">            final String branch = XpathUtil.printXpathBranch(options.xpath, filesToProcess.get(0));</span>
+<span class="fc" id="L285">            System.out.print(branch);</span>
+<span class="fc" id="L286">        }</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        else if (options.printAstWithComments) {</span>
+<span class="fc" id="L288">            final File file = filesToProcess.get(0);</span>
+<span class="fc" id="L289">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</span>
                     JavaParser.Options.WITH_COMMENTS);
-<span class="fc" id="L283">            System.out.print(stringAst);</span>
-<span class="fc" id="L284">        }</span>
-<span class="fc bfc" id="L285" title="All 2 branches covered.">        else if (options.printJavadocTree) {</span>
-<span class="fc" id="L286">            final File file = filesToProcess.get(0);</span>
-<span class="fc" id="L287">            final String stringAst = DetailNodeTreeStringPrinter.printFileAst(file);</span>
-<span class="fc" id="L288">            System.out.print(stringAst);</span>
-<span class="fc" id="L289">        }</span>
-<span class="fc bfc" id="L290" title="All 2 branches covered.">        else if (options.printTreeWithJavadoc) {</span>
-<span class="fc" id="L291">            final File file = filesToProcess.get(0);</span>
-<span class="fc" id="L292">            final String stringAst = AstTreeStringPrinter.printJavaAndJavadocTree(file);</span>
-<span class="fc" id="L293">            System.out.print(stringAst);</span>
-<span class="fc" id="L294">        }</span>
-<span class="fc bfc" id="L295" title="All 2 branches covered.">        else if (hasSuppressionLineColumnNumber) {</span>
-<span class="fc" id="L296">            final File file = filesToProcess.get(0);</span>
-<span class="fc" id="L297">            final String stringSuppressions =</span>
-<span class="fc" id="L298">                    SuppressionsStringPrinter.printSuppressions(file,</span>
-<span class="fc" id="L299">                            options.suppressionLineColumnNumber, options.tabWidth);</span>
-<span class="fc" id="L300">            System.out.print(stringSuppressions);</span>
-<span class="fc" id="L301">        }</span>
+<span class="fc" id="L291">            System.out.print(stringAst);</span>
+<span class="fc" id="L292">        }</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">        else if (options.printJavadocTree) {</span>
+<span class="fc" id="L294">            final File file = filesToProcess.get(0);</span>
+<span class="fc" id="L295">            final String stringAst = DetailNodeTreeStringPrinter.printFileAst(file);</span>
+<span class="fc" id="L296">            System.out.print(stringAst);</span>
+<span class="fc" id="L297">        }</span>
+<span class="fc bfc" id="L298" title="All 2 branches covered.">        else if (options.printTreeWithJavadoc) {</span>
+<span class="fc" id="L299">            final File file = filesToProcess.get(0);</span>
+<span class="fc" id="L300">            final String stringAst = AstTreeStringPrinter.printJavaAndJavadocTree(file);</span>
+<span class="fc" id="L301">            System.out.print(stringAst);</span>
+<span class="fc" id="L302">        }</span>
+<span class="fc bfc" id="L303" title="All 2 branches covered.">        else if (hasSuppressionLineColumnNumber) {</span>
+<span class="fc" id="L304">            final File file = filesToProcess.get(0);</span>
+<span class="fc" id="L305">            final String stringSuppressions =</span>
+<span class="fc" id="L306">                    SuppressionsStringPrinter.printSuppressions(file,</span>
+<span class="fc" id="L307">                            options.suppressionLineColumnNumber, options.tabWidth);</span>
+<span class="fc" id="L308">            System.out.print(stringSuppressions);</span>
+<span class="fc" id="L309">        }</span>
         else {
-<span class="fc bfc" id="L303" title="All 2 branches covered.">            if (options.debug) {</span>
-<span class="fc" id="L304">                final Logger parentLogger = Logger.getLogger(Main.class.getName()).getParent();</span>
-<span class="fc" id="L305">                final ConsoleHandler handler = new ConsoleHandler();</span>
-<span class="fc" id="L306">                handler.setLevel(Level.FINEST);</span>
-<span class="fc" id="L307">                handler.setFilter(new OnlyCheckstyleLoggersFilter());</span>
-<span class="fc" id="L308">                parentLogger.addHandler(handler);</span>
-<span class="fc" id="L309">                parentLogger.setLevel(Level.FINEST);</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">            if (options.debug) {</span>
+<span class="fc" id="L312">                final Logger parentLogger = Logger.getLogger(Main.class.getName()).getParent();</span>
+<span class="fc" id="L313">                final ConsoleHandler handler = new ConsoleHandler();</span>
+<span class="fc" id="L314">                handler.setLevel(Level.FINEST);</span>
+<span class="fc" id="L315">                handler.setFilter(new OnlyCheckstyleLoggersFilter());</span>
+<span class="fc" id="L316">                parentLogger.addHandler(handler);</span>
+<span class="fc" id="L317">                parentLogger.setLevel(Level.FINEST);</span>
             }
-<span class="fc bfc" id="L311" title="All 2 branches covered.">            if (LOG.isDebugEnabled()) {</span>
-<span class="fc" id="L312">                LOG.debug(&quot;Checkstyle debug logging enabled&quot;);</span>
-<span class="fc" id="L313">                LOG.debug(&quot;Running Checkstyle with version: &quot;</span>
-<span class="fc" id="L314">                        + Main.class.getPackage().getImplementationVersion());</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">            if (LOG.isDebugEnabled()) {</span>
+<span class="fc" id="L320">                LOG.debug(&quot;Checkstyle debug logging enabled&quot;);</span>
+<span class="fc" id="L321">                LOG.debug(&quot;Running Checkstyle with version: &quot;</span>
+<span class="fc" id="L322">                        + Main.class.getPackage().getImplementationVersion());</span>
             }
 
             // run Checker
-<span class="fc" id="L318">            result = runCheckstyle(options, filesToProcess);</span>
+<span class="fc" id="L326">            result = runCheckstyle(options, filesToProcess);</span>
         }
 
-<span class="fc" id="L321">        return result;</span>
+<span class="fc" id="L329">        return result;</span>
     }
 
     /**
@@ -336,68 +344,68 @@ public final class Main {
         // setup the properties
         final Properties props;
 
-<span class="fc bfc" id="L339" title="All 2 branches covered.">        if (options.propertiesFile == null) {</span>
-<span class="fc" id="L340">            props = System.getProperties();</span>
+<span class="fc bfc" id="L347" title="All 2 branches covered.">        if (options.propertiesFile == null) {</span>
+<span class="fc" id="L348">            props = System.getProperties();</span>
         }
         else {
-<span class="fc" id="L343">            props = loadProperties(options.propertiesFile);</span>
+<span class="fc" id="L351">            props = loadProperties(options.propertiesFile);</span>
         }
 
         // create a configuration
-<span class="fc" id="L347">        final ThreadModeSettings multiThreadModeSettings =</span>
-<span class="fc" id="L348">                new ThreadModeSettings(options.checkerThreadsNumber,</span>
-<span class="fc" id="L349">                        options.treeWalkerThreadsNumber);</span>
+<span class="fc" id="L355">        final ThreadModeSettings multiThreadModeSettings =</span>
+<span class="fc" id="L356">                new ThreadModeSettings(options.checkerThreadsNumber,</span>
+<span class="fc" id="L357">                        options.treeWalkerThreadsNumber);</span>
 
         final ConfigurationLoader.IgnoredModulesOptions ignoredModulesOptions;
-<span class="fc bfc" id="L352" title="All 2 branches covered.">        if (options.executeIgnoredModules) {</span>
-<span class="fc" id="L353">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.EXECUTE;</span>
+<span class="fc bfc" id="L360" title="All 2 branches covered.">        if (options.executeIgnoredModules) {</span>
+<span class="fc" id="L361">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.EXECUTE;</span>
         }
         else {
-<span class="fc" id="L356">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.OMIT;</span>
+<span class="fc" id="L364">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.OMIT;</span>
         }
 
-<span class="fc" id="L359">        final Configuration config = ConfigurationLoader.loadConfiguration(</span>
-<span class="fc" id="L360">                options.configurationFile, new PropertiesExpander(props),</span>
+<span class="fc" id="L367">        final Configuration config = ConfigurationLoader.loadConfiguration(</span>
+<span class="fc" id="L368">                options.configurationFile, new PropertiesExpander(props),</span>
                 ignoredModulesOptions, multiThreadModeSettings);
 
         // create RootModule object and run it
         final int errorCounter;
-<span class="fc" id="L365">        final ClassLoader moduleClassLoader = Checker.class.getClassLoader();</span>
-<span class="fc" id="L366">        final RootModule rootModule = getRootModule(config.getName(), moduleClassLoader);</span>
+<span class="fc" id="L373">        final ClassLoader moduleClassLoader = Checker.class.getClassLoader();</span>
+<span class="fc" id="L374">        final RootModule rootModule = getRootModule(config.getName(), moduleClassLoader);</span>
 
         try {
             final AuditListener listener;
-<span class="fc bfc" id="L370" title="All 2 branches covered.">            if (options.generateXpathSuppressionsFile) {</span>
+<span class="fc bfc" id="L378" title="All 2 branches covered.">            if (options.generateXpathSuppressionsFile) {</span>
                 // create filter to print generated xpath suppressions file
-<span class="fc" id="L372">                final Configuration treeWalkerConfig = getTreeWalkerConfig(config);</span>
-<span class="fc bfc" id="L373" title="All 2 branches covered.">                if (treeWalkerConfig != null) {</span>
-<span class="fc" id="L374">                    final DefaultConfiguration moduleConfig =</span>
+<span class="fc" id="L380">                final Configuration treeWalkerConfig = getTreeWalkerConfig(config);</span>
+<span class="fc bfc" id="L381" title="All 2 branches covered.">                if (treeWalkerConfig != null) {</span>
+<span class="fc" id="L382">                    final DefaultConfiguration moduleConfig =</span>
                             new DefaultConfiguration(
-<span class="fc" id="L376">                                    XpathFileGeneratorAstFilter.class.getName());</span>
-<span class="fc" id="L377">                    moduleConfig.addAttribute(CliOptions.ATTRIB_TAB_WIDTH_NAME,</span>
-<span class="fc" id="L378">                            String.valueOf(options.tabWidth));</span>
-<span class="fc" id="L379">                    ((DefaultConfiguration) treeWalkerConfig).addChild(moduleConfig);</span>
+<span class="fc" id="L384">                                    XpathFileGeneratorAstFilter.class.getName());</span>
+<span class="fc" id="L385">                    moduleConfig.addAttribute(CliOptions.ATTRIB_TAB_WIDTH_NAME,</span>
+<span class="fc" id="L386">                            String.valueOf(options.tabWidth));</span>
+<span class="fc" id="L387">                    ((DefaultConfiguration) treeWalkerConfig).addChild(moduleConfig);</span>
                 }
 
-<span class="fc" id="L382">                listener = new XpathFileGeneratorAuditListener(getOutputStream(options.outputPath),</span>
+<span class="fc" id="L390">                listener = new XpathFileGeneratorAuditListener(getOutputStream(options.outputPath),</span>
                         AutomaticBean.OutputStreamOptions.NONE);
-<span class="fc" id="L384">            }</span>
+<span class="fc" id="L392">            }</span>
             else {
-<span class="fc" id="L386">                listener = createListener(options.format, options.outputPath);</span>
+<span class="fc" id="L394">                listener = createListener(options.format, options.outputPath);</span>
             }
 
-<span class="fc" id="L389">            rootModule.setModuleClassLoader(moduleClassLoader);</span>
-<span class="fc" id="L390">            rootModule.configure(config);</span>
-<span class="fc" id="L391">            rootModule.addListener(listener);</span>
+<span class="fc" id="L397">            rootModule.setModuleClassLoader(moduleClassLoader);</span>
+<span class="fc" id="L398">            rootModule.configure(config);</span>
+<span class="fc" id="L399">            rootModule.addListener(listener);</span>
 
             // run RootModule
-<span class="fc" id="L394">            errorCounter = rootModule.process(filesToProcess);</span>
+<span class="fc" id="L402">            errorCounter = rootModule.process(filesToProcess);</span>
         }
         finally {
-<span class="fc" id="L397">            rootModule.destroy();</span>
+<span class="fc" id="L405">            rootModule.destroy();</span>
         }
 
-<span class="fc" id="L400">        return errorCounter;</span>
+<span class="fc" id="L408">        return errorCounter;</span>
     }
 
     /**
@@ -410,19 +418,19 @@ public final class Main {
      */
     private static Properties loadProperties(File file)
             throws CheckstyleException {
-<span class="fc" id="L413">        final Properties properties = new Properties();</span>
+<span class="fc" id="L421">        final Properties properties = new Properties();</span>
 
-<span class="fc" id="L415">        try (InputStream stream = Files.newInputStream(file.toPath())) {</span>
-<span class="fc" id="L416">            properties.load(stream);</span>
+<span class="fc" id="L423">        try (InputStream stream = Files.newInputStream(file.toPath())) {</span>
+<span class="fc" id="L424">            properties.load(stream);</span>
         }
-<span class="fc" id="L418">        catch (final IOException ex) {</span>
-<span class="fc" id="L419">            final LocalizedMessage loadPropertiesExceptionMessage = new LocalizedMessage(1,</span>
+<span class="fc" id="L426">        catch (final IOException ex) {</span>
+<span class="fc" id="L427">            final LocalizedMessage loadPropertiesExceptionMessage = new LocalizedMessage(1,</span>
                     Definitions.CHECKSTYLE_BUNDLE, LOAD_PROPERTIES_EXCEPTION,
-<span class="fc" id="L421">                    new String[] {file.getAbsolutePath()}, null, Main.class, null);</span>
-<span class="fc" id="L422">            throw new CheckstyleException(loadPropertiesExceptionMessage.getMessage(), ex);</span>
-<span class="fc" id="L423">        }</span>
+<span class="fc" id="L429">                    new String[] {file.getAbsolutePath()}, null, Main.class, null);</span>
+<span class="fc" id="L430">            throw new CheckstyleException(loadPropertiesExceptionMessage.getMessage(), ex);</span>
+<span class="fc" id="L431">        }</span>
 
-<span class="fc" id="L425">        return properties;</span>
+<span class="fc" id="L433">        return properties;</span>
     }
 
     /**
@@ -436,10 +444,10 @@ public final class Main {
      */
     private static RootModule getRootModule(String name, ClassLoader moduleClassLoader)
             throws CheckstyleException {
-<span class="fc" id="L439">        final ModuleFactory factory = new PackageObjectFactory(</span>
-<span class="fc" id="L440">                Checker.class.getPackage().getName(), moduleClassLoader);</span>
+<span class="fc" id="L447">        final ModuleFactory factory = new PackageObjectFactory(</span>
+<span class="fc" id="L448">                Checker.class.getPackage().getName(), moduleClassLoader);</span>
 
-<span class="fc" id="L442">        return (RootModule) factory.createModule(name);</span>
+<span class="fc" id="L450">        return (RootModule) factory.createModule(name);</span>
     }
 
     /**
@@ -448,16 +456,16 @@ public final class Main {
      * @return The {@code TreeWalker} module configuration.
      */
     private static Configuration getTreeWalkerConfig(Configuration config) {
-<span class="fc" id="L451">        Configuration result = null;</span>
+<span class="fc" id="L459">        Configuration result = null;</span>
 
-<span class="fc" id="L453">        final Configuration[] children = config.getChildren();</span>
-<span class="fc bfc" id="L454" title="All 2 branches covered.">        for (Configuration child : children) {</span>
-<span class="fc bfc" id="L455" title="All 2 branches covered.">            if (&quot;TreeWalker&quot;.equals(child.getName())) {</span>
-<span class="fc" id="L456">                result = child;</span>
-<span class="fc" id="L457">                break;</span>
+<span class="fc" id="L461">        final Configuration[] children = config.getChildren();</span>
+<span class="fc bfc" id="L462" title="All 2 branches covered.">        for (Configuration child : children) {</span>
+<span class="fc bfc" id="L463" title="All 2 branches covered.">            if (&quot;TreeWalker&quot;.equals(child.getName())) {</span>
+<span class="fc" id="L464">                result = child;</span>
+<span class="fc" id="L465">                break;</span>
             }
         }
-<span class="fc" id="L460">        return result;</span>
+<span class="fc" id="L468">        return result;</span>
     }
 
     /**
@@ -471,10 +479,10 @@ public final class Main {
      */
     private static AuditListener createListener(OutputFormat format, Path outputLocation)
             throws IOException {
-<span class="fc" id="L474">        final OutputStream out = getOutputStream(outputLocation);</span>
-<span class="fc" id="L475">        final AutomaticBean.OutputStreamOptions closeOutputStreamOption =</span>
-<span class="fc" id="L476">                getOutputStreamOptions(outputLocation);</span>
-<span class="fc" id="L477">        return format.createListener(out, closeOutputStreamOption);</span>
+<span class="fc" id="L482">        final OutputStream out = getOutputStream(outputLocation);</span>
+<span class="fc" id="L483">        final AutomaticBean.OutputStreamOptions closeOutputStreamOption =</span>
+<span class="fc" id="L484">                getOutputStreamOptions(outputLocation);</span>
+<span class="fc" id="L485">        return format.createListener(out, closeOutputStreamOption);</span>
     }
 
     /**
@@ -487,13 +495,13 @@ public final class Main {
     @SuppressWarnings(&quot;resource&quot;)
     private static OutputStream getOutputStream(Path outputPath) throws IOException {
         final OutputStream result;
-<span class="fc bfc" id="L490" title="All 2 branches covered.">        if (outputPath == null) {</span>
-<span class="fc" id="L491">            result = System.out;</span>
+<span class="fc bfc" id="L498" title="All 2 branches covered.">        if (outputPath == null) {</span>
+<span class="fc" id="L499">            result = System.out;</span>
         }
         else {
-<span class="fc" id="L494">            result = Files.newOutputStream(outputPath);</span>
+<span class="fc" id="L502">            result = Files.newOutputStream(outputPath);</span>
         }
-<span class="fc" id="L496">        return result;</span>
+<span class="fc" id="L504">        return result;</span>
     }
 
     /**
@@ -503,24 +511,26 @@ public final class Main {
      */
     private static AutomaticBean.OutputStreamOptions getOutputStreamOptions(Path outputPath) {
         final AutomaticBean.OutputStreamOptions result;
-<span class="fc bfc" id="L506" title="All 2 branches covered.">        if (outputPath == null) {</span>
-<span class="fc" id="L507">            result = AutomaticBean.OutputStreamOptions.NONE;</span>
+<span class="fc bfc" id="L514" title="All 2 branches covered.">        if (outputPath == null) {</span>
+<span class="fc" id="L515">            result = AutomaticBean.OutputStreamOptions.NONE;</span>
         }
         else {
-<span class="fc" id="L510">            result = AutomaticBean.OutputStreamOptions.CLOSE;</span>
+<span class="fc" id="L518">            result = AutomaticBean.OutputStreamOptions.CLOSE;</span>
         }
-<span class="fc" id="L512">        return result;</span>
+<span class="fc" id="L520">        return result;</span>
     }
 
-    /** Enumeration over the possible output formats.
+    /**
+     * Enumeration over the possible output formats.
+     *
      * @noinspection PackageVisibleInnerClass
      */
     // Package-visible for tests.
-<span class="fc" id="L519">    enum OutputFormat {</span>
+<span class="fc" id="L529">    enum OutputFormat {</span>
         /** XML output format. */
-<span class="fc" id="L521">        XML,</span>
+<span class="fc" id="L531">        XML,</span>
         /** Plain output format. */
-<span class="fc" id="L523">        PLAIN;</span>
+<span class="fc" id="L533">        PLAIN;</span>
 
         /**
          * Returns a new AuditListener for this OutputFormat.
@@ -531,28 +541,30 @@ public final class Main {
         public AuditListener createListener(OutputStream out,
                                             AutomaticBean.OutputStreamOptions options) {
             final AuditListener result;
-<span class="fc bfc" id="L534" title="All 2 branches covered.">            if (this == XML) {</span>
-<span class="fc" id="L535">                result = new XMLLogger(out, options);</span>
+<span class="fc bfc" id="L544" title="All 2 branches covered.">            if (this == XML) {</span>
+<span class="fc" id="L545">                result = new XMLLogger(out, options);</span>
             }
             else {
-<span class="fc" id="L538">                result = new DefaultLogger(out, options);</span>
+<span class="fc" id="L548">                result = new DefaultLogger(out, options);</span>
             }
-<span class="fc" id="L540">            return result;</span>
+<span class="fc" id="L550">            return result;</span>
         }
 
-        /** Returns the name in lowercase.
+        /**
+         * Returns the name in lowercase.
+         *
          * @return the enum name in lowercase
          */
         @Override
         public String toString() {
-<span class="fc" id="L548">            return name().toLowerCase(Locale.ROOT);</span>
+<span class="fc" id="L560">            return name().toLowerCase(Locale.ROOT);</span>
         }
     }
 
     /** Log Filter used in debug mode. */
-<span class="fc" id="L553">    private static final class OnlyCheckstyleLoggersFilter implements Filter {</span>
+<span class="fc" id="L565">    private static final class OnlyCheckstyleLoggersFilter implements Filter {</span>
         /** Name of the package used to filter on. */
-<span class="fc" id="L555">        private final String packageName = Main.class.getPackage().getName();</span>
+<span class="fc" id="L567">        private final String packageName = Main.class.getPackage().getName();</span>
 
         /**
          * Returns whether the specified record should be logged.
@@ -561,7 +573,7 @@ public final class Main {
          */
         @Override
         public boolean isLoggable(LogRecord record) {
-<span class="fc" id="L564">            return record.getLoggerName().startsWith(packageName);</span>
+<span class="fc" id="L576">            return record.getLoggerName().startsWith(packageName);</span>
         }
     }
 
@@ -575,7 +587,7 @@ public final class Main {
             + &quot;reported to standard out in plain format. Checkstyle requires a configuration &quot;
             + &quot;XML file that configures the checks to apply.&quot;,
             mixinStandardHelpOptions = true)
-<span class="fc" id="L578">    private static class CliOptions {</span>
+<span class="fc" id="L590">    private static class CliOptions {</span>
 
         /** Width of CLI help option. */
         private static final int HELP_WIDTH = 100;
@@ -587,7 +599,7 @@ public final class Main {
         private static final String ATTRIB_TAB_WIDTH_NAME = &quot;tabWidth&quot;;
 
         /** Default output format. */
-<span class="fc" id="L590">        private static final OutputFormat DEFAULT_OUTPUT_FORMAT = OutputFormat.PLAIN;</span>
+<span class="fc" id="L602">        private static final OutputFormat DEFAULT_OUTPUT_FORMAT = OutputFormat.PLAIN;</span>
 
         /** Option name for output format. */
         private static final String OUTPUT_FORMAT_OPTION = &quot;-f&quot;;
@@ -615,11 +627,13 @@ public final class Main {
                         + &quot;that the suppression should be generated for&quot;)
         private String suppressionLineColumnNumber;
 
-        /** Tab character length.
-         *  Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+        /**
+         * Tab character length.
+         * Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+         *
          * @noinspection CanBeFinal
          */
-<span class="fc" id="L622">        @Option(names = {&quot;-w&quot;, &quot;--tabWidth&quot;}, description = &quot;Sets the length of the tab character. &quot;</span>
+<span class="fc" id="L636">        @Option(names = {&quot;-w&quot;, &quot;--tabWidth&quot;}, description = &quot;Sets the length of the tab character. &quot;</span>
                 + &quot;Used only with \&quot;-s\&quot; option. Default value is ${DEFAULT-VALUE}&quot;)
         private int tabWidth = CommonUtil.DEFAULT_TAB_WIDTH;
 
@@ -629,11 +643,13 @@ public final class Main {
                         + &quot; violations from user's config&quot;)
         private boolean generateXpathSuppressionsFile;
 
-        /** Output format.
-         *  Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+        /**
+         * Output format.
+         * Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+         *
          * @noinspection CanBeFinal
          */
-<span class="fc" id="L636">        @Option(names = &quot;-f&quot;, description = &quot;Sets the output format. Valid values: &quot;</span>
+<span class="fc" id="L652">        @Option(names = &quot;-f&quot;, description = &quot;Sets the output format. Valid values: &quot;</span>
                 + &quot;${COMPLETION-CANDIDATES}. Defaults to ${DEFAULT-VALUE}&quot;)
         private OutputFormat format = DEFAULT_OUTPUT_FORMAT;
 
@@ -662,19 +678,23 @@ public final class Main {
                 description = &quot;Print all debug logging of CheckStyle utility&quot;)
         private boolean debug;
 
-        /** Option that allows users to specify a list of paths to exclude.
-         *  Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+        /**
+         * Option that allows users to specify a list of paths to exclude.
+         * Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+         *
          * @noinspection CanBeFinal
          */
-<span class="fc" id="L669">        @Option(names = {&quot;-e&quot;, &quot;--exclude&quot;},</span>
+<span class="fc" id="L687">        @Option(names = {&quot;-e&quot;, &quot;--exclude&quot;},</span>
                 description = &quot;Directory/File path to exclude from CheckStyle&quot;)
         private List&lt;File&gt; exclude = new ArrayList&lt;&gt;();
 
-        /** Option that allows users to specify a regex of paths to exclude.
-         *  Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+        /**
+         * Option that allows users to specify a regex of paths to exclude.
+         * Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+         *
          * @noinspection CanBeFinal
          */
-<span class="fc" id="L677">        @Option(names = {&quot;-x&quot;, &quot;--exclude-regexp&quot;},</span>
+<span class="fc" id="L697">        @Option(names = {&quot;-x&quot;, &quot;--exclude-regexp&quot;},</span>
                 description = &quot;Regular expression of directory/file to exclude from CheckStyle&quot;)
         private List&lt;Pattern&gt; excludeRegex = new ArrayList&lt;&gt;();
 
@@ -683,34 +703,43 @@ public final class Main {
                 description = &quot;Allows ignored modules to be run.&quot;)
         private boolean executeIgnoredModules;
 
-        /** The checker threads number.
-         *  Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+        /**
+         * The checker threads number.
+         * Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+         *
          * @noinspection CanBeFinal
          */
-<span class="fc" id="L690">        @Option(names = {&quot;-C&quot;, &quot;--checker-threads-number&quot;}, description = &quot;(experimental) The &quot;</span>
+<span class="fc" id="L712">        @Option(names = {&quot;-C&quot;, &quot;--checker-threads-number&quot;}, description = &quot;(experimental) The &quot;</span>
                 + &quot;number of Checker threads (must be greater than zero)&quot;)
         private int checkerThreadsNumber = DEFAULT_THREAD_COUNT;
 
-        /** The tree walker threads number.
-         *  Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+        /**
+         * The tree walker threads number.
+         * Suppression: CanBeFinal - we use picocli and it use  reflection to manage such fields
+         *
          * @noinspection CanBeFinal
          */
-<span class="fc" id="L698">        @Option(names = {&quot;-W&quot;, &quot;--tree-walker-threads-number&quot;}, description = &quot;(experimental) The &quot;</span>
+<span class="fc" id="L722">        @Option(names = {&quot;-W&quot;, &quot;--tree-walker-threads-number&quot;}, description = &quot;(experimental) The &quot;</span>
                 + &quot;number of TreeWalker threads (must be greater than zero)&quot;)
         private int treeWalkerThreadsNumber = DEFAULT_THREAD_COUNT;
+
+        /** Show AST branches that match xpath. */
+        @Option(names = {&quot;-b&quot;, &quot;--branch-matching-xpath&quot;},
+            description = &quot;Show Abstract Syntax Tree(AST) branches that match XPath&quot;)
+        private String xpath;
 
         /**
          * Gets the list of exclusions provided through the command line arguments.
          * @return List of exclusion patterns.
          */
         private List&lt;Pattern&gt; getExclusions() {
-<span class="fc" id="L707">            final List&lt;Pattern&gt; result = exclude.stream()</span>
-<span class="fc" id="L708">                    .map(File::getAbsolutePath)</span>
-<span class="fc" id="L709">                    .map(Pattern::quote)</span>
-<span class="fc" id="L710">                    .map(pattern -&gt; Pattern.compile(&quot;^&quot; + pattern + &quot;$&quot;))</span>
-<span class="fc" id="L711">                    .collect(Collectors.toCollection(ArrayList::new));</span>
-<span class="fc" id="L712">            result.addAll(excludeRegex);</span>
-<span class="fc" id="L713">            return result;</span>
+<span class="fc" id="L736">            final List&lt;Pattern&gt; result = exclude.stream()</span>
+<span class="fc" id="L737">                    .map(File::getAbsolutePath)</span>
+<span class="fc" id="L738">                    .map(Pattern::quote)</span>
+<span class="fc" id="L739">                    .map(pattern -&gt; Pattern.compile(&quot;^&quot; + pattern + &quot;$&quot;))</span>
+<span class="fc" id="L740">                    .collect(Collectors.toCollection(ArrayList::new));</span>
+<span class="fc" id="L741">            result.addAll(excludeRegex);</span>
+<span class="fc" id="L742">            return result;</span>
         }
 
         /**
@@ -721,61 +750,62 @@ public final class Main {
          */
         // -@cs[CyclomaticComplexity] Breaking apart will damage encapsulation
         private List&lt;String&gt; validateCli(ParseResult parseResult, List&lt;File&gt; filesToProcess) {
-<span class="fc" id="L724">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L725" title="All 2 branches covered.">            final boolean hasConfigurationFile = configurationFile != null;</span>
-<span class="fc bfc" id="L726" title="All 2 branches covered.">            final boolean hasSuppressionLineColumnNumber = suppressionLineColumnNumber != null;</span>
+<span class="fc" id="L753">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L754" title="All 2 branches covered.">            final boolean hasConfigurationFile = configurationFile != null;</span>
+<span class="fc bfc" id="L755" title="All 2 branches covered.">            final boolean hasSuppressionLineColumnNumber = suppressionLineColumnNumber != null;</span>
 
-<span class="fc bfc" id="L728" title="All 2 branches covered.">            if (filesToProcess.isEmpty()) {</span>
-<span class="fc" id="L729">                result.add(&quot;Files to process must be specified, found 0.&quot;);</span>
+<span class="fc bfc" id="L757" title="All 2 branches covered.">            if (filesToProcess.isEmpty()) {</span>
+<span class="fc" id="L758">                result.add(&quot;Files to process must be specified, found 0.&quot;);</span>
             }
             // ensure there is no conflicting options
-<span class="fc bfc" id="L732" title="All 8 branches covered.">            else if (printAst || printAstWithComments || printJavadocTree || printTreeWithJavadoc) {</span>
-<span class="fc bfc" id="L733" title="All 8 branches covered.">                if (suppressionLineColumnNumber != null || configurationFile != null</span>
+<span class="fc bfc" id="L761" title="All 10 branches covered.">            else if (printAst || printAstWithComments || printJavadocTree || printTreeWithJavadoc</span>
+                || xpath != null) {
+<span class="fc bfc" id="L763" title="All 8 branches covered.">                if (suppressionLineColumnNumber != null || configurationFile != null</span>
                         || propertiesFile != null || outputPath != null
-<span class="fc bfc" id="L735" title="All 2 branches covered.">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</span>
-<span class="fc" id="L736">                    result.add(&quot;Option '-t' cannot be used with other options.&quot;);</span>
+<span class="fc bfc" id="L765" title="All 2 branches covered.">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</span>
+<span class="fc" id="L766">                    result.add(&quot;Option '-t' cannot be used with other options.&quot;);</span>
                 }
-<span class="fc bfc" id="L738" title="All 2 branches covered.">                else if (filesToProcess.size() &gt; 1) {</span>
-<span class="fc" id="L739">                    result.add(&quot;Printing AST is allowed for only one file.&quot;);</span>
+<span class="fc bfc" id="L768" title="All 2 branches covered.">                else if (filesToProcess.size() &gt; 1) {</span>
+<span class="fc" id="L769">                    result.add(&quot;Printing AST is allowed for only one file.&quot;);</span>
                 }
             }
-<span class="fc bfc" id="L742" title="All 2 branches covered.">            else if (hasSuppressionLineColumnNumber) {</span>
-<span class="fc bfc" id="L743" title="All 6 branches covered.">                if (configurationFile != null || propertiesFile != null</span>
+<span class="fc bfc" id="L772" title="All 2 branches covered.">            else if (hasSuppressionLineColumnNumber) {</span>
+<span class="fc bfc" id="L773" title="All 6 branches covered.">                if (configurationFile != null || propertiesFile != null</span>
                         || outputPath != null
-<span class="fc bfc" id="L745" title="All 2 branches covered.">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</span>
-<span class="fc" id="L746">                    result.add(&quot;Option '-s' cannot be used with other options.&quot;);</span>
+<span class="fc bfc" id="L775" title="All 2 branches covered.">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</span>
+<span class="fc" id="L776">                    result.add(&quot;Option '-s' cannot be used with other options.&quot;);</span>
                 }
-<span class="fc bfc" id="L748" title="All 2 branches covered.">                else if (filesToProcess.size() &gt; 1) {</span>
-<span class="fc" id="L749">                    result.add(&quot;Printing xpath suppressions is allowed for only one file.&quot;);</span>
+<span class="fc bfc" id="L778" title="All 2 branches covered.">                else if (filesToProcess.size() &gt; 1) {</span>
+<span class="fc" id="L779">                    result.add(&quot;Printing xpath suppressions is allowed for only one file.&quot;);</span>
                 }
             }
-<span class="fc bfc" id="L752" title="All 2 branches covered.">            else if (hasConfigurationFile) {</span>
+<span class="fc bfc" id="L782" title="All 2 branches covered.">            else if (hasConfigurationFile) {</span>
                 try {
                     // test location only
-<span class="fc" id="L755">                    CommonUtil.getUriByFilename(configurationFile);</span>
+<span class="fc" id="L785">                    CommonUtil.getUriByFilename(configurationFile);</span>
                 }
-<span class="fc" id="L757">                catch (CheckstyleException ignored) {</span>
-<span class="fc" id="L758">                    final String msg = &quot;Could not find config XML file '%s'.&quot;;</span>
-<span class="fc" id="L759">                    result.add(String.format(Locale.ROOT, msg, configurationFile));</span>
-<span class="fc" id="L760">                }</span>
+<span class="fc" id="L787">                catch (CheckstyleException ignored) {</span>
+<span class="fc" id="L788">                    final String msg = &quot;Could not find config XML file '%s'.&quot;;</span>
+<span class="fc" id="L789">                    result.add(String.format(Locale.ROOT, msg, configurationFile));</span>
+<span class="fc" id="L790">                }</span>
 
                 // validate optional parameters
-<span class="fc bfc" id="L763" title="All 4 branches covered.">                if (propertiesFile != null &amp;&amp; !propertiesFile.exists()) {</span>
-<span class="fc" id="L764">                    result.add(String.format(Locale.ROOT,</span>
+<span class="fc bfc" id="L793" title="All 4 branches covered.">                if (propertiesFile != null &amp;&amp; !propertiesFile.exists()) {</span>
+<span class="fc" id="L794">                    result.add(String.format(Locale.ROOT,</span>
                             &quot;Could not find file '%s'.&quot;, propertiesFile));
                 }
-<span class="fc bfc" id="L767" title="All 2 branches covered.">                if (checkerThreadsNumber &lt; 1) {</span>
-<span class="fc" id="L768">                    result.add(&quot;Checker threads number must be greater than zero&quot;);</span>
+<span class="fc bfc" id="L797" title="All 2 branches covered.">                if (checkerThreadsNumber &lt; 1) {</span>
+<span class="fc" id="L798">                    result.add(&quot;Checker threads number must be greater than zero&quot;);</span>
                 }
-<span class="fc bfc" id="L770" title="All 2 branches covered.">                if (treeWalkerThreadsNumber &lt; 1) {</span>
-<span class="fc" id="L771">                    result.add(&quot;TreeWalker threads number must be greater than zero&quot;);</span>
+<span class="fc bfc" id="L800" title="All 2 branches covered.">                if (treeWalkerThreadsNumber &lt; 1) {</span>
+<span class="fc" id="L801">                    result.add(&quot;TreeWalker threads number must be greater than zero&quot;);</span>
                 }
             }
             else {
-<span class="fc" id="L775">                result.add(&quot;Must specify a config XML file.&quot;);</span>
+<span class="fc" id="L805">                result.add(&quot;Must specify a config XML file.&quot;);</span>
             }
 
-<span class="fc" id="L778">            return result;</span>
+<span class="fc" id="L808">            return result;</span>
         }
     }
 }

@@ -32,11 +32,110 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
 /**
- * Checks the number of methods declared in each type declaration by access
- * modifier or total count.
+ * &lt;p&gt;
+ * Checks the number of methods declared in each type declaration by access modifier
+ * or total count.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * This check can be configured to flag classes that define too many methods
+ * to prevent the class from getting too complex. Counting can be customized
+ * to prevent too many total methods in a type definition ({@code maxTotal}),
+ * or to prevent too many methods of a specific access modifier ({@code private},
+ * {@code package}, {@code protected} or {@code public}). Each count is completely
+ * separated to customize how many methods of each you want to allow. For example,
+ * specifying a {@code maxTotal} of 10, still means you can prevent more than 0
+ * {@code maxPackage} methods. A violation won't appear for 8 public methods,
+ * but one will appear if there is also 3 private methods or any package-private methods.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Methods defined in anonymous classes are not counted towards any totals.
+ * Counts only go towards the main type declaration parent, and are kept separate
+ * from it's children's inner types.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class ExampleClass {
+ *   public enum Colors {
+ *     RED, GREEN, YELLOW;
+ *
+ *     public String getRGB() { ... } // NOT counted towards ExampleClass
+ *   }
+ *
+ *   public void example() { // counted towards ExampleClass
+ *     Runnable r = (new Runnable() {
+ *       public void run() { ... } // NOT counted towards ExampleClass, won't produce any violations
+ *     });
+ *   }
+ *
+ *   public static class InnerExampleClass {
+ *     protected void example2() { ... } // NOT counted towards ExampleClass,
+ *                                    // but counted towards InnerExampleClass
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code maxTotal} - Specify the maximum number of methods allowed at all scope levels.
+ * Default value is {@code 100}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code maxPrivate} - Specify the maximum number of {@code private} methods allowed.
+ * Default value is {@code 100}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code maxPackage} - Specify the maximum number of {@code package} methods allowed.
+ * Default value is {@code 100}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code maxProtected} - Specify the maximum number of {@code protected} methods allowed.
+ * Default value is 100.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code maxPublic} - Specify the maximum number of {@code public} methods allowed.
+ * Default value is {@code 100}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code tokens} - tokens to check Default value is:
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#CLASS_DEF&quot;&gt;
+ * CLASS_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ENUM_CONSTANT_DEF&quot;&gt;
+ * ENUM_CONSTANT_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ENUM_DEF&quot;&gt;
+ * ENUM_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#INTERFACE_DEF&quot;&gt;
+ * INTERFACE_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#INTERFACE_DEF&quot;&gt;
+ * ANNOTATION_DEF&lt;/a&gt;.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the check with defaults:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MethodCount&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to allow no more than 30 methods per type declaration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MethodCount&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;maxTotal&quot; value=&quot;30&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to allow no more than 10 public methods per type declaration,
+ * and 40 methods in total:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MethodCount&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;maxPublic&quot; value=&quot;10&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;maxTotal&quot; value=&quot;40&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @since 5.3
  */
 @FileStatefulCheck
-<span class="fc" id="L39">public final class MethodCountCheck extends AbstractCheck {</span>
+<span class="fc" id="L138">public final class MethodCountCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -72,27 +171,27 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     private static final int DEFAULT_MAX_METHODS = 100;
 
     /** Maintains stack of counters, to support inner types. */
-<span class="fc" id="L75">    private final Deque&lt;MethodCounter&gt; counters = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L174">    private final Deque&lt;MethodCounter&gt; counters = new ArrayDeque&lt;&gt;();</span>
 
-    /** Maximum private methods. */
-<span class="fc" id="L78">    private int maxPrivate = DEFAULT_MAX_METHODS;</span>
-    /** Maximum package methods. */
-<span class="fc" id="L80">    private int maxPackage = DEFAULT_MAX_METHODS;</span>
-    /** Maximum protected methods. */
-<span class="fc" id="L82">    private int maxProtected = DEFAULT_MAX_METHODS;</span>
-    /** Maximum public methods. */
-<span class="fc" id="L84">    private int maxPublic = DEFAULT_MAX_METHODS;</span>
-    /** Maximum total number of methods. */
-<span class="fc" id="L86">    private int maxTotal = DEFAULT_MAX_METHODS;</span>
+    /** Specify the maximum number of {@code private} methods allowed. */
+<span class="fc" id="L177">    private int maxPrivate = DEFAULT_MAX_METHODS;</span>
+    /** Specify the maximum number of {@code package} methods allowed. */
+<span class="fc" id="L179">    private int maxPackage = DEFAULT_MAX_METHODS;</span>
+    /** Specify the maximum number of {@code protected} methods allowed. */
+<span class="fc" id="L181">    private int maxProtected = DEFAULT_MAX_METHODS;</span>
+    /** Specify the maximum number of {@code public} methods allowed. */
+<span class="fc" id="L183">    private int maxPublic = DEFAULT_MAX_METHODS;</span>
+    /** Specify the maximum number of methods allowed at all scope levels. */
+<span class="fc" id="L185">    private int maxTotal = DEFAULT_MAX_METHODS;</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L90">        return getAcceptableTokens();</span>
+<span class="fc" id="L189">        return getAcceptableTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L95">        return new int[] {</span>
+<span class="fc" id="L194">        return new int[] {</span>
             TokenTypes.CLASS_DEF,
             TokenTypes.ENUM_CONSTANT_DEF,
             TokenTypes.ENUM_DEF,
@@ -104,29 +203,29 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L107">        return new int[] {TokenTypes.METHOD_DEF};</span>
+<span class="fc" id="L206">        return new int[] {TokenTypes.METHOD_DEF};</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L112" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
-<span class="fc bfc" id="L113" title="All 2 branches covered.">            if (isInLatestScopeDefinition(ast)) {</span>
-<span class="fc" id="L114">                raiseCounter(ast);</span>
+<span class="fc bfc" id="L211" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">            if (isInLatestScopeDefinition(ast)) {</span>
+<span class="fc" id="L213">                raiseCounter(ast);</span>
             }
         }
         else {
-<span class="fc" id="L118">            counters.push(new MethodCounter(ast));</span>
+<span class="fc" id="L217">            counters.push(new MethodCounter(ast));</span>
         }
-<span class="fc" id="L120">    }</span>
+<span class="fc" id="L219">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L124" title="All 2 branches covered.">        if (ast.getType() != TokenTypes.METHOD_DEF) {</span>
-<span class="fc" id="L125">            final MethodCounter counter = counters.pop();</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (ast.getType() != TokenTypes.METHOD_DEF) {</span>
+<span class="fc" id="L224">            final MethodCounter counter = counters.pop();</span>
 
-<span class="fc" id="L127">            checkCounters(counter, ast);</span>
+<span class="fc" id="L226">            checkCounters(counter, ast);</span>
         }
-<span class="fc" id="L129">    }</span>
+<span class="fc" id="L228">    }</span>
 
     /**
      * Checks if there is a scope definition to check and that the method is found inside that scope
@@ -137,15 +236,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      *         counted.
      */
     private boolean isInLatestScopeDefinition(DetailAST methodDef) {
-<span class="fc" id="L140">        boolean result = false;</span>
+<span class="fc" id="L239">        boolean result = false;</span>
 
-<span class="fc bfc" id="L142" title="All 2 branches covered.">        if (!counters.isEmpty()) {</span>
-<span class="fc" id="L143">            final DetailAST latestDefinition = counters.peek().getScopeDefinition();</span>
+<span class="fc bfc" id="L241" title="All 2 branches covered.">        if (!counters.isEmpty()) {</span>
+<span class="fc" id="L242">            final DetailAST latestDefinition = counters.peek().getScopeDefinition();</span>
 
-<span class="fc bfc" id="L145" title="All 2 branches covered.">            result = latestDefinition == methodDef.getParent().getParent();</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">            result = latestDefinition == methodDef.getParent().getParent();</span>
         }
 
-<span class="fc" id="L148">        return result;</span>
+<span class="fc" id="L247">        return result;</span>
     }
 
     /**
@@ -154,11 +253,11 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      *            The method-subtree from the AbstractSyntaxTree.
      */
     private void raiseCounter(DetailAST method) {
-<span class="fc" id="L157">        final MethodCounter actualCounter = counters.peek();</span>
-<span class="fc" id="L158">        final DetailAST temp = method.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L159">        final Scope scope = ScopeUtil.getScopeFromMods(temp);</span>
-<span class="fc" id="L160">        actualCounter.increment(scope);</span>
-<span class="fc" id="L161">    }</span>
+<span class="fc" id="L256">        final MethodCounter actualCounter = counters.peek();</span>
+<span class="fc" id="L257">        final DetailAST temp = method.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L258">        final Scope scope = ScopeUtil.getScopeFromMods(temp);</span>
+<span class="fc" id="L259">        actualCounter.increment(scope);</span>
+<span class="fc" id="L260">    }</span>
 
     /**
      * Check the counters and report violations.
@@ -166,16 +265,16 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param ast to report violations against.
      */
     private void checkCounters(MethodCounter counter, DetailAST ast) {
-<span class="fc" id="L169">        checkMax(maxPrivate, counter.value(Scope.PRIVATE),</span>
+<span class="fc" id="L268">        checkMax(maxPrivate, counter.value(Scope.PRIVATE),</span>
                  MSG_PRIVATE_METHODS, ast);
-<span class="fc" id="L171">        checkMax(maxPackage, counter.value(Scope.PACKAGE),</span>
+<span class="fc" id="L270">        checkMax(maxPackage, counter.value(Scope.PACKAGE),</span>
                  MSG_PACKAGE_METHODS, ast);
-<span class="fc" id="L173">        checkMax(maxProtected, counter.value(Scope.PROTECTED),</span>
+<span class="fc" id="L272">        checkMax(maxProtected, counter.value(Scope.PROTECTED),</span>
                  MSG_PROTECTED_METHODS, ast);
-<span class="fc" id="L175">        checkMax(maxPublic, counter.value(Scope.PUBLIC),</span>
+<span class="fc" id="L274">        checkMax(maxPublic, counter.value(Scope.PUBLIC),</span>
                  MSG_PUBLIC_METHODS, ast);
-<span class="fc" id="L177">        checkMax(maxTotal, counter.getTotal(), MSG_MANY_METHODS, ast);</span>
-<span class="fc" id="L178">    }</span>
+<span class="fc" id="L276">        checkMax(maxTotal, counter.getTotal(), MSG_MANY_METHODS, ast);</span>
+<span class="fc" id="L277">    }</span>
 
     /**
      * Utility for reporting if a maximum has been exceeded.
@@ -185,50 +284,55 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param ast the AST to associate with the message.
      */
     private void checkMax(int max, int value, String msg, DetailAST ast) {
-<span class="fc bfc" id="L188" title="All 2 branches covered.">        if (max &lt; value) {</span>
-<span class="fc" id="L189">            log(ast.getLineNo(), msg, value, max);</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        if (max &lt; value) {</span>
+<span class="fc" id="L288">            log(ast.getLineNo(), msg, value, max);</span>
         }
-<span class="fc" id="L191">    }</span>
+<span class="fc" id="L290">    }</span>
 
     /**
-     * Sets the maximum allowed {@code private} methods per type.
+     * Setter to specify the maximum number of {@code private} methods allowed.
+     *
      * @param value the maximum allowed.
      */
     public void setMaxPrivate(int value) {
-<span class="fc" id="L198">        maxPrivate = value;</span>
-<span class="fc" id="L199">    }</span>
+<span class="fc" id="L298">        maxPrivate = value;</span>
+<span class="fc" id="L299">    }</span>
 
     /**
-     * Sets the maximum allowed {@code package} methods per type.
+     * Setter to specify the maximum number of {@code package} methods allowed.
+     *
      * @param value the maximum allowed.
      */
     public void setMaxPackage(int value) {
-<span class="fc" id="L206">        maxPackage = value;</span>
-<span class="fc" id="L207">    }</span>
+<span class="fc" id="L307">        maxPackage = value;</span>
+<span class="fc" id="L308">    }</span>
 
     /**
-     * Sets the maximum allowed {@code protected} methods per type.
+     * Setter to specify the maximum number of {@code protected} methods allowed.
+     *
      * @param value the maximum allowed.
      */
     public void setMaxProtected(int value) {
-<span class="fc" id="L214">        maxProtected = value;</span>
-<span class="fc" id="L215">    }</span>
+<span class="fc" id="L316">        maxProtected = value;</span>
+<span class="fc" id="L317">    }</span>
 
     /**
-     * Sets the maximum allowed {@code public} methods per type.
+     * Setter to specify the maximum number of {@code public} methods allowed.
+     *
      * @param value the maximum allowed.
      */
     public void setMaxPublic(int value) {
-<span class="fc" id="L222">        maxPublic = value;</span>
-<span class="fc" id="L223">    }</span>
+<span class="fc" id="L325">        maxPublic = value;</span>
+<span class="fc" id="L326">    }</span>
 
     /**
-     * Sets the maximum total methods per type.
+     * Setter to specify the maximum number of methods allowed at all scope levels.
+     *
      * @param value the maximum allowed.
      */
     public void setMaxTotal(int value) {
-<span class="fc" id="L230">        maxTotal = value;</span>
-<span class="fc" id="L231">    }</span>
+<span class="fc" id="L334">        maxTotal = value;</span>
+<span class="fc" id="L335">    }</span>
 
     /**
      * Marker class used to collect data about the number of methods per
@@ -238,7 +342,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     private static class MethodCounter {
 
         /** Maintains the counts. */
-<span class="fc" id="L241">        private final Map&lt;Scope, Integer&gt; counts = new EnumMap&lt;&gt;(Scope.class);</span>
+<span class="fc" id="L345">        private final Map&lt;Scope, Integer&gt; counts = new EnumMap&lt;&gt;(Scope.class);</span>
         /** Indicated is an interface, in which case all methods are public. */
         private final boolean inInterface;
         /**
@@ -255,24 +359,24 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          *        The surrounding scope definition (class, enum, etc.) which to count all methods
          *        for.
          */
-<span class="fc" id="L258">        /* package */ MethodCounter(DetailAST scopeDefinition) {</span>
-<span class="fc" id="L259">            this.scopeDefinition = scopeDefinition;</span>
-<span class="fc bfc" id="L260" title="All 2 branches covered.">            inInterface = scopeDefinition.getType() == TokenTypes.INTERFACE_DEF;</span>
-<span class="fc" id="L261">        }</span>
+<span class="fc" id="L362">        /* package */ MethodCounter(DetailAST scopeDefinition) {</span>
+<span class="fc" id="L363">            this.scopeDefinition = scopeDefinition;</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">            inInterface = scopeDefinition.getType() == TokenTypes.INTERFACE_DEF;</span>
+<span class="fc" id="L365">        }</span>
 
         /**
          * Increments to counter by one for the supplied scope.
          * @param scope the scope counter to increment.
          */
         private void increment(Scope scope) {
-<span class="fc" id="L268">            total++;</span>
-<span class="fc bfc" id="L269" title="All 2 branches covered.">            if (inInterface) {</span>
-<span class="fc" id="L270">                counts.put(Scope.PUBLIC, 1 + value(Scope.PUBLIC));</span>
+<span class="fc" id="L372">            total++;</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">            if (inInterface) {</span>
+<span class="fc" id="L374">                counts.put(Scope.PUBLIC, 1 + value(Scope.PUBLIC));</span>
             }
             else {
-<span class="fc" id="L273">                counts.put(scope, 1 + value(scope));</span>
+<span class="fc" id="L377">                counts.put(scope, 1 + value(scope));</span>
             }
-<span class="fc" id="L275">        }</span>
+<span class="fc" id="L379">        }</span>
 
         /**
          * Gets the value of a scope counter.
@@ -280,15 +384,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return the value of a scope counter
          */
         private int value(Scope scope) {
-<span class="fc" id="L283">            Integer value = counts.get(scope);</span>
-<span class="fc bfc" id="L284" title="All 2 branches covered.">            if (value == null) {</span>
-<span class="fc" id="L285">                value = 0;</span>
+<span class="fc" id="L387">            Integer value = counts.get(scope);</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">            if (value == null) {</span>
+<span class="fc" id="L389">                value = 0;</span>
             }
-<span class="fc" id="L287">            return value;</span>
+<span class="fc" id="L391">            return value;</span>
         }
 
         private DetailAST getScopeDefinition() {
-<span class="fc" id="L291">            return scopeDefinition;</span>
+<span class="fc" id="L395">            return scopeDefinition;</span>
         }
 
         /**
@@ -296,7 +400,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return the total number of methods.
          */
         private int getTotal() {
-<span class="fc" id="L299">            return total;</span>
+<span class="fc" id="L403">            return total;</span>
         }
 
     }
