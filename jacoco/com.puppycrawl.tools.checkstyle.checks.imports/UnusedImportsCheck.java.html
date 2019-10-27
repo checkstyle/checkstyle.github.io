@@ -39,19 +39,68 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
 
 /**
  * &lt;p&gt;
- * Checks for unused import statements.
+ * Checks for unused import statements. Checkstyle uses a simple but very
+ * reliable algorithm to report on unused import statements. An import statement
+ * is considered unused if:
  * &lt;/p&gt;
- *  &lt;p&gt;
- * An example of how to configure the check is:
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * It is not referenced in the file. The algorithm does not support wild-card
+ * imports like {@code import java.io.*;}. Most IDE's provide very sophisticated
+ * checks for imports that handle wild-card imports.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * It is a duplicate of another import. This is when a class is imported more
+ * than once.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * The class imported is from the {@code java.lang} package. For example
+ * importing {@code java.lang.String}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * The class imported is from the same package.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * &lt;b&gt;Optionally:&lt;/b&gt; it is referenced in Javadoc comments. This check is on by
+ * default, but it is considered bad practice to introduce a compile time
+ * dependency for documentation purposes only. As an example, the import
+ * {@code java.util.List} would be considered referenced with the Javadoc
+ * comment {@code {@link List}}. The alternative to avoid introducing a compile
+ * time dependency would be to write the Javadoc comment as {@code {&amp;#64;link java.util.List}}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * The main limitation of this check is handling the case where an imported type
+ * has the same name as a declaration, such as a member variable.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * For example, in the following case the import {@code java.awt.Component}
+ * will not be flagged as unused:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * import java.awt.Component;
+ * class FooBar {
+ *   private Object Component; // a bad practice in my opinion
+ *   ...
+ * }
+ * &lt;/pre&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code processJavadoc} - Control whether to process Javadoc comments.
+ * Default value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the check:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;UnusedImports&quot;/&amp;gt;
  * &lt;/pre&gt;
- * Compatible with Java 1.5 source.
  *
+ * @since 3.0
  */
 @FileStatefulCheck
-<span class="fc" id="L54">public class UnusedImportsCheck extends AbstractCheck {</span>
+<span class="fc" id="L103">public class UnusedImportsCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -60,65 +109,65 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
     public static final String MSG_KEY = &quot;import.unused&quot;;
 
     /** Regex to match class names. */
-<span class="fc" id="L63">    private static final Pattern CLASS_NAME = CommonUtil.createPattern(</span>
+<span class="fc" id="L112">    private static final Pattern CLASS_NAME = CommonUtil.createPattern(</span>
            &quot;((:?[\\p{L}_$][\\p{L}\\p{N}_$]*\\.)*[\\p{L}_$][\\p{L}\\p{N}_$]*)&quot;);
     /** Regex to match the first class name. */
-<span class="fc" id="L66">    private static final Pattern FIRST_CLASS_NAME = CommonUtil.createPattern(</span>
+<span class="fc" id="L115">    private static final Pattern FIRST_CLASS_NAME = CommonUtil.createPattern(</span>
            &quot;^&quot; + CLASS_NAME);
     /** Regex to match argument names. */
-<span class="fc" id="L69">    private static final Pattern ARGUMENT_NAME = CommonUtil.createPattern(</span>
-<span class="fc" id="L70">           &quot;[(,]\\s*&quot; + CLASS_NAME.pattern());</span>
+<span class="fc" id="L118">    private static final Pattern ARGUMENT_NAME = CommonUtil.createPattern(</span>
+<span class="fc" id="L119">           &quot;[(,]\\s*&quot; + CLASS_NAME.pattern());</span>
 
     /** Regexp pattern to match java.lang package. */
-<span class="fc" id="L73">    private static final Pattern JAVA_LANG_PACKAGE_PATTERN =</span>
-<span class="fc" id="L74">        CommonUtil.createPattern(&quot;^java\\.lang\\.[a-zA-Z]+$&quot;);</span>
+<span class="fc" id="L122">    private static final Pattern JAVA_LANG_PACKAGE_PATTERN =</span>
+<span class="fc" id="L123">        CommonUtil.createPattern(&quot;^java\\.lang\\.[a-zA-Z]+$&quot;);</span>
 
     /** Suffix for the star import. */
     private static final String STAR_IMPORT_SUFFIX = &quot;.*&quot;;
 
     /** Set of the imports. */
-<span class="fc" id="L80">    private final Set&lt;FullIdent&gt; imports = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L129">    private final Set&lt;FullIdent&gt; imports = new HashSet&lt;&gt;();</span>
 
     /** Set of references - possibly to imports or other things. */
-<span class="fc" id="L83">    private final Set&lt;String&gt; referenced = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L132">    private final Set&lt;String&gt; referenced = new HashSet&lt;&gt;();</span>
 
     /** Flag to indicate when time to start collecting references. */
     private boolean collect;
-    /** Flag whether to process Javadoc comments. */
-<span class="fc" id="L88">    private boolean processJavadoc = true;</span>
+    /** Control whether to process Javadoc comments. */
+<span class="fc" id="L137">    private boolean processJavadoc = true;</span>
 
     /**
-     * Sets whether to process JavaDoc or not.
+     * Setter to control whether to process Javadoc comments.
      *
-     * @param value Flag for processing JavaDoc.
+     * @param value Flag for processing Javadoc comments.
      */
     public void setProcessJavadoc(boolean value) {
-<span class="fc" id="L96">        processJavadoc = value;</span>
-<span class="fc" id="L97">    }</span>
+<span class="fc" id="L145">        processJavadoc = value;</span>
+<span class="fc" id="L146">    }</span>
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L101">        collect = false;</span>
-<span class="fc" id="L102">        imports.clear();</span>
-<span class="fc" id="L103">        referenced.clear();</span>
-<span class="fc" id="L104">    }</span>
+<span class="fc" id="L150">        collect = false;</span>
+<span class="fc" id="L151">        imports.clear();</span>
+<span class="fc" id="L152">        referenced.clear();</span>
+<span class="fc" id="L153">    }</span>
 
     @Override
     public void finishTree(DetailAST rootAST) {
         // loop over all the imports to see if referenced.
-<span class="fc" id="L109">        imports.stream()</span>
-<span class="fc" id="L110">            .filter(imprt -&gt; isUnusedImport(imprt.getText()))</span>
-<span class="fc" id="L111">            .forEach(imprt -&gt; log(imprt.getDetailAst(), MSG_KEY, imprt.getText()));</span>
-<span class="fc" id="L112">    }</span>
+<span class="fc" id="L158">        imports.stream()</span>
+<span class="fc" id="L159">            .filter(imprt -&gt; isUnusedImport(imprt.getText()))</span>
+<span class="fc" id="L160">            .forEach(imprt -&gt; log(imprt.getDetailAst(), MSG_KEY, imprt.getText()));</span>
+<span class="fc" id="L161">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L116">        return getRequiredTokens();</span>
+<span class="fc" id="L165">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L121">        return new int[] {</span>
+<span class="fc" id="L170">        return new int[] {</span>
             TokenTypes.IDENT,
             TokenTypes.IMPORT,
             TokenTypes.STATIC_IMPORT,
@@ -138,29 +187,29 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L141">        return getRequiredTokens();</span>
+<span class="fc" id="L190">        return getRequiredTokens();</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IDENT) {</span>
-<span class="fc bfc" id="L147" title="All 2 branches covered.">            if (collect) {</span>
-<span class="fc" id="L148">                processIdent(ast);</span>
+<span class="fc bfc" id="L195" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IDENT) {</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">            if (collect) {</span>
+<span class="fc" id="L197">                processIdent(ast);</span>
             }
         }
-<span class="fc bfc" id="L151" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.IMPORT) {</span>
-<span class="fc" id="L152">            processImport(ast);</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.IMPORT) {</span>
+<span class="fc" id="L201">            processImport(ast);</span>
         }
-<span class="fc bfc" id="L154" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.STATIC_IMPORT) {</span>
-<span class="fc" id="L155">            processStaticImport(ast);</span>
+<span class="fc bfc" id="L203" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.STATIC_IMPORT) {</span>
+<span class="fc" id="L204">            processStaticImport(ast);</span>
         }
         else {
-<span class="fc" id="L158">            collect = true;</span>
-<span class="fc bfc" id="L159" title="All 2 branches covered.">            if (processJavadoc) {</span>
-<span class="fc" id="L160">                collectReferencesFromJavadoc(ast);</span>
+<span class="fc" id="L207">            collect = true;</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">            if (processJavadoc) {</span>
+<span class="fc" id="L209">                collectReferencesFromJavadoc(ast);</span>
             }
         }
-<span class="fc" id="L163">    }</span>
+<span class="fc" id="L212">    }</span>
 
     /**
      * Checks whether an import is unused.
@@ -168,9 +217,9 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true if an import is unused.
      */
     private boolean isUnusedImport(String imprt) {
-<span class="fc" id="L171">        final Matcher javaLangPackageMatcher = JAVA_LANG_PACKAGE_PATTERN.matcher(imprt);</span>
-<span class="fc bfc" id="L172" title="All 2 branches covered.">        return !referenced.contains(CommonUtil.baseClassName(imprt))</span>
-<span class="fc bfc" id="L173" title="All 2 branches covered.">            || javaLangPackageMatcher.matches();</span>
+<span class="fc" id="L220">        final Matcher javaLangPackageMatcher = JAVA_LANG_PACKAGE_PATTERN.matcher(imprt);</span>
+<span class="fc bfc" id="L221" title="All 2 branches covered.">        return !referenced.contains(CommonUtil.baseClassName(imprt))</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">            || javaLangPackageMatcher.matches();</span>
     }
 
     /**
@@ -178,52 +227,52 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param ast the IDENT node to process
      */
     private void processIdent(DetailAST ast) {
-<span class="fc" id="L181">        final DetailAST parent = ast.getParent();</span>
-<span class="fc" id="L182">        final int parentType = parent.getType();</span>
-<span class="fc bfc" id="L183" title="All 6 branches covered.">        if (parentType != TokenTypes.DOT</span>
+<span class="fc" id="L230">        final DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L231">        final int parentType = parent.getType();</span>
+<span class="fc bfc" id="L232" title="All 6 branches covered.">        if (parentType != TokenTypes.DOT</span>
             &amp;&amp; parentType != TokenTypes.METHOD_DEF
             || parentType == TokenTypes.DOT
-<span class="fc bfc" id="L186" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling() != null) {</span>
-<span class="fc" id="L187">            referenced.add(ast.getText());</span>
+<span class="fc bfc" id="L235" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling() != null) {</span>
+<span class="fc" id="L236">            referenced.add(ast.getText());</span>
         }
-<span class="fc" id="L189">    }</span>
+<span class="fc" id="L238">    }</span>
 
     /**
      * Collects the details of imports.
      * @param ast node containing the import details
      */
     private void processImport(DetailAST ast) {
-<span class="fc" id="L196">        final FullIdent name = FullIdent.createFullIdentBelow(ast);</span>
-<span class="fc bfc" id="L197" title="All 2 branches covered.">        if (!name.getText().endsWith(STAR_IMPORT_SUFFIX)) {</span>
-<span class="fc" id="L198">            imports.add(name);</span>
+<span class="fc" id="L245">        final FullIdent name = FullIdent.createFullIdentBelow(ast);</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">        if (!name.getText().endsWith(STAR_IMPORT_SUFFIX)) {</span>
+<span class="fc" id="L247">            imports.add(name);</span>
         }
-<span class="fc" id="L200">    }</span>
+<span class="fc" id="L249">    }</span>
 
     /**
      * Collects the details of static imports.
      * @param ast node containing the static import details
      */
     private void processStaticImport(DetailAST ast) {
-<span class="fc" id="L207">        final FullIdent name =</span>
-<span class="fc" id="L208">            FullIdent.createFullIdent(</span>
-<span class="fc" id="L209">                ast.getFirstChild().getNextSibling());</span>
-<span class="fc bfc" id="L210" title="All 2 branches covered.">        if (!name.getText().endsWith(STAR_IMPORT_SUFFIX)) {</span>
-<span class="fc" id="L211">            imports.add(name);</span>
+<span class="fc" id="L256">        final FullIdent name =</span>
+<span class="fc" id="L257">            FullIdent.createFullIdent(</span>
+<span class="fc" id="L258">                ast.getFirstChild().getNextSibling());</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">        if (!name.getText().endsWith(STAR_IMPORT_SUFFIX)) {</span>
+<span class="fc" id="L260">            imports.add(name);</span>
         }
-<span class="fc" id="L213">    }</span>
+<span class="fc" id="L262">    }</span>
 
     /**
      * Collects references made in Javadoc comments.
      * @param ast node to inspect for Javadoc
      */
     private void collectReferencesFromJavadoc(DetailAST ast) {
-<span class="fc" id="L220">        final FileContents contents = getFileContents();</span>
-<span class="fc" id="L221">        final int lineNo = ast.getLineNo();</span>
-<span class="fc" id="L222">        final TextBlock textBlock = contents.getJavadocBefore(lineNo);</span>
-<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (textBlock != null) {</span>
-<span class="fc" id="L224">            referenced.addAll(collectReferencesFromJavadoc(textBlock));</span>
+<span class="fc" id="L269">        final FileContents contents = getFileContents();</span>
+<span class="fc" id="L270">        final int lineNo = ast.getLineNo();</span>
+<span class="fc" id="L271">        final TextBlock textBlock = contents.getJavadocBefore(lineNo);</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">        if (textBlock != null) {</span>
+<span class="fc" id="L273">            referenced.addAll(collectReferencesFromJavadoc(textBlock));</span>
         }
-<span class="fc" id="L226">    }</span>
+<span class="fc" id="L275">    }</span>
 
     /**
      * Process a javadoc {@link TextBlock} and return the set of classes
@@ -232,19 +281,19 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return a set of classes referenced in the javadoc block
      */
     private static Set&lt;String&gt; collectReferencesFromJavadoc(TextBlock textBlock) {
-<span class="fc" id="L235">        final List&lt;JavadocTag&gt; tags = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L284">        final List&lt;JavadocTag&gt; tags = new ArrayList&lt;&gt;();</span>
         // gather all the inline tags, like @link
         // INLINE tags inside BLOCKs get hidden when using ALL
-<span class="fc" id="L238">        tags.addAll(getValidTags(textBlock, JavadocUtil.JavadocTagType.INLINE));</span>
+<span class="fc" id="L287">        tags.addAll(getValidTags(textBlock, JavadocUtil.JavadocTagType.INLINE));</span>
         // gather all the block-level tags, like @throws and @see
-<span class="fc" id="L240">        tags.addAll(getValidTags(textBlock, JavadocUtil.JavadocTagType.BLOCK));</span>
+<span class="fc" id="L289">        tags.addAll(getValidTags(textBlock, JavadocUtil.JavadocTagType.BLOCK));</span>
 
-<span class="fc" id="L242">        final Set&lt;String&gt; references = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L291">        final Set&lt;String&gt; references = new HashSet&lt;&gt;();</span>
 
-<span class="fc" id="L244">        tags.stream()</span>
-<span class="fc" id="L245">            .filter(JavadocTag::canReferenceImports)</span>
-<span class="fc" id="L246">            .forEach(tag -&gt; references.addAll(processJavadocTag(tag)));</span>
-<span class="fc" id="L247">        return references;</span>
+<span class="fc" id="L293">        tags.stream()</span>
+<span class="fc" id="L294">            .filter(JavadocTag::canReferenceImports)</span>
+<span class="fc" id="L295">            .forEach(tag -&gt; references.addAll(processJavadocTag(tag)));</span>
+<span class="fc" id="L296">        return references;</span>
     }
 
     /**
@@ -255,7 +304,7 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      */
     private static List&lt;JavadocTag&gt; getValidTags(TextBlock cmt,
             JavadocUtil.JavadocTagType tagType) {
-<span class="fc" id="L258">        return JavadocUtil.getJavadocTags(cmt, tagType).getValidTags();</span>
+<span class="fc" id="L307">        return JavadocUtil.getJavadocTags(cmt, tagType).getValidTags();</span>
     }
 
     /**
@@ -264,13 +313,13 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return A list of references found in this tag
      */
     private static Set&lt;String&gt; processJavadocTag(JavadocTag tag) {
-<span class="fc" id="L267">        final Set&lt;String&gt; references = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L268">        final String identifier = tag.getFirstArg().trim();</span>
-<span class="fc bfc" id="L269" title="All 2 branches covered.">        for (Pattern pattern : new Pattern[]</span>
+<span class="fc" id="L316">        final Set&lt;String&gt; references = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L317">        final String identifier = tag.getFirstArg().trim();</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">        for (Pattern pattern : new Pattern[]</span>
         {FIRST_CLASS_NAME, ARGUMENT_NAME}) {
-<span class="fc" id="L271">            references.addAll(matchPattern(identifier, pattern));</span>
+<span class="fc" id="L320">            references.addAll(matchPattern(identifier, pattern));</span>
         }
-<span class="fc" id="L273">        return references;</span>
+<span class="fc" id="L322">        return references;</span>
     }
 
     /**
@@ -281,12 +330,12 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return A list of texts which matched the pattern
      */
     private static Set&lt;String&gt; matchPattern(String identifier, Pattern pattern) {
-<span class="fc" id="L284">        final Set&lt;String&gt; references = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L285">        final Matcher matcher = pattern.matcher(identifier);</span>
-<span class="fc bfc" id="L286" title="All 2 branches covered.">        while (matcher.find()) {</span>
-<span class="fc" id="L287">            references.add(topLevelType(matcher.group(1)));</span>
+<span class="fc" id="L333">        final Set&lt;String&gt; references = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L334">        final Matcher matcher = pattern.matcher(identifier);</span>
+<span class="fc bfc" id="L335" title="All 2 branches covered.">        while (matcher.find()) {</span>
+<span class="fc" id="L336">            references.add(topLevelType(matcher.group(1)));</span>
         }
-<span class="fc" id="L289">        return references;</span>
+<span class="fc" id="L338">        return references;</span>
     }
 
     /**
@@ -298,15 +347,15 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      */
     private static String topLevelType(String type) {
         final String topLevelType;
-<span class="fc" id="L301">        final int dotIndex = type.indexOf('.');</span>
-<span class="fc bfc" id="L302" title="All 2 branches covered.">        if (dotIndex == -1) {</span>
-<span class="fc" id="L303">            topLevelType = type;</span>
+<span class="fc" id="L350">        final int dotIndex = type.indexOf('.');</span>
+<span class="fc bfc" id="L351" title="All 2 branches covered.">        if (dotIndex == -1) {</span>
+<span class="fc" id="L352">            topLevelType = type;</span>
         }
         else {
-<span class="fc" id="L306">            topLevelType = type.substring(0, dotIndex);</span>
+<span class="fc" id="L355">            topLevelType = type.substring(0, dotIndex);</span>
         }
-<span class="fc" id="L308">        return topLevelType;</span>
+<span class="fc" id="L357">        return topLevelType;</span>
     }
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

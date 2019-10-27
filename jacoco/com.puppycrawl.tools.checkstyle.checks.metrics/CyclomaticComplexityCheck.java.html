@@ -29,22 +29,157 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
 /**
- * Checks cyclomatic complexity against a specified limit. The complexity is
- * measured by the number of &quot;if&quot;, &quot;while&quot;, &quot;do&quot;, &quot;for&quot;, &quot;?:&quot;, &quot;catch&quot;,
- * &quot;switch&quot;, &quot;case&quot;, &quot;&amp;amp;&amp;amp;&quot; and &quot;||&quot; statements (plus one) in the body of
- * the member. It is a measure of the minimum number of possible paths through
- * the source and therefore the number of required tests. Generally 1-4 is
- * considered good, 5-7 ok, 8-10 consider re-factoring, and 11+ re-factor now!
+ * &lt;p&gt;
+ * Checks cyclomatic complexity against a specified limit. It is a measure of
+ * the minimum number of possible paths through the source and therefore the
+ * number of required tests, it is not a about quality of code! It is only
+ * applied to methods, c-tors,
+ * &lt;a href=&quot;https://docs.oracle.com/javase/tutorial/java/javaOO/initial.html&quot;&gt;
+ * static initializers and instance initializers&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The complexity is equal to the number of decision points {@code + 1}.
+ * Decision points: {@code if}, {@code while}, {@code do}, {@code for},
+ * {@code ?:}, {@code catch}, {@code switch}, {@code case} statements and
+ * operators {@code &amp;amp;&amp;amp;} and {@code ||} in the body of target.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * By pure theory level 1-4 is considered easy to test, 5-7 OK, 8-10 consider
+ * re-factoring to ease testing, and 11+ re-factor now as testing will be painful.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * When it comes to code quality measurement by this metric level 10 is very
+ * good level as a ultimate target (that is hard to archive). Do not be ashamed
+ * to have complexity level 15 or even higher, but keep it below 20 to catch
+ * really bad designed code automatically.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Please use Suppression to avoid violations on cases that could not be split
+ * in few methods without damaging readability of code or encapsulation.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code max} - Specify the maximum threshold allowed.
+ * Default value is {@code 10}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code switchBlockAsSingleDecisionPoint} - Control whether to treat
+ * the whole switch block as a single decision point.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code tokens} - tokens to check
+ * Default value is:
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_WHILE&quot;&gt;
+ * LITERAL_WHILE&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_DO&quot;&gt;
+ * LITERAL_DO&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_FOR&quot;&gt;
+ * LITERAL_FOR&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_IF&quot;&gt;
+ * LITERAL_IF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_SWITCH&quot;&gt;
+ * LITERAL_SWITCH&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_CASE&quot;&gt;
+ * LITERAL_CASE&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_CATCH&quot;&gt;
+ * LITERAL_CATCH&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#QUESTION&quot;&gt;
+ * QUESTION&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAND&quot;&gt;
+ * LAND&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LOR&quot;&gt;
+ * LOR&lt;/a&gt;.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;CyclomaticComplexity&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check with a threshold of 15:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;CyclomaticComplexity&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;max&quot; value=&quot;15&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Explanation on how complexity is calculated (switchBlockAsSingleDecisionPoint is set to false):
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * class CC {
+ *   // Cyclomatic Complexity = 12
+ *   public void doSmth()  {         // 1
+ *     if (a == b)  {                // 2
+ *       if (a1 == b1                // 3
+ *         &amp;amp;&amp;amp; c1 == d1) {            // 4
+ *         fiddle();
+ *       }
+ *       else if (a2 == b2           // 5
+ *               || c1 &amp;lt; d1) {       // 6
+ *         fiddle();
+ *       }
+ *       else {
+ *         fiddle();
+ *       }
+ *     }
+ *     else if (c == d) {            // 7
+ *       while (c == d) {            // 8
+ *         fiddle();
+ *       }
+ *     }
+ *     else if (e == f) {
+ *       for (n = 0; n &amp;lt; h            // 9
+ *             || n &amp;lt; 6; n++) {       // 10
+ *         fiddle();
+ *       }
+ *     }
+ *       else {
+ *         switch (z) {
+ *           case 1:                  // 11
+ *             fiddle();
+ *             break;
+ *           case 2:                  // 12
+ *             fiddle();
+ *             break;
+ *           default:
+ *             fiddle();
+ *             break;
+ *       }
+ *     }
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Explanation on how complexity is calculated (switchBlockAsSingleDecisionPoint is set to true):
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * class SwitchExample {
+ *   // Cyclomatic Complexity = 2
+ *   public void doSmth()  {          // 1
+ *     int z = 1;
+ *     switch (z) {                   // 2
+ *       case 1:
+ *         foo1();
+ *         break;
+ *       case 2:
+ *         foo2();
+ *         break;
+ *       default:
+ *         fooDefault();
+ *         break;
+ *      }
+ *   }
+ * }
+ * &lt;/pre&gt;
  *
- * &lt;p&gt;Check has following properties:
- *
- * &lt;p&gt;&lt;b&gt;switchBlockAsSingleDecisionPoint&lt;/b&gt; - controls whether to treat the whole switch
- * block as a single decision point. Default value is &lt;b&gt;false&lt;/b&gt;
- *
- *
+ * @since 3.2
  */
 @FileStatefulCheck
-<span class="fc" id="L47">public class CyclomaticComplexityCheck</span>
+<span class="fc" id="L182">public class CyclomaticComplexityCheck</span>
     extends AbstractCheck {
 
     /**
@@ -54,44 +189,45 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     public static final String MSG_KEY = &quot;cyclomaticComplexity&quot;;
 
     /** The initial current value. */
-<span class="fc" id="L57">    private static final BigInteger INITIAL_VALUE = BigInteger.ONE;</span>
+<span class="fc" id="L192">    private static final BigInteger INITIAL_VALUE = BigInteger.ONE;</span>
 
     /** Default allowed complexity. */
     private static final int DEFAULT_COMPLEXITY_VALUE = 10;
 
     /** Stack of values - all but the current value. */
-<span class="fc" id="L63">    private final Deque&lt;BigInteger&gt; valueStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L198">    private final Deque&lt;BigInteger&gt; valueStack = new ArrayDeque&lt;&gt;();</span>
 
-    /** Whether to treat the whole switch block as a single decision point.*/
+    /** Control whether to treat the whole switch block as a single decision point. */
     private boolean switchBlockAsSingleDecisionPoint;
 
     /** The current value. */
-<span class="fc" id="L69">    private BigInteger currentValue = INITIAL_VALUE;</span>
+<span class="fc" id="L204">    private BigInteger currentValue = INITIAL_VALUE;</span>
 
-    /** Threshold to report violation for. */
-<span class="fc" id="L72">    private int max = DEFAULT_COMPLEXITY_VALUE;</span>
+    /** Specify the maximum threshold allowed. */
+<span class="fc" id="L207">    private int max = DEFAULT_COMPLEXITY_VALUE;</span>
 
     /**
-     * Sets whether to treat the whole switch block as a single decision point.
+     * Setter to control whether to treat the whole switch block as a single decision point.
+     *
      * @param switchBlockAsSingleDecisionPoint whether to treat the whole switch
      *                                          block as a single decision point.
      */
     public void setSwitchBlockAsSingleDecisionPoint(boolean switchBlockAsSingleDecisionPoint) {
-<span class="fc" id="L80">        this.switchBlockAsSingleDecisionPoint = switchBlockAsSingleDecisionPoint;</span>
-<span class="fc" id="L81">    }</span>
+<span class="fc" id="L216">        this.switchBlockAsSingleDecisionPoint = switchBlockAsSingleDecisionPoint;</span>
+<span class="fc" id="L217">    }</span>
 
     /**
-     * Set the maximum threshold allowed.
+     * Setter to specify the maximum threshold allowed.
      *
      * @param max the maximum threshold
      */
     public final void setMax(int max) {
-<span class="fc" id="L89">        this.max = max;</span>
-<span class="fc" id="L90">    }</span>
+<span class="fc" id="L225">        this.max = max;</span>
+<span class="fc" id="L226">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L94">        return new int[] {</span>
+<span class="fc" id="L230">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.INSTANCE_INIT,
@@ -111,7 +247,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L114">        return new int[] {</span>
+<span class="fc" id="L250">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.INSTANCE_INIT,
@@ -131,7 +267,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public final int[] getRequiredTokens() {
-<span class="fc" id="L134">        return new int[] {</span>
+<span class="fc" id="L270">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.INSTANCE_INIT,
@@ -141,31 +277,31 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L144" title="All 2 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
             case TokenTypes.INSTANCE_INIT:
             case TokenTypes.STATIC_INIT:
-<span class="fc" id="L149">                visitMethodDef();</span>
-<span class="fc" id="L150">                break;</span>
+<span class="fc" id="L285">                visitMethodDef();</span>
+<span class="fc" id="L286">                break;</span>
             default:
-<span class="fc" id="L152">                visitTokenHook(ast);</span>
+<span class="fc" id="L288">                visitTokenHook(ast);</span>
         }
-<span class="fc" id="L154">    }</span>
+<span class="fc" id="L290">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L158" title="All 2 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L294" title="All 2 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
             case TokenTypes.INSTANCE_INIT:
             case TokenTypes.STATIC_INIT:
-<span class="fc" id="L163">                leaveMethodDef(ast);</span>
-<span class="fc" id="L164">                break;</span>
+<span class="fc" id="L299">                leaveMethodDef(ast);</span>
+<span class="fc" id="L300">                break;</span>
             default:
                 break;
         }
-<span class="fc" id="L168">    }</span>
+<span class="fc" id="L304">    }</span>
 
     /**
      * Hook called when visiting a token. Will not be called the method
@@ -174,15 +310,15 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param ast the token being visited
      */
     private void visitTokenHook(DetailAST ast) {
-<span class="fc bfc" id="L177" title="All 2 branches covered.">        if (switchBlockAsSingleDecisionPoint) {</span>
-<span class="fc bfc" id="L178" title="All 2 branches covered.">            if (ast.getType() != TokenTypes.LITERAL_CASE) {</span>
-<span class="fc" id="L179">                incrementCurrentValue(BigInteger.ONE);</span>
+<span class="fc bfc" id="L313" title="All 2 branches covered.">        if (switchBlockAsSingleDecisionPoint) {</span>
+<span class="fc bfc" id="L314" title="All 2 branches covered.">            if (ast.getType() != TokenTypes.LITERAL_CASE) {</span>
+<span class="fc" id="L315">                incrementCurrentValue(BigInteger.ONE);</span>
             }
         }
-<span class="fc bfc" id="L182" title="All 2 branches covered.">        else if (ast.getType() != TokenTypes.LITERAL_SWITCH) {</span>
-<span class="fc" id="L183">            incrementCurrentValue(BigInteger.ONE);</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">        else if (ast.getType() != TokenTypes.LITERAL_SWITCH) {</span>
+<span class="fc" id="L319">            incrementCurrentValue(BigInteger.ONE);</span>
         }
-<span class="fc" id="L185">    }</span>
+<span class="fc" id="L321">    }</span>
 
     /**
      * Process the end of a method definition.
@@ -190,12 +326,12 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param ast the token representing the method definition
      */
     private void leaveMethodDef(DetailAST ast) {
-<span class="fc" id="L193">        final BigInteger bigIntegerMax = BigInteger.valueOf(max);</span>
-<span class="fc bfc" id="L194" title="All 2 branches covered.">        if (currentValue.compareTo(bigIntegerMax) &gt; 0) {</span>
-<span class="fc" id="L195">            log(ast, MSG_KEY, currentValue, bigIntegerMax);</span>
+<span class="fc" id="L329">        final BigInteger bigIntegerMax = BigInteger.valueOf(max);</span>
+<span class="fc bfc" id="L330" title="All 2 branches covered.">        if (currentValue.compareTo(bigIntegerMax) &gt; 0) {</span>
+<span class="fc" id="L331">            log(ast, MSG_KEY, currentValue, bigIntegerMax);</span>
         }
-<span class="fc" id="L197">        popValue();</span>
-<span class="fc" id="L198">    }</span>
+<span class="fc" id="L333">        popValue();</span>
+<span class="fc" id="L334">    }</span>
 
     /**
      * Increments the current value by a specified amount.
@@ -203,26 +339,26 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param amount the amount to increment by
      */
     private void incrementCurrentValue(BigInteger amount) {
-<span class="fc" id="L206">        currentValue = currentValue.add(amount);</span>
-<span class="fc" id="L207">    }</span>
+<span class="fc" id="L342">        currentValue = currentValue.add(amount);</span>
+<span class="fc" id="L343">    }</span>
 
     /** Push the current value on the stack. */
     private void pushValue() {
-<span class="fc" id="L211">        valueStack.push(currentValue);</span>
-<span class="fc" id="L212">        currentValue = INITIAL_VALUE;</span>
-<span class="fc" id="L213">    }</span>
+<span class="fc" id="L347">        valueStack.push(currentValue);</span>
+<span class="fc" id="L348">        currentValue = INITIAL_VALUE;</span>
+<span class="fc" id="L349">    }</span>
 
     /**
      * Pops a value off the stack and makes it the current value.
      */
     private void popValue() {
-<span class="fc" id="L219">        currentValue = valueStack.pop();</span>
-<span class="fc" id="L220">    }</span>
+<span class="fc" id="L355">        currentValue = valueStack.pop();</span>
+<span class="fc" id="L356">    }</span>
 
     /** Process the start of the method definition. */
     private void visitMethodDef() {
-<span class="fc" id="L224">        pushValue();</span>
-<span class="fc" id="L225">    }</span>
+<span class="fc" id="L360">        pushValue();</span>
+<span class="fc" id="L361">    }</span>
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

@@ -32,29 +32,420 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
 /**
  * &lt;p&gt;
- * A check that makes sure that a specified pattern exists (or not) in the file.
+ * A check that makes sure that a specified pattern exists, exists less than
+ * a set number of times, or does not exist in the file.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * This check combines all the functionality provided by
+ * &lt;a href=&quot;https://checkstyle.org/config_header.html#RegexpHeader&quot;&gt;RegexpHeader&lt;/a&gt;
+ * except supplying the regular expression from a file.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * It differs from them in that it works in multiline mode. Its regular expression
+ * can span multiple lines and it checks this against the whole file at once.
+ * The others work in singleline mode. Their single or multiple regular expressions
+ * can only span one line. They check each of these against each line in the file in turn.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;Note:&lt;/b&gt; Because of the different mode of operation there may be some
+ * changes in the regular expressions used to achieve a particular end.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * In multiline mode...
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code ^} means the beginning of a line, as opposed to beginning of the input.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * For beginning of the input use {@code \A}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code $} means the end of a line, as opposed to the end of the input.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * For end of input use {@code \Z}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Each line in the file is terminated with a line feed character.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;Note:&lt;/b&gt; Not all regular expression engines are created equal.
+ * Some provide extra functions that others do not and some elements
+ * of the syntax may vary. This check makes use of the
+ * &lt;a href=&quot;https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/regex/package-summary.html&quot;&gt;
+ * java.util.regex package&lt;/a&gt;; please check its documentation for details
+ * of how to construct a regular expression to achieve a particular goal.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;Note:&lt;/b&gt; When entering a regular expression as a parameter in
+ * the XML config file you must also take into account the XML rules. e.g.
+ * if you want to match a &amp;lt; symbol you need to enter &amp;amp;lt;.
+ * The regular expression should be entered on one line.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code format} - Specify the pattern to match against.
+ * Default value is {@code &quot;^$&quot;}(empty).
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code message} - Specify message which is used to notify about
+ * violations, if empty then the default (hard-coded) message is used.
+ * Default value is {@code null}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code illegalPattern} - Control whether the pattern is required or illegal.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code duplicateLimit} - Control whether to check for duplicates
+ * of a required pattern, any negative value means no checking for duplicates,
+ * any positive value is used as the maximum number of allowed duplicates,
+ * if the limit is exceeded violations will be logged.
+ * Default value is {@code 0}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code errorLimit} - Specify the maximum number of violations before
+ * the check will abort.
+ * Default value is {@code 100}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code ignoreComments} - Control whether to ignore matches found within comments.
+ * Default value is {@code false}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * The following examples are mainly copied from the other 3 checks mentioned above,
+ * to show how the same results can be achieved using this check in place of them.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;To use like Required Regexp check:&lt;/b&gt;
  * &lt;/p&gt;
  * &lt;p&gt;
  * An example of how to configure the check to make sure a copyright statement
- * is included in the file (but without requirements on where in the file
- * it should be):
+ * is included in the file:
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The statement.
  * &lt;/p&gt;
  * &lt;pre&gt;
- * &amp;lt;module name=&quot;RegexpCheck&quot;&amp;gt;
- *    &amp;lt;property name=&quot;format&quot; value=&quot;This code is copyrighted&quot;/&amp;gt;
+ * // This code is copyrighted
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * The check.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;// This code is copyrighted&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * And to make sure the same statement appears at the beginning of the file.
+ * Your statement may be multiline.
  * &lt;/p&gt;
  * &lt;pre&gt;
- * &amp;lt;module name=&quot;RegexpCheck&quot;&amp;gt;
- *    &amp;lt;property name=&quot;format&quot; value=&quot;\AThis code is copyrighted&quot;/&amp;gt;
+ * // This code is copyrighted
+ * // (c) MyCompany
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Then the check would be.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;// This code is copyrighted\n// \(c\) MyCompany&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;Note:&lt;/b&gt; To search for parentheses () in a regular expression you must
+ * escape them like \(\). This is required by the regexp engine, otherwise it will
+ * think they are special instruction characters.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * And to make sure it appears only once:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;// This code is copyrighted\n// \(c\) MyCompany&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;duplicateLimit&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * It can also be useful to attach a meaningful message to the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;// This code is copyrighted\n// \(c\) MyCompany&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;message&quot; value=&quot;Copyright&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;To use like illegal regexp check:&lt;/b&gt;
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check to make sure there are no calls to
+ * {@code System.out.println}:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;!-- . matches any character, so we need to escape it and use \. to match dots. --&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;System\.out\.println&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;illegalPattern&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * You may want to make the above check ignore comments, like this:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;System\.out\.println&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;illegalPattern&quot; value=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;ignoreComments&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check to find trailing whitespace at the end of a line:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;[ \t]+$&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;illegalPattern&quot; value=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;message&quot; value=&quot;Trailing whitespace&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * An example of how to configure the check to find case-insensitive occurrences of &quot;debug&quot;:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;(?i)debug&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;illegalPattern&quot; value=&quot;true&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;Note:&lt;/b&gt; The (?i) at the beginning of the regular expression tells the
+ * regexp engine to ignore the case.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * There is also a feature to limit the number of violations reported.
+ * When the limit is reached the check aborts with a message reporting that
+ * the limit has been reached. The default limit setting is 100,
+ * but this can be change as shown in the following example.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;(?i)debug&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;illegalPattern&quot; value=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;errorLimit&quot; value=&quot;1000&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;To use like &lt;a href=&quot;https://checkstyle.org/config_header.html#RegexpHeader&quot;&gt;
+ * RegexpHeader&lt;/a&gt;:&lt;/b&gt;
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the check to verify that each file starts with the following multiline header.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Note the following:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * \A means the start of the file.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * The date can be any 4 digit number.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;pre&gt;
+ * // Copyright (C) 2004 MyCompany
+ * // All rights reserved
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property
+ *     name=&quot;format&quot;
+ *     value=&quot;\A// Copyright \(C\) \d\d\d\d MyCompany\n// All rights reserved&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * A more complex example. Note how the import and javadoc multilines are handled,
+ * there can be any number of them.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * ///////////////////////////////////////////////////////////////////////
+ * // checkstyle:
+ * // Checks Java source code for adherence to a set of rules.
+ * // Copyright (C) 2004  Oliver Burn
+ * // Last modification by $Author A.N.Other$
+ * ///////////////////////////////////////////////////////////////////////
+ *
+ * package com.puppycrawl.checkstyle;
+ *
+ * import java.util.thing1;
+ * import java.util.thing2;
+ * import java.util.thing3;
+ *
+ * &amp;#47;**
+ * * javadoc line 1
+ * * javadoc line 2
+ * * javadoc line 3
+ * *&amp;#47;
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property
+ *     name=&quot;format&quot;
+ *     value=&quot;\A/{71}\n// checkstyle:\n// Checks Java source code for
+ *     adherence to a set of rules\.\n// Copyright \(C\) \d\d\d\d  Oliver Burn\n
+ *     // Last modification by \$Author.*\$\n/{71}\n\npackage [\w\.]*;\n\n
+ *     (import [\w\.]*;\n)*\n/\*\*\n( \*[^/]*\n)* \*&amp;#47;&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;More examples:&lt;/b&gt;
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The next 2 examples deal with the following example Java source file:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;*
+ * * PID.java
+ * *
+ * * Copyright (c) 2001 ACME
+ * * 123 Some St.
+ * * Somewhere.
+ * *
+ * * This software is the confidential and proprietary information of ACME.
+ * * (&quot;Confidential Information&quot;). You shall not disclose such
+ * * Confidential Information and shall use it only in accordance with
+ * * the terms of the license agreement you entered into with ACME.
+ * *
+ * * $Log: config_misc.xml,v $
+ * * Revision 1.7  2007/01/16 12:16:35  oburn
+ * * Removing all reference to mailing lists
+ * *
+ * * Revision 1.6  2005/12/25 16:13:10  o_sukhodolsky
+ * * Fix for rfe 1248106 (TYPECAST is now accepted by NoWhitespaceAfter)
+ * *
+ * * Fix for rfe 953266 (thanks to Paul Guyot (pguyot) for submitting patch)
+ * * IllegalType can be configured to accept some abstract classes which
+ * * matches to regexp of illegal type names (property legalAbstractClassNames)
+ * *
+ * * TrailingComment now can be configured to accept some trailing comments
+ * * (such as NOI18N) (property legalComment, rfe 1385344).
+ * *
+ * * Revision 1.5  2005/11/06 11:54:12  oburn
+ * * Incorporate excellent patch [ 1344344 ] Consolidation of regexp checks.
+ * *
+ * * Revision 1.3.8.1  2005/10/11 14:26:32  someone
+ * * Fix for bug 251.  The broken bit is fixed
+ * *&amp;#47;
+ *
+ * package com.acme.tools;
+ *
+ * import com.acme.thing1;
+ * import com.acme.thing2;
+ * import com.acme.thing3;
+ *
+ * &amp;#47;**
+ * *
+ * * &amp;lt;P&amp;gt;
+ * *   &amp;lt;I&amp;gt;This software is the confidential and proprietary information of
+ * *   ACME (&amp;lt;B&amp;gt;&quot;Confidential Information&quot;&amp;lt;/B&amp;gt;). You shall not
+ * *   disclose such Confidential Information and shall use it only in
+ * *   accordance with the terms of the license agreement you entered into
+ * *   with ACME.&amp;lt;/I&amp;gt;
+ * * &amp;lt;/P&amp;gt;
+ * *
+ * * &amp;amp;#169; copyright 2002 ACME
+ * *
+ * * &amp;#64;author   Some Body
+ * *&amp;#47;
+ * public class PID extends StateMachine implements WebObject.Constants {
+ *
+ * &amp;#47;** javadoc. *&amp;#47;
+ * public static final int A_SETPOINT = 1;
+ * .
+ * .
+ * .
+ * } // class PID
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * This checks for the presence of the header, the first 16 lines.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Note the following:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Line 2 and 13 contain the file name. These are checked to make sure they
+ * are the same, and that they match the class name.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * The date can be any 4 digit number.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property
+ *     name=&quot;format&quot;
+ *     value=&quot;\A/\*\n \* (\w*)\.java\n \*\n \* Copyright \(c\)
+ *     \d\d\d\d ACME\n \* 123 Some St\.\n \* Somewhere\.\n \*\n
+ *     \* This software is the confidential and proprietary information
+ *     of ACME\.\n \* \(&amp;amp;quot;Confidential Information&amp;amp;quot;\)\. You
+ *     shall not disclose such\n \* Confidential Information and shall
+ *     use it only in accordance with\n \* the terms of the license
+ *     agreement you entered into with ACME\.\n \*\n
+ *     \* \$Log: config_misc\.xml,v $
+ *     \* Revision 1\.7  2007/01/16 12:16:35  oburn
+ *     \* Removing all reference to mailing lists
+ *     \* \
+ *     \* Revision 1.6  2005/12/25 16:13:10  o_sukhodolsky
+ *     \* Fix for rfe 1248106 \(TYPECAST is now accepted by NoWhitespaceAfter\)
+ *     \* \
+ *     \* Fix for rfe 953266 \(thanks to Paul Guyot \(pguyot\) for submitting patch\)
+ *     \* IllegalType can be configured to accept some abstract classes which
+ *     \* matches to regexp of illegal type names \(property legalAbstractClassNames\)
+ *     \*
+ *     \* TrailingComment now can be configured to accept some trailing comments
+ *     \* \(such as NOI18N\) \(property legalComment, rfe 1385344\).
+ *     \*
+ *     \* Revision 1.5  2005/11/06 11:54:12  oburn
+ *     \* Incorporate excellent patch \[ 1344344 \] Consolidation of regexp checks.
+ *     \* \\n(.*\n)*([\w|\s]*( class | interface )\1)&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;message&quot; value=&quot;Correct header not found&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * This checks for the presence of a copyright notice within the class javadoc, lines 24 to 37.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;Regexp&quot;&amp;gt;
+ *   &amp;lt;property
+ *     name=&quot;format&quot;
+ *     value=&quot;(/\*\*\n)( \*.*\n)*( \* &amp;lt;P&amp;gt;\n \*   &amp;lt;I&amp;gt;
+ *     This software is the confidential and proprietary information of\n
+ *     \*   ACME \(&amp;lt;B&amp;gt;&amp;amp;quot;Confidential Information&amp;amp;quot;&amp;lt;/B&amp;gt;
+ *     \)\. You shall not\n \*   disclose such Confidential Information
+ *     and shall use it only in\n \*   accordance with the terms of the
+ *     license agreement you entered into\n \*   with ACME\.&amp;lt;/I&amp;gt;\n
+ *     \* &amp;lt;/P&amp;gt;\n \*\n \* &amp;amp;#169; copyright \d\d\d\d ACME\n
+ *     \*\n \* &amp;#64;author .*)(\n\s\*.*)*&amp;#47;\n[\w|\s]*( class | interface )&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;message&quot;
+ *     value=&quot;Copyright in class/interface Javadoc&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;duplicateLimit&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * &lt;b&gt;Note:&lt;/b&gt; To search for things that mean something in XML, like &amp;lt;
+ * you need to escape them like &amp;amp;lt;. This is required so the XML parser
+ * does not act on them, but instead passes the correct character to the regexp engine.
+ * &lt;/p&gt;
+ *
+ * @since 4.0
  */
 @FileStatefulCheck
-<span class="fc" id="L57">public class RegexpCheck extends AbstractCheck {</span>
+<span class="fc" id="L448">public class RegexpCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -85,19 +476,27 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
         &quot;The error limit has been exceeded, &quot;
         + &quot;the check is aborting, there may be more unreported errors.&quot;;
 
-    /** Custom message for report. */
+    /**
+     * Specify message which is used to notify about violations,
+     * if empty then the default (hard-coded) message is used.
+     */
     private String message;
 
-    /** Ignore matches within comments?. **/
+    /** Control whether to ignore matches found within comments. */
     private boolean ignoreComments;
 
-    /** Pattern illegal?. */
+    /** Control whether the pattern is required or illegal. */
     private boolean illegalPattern;
 
-    /** Error report limit. */
-<span class="fc" id="L98">    private int errorLimit = DEFAULT_ERROR_LIMIT;</span>
+    /** Specify the maximum number of violations before the check will abort. */
+<span class="fc" id="L492">    private int errorLimit = DEFAULT_ERROR_LIMIT;</span>
 
-    /** Disallow more than x duplicates?. */
+    /**
+     * Control whether to check for duplicates of a required pattern,
+     * any negative value means no checking for duplicates,
+     * any positive value is used as the maximum number of allowed duplicates,
+     * if the limit is exceeded violations will be logged.
+     */
     private int duplicateLimit;
 
     /** Boolean to say if we should check for duplicates. */
@@ -109,117 +508,126 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     /** Tracks number of errors. */
     private int errorCount;
 
-    /** The regexp to match against. */
-<span class="fc" id="L113">    private Pattern format = Pattern.compile(&quot;^$&quot;, Pattern.MULTILINE);</span>
+    /** Specify the pattern to match against. */
+<span class="fc" id="L512">    private Pattern format = Pattern.compile(&quot;^$&quot;, Pattern.MULTILINE);</span>
 
     /** The matcher. */
     private Matcher matcher;
 
     /**
-     * Setter for message property.
+     * Setter to specify message which is used to notify about violations,
+     * if empty then the default (hard-coded) message is used.
+     *
      * @param message custom message which should be used in report.
      */
     public void setMessage(String message) {
-<span class="fc bfc" id="L123" title="All 2 branches covered.">        if (message == null) {</span>
-<span class="fc" id="L124">            this.message = &quot;&quot;;</span>
+<span class="fc bfc" id="L524" title="All 2 branches covered.">        if (message == null) {</span>
+<span class="fc" id="L525">            this.message = &quot;&quot;;</span>
         }
         else {
-<span class="fc" id="L127">            this.message = message;</span>
+<span class="fc" id="L528">            this.message = message;</span>
         }
-<span class="fc" id="L129">    }</span>
+<span class="fc" id="L530">    }</span>
 
     /**
-     * Sets if matches within comments should be ignored.
+     * Setter to control whether to ignore matches found within comments.
+     *
      * @param ignoreComments True if comments should be ignored.
      */
     public void setIgnoreComments(boolean ignoreComments) {
-<span class="fc" id="L136">        this.ignoreComments = ignoreComments;</span>
-<span class="fc" id="L137">    }</span>
+<span class="fc" id="L538">        this.ignoreComments = ignoreComments;</span>
+<span class="fc" id="L539">    }</span>
 
     /**
-     * Sets if pattern is illegal, otherwise pattern is required.
+     * Setter to control whether the pattern is required or illegal.
+     *
      * @param illegalPattern True if pattern is not allowed.
      */
     public void setIllegalPattern(boolean illegalPattern) {
-<span class="fc" id="L144">        this.illegalPattern = illegalPattern;</span>
-<span class="fc" id="L145">    }</span>
+<span class="fc" id="L547">        this.illegalPattern = illegalPattern;</span>
+<span class="fc" id="L548">    }</span>
 
     /**
-     * Sets the limit on the number of errors to report.
+     * Setter to specify the maximum number of violations before the check will abort.
+     *
      * @param errorLimit the number of errors to report.
      */
     public void setErrorLimit(int errorLimit) {
-<span class="fc" id="L152">        this.errorLimit = errorLimit;</span>
-<span class="fc" id="L153">    }</span>
+<span class="fc" id="L556">        this.errorLimit = errorLimit;</span>
+<span class="fc" id="L557">    }</span>
 
     /**
-     * Sets the maximum number of instances of required pattern allowed.
+     * Setter to control whether to check for duplicates of a required pattern,
+     * any negative value means no checking for duplicates,
+     * any positive value is used as the maximum number of allowed duplicates,
+     * if the limit is exceeded violations will be logged.
+     *
      * @param duplicateLimit negative values mean no duplicate checking,
      *     any positive value is used as the limit.
      */
     public void setDuplicateLimit(int duplicateLimit) {
-<span class="fc" id="L161">        this.duplicateLimit = duplicateLimit;</span>
-<span class="fc bfc" id="L162" title="All 2 branches covered.">        checkForDuplicates = duplicateLimit &gt; DEFAULT_DUPLICATE_LIMIT;</span>
-<span class="fc" id="L163">    }</span>
+<span class="fc" id="L569">        this.duplicateLimit = duplicateLimit;</span>
+<span class="fc bfc" id="L570" title="All 2 branches covered.">        checkForDuplicates = duplicateLimit &gt; DEFAULT_DUPLICATE_LIMIT;</span>
+<span class="fc" id="L571">    }</span>
 
     /**
-     * Set the format to the specified regular expression.
+     * Setter to specify the pattern to match against.
+     *
      * @param pattern the new pattern
-     * @throws org.apache.commons.beanutils.ConversionException unable to parse format
      */
     public final void setFormat(Pattern pattern) {
-<span class="fc" id="L171">        format = CommonUtil.createPattern(pattern.pattern(), Pattern.MULTILINE);</span>
-<span class="fc" id="L172">    }</span>
+<span class="fc" id="L579">        format = CommonUtil.createPattern(pattern.pattern(), Pattern.MULTILINE);</span>
+<span class="fc" id="L580">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L176">        return getRequiredTokens();</span>
+<span class="fc" id="L584">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L181">        return getRequiredTokens();</span>
+<span class="fc" id="L589">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L186">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L594">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L191">        matcher = format.matcher(getFileContents().getText().getFullText());</span>
-<span class="fc" id="L192">        matchCount = 0;</span>
-<span class="fc" id="L193">        errorCount = 0;</span>
-<span class="fc" id="L194">        findMatch();</span>
-<span class="fc" id="L195">    }</span>
+<span class="fc" id="L599">        matcher = format.matcher(getFileContents().getText().getFullText());</span>
+<span class="fc" id="L600">        matchCount = 0;</span>
+<span class="fc" id="L601">        errorCount = 0;</span>
+<span class="fc" id="L602">        findMatch();</span>
+<span class="fc" id="L603">    }</span>
 
     /** Recursive method that finds the matches. */
     private void findMatch() {
-<span class="fc" id="L199">        final boolean foundMatch = matcher.find();</span>
-<span class="fc bfc" id="L200" title="All 2 branches covered.">        if (foundMatch) {</span>
-<span class="fc" id="L201">            final FileText text = getFileContents().getText();</span>
-<span class="fc" id="L202">            final LineColumn start = text.lineColumn(matcher.start());</span>
-<span class="fc" id="L203">            final int startLine = start.getLine();</span>
+<span class="fc" id="L607">        final boolean foundMatch = matcher.find();</span>
+<span class="fc bfc" id="L608" title="All 2 branches covered.">        if (foundMatch) {</span>
+<span class="fc" id="L609">            final FileText text = getFileContents().getText();</span>
+<span class="fc" id="L610">            final LineColumn start = text.lineColumn(matcher.start());</span>
+<span class="fc" id="L611">            final int startLine = start.getLine();</span>
 
-<span class="fc" id="L205">            final boolean ignore = isIgnore(startLine, text, start);</span>
+<span class="fc" id="L613">            final boolean ignore = isIgnore(startLine, text, start);</span>
 
-<span class="fc bfc" id="L207" title="All 2 branches covered.">            if (!ignore) {</span>
-<span class="fc" id="L208">                matchCount++;</span>
-<span class="fc bfc" id="L209" title="All 6 branches covered.">                if (illegalPattern || checkForDuplicates</span>
+<span class="fc bfc" id="L615" title="All 2 branches covered.">            if (!ignore) {</span>
+<span class="fc" id="L616">                matchCount++;</span>
+<span class="fc bfc" id="L617" title="All 6 branches covered.">                if (illegalPattern || checkForDuplicates</span>
                         &amp;&amp; matchCount - 1 &gt; duplicateLimit) {
-<span class="fc" id="L211">                    errorCount++;</span>
-<span class="fc" id="L212">                    logMessage(startLine);</span>
+<span class="fc" id="L619">                    errorCount++;</span>
+<span class="fc" id="L620">                    logMessage(startLine);</span>
                 }
             }
-<span class="fc bfc" id="L215" title="All 2 branches covered.">            if (canContinueValidation(ignore)) {</span>
-<span class="fc" id="L216">                findMatch();</span>
+<span class="fc bfc" id="L623" title="All 2 branches covered.">            if (canContinueValidation(ignore)) {</span>
+<span class="fc" id="L624">                findMatch();</span>
             }
-<span class="fc" id="L218">        }</span>
-<span class="fc bfc" id="L219" title="All 4 branches covered.">        else if (!illegalPattern &amp;&amp; matchCount == 0) {</span>
-<span class="fc" id="L220">            logMessage(0);</span>
+<span class="fc" id="L626">        }</span>
+<span class="fc bfc" id="L627" title="All 4 branches covered.">        else if (!illegalPattern &amp;&amp; matchCount == 0) {</span>
+<span class="fc" id="L628">            logMessage(0);</span>
         }
-<span class="fc" id="L222">    }</span>
+<span class="fc" id="L630">    }</span>
 
     /**
      * Check if we can stop validation.
@@ -227,7 +635,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true is we can continue
      */
     private boolean canContinueValidation(boolean ignore) {
-<span class="fc bfc" id="L230" title="All 8 branches covered.">        return errorCount &lt;= errorLimit - 1</span>
+<span class="fc bfc" id="L638" title="All 8 branches covered.">        return errorCount &lt;= errorLimit - 1</span>
                 &amp;&amp; (ignore || illegalPattern || checkForDuplicates);
     }
 
@@ -240,22 +648,22 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private boolean isIgnore(int startLine, FileText text, LineColumn start) {
         final LineColumn end;
-<span class="fc bfc" id="L243" title="All 2 branches covered.">        if (matcher.end() == 0) {</span>
-<span class="fc" id="L244">            end = text.lineColumn(0);</span>
+<span class="fc bfc" id="L651" title="All 2 branches covered.">        if (matcher.end() == 0) {</span>
+<span class="fc" id="L652">            end = text.lineColumn(0);</span>
         }
         else {
-<span class="fc" id="L247">            end = text.lineColumn(matcher.end() - 1);</span>
+<span class="fc" id="L655">            end = text.lineColumn(matcher.end() - 1);</span>
         }
-<span class="fc" id="L249">        boolean ignore = false;</span>
-<span class="fc bfc" id="L250" title="All 2 branches covered.">        if (ignoreComments) {</span>
-<span class="fc" id="L251">            final FileContents theFileContents = getFileContents();</span>
-<span class="fc" id="L252">            final int startColumn = start.getColumn();</span>
-<span class="fc" id="L253">            final int endLine = end.getLine();</span>
-<span class="fc" id="L254">            final int endColumn = end.getColumn();</span>
-<span class="fc" id="L255">            ignore = theFileContents.hasIntersectionWithComment(startLine,</span>
+<span class="fc" id="L657">        boolean ignore = false;</span>
+<span class="fc bfc" id="L658" title="All 2 branches covered.">        if (ignoreComments) {</span>
+<span class="fc" id="L659">            final FileContents theFileContents = getFileContents();</span>
+<span class="fc" id="L660">            final int startColumn = start.getColumn();</span>
+<span class="fc" id="L661">            final int endLine = end.getLine();</span>
+<span class="fc" id="L662">            final int endColumn = end.getColumn();</span>
+<span class="fc" id="L663">            ignore = theFileContents.hasIntersectionWithComment(startLine,</span>
                 startColumn, endLine, endColumn);
         }
-<span class="fc" id="L258">        return ignore;</span>
+<span class="fc" id="L666">        return ignore;</span>
     }
 
     /**
@@ -265,29 +673,29 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     private void logMessage(int lineNumber) {
         String msg;
 
-<span class="fc bfc" id="L268" title="All 4 branches covered.">        if (message == null || message.isEmpty()) {</span>
-<span class="fc" id="L269">            msg = format.pattern();</span>
+<span class="fc bfc" id="L676" title="All 4 branches covered.">        if (message == null || message.isEmpty()) {</span>
+<span class="fc" id="L677">            msg = format.pattern();</span>
         }
         else {
-<span class="fc" id="L272">            msg = message;</span>
+<span class="fc" id="L680">            msg = message;</span>
         }
 
-<span class="fc bfc" id="L275" title="All 2 branches covered.">        if (errorCount &gt;= errorLimit) {</span>
-<span class="fc" id="L276">            msg = ERROR_LIMIT_EXCEEDED_MESSAGE + msg;</span>
+<span class="fc bfc" id="L683" title="All 2 branches covered.">        if (errorCount &gt;= errorLimit) {</span>
+<span class="fc" id="L684">            msg = ERROR_LIMIT_EXCEEDED_MESSAGE + msg;</span>
         }
 
-<span class="fc bfc" id="L279" title="All 2 branches covered.">        if (illegalPattern) {</span>
-<span class="fc" id="L280">            log(lineNumber, MSG_ILLEGAL_REGEXP, msg);</span>
+<span class="fc bfc" id="L687" title="All 2 branches covered.">        if (illegalPattern) {</span>
+<span class="fc" id="L688">            log(lineNumber, MSG_ILLEGAL_REGEXP, msg);</span>
         }
         else {
-<span class="fc bfc" id="L283" title="All 2 branches covered.">            if (lineNumber &gt; 0) {</span>
-<span class="fc" id="L284">                log(lineNumber, MSG_DUPLICATE_REGEXP, msg);</span>
+<span class="fc bfc" id="L691" title="All 2 branches covered.">            if (lineNumber &gt; 0) {</span>
+<span class="fc" id="L692">                log(lineNumber, MSG_DUPLICATE_REGEXP, msg);</span>
             }
             else {
-<span class="fc" id="L287">                log(lineNumber, MSG_REQUIRED_REGEXP, msg);</span>
+<span class="fc" id="L695">                log(lineNumber, MSG_REQUIRED_REGEXP, msg);</span>
             }
         }
-<span class="fc" id="L290">    }</span>
+<span class="fc" id="L698">    }</span>
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

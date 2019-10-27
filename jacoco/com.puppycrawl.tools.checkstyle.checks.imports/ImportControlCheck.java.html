@@ -33,19 +33,402 @@ import com.puppycrawl.tools.checkstyle.api.FullIdent;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
 /**
- * Check that controls what can be imported in each package and file. Useful
- * for ensuring that application layering is not violated. Ideas on how the
- * check can be improved include support for:
+ * &lt;p&gt;
+ * Controls what can be imported in each package and file. Useful for ensuring
+ * that application layering rules are not violated, especially on large projects.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * You can control imports based on the a package name or based on the file name.
+ * When controlling packages, all files and sub-packages in the declared package
+ * will be controlled by this check. To specify differences between a main package
+ * and a sub-package, you must define the sub-package inside the main package.
+ * When controlling file, only the file name is considered and only files processed by
+ * &lt;a href=&quot;https://checkstyle.org/config.html#TreeWalker&quot;&gt;TreeWalker&lt;/a&gt;.
+ * The file's extension is ignored.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Short description of the behaviour:
+ * &lt;/p&gt;
  * &lt;ul&gt;
  * &lt;li&gt;
- * Change the default policy that if a package being checked does not
- * match any guards, then it is allowed. Currently defaults to disallowed.
+ * Check starts checking from the longest matching subpackage (later 'current subpackage') or
+ * the first file name match described inside import control file to package defined in class file.
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * The longest matching subpackage is found by starting with the root package and
+ * examining if the any of the sub-packages or file definitions match the current
+ * class' package or file name.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * If a file name is matched first, that is considered the longest match and becomes
+ * the current file/subpackage.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * If another subpackage is matched, then it's subpackages and file names are examined
+ * for the next longest match and the process repeats recursively.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * If no subpackages or file names are matched, the current subpackage is then used.
  * &lt;/li&gt;
  * &lt;/ul&gt;
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Order of rules in the same subpackage/root are defined by the order of declaration
+ * in the XML file, which is from top (first) to bottom (last).
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * If there is matching allow/disallow rule inside the current file/subpackage
+ * then the Check returns the first &quot;allowed&quot; or &quot;disallowed&quot; message.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * If there is no matching allow/disallow rule inside the current file/subpackage
+ * then it continues checking in the parent subpackage.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * If there is no matching allow/disallow rule in any of the files/subpackages,
+ * including the root level (import-control), then the import is disallowed by default.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * The DTD for a import control XML document is at
+ * &lt;a href=&quot;https://checkstyle.org/dtds/import_control_1_4.dtd&quot;&gt;
+ * https://checkstyle.org/dtds/import_control_1_4.dtd&lt;/a&gt;.
+ * It contains documentation on each of the elements and attributes.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The check validates a XML document when it loads the document. To validate against
+ * the above DTD, include the following document type declaration in your XML document:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;!DOCTYPE import-control PUBLIC
+ *     &quot;-//Checkstyle//DTD ImportControl Configuration 1.4//EN&quot;
+ *     &quot;https://checkstyle.org/dtds/import_control_1_4.dtd&quot;&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code file} - Specify the location of the file containing the
+ * import control configuration. It can be a regular file, URL or resource path.
+ * It will try loading the path as a URL first, then as a file, and finally as a resource.
+ * Default value is {@code null}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code path} - Specify the regular expression of file paths to which
+ * this check should apply. Files that don't match the pattern will not be checked.
+ * The pattern will be matched against the full absolute file path.
+ * Default value is {@code &quot;.*&quot;}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * To configure the check using an import control file called &quot;config/import-control.xml&quot;,
+ * then have the following:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;ImportControl&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;file&quot; value=&quot;config/import-control.xml&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to only check the &quot;src/main&quot; directory using an import
+ * control file called &quot;config/import-control.xml&quot;, then have the following:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;ImportControl&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;file&quot; value=&quot;config/import-control.xml&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;path&quot; value=&quot;^.*[\\/]src[\\/]main[\\/].*$&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the example below access to package {@code com.puppycrawl.tools.checkstyle.checks}
+ * and its subpackages is allowed from anywhere in {@code com.puppycrawl.tools.checkstyle}
+ * except from the {@code filters} subpackage where access to all {@code check}'s
+ * subpackages is disallowed. Two {@code java.lang.ref} classes are allowed by virtue
+ * of one regular expression instead of listing them in two separate allow rules
+ * (as it is done with the {@code Files} and {@code ClassPath} classes).
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle&quot;&amp;gt;
+ *   &amp;lt;disallow pkg=&quot;sun&quot;/&amp;gt;
+ *   &amp;lt;allow pkg=&quot;com.puppycrawl.tools.checkstyle.api&quot;/&amp;gt;
+ *   &amp;lt;allow pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;/&amp;gt;
+ *   &amp;lt;allow class=&quot;com.google.common.io.Files&quot;/&amp;gt;
+ *   &amp;lt;allow class=&quot;com.google.common.reflect.ClassPath&quot;/&amp;gt;
+ *   &amp;lt;subpackage name=&quot;filters&quot;&amp;gt;
+ *     &amp;lt;allow class=&quot;java\.lang\.ref\.(Weak|Soft)Reference&quot;
+ *       regex=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;com\.puppycrawl\.tools\.checkstyle\.checks\.[^.]+&quot;
+ *       regex=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;com.puppycrawl.tools.checkstyle.ant&quot;/&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;com.puppycrawl.tools.checkstyle.gui&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ *   &amp;lt;subpackage name=&quot;dao&quot;&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;javax.swing&quot; exact-match=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the next example regular expressions are used to enforce a layering rule:
+ * In all {@code dao} packages it is not allowed to access UI layer code ({@code ui},
+ * {@code awt}, and {@code swing}). On the other hand it is not allowed to directly
+ * access {@code dao} and {@code service} layer from {@code ui} packages.
+ * The root package is also a regular expression that is used to handle old and
+ * new domain name with the same rules.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;(de.olddomain|de.newdomain)\..*&quot; regex=&quot;true&quot;&amp;gt;
+ *   &amp;lt;subpackage pkg=&quot;[^.]+\.dao&quot; regex=&quot;true&quot;&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;.*\.ui&quot; regex=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;.*\.(awt|swing).\.*&quot; regex=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ *   &amp;lt;subpackage pkg=&quot;[^.]+\.ui&quot; regex=&quot;true&quot;&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;.*\.(dao|service)&quot; regex=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the next examples usage of {@code strategyOnMismatch} property is shown.
+ * This property defines strategy in a case when no matching allow/disallow rule was found.
+ * Property {@code strategyOnMismatch} is attribute of {@code import-control} and
+ * {@code subpackage} tags. Property can have following values for {@code import-control} tag:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * disallowed (default value) - if there is no matching allow/disallow rule in any of
+ * the subpackages, including the root level (import-control), then the import is disallowed.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * allowed - if there is no matching allow/disallow rule in any of the subpackages,
+ * including the root level, then the import is allowed.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * And following values for {@code subpackage} tags:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * delegateToParent (default value) - if there is no matching allow/disallow rule
+ * inside the current subpackage, then it continues checking in the parent subpackage.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * allowed - if there is no matching allow/disallow rule inside the current subpackage,
+ * then the import is allowed.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * disallowed - if there is no matching allow/disallow rule inside the current subpackage,
+ * then the import is disallowed.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * The following example demonstrates usage of {@code strategyOnMismatch}
+ * property for {@code import-control} tag. Here all imports are allowed except
+ * {@code java.awt.Image} and {@code java.io.File} classes.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;
+ *   strategyOnMismatch=&quot;allowed&quot;&amp;gt;
+ *   &amp;lt;disallow class=&quot;java.awt.Image&quot;/&amp;gt;
+ *   &amp;lt;disallow class=&quot;java.io.File&quot;/&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the example below, any import is disallowed inside
+ * {@code com.puppycrawl.tools.checkstyle.checks.imports} package except imports
+ * from package {@code javax.swing} and class {@code java.io.File}.
+ * However, any import is allowed in the classes outside of
+ * {@code com.puppycrawl.tools.checkstyle.checks.imports} package.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;
+ *   strategyOnMismatch=&quot;allowed&quot;&amp;gt;
+ *   &amp;lt;subpackage name=&quot;imports&quot; strategyOnMismatch=&quot;disallowed&quot;&amp;gt;
+ *     &amp;lt;allow pkg=&quot;javax.swing&quot;/&amp;gt;
+ *     &amp;lt;allow class=&quot;java.io.File&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * When {@code strategyOnMismatch} has {@code allowed} or {@code disallowed}
+ * value for {@code subpackage} tag, it makes {@code subpackage} isolated from
+ * parent rules. In the next example, if no matching rule was found inside
+ * {@code com.puppycrawl.tools.checkstyle.checks.filters} then it continues
+ * checking in the parent subpackage, while for
+ * {@code com.puppycrawl.tools.checkstyle.checks.imports} import will be allowed by default.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;&amp;gt;
+ *   &amp;lt;allow class=&quot;java\.awt\.Image&quot; regex=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;allow class=&quot;java\..*\.File&quot; local-only=&quot;true&quot; regex=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;subpackage name=&quot;imports&quot; strategyOnMismatch=&quot;allowed&quot;&amp;gt;
+ *     &amp;lt;allow pkg=&quot;javax\.swing&quot; regex=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;allow pkg=&quot;java\.io&quot; exact-match=&quot;true&quot;
+ *       local-only=&quot;true&quot; regex=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ *   &amp;lt;subpackage name=&quot;filters&quot;&amp;gt;
+ *     &amp;lt;allow class=&quot;javax.util.Date&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the example below, only file names that end with &quot;Panel&quot;, &quot;View&quot;, or &quot;Dialog&quot;
+ * in the package {@code gui} are disallowed to have imports from {@code com.mycompany.dao}
+ * and any {@code jdbc} package. In addition, only the file name named &quot;PresentationModel&quot;
+ * in the package {@code gui} are disallowed to have imports that match {@code javax.swing.J*}.
+ * All other imports in the package are allowed.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.mycompany.billing&quot;&amp;gt;
+ *   &amp;lt;subpackage name=&quot;gui&quot; strategyOnMismatch=&quot;allowed&quot;&amp;gt;
+ *     &amp;lt;file name=&quot;.*(Panel|View|Dialog)&quot; regex=&quot;true&quot;&amp;gt;
+ *       &amp;lt;disallow pkg=&quot;com.mycompany.dao&quot;/&amp;gt;
+ *       &amp;lt;disallow pkg=&quot;.*\.jdbc&quot; regex=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;/file&amp;gt;
+ *     &amp;lt;file name=&quot;PresentationModel&quot;&amp;gt;
+ *       &amp;lt;disallow pkg=&quot;javax\.swing\.J.*&quot; regex=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;/file&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * For a real-life import control file look at the file called
+ * &lt;a href=&quot;https://github.com/checkstyle/checkstyle/blob/master/config/import-control.xml&quot;&gt;
+ * import-control.xml&lt;/a&gt; which is part of the Checkstyle distribution.
+ * &lt;/p&gt;
+ * &lt;p id=&quot;blacklist-example&quot;&gt;Example of blacklist mode&lt;/p&gt;
+ * &lt;p&gt;
+ * To have a &lt;b&gt;blacklist mode&lt;/b&gt;, it is required to have disallows inside
+ * subpackage and to have allow rule inside parent of the current subpackage
+ * to catch classes and packages those are not in the blacklist.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * In the example below any import from {@code java.util}({@code java.util.List},
+ * {@code java.util.Date}) package is allowed except {@code java.util.Map}
+ * inside subpackage {@code com.puppycrawl.tools.checkstyle.filters}.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle&quot;&amp;gt;
+ *   &amp;lt;allow pkg=&quot;java.util&quot;/&amp;gt;
+ *   &amp;lt;subpackage name=&quot;filters&quot; &amp;gt;
+ *     &amp;lt;disallow class=&quot;java.util.Map&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the next example imports {@code java.util.stream.Stream} and
+ * {@code java.util.stream.Collectors} are disallowed inside
+ * {@code com.puppycrawl.tools.checkstyle.checks.imports} package, but because of
+ * {@code &amp;lt;allow pkg=&quot;java.util.stream&quot;/&amp;gt;} every import from
+ * {@code java.util.stream} is allowed except described ones.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;&amp;gt;
+ *   &amp;lt;allow pkg=&quot;java.util.stream&quot;/&amp;gt;
+ *   &amp;lt;subpackage name=&quot;imports&quot;&amp;gt;
+ *     &amp;lt;disallow class=&quot;java.util.stream.Stream&quot;/&amp;gt;
+ *     &amp;lt;disallow class=&quot;java.util.stream.Collectors&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * package com.puppycrawl.tools.checkstyle.checks.imports;
  *
+ * import java.util.stream.Stream;     // violation here
+ * import java.util.stream.Collectors; // violation here
+ * import java.util.stream.IntStream;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the following example, all imports are allowed except the classes
+ * {@code java.util.Date}, {@code java.util.List} and package {@code sun}.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;&amp;gt;
+ *   &amp;lt;allow pkg=&quot;.*&quot; regex=&quot;true&quot;/&amp;gt;
+ *   &amp;lt;subpackage name=&quot;imports&quot;&amp;gt;
+ *     &amp;lt;disallow class=&quot;java.util.Date&quot;/&amp;gt;
+ *     &amp;lt;disallow class=&quot;java.util.List&quot;/&amp;gt;
+ *     &amp;lt;disallow pkg=&quot;sun&quot;/&amp;gt;
+ *   &amp;lt;/subpackage&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * In the following example, all imports of the {@code java.util} package are
+ * allowed except the {@code java.util.Date} class.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle.checks&quot;&amp;gt;
+ *   &amp;lt;disallow class=&quot;java.util.Date&quot;/&amp;gt;
+ *
+ *   &amp;lt;allow pkg=&quot;java.util&quot;/&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p id=&quot;regex-notes&quot;&gt;Notes on regular expressions&lt;/p&gt;
+ * &lt;p&gt;
+ * Regular expressions in import rules have to match either Java packages or classes.
+ * The language rules for packages and class names can be described by the following
+ * complicated regular expression that takes into account that Java names may contain
+ * any unicode letter, numbers, underscores, and dollar signs (see section 3.8 in the
+ * &lt;a href=&quot;https://docs.oracle.com/javase/specs/&quot;&gt;Java specs&lt;/a&gt;):
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code [\p{Letter}_$][\p{Letter}\p{Number}_$]*} or short {@code [\p{L}_$][\p{L}\p{N}_$]*}
+ * for a class name or package component.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code ([\p{L}_$][\p{L}\p{N}_$]*\.)*[\p{L}_$][\p{L}\p{N}_$]*} for a fully qualified name.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * But it is not necessary to use these complicated expressions since no validation is required.
+ * Differentiating between package separator '.' and others is sufficient.
+ * Unfortunately '.' has a special meaning in regular expressions so one has to write {@code \.}
+ * to match an actual dot.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Use {@code [^.]+}(one or more &quot;not a dot&quot; characters) for a class name or package component.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Use {@code com\.google\.common\.[^.]+} to match any subpackage of {@code com.google.common}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * When matching concrete packages like {@code com.google.common} omitting the backslash before
+ * the dots may improve readability and may be just exact enough: {@code com.google.common\.[^.]+}
+ * matches not only subpackages of {@code com.google.common} but e.g. also of
+ * {@code com.googleecommon} but you may not care for that.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Do not use {@code .*} unless you really do not care for what is matched.
+ * Often you want to match only a certain package level instead.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;&lt;p id=&quot;static-import-notes&quot;&gt;Notes on static imports&lt;/p&gt;
+ * &lt;p&gt;
+ * Static members (including methods, constants and static inner classes)
+ * have to be explicitly allowed when they are imported, they are not automatically
+ * allowed along with their enclosing class.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * For example, to allow importing both {@code java.util.Map} and {@code java.util.Map.Entry}
+ * use the following configuration:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle&quot;&amp;gt;
+ *   &amp;lt;allow class=&quot;java.util.Map&quot;/&amp;gt;
+ *   &amp;lt;allow class=&quot;java.util.Map.Entry&quot;/&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * It is also possible to use a regex with a wildcard:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;import-control pkg=&quot;com.puppycrawl.tools.checkstyle&quot;&amp;gt;
+ *   &amp;lt;allow class=&quot;java.util.Map&quot;/&amp;gt;
+ *   &amp;lt;allow class=&quot;java.util.Map.*&quot; regex=&quot;true&quot; /&amp;gt;
+ * &amp;lt;/import-control&amp;gt;
+ * &lt;/pre&gt;
+ *
+ * @since 4.0
  */
 @FileStatefulCheck
-<span class="fc" id="L48">public class ImportControlCheck extends AbstractCheck implements ExternalResourceHolder {</span>
+<span class="fc" id="L431">public class ImportControlCheck extends AbstractCheck implements ExternalResourceHolder {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -70,11 +453,19 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static final String UNABLE_TO_LOAD = &quot;Unable to load &quot;;
 
-    /** Location of import control file. */
+    /**
+     * Specify the location of the file containing the import control configuration.
+     * It can be a regular file, URL or resource path. It will try loading the path
+     * as a URL first, then as a file, and finally as a resource.
+     */
     private URI file;
 
-    /** The filepath pattern this check applies to. */
-<span class="fc" id="L77">    private Pattern path = Pattern.compile(&quot;.*&quot;);</span>
+    /**
+     * Specify the regular expression of file paths to which this check should apply.
+     * Files that don't match the pattern will not be checked. The pattern will
+     * be matched against the full absolute file path.
+     */
+<span class="fc" id="L468">    private Pattern path = Pattern.compile(&quot;.*&quot;);</span>
     /** Whether to process the current file. */
     private boolean processCurrentFile;
 
@@ -93,61 +484,61 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L96">        return getRequiredTokens();</span>
+<span class="fc" id="L487">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L101">        return getRequiredTokens();</span>
+<span class="fc" id="L492">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L106">        return new int[] {TokenTypes.PACKAGE_DEF, TokenTypes.IMPORT, TokenTypes.STATIC_IMPORT, };</span>
+<span class="fc" id="L497">        return new int[] {TokenTypes.PACKAGE_DEF, TokenTypes.IMPORT, TokenTypes.STATIC_IMPORT, };</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L111">        currentImportControl = null;</span>
-<span class="fc" id="L112">        processCurrentFile = path.matcher(getFileContents().getFileName()).find();</span>
-<span class="fc" id="L113">        fileName = getFileContents().getText().getFile().getName();</span>
+<span class="fc" id="L502">        currentImportControl = null;</span>
+<span class="fc" id="L503">        processCurrentFile = path.matcher(getFileContents().getFileName()).find();</span>
+<span class="fc" id="L504">        fileName = getFileContents().getText().getFile().getName();</span>
 
-<span class="fc" id="L115">        final int period = fileName.lastIndexOf('.');</span>
+<span class="fc" id="L506">        final int period = fileName.lastIndexOf('.');</span>
 
-<span class="fc bfc" id="L117" title="All 2 branches covered.">        if (period != -1) {</span>
-<span class="fc" id="L118">            fileName = fileName.substring(0, period);</span>
+<span class="fc bfc" id="L508" title="All 2 branches covered.">        if (period != -1) {</span>
+<span class="fc" id="L509">            fileName = fileName.substring(0, period);</span>
         }
-<span class="fc" id="L120">    }</span>
+<span class="fc" id="L511">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L124" title="All 2 branches covered.">        if (processCurrentFile) {</span>
-<span class="fc bfc" id="L125" title="All 2 branches covered.">            if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
-<span class="fc bfc" id="L126" title="All 2 branches covered.">                if (root == null) {</span>
-<span class="fc" id="L127">                    log(ast, MSG_MISSING_FILE);</span>
+<span class="fc bfc" id="L515" title="All 2 branches covered.">        if (processCurrentFile) {</span>
+<span class="fc bfc" id="L516" title="All 2 branches covered.">            if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
+<span class="fc bfc" id="L517" title="All 2 branches covered.">                if (root == null) {</span>
+<span class="fc" id="L518">                    log(ast, MSG_MISSING_FILE);</span>
                 }
                 else {
-<span class="fc" id="L130">                    packageName = getPackageText(ast);</span>
-<span class="fc" id="L131">                    currentImportControl = root.locateFinest(packageName, fileName);</span>
-<span class="fc bfc" id="L132" title="All 2 branches covered.">                    if (currentImportControl == null) {</span>
-<span class="fc" id="L133">                        log(ast, MSG_UNKNOWN_PKG);</span>
+<span class="fc" id="L521">                    packageName = getPackageText(ast);</span>
+<span class="fc" id="L522">                    currentImportControl = root.locateFinest(packageName, fileName);</span>
+<span class="fc bfc" id="L523" title="All 2 branches covered.">                    if (currentImportControl == null) {</span>
+<span class="fc" id="L524">                        log(ast, MSG_UNKNOWN_PKG);</span>
                     }
                 }
             }
-<span class="fc bfc" id="L137" title="All 2 branches covered.">            else if (currentImportControl != null) {</span>
-<span class="fc" id="L138">                final String importText = getImportText(ast);</span>
-<span class="fc" id="L139">                final AccessResult access = currentImportControl.checkAccess(packageName, fileName,</span>
+<span class="fc bfc" id="L528" title="All 2 branches covered.">            else if (currentImportControl != null) {</span>
+<span class="fc" id="L529">                final String importText = getImportText(ast);</span>
+<span class="fc" id="L530">                final AccessResult access = currentImportControl.checkAccess(packageName, fileName,</span>
                         importText);
-<span class="fc bfc" id="L141" title="All 2 branches covered.">                if (access != AccessResult.ALLOWED) {</span>
-<span class="fc" id="L142">                    log(ast, MSG_DISALLOWED, importText);</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">                if (access != AccessResult.ALLOWED) {</span>
+<span class="fc" id="L533">                    log(ast, MSG_DISALLOWED, importText);</span>
                 }
             }
         }
-<span class="fc" id="L146">    }</span>
+<span class="fc" id="L537">    }</span>
 
     @Override
     public Set&lt;String&gt; getExternalResourceLocations() {
-<span class="fc" id="L150">        return Collections.singleton(file.toString());</span>
+<span class="fc" id="L541">        return Collections.singleton(file.toString());</span>
     }
 
     /**
@@ -156,8 +547,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return String that represents full package name
      */
     private static String getPackageText(DetailAST ast) {
-<span class="fc" id="L159">        final DetailAST nameAST = ast.getLastChild().getPreviousSibling();</span>
-<span class="fc" id="L160">        return FullIdent.createFullIdent(nameAST).getText();</span>
+<span class="fc" id="L550">        final DetailAST nameAST = ast.getLastChild().getPreviousSibling();</span>
+<span class="fc" id="L551">        return FullIdent.createFullIdent(nameAST).getText();</span>
     }
 
     /**
@@ -167,44 +558,48 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static String getImportText(DetailAST ast) {
         final FullIdent imp;
-<span class="fc bfc" id="L170" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IMPORT) {</span>
-<span class="fc" id="L171">            imp = FullIdent.createFullIdentBelow(ast);</span>
+<span class="fc bfc" id="L561" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IMPORT) {</span>
+<span class="fc" id="L562">            imp = FullIdent.createFullIdentBelow(ast);</span>
         }
         else {
             // know it is a static import
-<span class="fc" id="L175">            imp = FullIdent.createFullIdent(ast</span>
-<span class="fc" id="L176">                    .getFirstChild().getNextSibling());</span>
+<span class="fc" id="L566">            imp = FullIdent.createFullIdent(ast</span>
+<span class="fc" id="L567">                    .getFirstChild().getNextSibling());</span>
         }
-<span class="fc" id="L178">        return imp.getText();</span>
+<span class="fc" id="L569">        return imp.getText();</span>
     }
 
     /**
-     * Set the name for the file containing the import control
-     * configuration. It can also be a URL or resource in the classpath.
-     * It will cause the file to be loaded.
+     * Setter to specify the location of the file containing the import control configuration.
+     * It can be a regular file, URL or resource path. It will try loading the path
+     * as a URL first, then as a file, and finally as a resource.
+     *
      * @param uri the uri of the file to load.
      * @throws IllegalArgumentException on error loading the file.
      */
     public void setFile(URI uri) {
         // Handle empty param
-<span class="fc bfc" id="L190" title="All 2 branches covered.">        if (uri != null) {</span>
+<span class="fc bfc" id="L582" title="All 2 branches covered.">        if (uri != null) {</span>
             try {
-<span class="fc" id="L192">                root = ImportControlLoader.load(uri);</span>
-<span class="fc" id="L193">                file = uri;</span>
+<span class="fc" id="L584">                root = ImportControlLoader.load(uri);</span>
+<span class="fc" id="L585">                file = uri;</span>
             }
-<span class="fc" id="L195">            catch (CheckstyleException ex) {</span>
-<span class="fc" id="L196">                throw new IllegalArgumentException(UNABLE_TO_LOAD + uri, ex);</span>
-<span class="fc" id="L197">            }</span>
+<span class="fc" id="L587">            catch (CheckstyleException ex) {</span>
+<span class="fc" id="L588">                throw new IllegalArgumentException(UNABLE_TO_LOAD + uri, ex);</span>
+<span class="fc" id="L589">            }</span>
         }
-<span class="fc" id="L199">    }</span>
+<span class="fc" id="L591">    }</span>
 
     /**
-     * Set the file path pattern that this check applies to.
+     * Setter to specify the regular expression of file paths to which this check should apply.
+     * Files that don't match the pattern will not be checked. The pattern will be matched
+     * against the full absolute file path.
+     *
      * @param pattern the file path regex this check should apply to.
      */
     public void setPath(Pattern pattern) {
-<span class="fc" id="L206">        path = pattern;</span>
-<span class="fc" id="L207">    }</span>
+<span class="fc" id="L601">        path = pattern;</span>
+<span class="fc" id="L602">    }</span>
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
