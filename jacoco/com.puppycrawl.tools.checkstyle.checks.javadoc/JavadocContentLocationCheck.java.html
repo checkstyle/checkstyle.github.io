@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JavadocContentLocationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.javadoc</a> &gt; <span class="el_source">JavadocContentLocationCheck.java</span></div><h1>JavadocContentLocationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2019 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.javadoc;
+
+import java.util.Locale;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks that the Javadoc content begins from the same position
+ * for all Javadoc comments in the project. Any leading asterisks and spaces
+ * are not counted as the beginning of the content and are therefore ignored.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * It is possible to enforce two different styles:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code first_line} - Javadoc content starts from the first line:
+ * &lt;pre&gt;
+ * &amp;#47;** Summary text.
+ *   * More details.
+ *   *&amp;#47;
+ * public void method();
+ * &lt;/pre&gt;
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code second_line} - Javadoc content starts from the second line:
+ * &lt;pre&gt;
+ * &amp;#47;**
+ *   * Summary text.
+ *   * More details.
+ *   *&amp;#47;
+ * public void method();
+ * &lt;/pre&gt;
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * This check does not validate the Javadoc summary itself nor its presence.
+ * The check will not report any violations for missing or malformed javadoc summary.
+ * To validate the Javadoc summary use
+ * &lt;a href=&quot;https://checkstyle.org/config_javadoc.html#SummaryJavadoc&quot;&gt;SummaryJavadoc&lt;/a&gt; check.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * The &lt;a href=&quot;https://docs.oracle.com/en/java/javase/11/docs/specs/doc-comment-spec.html&quot;&gt;
+ * Documentation Comment Specification&lt;/a&gt; permits leading asterisks on the first line.
+ * For these Javadoc comments:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;***
+ *   * Some text.
+ *   *&amp;#47;
+ * &amp;#47;************
+ *   * Some text.
+ *   *&amp;#47;
+ * &amp;#47;**           **
+ *   * Some text.
+ *   *&amp;#47;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * The documentation generated will be just &quot;Some text.&quot; without any asterisks.
+ * Since these asterisks will not appear in the generated documentation,
+ * they should not be considered as the beginning of the Javadoc content.
+ * In such cases, the check assumes that the Javadoc content begins on the second line.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code location} - Specify the policy on placement of the Javadoc content.
+ * Default value is {@code second_line}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * By default Check validate that the Javadoc content starts from the second line:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;JavadocContentLocationCheck&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * This setting produces a violation for each multi-line comment starting
+ * on the same line as the initial asterisks:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;** This comment causes a violation because it starts from the first line
+ *   * and spans several lines.
+ *   *&amp;#47;
+ * &amp;#47;**
+ *   * This comment is OK because it starts from the second line.
+ *   *&amp;#47;
+ * &amp;#47;** This comment is OK because it is on the single line. *&amp;#47;
+ *&lt;/pre&gt;
+ * &lt;p&gt;
+ * To ensure that Javadoc content starts from the first line:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;JavadocContentLocationCheck&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;location&quot; value=&quot;first_line&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * This setting produces a violation for each comment not
+ * starting on the same line as the initial asterisks:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;** This comment is OK because it starts on the first line.
+ *    * There may be additional text.
+ *    *&amp;#47;
+ * &amp;#47;**
+ *   * This comment causes a violation because it starts on the second line.
+ *   *&amp;#47;
+ * &amp;#47;** This single-line comment also is OK. *&amp;#47;
+ * &lt;/pre&gt;
+ *
+ * @since 8.27
+ */
+@StatelessCheck
+<span class="fc" id="L138">public class JavadocContentLocationCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_JAVADOC_CONTENT_FIRST_LINE = &quot;javadoc.content.first.line&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_JAVADOC_CONTENT_SECOND_LINE = &quot;javadoc.content.second.line&quot;;
+
+    /**
+     * Specify the policy on placement of the Javadoc content.
+     */
+<span class="fc" id="L153">    private JavadocContentLocationOption location = JavadocContentLocationOption.SECOND_LINE;</span>
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L157">        return new int[] {</span>
+            TokenTypes.BLOCK_COMMENT_BEGIN,
+        };
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L164">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L169">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public boolean isCommentNodesRequired() {
+<span class="fc" id="L174">        return true;</span>
+    }
+
+    /**
+     * Setter to specify the policy on placement of the Javadoc content.
+     *
+     * @param value string to decode location from
+     * @throws IllegalArgumentException if unable to decode
+     */
+    public void setLocation(String value) {
+<span class="fc" id="L184">        location = JavadocContentLocationOption.valueOf(value.trim().toUpperCase(Locale.ENGLISH));</span>
+<span class="fc" id="L185">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L189" title="All 4 branches covered.">        if (isMultilineComment(ast) &amp;&amp; JavadocUtil.isJavadocComment(ast)) {</span>
+<span class="fc" id="L190">            final String commentContent = JavadocUtil.getJavadocCommentContent(ast);</span>
+<span class="fc" id="L191">            final int indexOfFirstNonBlankLine = findIndexOfFirstNonBlankLine(commentContent);</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">            if (indexOfFirstNonBlankLine &gt;= 0) {</span>
+<span class="fc bfc" id="L193" title="All 2 branches covered.">                if (location == JavadocContentLocationOption.FIRST_LINE) {</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">                    if (indexOfFirstNonBlankLine != 0) {</span>
+<span class="fc" id="L195">                        log(ast, MSG_JAVADOC_CONTENT_FIRST_LINE);</span>
+                    }
+                }
+<span class="fc bfc" id="L198" title="All 2 branches covered.">                else if (indexOfFirstNonBlankLine != 1) {</span>
+<span class="fc" id="L199">                    log(ast, MSG_JAVADOC_CONTENT_SECOND_LINE);</span>
+                }
+            }
+        }
+<span class="fc" id="L203">    }</span>
+
+    /**
+     * Checks if a DetailAST of type {@code TokenTypes.BLOCK_COMMENT_BEGIN} span
+     * more than one line. The node always has at least one child of the type
+     * {@code TokenTypes.BLOCK_COMMENT_END}.
+     *
+     * @param node node to check
+     * @return {@code true} for multi-line comment nodes
+     */
+    private static boolean isMultilineComment(DetailAST node) {
+<span class="fc bfc" id="L214" title="All 2 branches covered.">        return node.getLineNo() != node.getLastChild().getLineNo();</span>
+    }
+
+    /**
+     * Returns the index of the first non-blank line.
+     * All lines consists only of asterisks and whitespaces are treated as blank.
+     *
+     * @param commentContent Javadoc content to process
+     * @return the index of the first non-blank line or {@code -1} if all lines are blank
+     */
+    private static int findIndexOfFirstNonBlankLine(String commentContent) {
+<span class="fc" id="L225">        int lineNo = 0;</span>
+<span class="fc" id="L226">        boolean noContent = true;</span>
+<span class="fc bfc" id="L227" title="All 2 branches covered.">        for (int i = 0; i &lt; commentContent.length(); ++i) {</span>
+<span class="fc" id="L228">            final char character = commentContent.charAt(i);</span>
+<span class="fc bfc" id="L229" title="All 2 branches covered.">            if (character == '\n') {</span>
+<span class="fc" id="L230">                ++lineNo;</span>
+            }
+<span class="fc bfc" id="L232" title="All 4 branches covered.">            else if (character != '*' &amp;&amp; !Character.isWhitespace(character)) {</span>
+<span class="fc" id="L233">                noContent = false;</span>
+<span class="fc" id="L234">                break;</span>
+            }
+        }
+<span class="fc bfc" id="L237" title="All 2 branches covered.">        if (noContent) {</span>
+<span class="fc" id="L238">            lineNo = -1;</span>
+        }
+<span class="fc" id="L240">        return lineNo;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
