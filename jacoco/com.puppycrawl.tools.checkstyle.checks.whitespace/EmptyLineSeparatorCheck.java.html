@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
@@ -39,8 +40,11 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  * static initializers and instance initializers.
  * &lt;/p&gt;
  * &lt;p&gt;
- * ATTENTION: empty line separator is required between AST siblings,
+ * ATTENTION: empty line separator is required between token siblings,
  * not after line where token is found.
+ * If token does not have same type sibling then empty line
+ * is required at its end (for example for CLASS_DEF it is after '}').
+ * Also, trailing comments are skipped.
  * &lt;/p&gt;
  * &lt;ul&gt;
  * &lt;li&gt;
@@ -93,8 +97,7 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  * ///////////////////////////////////////////////////
  * package com.puppycrawl.tools.checkstyle.whitespace;
  * import java.io.Serializable;
- * class Foo
- * {
+ * class Foo {
  *   public static final int FOO_CONST = 1;
  *   public void foo() {} //should be separated from previous statement.
  * }
@@ -122,8 +125,7 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  *
  * import java.io.Serializable;
  *
- * class Foo
- * {
+ * class Foo {
  *   public static final int FOO_CONST = 1;
  *
  *   public void foo() {}
@@ -169,8 +171,7 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  * import java.io.Serializable;
  *
  *
- * class Foo
- * {
+ * class Foo {
  *   public static final int FOO_CONST = 1;
  *
  *
@@ -224,8 +225,7 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  *
  * package com.puppycrawl.tools.checkstyle.whitespace;
  *
- * class Foo
- * {
+ * class Foo {
  *
  *   public void foo() {
  *
@@ -347,37 +347,61 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
 <span class="fc bfc" id="L347" title="All 2 branches covered.">        if (!allowMultipleEmptyLinesInsideClassMembers) {</span>
 <span class="fc" id="L348">            processMultipleLinesInside(ast);</span>
         }
+<span class="fc bfc" id="L350" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
+<span class="fc" id="L351">            checkCommentInModifiers(ast);</span>
+        }
+<span class="fc" id="L353">        DetailAST nextToken = ast.getNextSibling();</span>
+<span class="fc bfc" id="L354" title="All 4 branches covered.">        while (nextToken != null &amp;&amp; isComment(nextToken)) {</span>
+<span class="fc" id="L355">            nextToken = nextToken.getNextSibling();</span>
+        }
+<span class="fc bfc" id="L357" title="All 2 branches covered.">        if (nextToken != null) {</span>
+<span class="fc" id="L358">            checkToken(ast, nextToken);</span>
+        }
+<span class="fc" id="L360">    }</span>
 
-<span class="fc" id="L351">        DetailAST nextToken = ast.getNextSibling();</span>
-<span class="fc bfc" id="L352" title="All 4 branches covered.">        while (nextToken != null &amp;&amp; isComment(nextToken)) {</span>
-<span class="fc" id="L353">            nextToken = nextToken.getNextSibling();</span>
-        }
-<span class="fc bfc" id="L355" title="All 2 branches covered.">        if (nextToken != null) {</span>
-<span class="fc" id="L356">            final int astType = ast.getType();</span>
-<span class="fc bfc" id="L357" title="All 4 branches covered.">            switch (astType) {</span>
-                case TokenTypes.VARIABLE_DEF:
-<span class="fc" id="L359">                    processVariableDef(ast, nextToken);</span>
-<span class="fc" id="L360">                    break;</span>
-                case TokenTypes.IMPORT:
-                case TokenTypes.STATIC_IMPORT:
-<span class="fc" id="L363">                    processImport(ast, nextToken);</span>
-<span class="fc" id="L364">                    break;</span>
-                case TokenTypes.PACKAGE_DEF:
-<span class="fc" id="L366">                    processPackage(ast, nextToken);</span>
-<span class="fc" id="L367">                    break;</span>
-                default:
-<span class="fc bfc" id="L369" title="All 2 branches covered.">                    if (nextToken.getType() == TokenTypes.RCURLY) {</span>
-<span class="fc bfc" id="L370" title="All 2 branches covered.">                        if (hasNotAllowedTwoEmptyLinesBefore(nextToken)) {</span>
-<span class="fc" id="L371">                            log(ast.getLineNo(), MSG_MULTIPLE_LINES_AFTER, ast.getText());</span>
-                        }
+    /**
+     * Checks that token and next token are separated.
+     *
+     * @param ast token to validate
+     * @param nextToken next sibling of the token
+     */
+    private void checkToken(DetailAST ast, DetailAST nextToken) {
+<span class="fc" id="L369">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L370" title="All 4 branches covered.">        switch (astType) {</span>
+            case TokenTypes.VARIABLE_DEF:
+<span class="fc" id="L372">                processVariableDef(ast, nextToken);</span>
+<span class="fc" id="L373">                break;</span>
+            case TokenTypes.IMPORT:
+            case TokenTypes.STATIC_IMPORT:
+<span class="fc" id="L376">                processImport(ast, nextToken);</span>
+<span class="fc" id="L377">                break;</span>
+            case TokenTypes.PACKAGE_DEF:
+<span class="fc" id="L379">                processPackage(ast, nextToken);</span>
+<span class="fc" id="L380">                break;</span>
+            default:
+<span class="fc bfc" id="L382" title="All 2 branches covered.">                if (nextToken.getType() == TokenTypes.RCURLY) {</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">                    if (hasNotAllowedTwoEmptyLinesBefore(nextToken)) {</span>
+<span class="fc" id="L384">                        log(ast.getLineNo(), MSG_MULTIPLE_LINES_AFTER, ast.getText());</span>
                     }
-<span class="fc bfc" id="L374" title="All 2 branches covered.">                    else if (!hasEmptyLineAfter(ast)) {</span>
-<span class="fc" id="L375">                        log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED,</span>
-<span class="fc" id="L376">                            nextToken.getText());</span>
-                    }
-            }
+                }
+<span class="fc bfc" id="L387" title="All 2 branches covered.">                else if (!hasEmptyLineAfter(ast)) {</span>
+<span class="fc" id="L388">                    log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED,</span>
+<span class="fc" id="L389">                        nextToken.getText());</span>
+                }
         }
-<span class="fc" id="L380">    }</span>
+<span class="fc" id="L392">    }</span>
+
+    /**
+     * Checks that packageDef token is separated from comment in modifiers.
+     *
+     * @param packageDef package def token
+     */
+    private void checkCommentInModifiers(DetailAST packageDef) {
+<span class="fc" id="L400">        final Optional&lt;DetailAST&gt; comment = findCommentUnder(packageDef);</span>
+<span class="fc bfc" id="L401" title="All 2 branches covered.">        if (comment.isPresent()) {</span>
+<span class="fc" id="L402">            log(comment.get().getLineNo(), MSG_SHOULD_BE_SEPARATED, comment.get().getText());</span>
+        }
+<span class="fc" id="L404">    }</span>
 
     /**
      * Log violation in case there are multiple empty lines inside constructor,
@@ -385,17 +409,17 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param ast the ast to check.
      */
     private void processMultipleLinesInside(DetailAST ast) {
-<span class="fc" id="L388">        final int astType = ast.getType();</span>
-<span class="fc bfc" id="L389" title="All 2 branches covered.">        if (isClassMemberBlock(astType)) {</span>
-<span class="fc" id="L390">            final List&lt;Integer&gt; emptyLines = getEmptyLines(ast);</span>
-<span class="fc" id="L391">            final List&lt;Integer&gt; emptyLinesToLog = getEmptyLinesToLog(emptyLines);</span>
+<span class="fc" id="L412">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L413" title="All 2 branches covered.">        if (isClassMemberBlock(astType)) {</span>
+<span class="fc" id="L414">            final List&lt;Integer&gt; emptyLines = getEmptyLines(ast);</span>
+<span class="fc" id="L415">            final List&lt;Integer&gt; emptyLinesToLog = getEmptyLinesToLog(emptyLines);</span>
 
-<span class="fc bfc" id="L393" title="All 2 branches covered.">            for (Integer lineNo : emptyLinesToLog) {</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">            for (Integer lineNo : emptyLinesToLog) {</span>
                 // Checkstyle counts line numbers from 0 but IDE from 1
-<span class="fc" id="L395">                log(lineNo + 1, MSG_MULTIPLE_LINES_INSIDE);</span>
-<span class="fc" id="L396">            }</span>
+<span class="fc" id="L419">                log(lineNo + 1, MSG_MULTIPLE_LINES_INSIDE);</span>
+<span class="fc" id="L420">            }</span>
         }
-<span class="fc" id="L398">    }</span>
+<span class="fc" id="L422">    }</span>
 
     /**
      * Whether the AST is a class member block.
@@ -403,7 +427,7 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true if the AST is a class member block.
      */
     private static boolean isClassMemberBlock(int astType) {
-<span class="fc bfc" id="L406" title="All 8 branches covered.">        return astType == TokenTypes.STATIC_INIT</span>
+<span class="fc bfc" id="L430" title="All 8 branches covered.">        return astType == TokenTypes.STATIC_INIT</span>
                 || astType == TokenTypes.INSTANCE_INIT
                 || astType == TokenTypes.METHOD_DEF
                 || astType == TokenTypes.CTOR_DEF;
@@ -415,22 +439,22 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return list of line numbers for empty lines.
      */
     private List&lt;Integer&gt; getEmptyLines(DetailAST ast) {
-<span class="fc" id="L418">        final DetailAST lastToken = ast.getLastChild().getLastChild();</span>
-<span class="fc" id="L419">        int lastTokenLineNo = 0;</span>
-<span class="fc bfc" id="L420" title="All 2 branches covered.">        if (lastToken != null) {</span>
+<span class="fc" id="L442">        final DetailAST lastToken = ast.getLastChild().getLastChild();</span>
+<span class="fc" id="L443">        int lastTokenLineNo = 0;</span>
+<span class="fc bfc" id="L444" title="All 2 branches covered.">        if (lastToken != null) {</span>
             // -1 as count starts from 0
             // -2 as last token line cannot be empty, because it is a RCURLY
-<span class="fc" id="L423">            lastTokenLineNo = lastToken.getLineNo() - 2;</span>
+<span class="fc" id="L447">            lastTokenLineNo = lastToken.getLineNo() - 2;</span>
         }
-<span class="fc" id="L425">        final List&lt;Integer&gt; emptyLines = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L426">        final FileContents fileContents = getFileContents();</span>
+<span class="fc" id="L449">        final List&lt;Integer&gt; emptyLines = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L450">        final FileContents fileContents = getFileContents();</span>
 
-<span class="fc bfc" id="L428" title="All 2 branches covered.">        for (int lineNo = ast.getLineNo(); lineNo &lt;= lastTokenLineNo; lineNo++) {</span>
-<span class="fc bfc" id="L429" title="All 2 branches covered.">            if (fileContents.lineIsBlank(lineNo)) {</span>
-<span class="fc" id="L430">                emptyLines.add(lineNo);</span>
+<span class="fc bfc" id="L452" title="All 2 branches covered.">        for (int lineNo = ast.getLineNo(); lineNo &lt;= lastTokenLineNo; lineNo++) {</span>
+<span class="fc bfc" id="L453" title="All 2 branches covered.">            if (fileContents.lineIsBlank(lineNo)) {</span>
+<span class="fc" id="L454">                emptyLines.add(lineNo);</span>
             }
         }
-<span class="fc" id="L433">        return emptyLines;</span>
+<span class="fc" id="L457">        return emptyLines;</span>
     }
 
     /**
@@ -439,17 +463,17 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return list of empty lines to log.
      */
     private static List&lt;Integer&gt; getEmptyLinesToLog(List&lt;Integer&gt; emptyLines) {
-<span class="fc" id="L442">        final List&lt;Integer&gt; emptyLinesToLog = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L443" title="All 2 branches covered.">        if (emptyLines.size() &gt;= 2) {</span>
-<span class="fc" id="L444">            int previousEmptyLineNo = emptyLines.get(0);</span>
-<span class="fc bfc" id="L445" title="All 2 branches covered.">            for (int emptyLineNo : emptyLines) {</span>
-<span class="fc bfc" id="L446" title="All 2 branches covered.">                if (previousEmptyLineNo + 1 == emptyLineNo) {</span>
-<span class="fc" id="L447">                    emptyLinesToLog.add(emptyLineNo);</span>
+<span class="fc" id="L466">        final List&lt;Integer&gt; emptyLinesToLog = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L467" title="All 2 branches covered.">        if (emptyLines.size() &gt;= 2) {</span>
+<span class="fc" id="L468">            int previousEmptyLineNo = emptyLines.get(0);</span>
+<span class="fc bfc" id="L469" title="All 2 branches covered.">            for (int emptyLineNo : emptyLines) {</span>
+<span class="fc bfc" id="L470" title="All 2 branches covered.">                if (previousEmptyLineNo + 1 == emptyLineNo) {</span>
+<span class="fc" id="L471">                    emptyLinesToLog.add(emptyLineNo);</span>
                 }
-<span class="fc" id="L449">                previousEmptyLineNo = emptyLineNo;</span>
-<span class="fc" id="L450">            }</span>
+<span class="fc" id="L473">                previousEmptyLineNo = emptyLineNo;</span>
+<span class="fc" id="L474">            }</span>
         }
-<span class="fc" id="L452">        return emptyLinesToLog;</span>
+<span class="fc" id="L476">        return emptyLinesToLog;</span>
     }
 
     /**
@@ -458,13 +482,13 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true if the token has not allowed multiple empty lines before.
      */
     private boolean hasMultipleLinesBefore(DetailAST ast) {
-<span class="fc" id="L461">        boolean result = false;</span>
-<span class="fc bfc" id="L462" title="All 2 branches covered.">        if ((ast.getType() != TokenTypes.VARIABLE_DEF</span>
-<span class="fc bfc" id="L463" title="All 2 branches covered.">            || isTypeField(ast))</span>
-<span class="fc bfc" id="L464" title="All 2 branches covered.">                &amp;&amp; hasNotAllowedTwoEmptyLinesBefore(ast)) {</span>
-<span class="fc" id="L465">            result = true;</span>
+<span class="fc" id="L485">        boolean result = false;</span>
+<span class="fc bfc" id="L486" title="All 2 branches covered.">        if ((ast.getType() != TokenTypes.VARIABLE_DEF</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">            || isTypeField(ast))</span>
+<span class="fc bfc" id="L488" title="All 2 branches covered.">                &amp;&amp; hasNotAllowedTwoEmptyLinesBefore(ast)) {</span>
+<span class="fc" id="L489">            result = true;</span>
         }
-<span class="fc" id="L467">        return result;</span>
+<span class="fc" id="L491">        return result;</span>
     }
 
     /**
@@ -473,20 +497,20 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param nextToken next token
      */
     private void processPackage(DetailAST ast, DetailAST nextToken) {
-<span class="fc bfc" id="L476" title="All 4 branches covered.">        if (ast.getLineNo() &gt; 1 &amp;&amp; !hasEmptyLineBefore(ast)) {</span>
-<span class="fc bfc" id="L477" title="All 2 branches covered.">            if (getFileContents().getFileName().endsWith(&quot;package-info.java&quot;)) {</span>
-<span class="fc bfc" id="L478" title="All 4 branches covered.">                if (ast.getFirstChild().getChildCount() == 0 &amp;&amp; !isPrecededByJavadoc(ast)) {</span>
-<span class="fc" id="L479">                    log(ast.getLineNo(), MSG_SHOULD_BE_SEPARATED, ast.getText());</span>
+<span class="fc bfc" id="L500" title="All 4 branches covered.">        if (ast.getLineNo() &gt; 1 &amp;&amp; !hasEmptyLineBefore(ast)) {</span>
+<span class="fc bfc" id="L501" title="All 2 branches covered.">            if (getFileContents().getFileName().endsWith(&quot;package-info.java&quot;)) {</span>
+<span class="fc bfc" id="L502" title="All 4 branches covered.">                if (ast.getFirstChild().getChildCount() == 0 &amp;&amp; !isPrecededByJavadoc(ast)) {</span>
+<span class="fc" id="L503">                    log(ast.getLineNo(), MSG_SHOULD_BE_SEPARATED, ast.getText());</span>
                 }
             }
             else {
-<span class="fc" id="L483">                log(ast.getLineNo(), MSG_SHOULD_BE_SEPARATED, ast.getText());</span>
+<span class="fc" id="L507">                log(ast.getLineNo(), MSG_SHOULD_BE_SEPARATED, ast.getText());</span>
             }
         }
-<span class="fc bfc" id="L486" title="All 2 branches covered.">        if (!hasEmptyLineAfter(ast)) {</span>
-<span class="fc" id="L487">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED, nextToken.getText());</span>
+<span class="fc bfc" id="L510" title="All 2 branches covered.">        if (!hasEmptyLineAfter(ast)) {</span>
+<span class="fc" id="L511">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED, nextToken.getText());</span>
         }
-<span class="fc" id="L489">    }</span>
+<span class="fc" id="L513">    }</span>
 
     /**
      * Process Import.
@@ -494,11 +518,11 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param nextToken next token
      */
     private void processImport(DetailAST ast, DetailAST nextToken) {
-<span class="fc bfc" id="L497" title="All 2 branches covered.">        if (nextToken.getType() != TokenTypes.IMPORT</span>
-<span class="fc bfc" id="L498" title="All 4 branches covered.">                &amp;&amp; nextToken.getType() != TokenTypes.STATIC_IMPORT &amp;&amp; !hasEmptyLineAfter(ast)) {</span>
-<span class="fc" id="L499">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED, nextToken.getText());</span>
+<span class="fc bfc" id="L521" title="All 2 branches covered.">        if (nextToken.getType() != TokenTypes.IMPORT</span>
+<span class="fc bfc" id="L522" title="All 4 branches covered.">                &amp;&amp; nextToken.getType() != TokenTypes.STATIC_IMPORT &amp;&amp; !hasEmptyLineAfter(ast)) {</span>
+<span class="fc" id="L523">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED, nextToken.getText());</span>
         }
-<span class="fc" id="L501">    }</span>
+<span class="fc" id="L525">    }</span>
 
     /**
      * Process Variable.
@@ -506,12 +530,12 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param nextToken next Token
      */
     private void processVariableDef(DetailAST ast, DetailAST nextToken) {
-<span class="fc bfc" id="L509" title="All 4 branches covered.">        if (isTypeField(ast) &amp;&amp; !hasEmptyLineAfter(ast)</span>
-<span class="fc bfc" id="L510" title="All 2 branches covered.">                &amp;&amp; isViolatingEmptyLineBetweenFieldsPolicy(nextToken)) {</span>
-<span class="fc" id="L511">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED,</span>
-<span class="fc" id="L512">                    nextToken.getText());</span>
+<span class="fc bfc" id="L533" title="All 4 branches covered.">        if (isTypeField(ast) &amp;&amp; !hasEmptyLineAfter(ast)</span>
+<span class="fc bfc" id="L534" title="All 2 branches covered.">                &amp;&amp; isViolatingEmptyLineBetweenFieldsPolicy(nextToken)) {</span>
+<span class="fc" id="L535">            log(nextToken.getLineNo(), MSG_SHOULD_BE_SEPARATED,</span>
+<span class="fc" id="L536">                    nextToken.getText());</span>
         }
-<span class="fc" id="L514">    }</span>
+<span class="fc" id="L538">    }</span>
 
     /**
      * Checks whether token placement violates policy of empty line between fields.
@@ -519,9 +543,9 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true if policy is violated and warning should be raised; false otherwise
      */
     private boolean isViolatingEmptyLineBetweenFieldsPolicy(DetailAST detailAST) {
-<span class="fc bfc" id="L522" title="All 4 branches covered.">        return detailAST.getType() != TokenTypes.RCURLY</span>
+<span class="fc bfc" id="L546" title="All 4 branches covered.">        return detailAST.getType() != TokenTypes.RCURLY</span>
                 &amp;&amp; (!allowNoEmptyLineBetweenFields
-<span class="fc bfc" id="L524" title="All 2 branches covered.">                    || detailAST.getType() != TokenTypes.VARIABLE_DEF);</span>
+<span class="fc bfc" id="L548" title="All 2 branches covered.">                    || detailAST.getType() != TokenTypes.VARIABLE_DEF);</span>
     }
 
     /**
@@ -530,8 +554,8 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true, if token has empty two lines before and allowMultipleEmptyLines is false
      */
     private boolean hasNotAllowedTwoEmptyLinesBefore(DetailAST token) {
-<span class="fc bfc" id="L533" title="All 4 branches covered.">        return !allowMultipleEmptyLines &amp;&amp; hasEmptyLineBefore(token)</span>
-<span class="fc bfc" id="L534" title="All 2 branches covered.">                &amp;&amp; isPrePreviousLineEmpty(token);</span>
+<span class="fc bfc" id="L557" title="All 4 branches covered.">        return !allowMultipleEmptyLines &amp;&amp; hasEmptyLineBefore(token)</span>
+<span class="fc bfc" id="L558" title="All 2 branches covered.">                &amp;&amp; isPrePreviousLineEmpty(token);</span>
     }
 
     /**
@@ -539,21 +563,21 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param token DetailAST token
      */
     private void checkComments(DetailAST token) {
-<span class="fc bfc" id="L542" title="All 2 branches covered.">        if (!allowMultipleEmptyLines) {</span>
-<span class="fc bfc" id="L543" title="All 2 branches covered.">            if (TOKEN_TYPES_WITHOUT_COMMENTS_TO_CHECK_INSIDE.contains(token.getType())) {</span>
-<span class="fc" id="L544">                DetailAST previousNode = token.getPreviousSibling();</span>
-<span class="fc bfc" id="L545" title="All 2 branches covered.">                while (isCommentInBeginningOfLine(previousNode)) {</span>
-<span class="fc bfc" id="L546" title="All 4 branches covered.">                    if (hasEmptyLineBefore(previousNode) &amp;&amp; isPrePreviousLineEmpty(previousNode)) {</span>
-<span class="fc" id="L547">                        log(previousNode, MSG_MULTIPLE_LINES, previousNode.getText());</span>
+<span class="fc bfc" id="L566" title="All 2 branches covered.">        if (!allowMultipleEmptyLines) {</span>
+<span class="fc bfc" id="L567" title="All 2 branches covered.">            if (TOKEN_TYPES_WITHOUT_COMMENTS_TO_CHECK_INSIDE.contains(token.getType())) {</span>
+<span class="fc" id="L568">                DetailAST previousNode = token.getPreviousSibling();</span>
+<span class="fc bfc" id="L569" title="All 2 branches covered.">                while (isCommentInBeginningOfLine(previousNode)) {</span>
+<span class="fc bfc" id="L570" title="All 4 branches covered.">                    if (hasEmptyLineBefore(previousNode) &amp;&amp; isPrePreviousLineEmpty(previousNode)) {</span>
+<span class="fc" id="L571">                        log(previousNode, MSG_MULTIPLE_LINES, previousNode.getText());</span>
                     }
-<span class="fc" id="L549">                    previousNode = previousNode.getPreviousSibling();</span>
+<span class="fc" id="L573">                    previousNode = previousNode.getPreviousSibling();</span>
                 }
-<span class="fc" id="L551">            }</span>
+<span class="fc" id="L575">            }</span>
             else {
-<span class="fc" id="L553">                checkCommentsInsideToken(token);</span>
+<span class="fc" id="L577">                checkCommentsInsideToken(token);</span>
             }
         }
-<span class="fc" id="L556">    }</span>
+<span class="fc" id="L580">    }</span>
 
     /**
      * Check if group of comments located at the start of token has more than one previous empty
@@ -561,29 +585,29 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param token DetailAST token
      */
     private void checkCommentsInsideToken(DetailAST token) {
-<span class="fc" id="L564">        final List&lt;DetailAST&gt; childNodes = new LinkedList&lt;&gt;();</span>
-<span class="fc" id="L565">        DetailAST childNode = token.getLastChild();</span>
-<span class="fc bfc" id="L566" title="All 2 branches covered.">        while (childNode != null) {</span>
-<span class="fc bfc" id="L567" title="All 2 branches covered.">            if (childNode.getType() == TokenTypes.MODIFIERS) {</span>
-<span class="fc" id="L568">                for (DetailAST node = token.getFirstChild().getLastChild();</span>
-<span class="fc bfc" id="L569" title="All 2 branches covered.">                         node != null;</span>
-<span class="fc" id="L570">                         node = node.getPreviousSibling()) {</span>
-<span class="fc bfc" id="L571" title="All 2 branches covered.">                    if (isCommentInBeginningOfLine(node)) {</span>
-<span class="fc" id="L572">                        childNodes.add(node);</span>
+<span class="fc" id="L588">        final List&lt;DetailAST&gt; childNodes = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L589">        DetailAST childNode = token.getLastChild();</span>
+<span class="fc bfc" id="L590" title="All 2 branches covered.">        while (childNode != null) {</span>
+<span class="fc bfc" id="L591" title="All 2 branches covered.">            if (childNode.getType() == TokenTypes.MODIFIERS) {</span>
+<span class="fc" id="L592">                for (DetailAST node = token.getFirstChild().getLastChild();</span>
+<span class="fc bfc" id="L593" title="All 2 branches covered.">                         node != null;</span>
+<span class="fc" id="L594">                         node = node.getPreviousSibling()) {</span>
+<span class="fc bfc" id="L595" title="All 2 branches covered.">                    if (isCommentInBeginningOfLine(node)) {</span>
+<span class="fc" id="L596">                        childNodes.add(node);</span>
                     }
                 }
             }
-<span class="fc bfc" id="L576" title="All 2 branches covered.">            else if (isCommentInBeginningOfLine(childNode)) {</span>
-<span class="fc" id="L577">                childNodes.add(childNode);</span>
+<span class="fc bfc" id="L600" title="All 2 branches covered.">            else if (isCommentInBeginningOfLine(childNode)) {</span>
+<span class="fc" id="L601">                childNodes.add(childNode);</span>
             }
-<span class="fc" id="L579">            childNode = childNode.getPreviousSibling();</span>
+<span class="fc" id="L603">            childNode = childNode.getPreviousSibling();</span>
         }
-<span class="fc bfc" id="L581" title="All 2 branches covered.">        for (DetailAST node : childNodes) {</span>
-<span class="fc bfc" id="L582" title="All 4 branches covered.">            if (hasEmptyLineBefore(node) &amp;&amp; isPrePreviousLineEmpty(node)) {</span>
-<span class="fc" id="L583">                log(node, MSG_MULTIPLE_LINES, node.getText());</span>
+<span class="fc bfc" id="L605" title="All 2 branches covered.">        for (DetailAST node : childNodes) {</span>
+<span class="fc bfc" id="L606" title="All 4 branches covered.">            if (hasEmptyLineBefore(node) &amp;&amp; isPrePreviousLineEmpty(node)) {</span>
+<span class="fc" id="L607">                log(node, MSG_MULTIPLE_LINES, node.getText());</span>
             }
-<span class="fc" id="L585">        }</span>
-<span class="fc" id="L586">    }</span>
+<span class="fc" id="L609">        }</span>
+<span class="fc" id="L610">    }</span>
 
     /**
      * Checks if a token has empty pre-previous line.
@@ -591,15 +615,15 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true, if token has empty lines before.
      */
     private boolean isPrePreviousLineEmpty(DetailAST token) {
-<span class="fc" id="L594">        boolean result = false;</span>
-<span class="fc" id="L595">        final int lineNo = token.getLineNo();</span>
+<span class="fc" id="L618">        boolean result = false;</span>
+<span class="fc" id="L619">        final int lineNo = token.getLineNo();</span>
         // 3 is the number of the pre-previous line because the numbering starts from zero.
-<span class="fc" id="L597">        final int number = 3;</span>
-<span class="fc bfc" id="L598" title="All 2 branches covered.">        if (lineNo &gt;= number) {</span>
-<span class="fc" id="L599">            final String prePreviousLine = getLines()[lineNo - number];</span>
-<span class="fc" id="L600">            result = CommonUtil.isBlank(prePreviousLine);</span>
+<span class="fc" id="L621">        final int number = 3;</span>
+<span class="fc bfc" id="L622" title="All 2 branches covered.">        if (lineNo &gt;= number) {</span>
+<span class="fc" id="L623">            final String prePreviousLine = getLines()[lineNo - number];</span>
+<span class="fc" id="L624">            result = CommonUtil.isBlank(prePreviousLine);</span>
         }
-<span class="fc" id="L602">        return result;</span>
+<span class="fc" id="L626">        return result;</span>
     }
 
     /**
@@ -608,19 +632,33 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true if token have empty line after.
      */
     private boolean hasEmptyLineAfter(DetailAST token) {
-<span class="fc" id="L611">        DetailAST lastToken = token.getLastChild().getLastChild();</span>
-<span class="fc bfc" id="L612" title="All 2 branches covered.">        if (lastToken == null) {</span>
-<span class="fc" id="L613">            lastToken = token.getLastChild();</span>
+<span class="fc" id="L635">        DetailAST lastToken = token.getLastChild().getLastChild();</span>
+<span class="fc bfc" id="L636" title="All 2 branches covered.">        if (lastToken == null) {</span>
+<span class="fc" id="L637">            lastToken = token.getLastChild();</span>
         }
-<span class="fc" id="L615">        DetailAST nextToken = token.getNextSibling();</span>
-<span class="fc bfc" id="L616" title="All 2 branches covered.">        if (isComment(nextToken)) {</span>
-<span class="fc" id="L617">            nextToken = nextToken.getNextSibling();</span>
+<span class="fc" id="L639">        DetailAST nextToken = token.getNextSibling();</span>
+<span class="fc bfc" id="L640" title="All 2 branches covered.">        if (isComment(nextToken)) {</span>
+<span class="fc" id="L641">            nextToken = nextToken.getNextSibling();</span>
         }
         // Start of the next token
-<span class="fc" id="L620">        final int nextBegin = nextToken.getLineNo();</span>
+<span class="fc" id="L644">        final int nextBegin = nextToken.getLineNo();</span>
         // End of current token.
-<span class="fc" id="L622">        final int currentEnd = lastToken.getLineNo();</span>
-<span class="fc" id="L623">        return hasEmptyLine(currentEnd + 1, nextBegin - 1);</span>
+<span class="fc" id="L646">        final int currentEnd = lastToken.getLineNo();</span>
+<span class="fc" id="L647">        return hasEmptyLine(currentEnd + 1, nextBegin - 1);</span>
+    }
+
+    /**
+     * Finds comment in next sibling of given packageDef.
+     *
+     * @param packageDef token to check
+     * @return comment under the token
+     */
+    private static Optional&lt;DetailAST&gt; findCommentUnder(DetailAST packageDef) {
+<span class="fc" id="L657">        return Optional.ofNullable(packageDef.getNextSibling())</span>
+<span class="fc" id="L658">            .map(sibling -&gt; sibling.findFirstToken(TokenTypes.MODIFIERS))</span>
+<span class="fc" id="L659">            .map(DetailAST::getFirstChild)</span>
+<span class="fc" id="L660">            .filter(EmptyLineSeparatorCheck::isComment)</span>
+<span class="fc bfc" id="L661" title="All 2 branches covered.">            .filter(comment -&gt; comment.getLineNo() == packageDef.getLineNo() + 1);</span>
     }
 
     /**
@@ -633,16 +671,16 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      */
     private boolean hasEmptyLine(int startLine, int endLine) {
         // Initial value is false - blank line not found
-<span class="fc" id="L636">        boolean result = false;</span>
-<span class="fc" id="L637">        final FileContents fileContents = getFileContents();</span>
-<span class="fc bfc" id="L638" title="All 2 branches covered.">        for (int line = startLine; line &lt;= endLine; line++) {</span>
+<span class="fc" id="L674">        boolean result = false;</span>
+<span class="fc" id="L675">        final FileContents fileContents = getFileContents();</span>
+<span class="fc bfc" id="L676" title="All 2 branches covered.">        for (int line = startLine; line &lt;= endLine; line++) {</span>
             // Check, if the line is blank. Lines are numbered from 0, so subtract 1
-<span class="fc bfc" id="L640" title="All 2 branches covered.">            if (fileContents.lineIsBlank(line - 1)) {</span>
-<span class="fc" id="L641">                result = true;</span>
-<span class="fc" id="L642">                break;</span>
+<span class="fc bfc" id="L678" title="All 2 branches covered.">            if (fileContents.lineIsBlank(line - 1)) {</span>
+<span class="fc" id="L679">                result = true;</span>
+<span class="fc" id="L680">                break;</span>
             }
         }
-<span class="fc" id="L645">        return result;</span>
+<span class="fc" id="L683">        return result;</span>
     }
 
     /**
@@ -651,14 +689,14 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true, if token have empty line before.
      */
     private boolean hasEmptyLineBefore(DetailAST token) {
-<span class="fc" id="L654">        boolean result = false;</span>
-<span class="fc" id="L655">        final int lineNo = token.getLineNo();</span>
-<span class="fc bfc" id="L656" title="All 2 branches covered.">        if (lineNo != 1) {</span>
+<span class="fc" id="L692">        boolean result = false;</span>
+<span class="fc" id="L693">        final int lineNo = token.getLineNo();</span>
+<span class="fc bfc" id="L694" title="All 2 branches covered.">        if (lineNo != 1) {</span>
             // [lineNo - 2] is the number of the previous line as the numbering starts from zero.
-<span class="fc" id="L658">            final String lineBefore = getLines()[lineNo - 2];</span>
-<span class="fc" id="L659">            result = CommonUtil.isBlank(lineBefore);</span>
+<span class="fc" id="L696">            final String lineBefore = getLines()[lineNo - 2];</span>
+<span class="fc" id="L697">            result = CommonUtil.isBlank(lineBefore);</span>
         }
-<span class="fc" id="L661">        return result;</span>
+<span class="fc" id="L699">        return result;</span>
     }
 
     /**
@@ -669,12 +707,12 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
     private boolean isCommentInBeginningOfLine(DetailAST comment) {
         // [comment.getLineNo() - 1] is the number of the previous line as the numbering starts
         // from zero.
-<span class="fc" id="L672">        boolean result = false;</span>
-<span class="fc bfc" id="L673" title="All 2 branches covered.">        if (comment != null) {</span>
-<span class="fc" id="L674">            final String lineWithComment = getLines()[comment.getLineNo() - 1].trim();</span>
-<span class="fc bfc" id="L675" title="All 4 branches covered.">            result = lineWithComment.startsWith(&quot;//&quot;) || lineWithComment.startsWith(&quot;/*&quot;);</span>
+<span class="fc" id="L710">        boolean result = false;</span>
+<span class="fc bfc" id="L711" title="All 2 branches covered.">        if (comment != null) {</span>
+<span class="fc" id="L712">            final String lineWithComment = getLines()[comment.getLineNo() - 1].trim();</span>
+<span class="fc bfc" id="L713" title="All 4 branches covered.">            result = lineWithComment.startsWith(&quot;//&quot;) || lineWithComment.startsWith(&quot;/*&quot;);</span>
         }
-<span class="fc" id="L677">        return result;</span>
+<span class="fc" id="L715">        return result;</span>
     }
 
     /**
@@ -683,13 +721,13 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true, if token is preceded by javadoc comment.
      */
     private static boolean isPrecededByJavadoc(DetailAST token) {
-<span class="fc" id="L686">        boolean result = false;</span>
-<span class="fc" id="L687">        final DetailAST previous = token.getPreviousSibling();</span>
-<span class="fc bfc" id="L688" title="All 2 branches covered.">        if (previous.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
-<span class="fc bfc" id="L689" title="All 2 branches covered.">                &amp;&amp; JavadocUtil.isJavadocComment(previous.getFirstChild().getText())) {</span>
-<span class="fc" id="L690">            result = true;</span>
+<span class="fc" id="L724">        boolean result = false;</span>
+<span class="fc" id="L725">        final DetailAST previous = token.getPreviousSibling();</span>
+<span class="fc bfc" id="L726" title="All 2 branches covered.">        if (previous.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
+<span class="fc bfc" id="L727" title="All 2 branches covered.">                &amp;&amp; JavadocUtil.isJavadocComment(previous.getFirstChild().getText())) {</span>
+<span class="fc" id="L728">            result = true;</span>
         }
-<span class="fc" id="L692">        return result;</span>
+<span class="fc" id="L730">        return result;</span>
     }
 
     /**
@@ -698,8 +736,8 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true, if given ast is comment.
      */
     private static boolean isComment(DetailAST ast) {
-<span class="fc bfc" id="L701" title="All 2 branches covered.">        return ast.getType() == TokenTypes.SINGLE_LINE_COMMENT</span>
-<span class="fc bfc" id="L702" title="All 2 branches covered.">                   || ast.getType() == TokenTypes.BLOCK_COMMENT_BEGIN;</span>
+<span class="fc bfc" id="L739" title="All 2 branches covered.">        return ast.getType() == TokenTypes.SINGLE_LINE_COMMENT</span>
+<span class="fc bfc" id="L740" title="All 2 branches covered.">                   || ast.getType() == TokenTypes.BLOCK_COMMENT_BEGIN;</span>
     }
 
     /**
@@ -708,8 +746,8 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return true variable definition is a type field.
      */
     private static boolean isTypeField(DetailAST variableDef) {
-<span class="fc" id="L711">        final int parentType = variableDef.getParent().getParent().getType();</span>
-<span class="fc bfc" id="L712" title="All 2 branches covered.">        return parentType == TokenTypes.CLASS_DEF;</span>
+<span class="fc" id="L749">        final int parentType = variableDef.getParent().getParent().getType();</span>
+<span class="fc bfc" id="L750" title="All 2 branches covered.">        return parentType == TokenTypes.CLASS_DEF;</span>
     }
 
 }
