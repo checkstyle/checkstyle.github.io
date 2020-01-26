@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IndentationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.indentation</a> &gt; <span class="el_source">IndentationCheck.java</span></div><h1>IndentationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
 // checkstyle: Checks Java source code for adherence to a set of rules.
-// Copyright (C) 2001-2019 the original author or authors.
+// Copyright (C) 2001-2020 the original author or authors.
 //
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -41,6 +41,31 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
  * case, this check should just ensure that a minimal set of indentation
  * rules is followed.
  * &lt;/p&gt;
+ * &lt;p&gt;
+ * Basic offset indentation is used for indentation inside code blocks.
+ * For any lines that span more than 1, line wrapping indentation is used for those lines
+ * after the first. Brace adjustment, case, and throws indentations are all used only if
+ * those specific identifiers start the line. If, for example, a brace is used in the
+ * middle of the line, its indentation will not take effect. All indentations have an
+ * accumulative/recursive effect when they are triggered. If during a line wrapping, another
+ * code block is found and it doesn't end on that same line, then the subsequent lines
+ * afterwards, in that new code block, are increased on top of the line wrap and any
+ * indentations above it.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * if ((condition1 &amp;amp;&amp;amp; condition2)
+ *         || (condition3 &amp;amp;&amp;amp; condition4)    // line wrap with bigger indentation
+ *         ||!(condition5 &amp;amp;&amp;amp; condition6)) { // line wrap with bigger indentation
+ *   field.doSomething()                    // basic offset
+ *       .doSomething()                     // line wrap
+ *       .doSomething( c -&amp;gt; {               // line wrap
+ *         return c.doSome();               // basic offset
+ *       });
+ * }
+ * &lt;/pre&gt;
  * &lt;ul&gt;
  * &lt;li&gt;
  * Property {@code basicOffset} - Specify how far new indentation level should be
@@ -80,10 +105,43 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
- * To configure the check:
+ * To configure the check for default behavior:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;Indentation&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example of Compliant code for default configuration (in comment name of property
+ * that controls indentations):
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * class Test {
+ *    String field;               // basicOffset
+ *    int[] arr = {               // basicOffset
+ *        5,                      // arrayInitIndent
+ *        6 };                    // arrayInitIndent
+ *    void bar() throws Exception // basicOffset
+ *    {                           // braceAdjustment
+ *        foo();                  // basicOffset
+ *    }                           // braceAdjustment
+ *    void foo() {                // basicOffset
+ *        if ((cond1 &amp;amp;&amp;amp; cond2)    // basicOffset
+ *                  || (cond3 &amp;amp;&amp;amp; cond4)    // lineWrappingIndentation, forceStrictCondition
+ *                  ||!(cond5 &amp;amp;&amp;amp; cond6)) { // lineWrappingIndentation, forceStrictCondition
+ *            field.doSomething()          // basicOffset
+ *                .doSomething()           // lineWrappingIndentation and forceStrictCondition
+ *                .doSomething( c -&amp;gt; {     // lineWrappingIndentation and forceStrictCondition
+ *                    return c.doSome();   // basicOffset
+ *                });
+ *        }
+ *    }
+ *    void fooCase()                // basicOffset
+ *        throws Exception {        // throwsIndent
+ *        switch (field) {          // basicOffset
+ *            case &quot;value&quot; : bar(); // caseIndent
+ *        }
+ *    }
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure the check to enforce the indentation style recommended by Oracle:
@@ -94,6 +152,17 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
+ * Example of Compliant code for default configuration (in comment name of property that controls
+ * indentation):
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * void fooCase() {          // basicOffset
+ *     switch (field) {      // basicOffset
+ *     case &quot;value&quot; : bar(); // caseIndent
+ *     }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
  * To configure the Check to enforce strict condition in line-wrapping validation.
  * &lt;/p&gt;
  * &lt;pre&gt;
@@ -102,25 +171,56 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * Such config doesn't allow next cases:
+ * Such config doesn't allow next cases even code is aligned further to the right for better
+ * reading:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * void foo(String aFooString,
- *         int aFooInt) {} // indent:8 ; expected: 4; warn, because 8 != 4
+ *         int aFooInt) { // indent:8 ; expected: 4; violation, because 8 != 4
+ *     if (cond1
+ *         || cond2) {
+ *         field.doSomething()
+ *             .doSomething();
+ *     }
+ *     if ((cond1 &amp;amp;&amp;amp; cond2)
+ *               || (cond3 &amp;amp;&amp;amp; cond4)    // violation
+ *               ||!(cond5 &amp;amp;&amp;amp; cond6)) { // violation
+ *         field.doSomething()
+ *              .doSomething()          // violation
+ *              .doSomething( c -&amp;gt; {    // violation
+ *                  return c.doSome();
+ *             });
+ *     }
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * But if forceStrictCondition = false, this code is valid:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * void foo(String aFooString,
- *         int aFooInt) {} // indent:8 ; expected: &amp;gt; 4; ok, because 8 &amp;gt; 4
+ *         int aFooInt) { // indent:8 ; expected: &amp;gt; 4; ok, because 8 &amp;gt; 4
+ *     if (cond1
+ *         || cond2) {
+ *         field.doSomething()
+ *             .doSomething();
+ *     }
+ *     if ((cond1 &amp;amp;&amp;amp; cond2)
+ *               || (cond3 &amp;amp;&amp;amp; cond4)
+ *               ||!(cond5 &amp;amp;&amp;amp; cond6)) {
+ *         field.doSomething()
+ *              .doSomething()
+ *              .doSomething( c -&amp;gt; {
+ *                  return c.doSome();
+ *             });
+ *     }
+ * }
  * &lt;/pre&gt;
  *
  * @noinspection ThisEscapedInObjectConstruction
  * @since 3.1
  */
 @FileStatefulCheck
-<span class="fc" id="L123">public class IndentationCheck extends AbstractCheck {</span>
+<span class="fc" id="L223">public class IndentationCheck extends AbstractCheck {</span>
 
     /*  -- Implementation --
      *
@@ -181,34 +281,34 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
     private static final int DEFAULT_INDENTATION = 4;
 
     /** Handlers currently in use. */
-<span class="fc" id="L184">    private final Deque&lt;AbstractExpressionHandler&gt; handlers = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L284">    private final Deque&lt;AbstractExpressionHandler&gt; handlers = new ArrayDeque&lt;&gt;();</span>
 
     /** Instance of line wrapping handler to use. */
-<span class="fc" id="L187">    private final LineWrappingHandler lineWrappingHandler = new LineWrappingHandler(this);</span>
+<span class="fc" id="L287">    private final LineWrappingHandler lineWrappingHandler = new LineWrappingHandler(this);</span>
 
     /** Factory from which handlers are distributed. */
-<span class="fc" id="L190">    private final HandlerFactory handlerFactory = new HandlerFactory();</span>
+<span class="fc" id="L290">    private final HandlerFactory handlerFactory = new HandlerFactory();</span>
 
     /** Lines logged as having incorrect indentation. */
     private Set&lt;Integer&gt; incorrectIndentationLines;
 
     /** Specify how far new indentation level should be indented when on the next line. */
-<span class="fc" id="L196">    private int basicOffset = DEFAULT_INDENTATION;</span>
+<span class="fc" id="L296">    private int basicOffset = DEFAULT_INDENTATION;</span>
 
     /** Specify how far a case label should be indented when on next line. */
-<span class="fc" id="L199">    private int caseIndent = DEFAULT_INDENTATION;</span>
+<span class="fc" id="L299">    private int caseIndent = DEFAULT_INDENTATION;</span>
 
     /** Specify how far a braces should be indented when on the next line. */
     private int braceAdjustment;
 
     /** Specify how far a throws clause should be indented when on next line. */
-<span class="fc" id="L205">    private int throwsIndent = DEFAULT_INDENTATION;</span>
+<span class="fc" id="L305">    private int throwsIndent = DEFAULT_INDENTATION;</span>
 
     /** Specify how far an array initialisation should be indented when on next line. */
-<span class="fc" id="L208">    private int arrayInitIndent = DEFAULT_INDENTATION;</span>
+<span class="fc" id="L308">    private int arrayInitIndent = DEFAULT_INDENTATION;</span>
 
     /** Specify how far continuation line should be indented when line-wrapping is present. */
-<span class="fc" id="L211">    private int lineWrappingIndentation = DEFAULT_INDENTATION;</span>
+<span class="fc" id="L311">    private int lineWrappingIndentation = DEFAULT_INDENTATION;</span>
 
     /**
      * Force strict indent level in line wrapping case. If value is true, line wrap indent
@@ -225,7 +325,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return forceStrictCondition value.
      */
     public boolean isForceStrictCondition() {
-<span class="fc" id="L228">        return forceStrictCondition;</span>
+<span class="fc" id="L328">        return forceStrictCondition;</span>
     }
 
     /**
@@ -236,8 +336,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param value user's value of forceStrictCondition.
      */
     public void setForceStrictCondition(boolean value) {
-<span class="fc" id="L239">        forceStrictCondition = value;</span>
-<span class="fc" id="L240">    }</span>
+<span class="fc" id="L339">        forceStrictCondition = value;</span>
+<span class="fc" id="L340">    }</span>
 
     /**
      * Setter to specify how far new indentation level should be indented when on the next line.
@@ -245,8 +345,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param basicOffset   the number of tabs or spaces to indent
      */
     public void setBasicOffset(int basicOffset) {
-<span class="fc" id="L248">        this.basicOffset = basicOffset;</span>
-<span class="fc" id="L249">    }</span>
+<span class="fc" id="L348">        this.basicOffset = basicOffset;</span>
+<span class="fc" id="L349">    }</span>
 
     /**
      * Getter to query how far new indentation level should be indented when on the next line.
@@ -254,7 +354,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the number of tabs or spaces to indent
      */
     public int getBasicOffset() {
-<span class="fc" id="L257">        return basicOffset;</span>
+<span class="fc" id="L357">        return basicOffset;</span>
     }
 
     /**
@@ -263,8 +363,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param adjustmentAmount   the brace offset
      */
     public void setBraceAdjustment(int adjustmentAmount) {
-<span class="fc" id="L266">        braceAdjustment = adjustmentAmount;</span>
-<span class="fc" id="L267">    }</span>
+<span class="fc" id="L366">        braceAdjustment = adjustmentAmount;</span>
+<span class="fc" id="L367">    }</span>
 
     /**
      * Getter to query how far a braces should be indented when on the next line.
@@ -272,7 +372,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the positive offset to adjust braces
      */
     public int getBraceAdjustment() {
-<span class="fc" id="L275">        return braceAdjustment;</span>
+<span class="fc" id="L375">        return braceAdjustment;</span>
     }
 
     /**
@@ -281,8 +381,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param amount   the case indentation level
      */
     public void setCaseIndent(int amount) {
-<span class="fc" id="L284">        caseIndent = amount;</span>
-<span class="fc" id="L285">    }</span>
+<span class="fc" id="L384">        caseIndent = amount;</span>
+<span class="fc" id="L385">    }</span>
 
     /**
      * Getter to query how far a case label should be indented when on next line.
@@ -290,7 +390,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the case indentation level
      */
     public int getCaseIndent() {
-<span class="fc" id="L293">        return caseIndent;</span>
+<span class="fc" id="L393">        return caseIndent;</span>
     }
 
     /**
@@ -299,8 +399,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param throwsIndent the throws indentation level
      */
     public void setThrowsIndent(int throwsIndent) {
-<span class="fc" id="L302">        this.throwsIndent = throwsIndent;</span>
-<span class="fc" id="L303">    }</span>
+<span class="fc" id="L402">        this.throwsIndent = throwsIndent;</span>
+<span class="fc" id="L403">    }</span>
 
     /**
      * Getter to query how far a throws clause should be indented when on next line.
@@ -308,7 +408,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the throws indentation level
      */
     public int getThrowsIndent() {
-<span class="fc" id="L311">        return throwsIndent;</span>
+<span class="fc" id="L411">        return throwsIndent;</span>
     }
 
     /**
@@ -317,8 +417,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param arrayInitIndent the array initialisation indentation level
      */
     public void setArrayInitIndent(int arrayInitIndent) {
-<span class="fc" id="L320">        this.arrayInitIndent = arrayInitIndent;</span>
-<span class="fc" id="L321">    }</span>
+<span class="fc" id="L420">        this.arrayInitIndent = arrayInitIndent;</span>
+<span class="fc" id="L421">    }</span>
 
     /**
      * Getter to query how far an array initialisation should be indented when on next line.
@@ -326,7 +426,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the initialisation indentation level
      */
     public int getArrayInitIndent() {
-<span class="fc" id="L329">        return arrayInitIndent;</span>
+<span class="fc" id="L429">        return arrayInitIndent;</span>
     }
 
     /**
@@ -335,7 +435,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the line-wrapping indentation level
      */
     public int getLineWrappingIndentation() {
-<span class="fc" id="L338">        return lineWrappingIndentation;</span>
+<span class="fc" id="L438">        return lineWrappingIndentation;</span>
     }
 
     /**
@@ -344,8 +444,8 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @param lineWrappingIndentation the line-wrapping indentation level
      */
     public void setLineWrappingIndentation(int lineWrappingIndentation) {
-<span class="fc" id="L347">        this.lineWrappingIndentation = lineWrappingIndentation;</span>
-<span class="fc" id="L348">    }</span>
+<span class="fc" id="L447">        this.lineWrappingIndentation = lineWrappingIndentation;</span>
+<span class="fc" id="L448">    }</span>
 
     /**
      * Log a violation message.
@@ -357,11 +457,11 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @see java.text.MessageFormat
      */
     public void indentationLog(int line, String key, Object... args) {
-<span class="fc bfc" id="L360" title="All 2 branches covered.">        if (!incorrectIndentationLines.contains(line)) {</span>
-<span class="fc" id="L361">            incorrectIndentationLines.add(line);</span>
-<span class="fc" id="L362">            log(line, key, args);</span>
+<span class="fc bfc" id="L460" title="All 2 branches covered.">        if (!incorrectIndentationLines.contains(line)) {</span>
+<span class="fc" id="L461">            incorrectIndentationLines.add(line);</span>
+<span class="fc" id="L462">            log(line, key, args);</span>
         }
-<span class="fc" id="L364">    }</span>
+<span class="fc" id="L464">    }</span>
 
     /**
      * Get the width of a tab.
@@ -369,46 +469,46 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the width of a tab
      */
     public int getIndentationTabWidth() {
-<span class="fc" id="L372">        return getTabWidth();</span>
+<span class="fc" id="L472">        return getTabWidth();</span>
     }
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L377">        return getRequiredTokens();</span>
+<span class="fc" id="L477">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L382">        return getRequiredTokens();</span>
+<span class="fc" id="L482">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L387">        return handlerFactory.getHandledTypes();</span>
+<span class="fc" id="L487">        return handlerFactory.getHandledTypes();</span>
     }
 
     @Override
     public void beginTree(DetailAST ast) {
-<span class="fc" id="L392">        handlerFactory.clearCreatedHandlers();</span>
-<span class="fc" id="L393">        handlers.clear();</span>
-<span class="fc" id="L394">        final PrimordialHandler primordialHandler = new PrimordialHandler(this);</span>
-<span class="fc" id="L395">        handlers.push(primordialHandler);</span>
-<span class="fc" id="L396">        primordialHandler.checkIndentation();</span>
-<span class="fc" id="L397">        incorrectIndentationLines = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L398">    }</span>
+<span class="fc" id="L492">        handlerFactory.clearCreatedHandlers();</span>
+<span class="fc" id="L493">        handlers.clear();</span>
+<span class="fc" id="L494">        final PrimordialHandler primordialHandler = new PrimordialHandler(this);</span>
+<span class="fc" id="L495">        handlers.push(primordialHandler);</span>
+<span class="fc" id="L496">        primordialHandler.checkIndentation();</span>
+<span class="fc" id="L497">        incorrectIndentationLines = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L498">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L402">        final AbstractExpressionHandler handler = handlerFactory.getHandler(this, ast,</span>
-<span class="fc" id="L403">            handlers.peek());</span>
-<span class="fc" id="L404">        handlers.push(handler);</span>
-<span class="fc" id="L405">        handler.checkIndentation();</span>
-<span class="fc" id="L406">    }</span>
+<span class="fc" id="L502">        final AbstractExpressionHandler handler = handlerFactory.getHandler(this, ast,</span>
+<span class="fc" id="L503">            handlers.peek());</span>
+<span class="fc" id="L504">        handlers.push(handler);</span>
+<span class="fc" id="L505">        handler.checkIndentation();</span>
+<span class="fc" id="L506">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc" id="L410">        handlers.pop();</span>
-<span class="fc" id="L411">    }</span>
+<span class="fc" id="L510">        handlers.pop();</span>
+<span class="fc" id="L511">    }</span>
 
     /**
      * Accessor for the line wrapping handler.
@@ -416,7 +516,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the line wrapping handler
      */
     public LineWrappingHandler getLineWrappingHandler() {
-<span class="fc" id="L419">        return lineWrappingHandler;</span>
+<span class="fc" id="L519">        return lineWrappingHandler;</span>
     }
 
     /**
@@ -425,7 +525,7 @@ import com.puppycrawl.tools.checkstyle.api.DetailAST;
      * @return the handler factory
      */
     public final HandlerFactory getHandlerFactory() {
-<span class="fc" id="L428">        return handlerFactory;</span>
+<span class="fc" id="L528">        return handlerFactory;</span>
     }
 
 }
