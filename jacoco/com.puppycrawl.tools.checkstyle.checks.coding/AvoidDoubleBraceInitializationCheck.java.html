@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AvoidDoubleBraceInitializationCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">AvoidDoubleBraceInitializationCheck.java</span></div><h1>AvoidDoubleBraceInitializationCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2020 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Predicate;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
+
+/**
+ * &lt;p&gt;
+ * Detects double brace initialization.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Rationale: Double brace initialization (set of
+ * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se12/html/jls-8.html#jls-8.6&quot;&gt;
+ * Instance Initializers&lt;/a&gt; in class body) may look cool, but it is considered as anti-pattern
+ * and should be avoided.
+ * This is also can lead to a hard-to-detect memory leak, if the anonymous class instance is
+ * returned outside and other object(s) hold reference to it.
+ * Created anonymous class is not static, it holds an implicit reference to the outer class
+ * instance.
+ * See this
+ * &lt;a href=&quot;https://blog.jooq.org/2014/12/08/dont-be-clever-the-double-curly-braces-anti-pattern/&quot;&gt;
+ * blog post&lt;/a&gt; and
+ * &lt;a href=&quot;https://www.baeldung.com/java-double-brace-initialization&quot;&gt;
+ * article&lt;/a&gt; for more details.
+ * Check ignores any comments and semicolons in class body.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;AvoidDoubleBraceInitialization&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Which results in the following violations:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * class MyClass {
+ *   List list1 = new ArrayList&amp;lt;Object&amp;gt; { // violation
+ *     {
+ *       add(new Object());
+ *     }
+ *   };
+ *   List list2 = new ArrayList&amp;lt;Object&amp;gt; { // violation, comments and semicolons are ignored
+ *     ;
+ *     // my comment
+ *     {
+ *       add(new Object());
+ *     }
+ *   };
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Check only looks for double brace initialization and it ignores cases
+ * where the anonymous class has fields or methods.
+ * Though these might create the same memory issues as double brace,
+ * the extra class members can produce side effects if changed incorrectly.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * class MyClass {
+ *  List list = new ArrayList&amp;lt;Object&amp;gt; { // OK as it is not pure double brace pattern
+ *     private int field;
+ *     {
+ *       add(new Object());
+ *     }
+ *   };
+ * }
+ * &lt;/pre&gt;
+ *
+ * @since 8.30
+ */
+@StatelessCheck
+<span class="fc" id="L97">public class AvoidDoubleBraceInitializationCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_KEY = &quot;avoid.double.brace.init&quot;;
+
+    /**
+     * List of token types that are used in {@link #HAS_MEMBERS} predicate.
+     */
+<span class="fc" id="L108">    private static final List&lt;Integer&gt; IGNORED_TYPES = Arrays.asList(</span>
+<span class="fc" id="L109">        TokenTypes.INSTANCE_INIT,</span>
+<span class="fc" id="L110">        TokenTypes.SEMI,</span>
+<span class="fc" id="L111">        TokenTypes.LCURLY,</span>
+<span class="fc" id="L112">        TokenTypes.RCURLY</span>
+    );
+
+    /**
+     * Predicate for tokens that is used in {@link #hasOnlyInitialization(DetailAST)}.
+     */
+<span class="fc" id="L118">    private static final Predicate&lt;DetailAST&gt; HAS_MEMBERS =</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">        token -&gt; !IGNORED_TYPES.contains(token.getType());</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L123">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L128">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L133">        return new int[] {TokenTypes.OBJBLOCK};</span>
+    }
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        if (ast.getParent().getType() == TokenTypes.LITERAL_NEW</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">            &amp;&amp; hasOnlyInitialization(ast)) {</span>
+<span class="fc" id="L140">            log(ast, MSG_KEY);</span>
+        }
+<span class="fc" id="L142">    }</span>
+
+    /**
+     * Checks that block has at least one instance init block and no other class members.
+     *
+     * @param objBlock token to check
+     * @return true if there is least one instance init block and no other class members,
+     *     false otherwise
+     */
+    private static boolean hasOnlyInitialization(DetailAST objBlock) {
+<span class="fc bfc" id="L152" title="All 2 branches covered.">        final boolean hasInitBlock = objBlock.findFirstToken(TokenTypes.INSTANCE_INIT) != null;</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">        return hasInitBlock</span>
+<span class="fc bfc" id="L154" title="All 2 branches covered.">                  &amp;&amp; !TokenUtil.findFirstTokenByPredicate(objBlock, HAS_MEMBERS).isPresent();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
