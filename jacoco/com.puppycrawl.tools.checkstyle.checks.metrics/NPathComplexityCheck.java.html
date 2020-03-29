@@ -119,19 +119,107 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &amp;lt;module name=&quot;NPathComplexity&quot;/&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * To configure the check with a threshold of 1000:
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public abstract class Test {
+ *
+ * final int a = 0;
+ * int b = 0;
+ *
+ * public void foo() { // OK, NPath complexity is less than default threshold
+ *   // function consists of one if-else block with an NPath Complexity of 3
+ *   if (a &amp;gt; 10) {
+ *     if (a &amp;gt; b) { // nested if-else decision tree adds 2 to the complexity count
+ *       buzz();
+ *     } else {
+ *       fizz();
+ *     }
+ *   } else { // last possible outcome of the main if-else block, adds 1 to complexity
+ *     buzz();
+ *   }
+ * }
+ *
+ * public void boo() { // violation, NPath complexity is 217 (max allowed is 200)
+ *   // looping through 3 switch statements produces 6^3 + 1 (217) possible outcomes
+ *   for(int i = 0; i &amp;lt; b; i++) { // for statement adds 1 to final complexity
+ *     switch(i) { // each independent switch statement multiplies complexity by 6
+ *       case a:
+ *         // ternary with &amp;amp;&amp;amp; adds 3 to switch's complexity
+ *         print(f(i) &amp;amp;&amp;amp; g(i) ? fizz() : buzz());
+ *       default:
+ *         // ternary with || adds 3 to switch's complexity
+ *         print(f(i) || g(i) ? fizz() : buzz());
+ *     }
+ *     switch(i - 1) { // multiplies complexity by 6
+ *       case a:
+ *         print(f(i) &amp;amp;&amp;amp; g(i) ? fizz() : buzz());
+ *       default:
+ *         print(f(i) || g(i) ? fizz() : buzz());
+ *     }
+ *     switch(i + 1) { // multiplies complexity by 6
+ *       case a:
+ *         print(f(i) &amp;amp;&amp;amp; g(i) ? fizz() : buzz());
+ *       default:
+ *         print(f(i) || g(i) ? fizz() : buzz());
+ *     }
+ *   }
+ * }
+ *
+ * public abstract boolean f(int x);
+ * public abstract boolean g(int x);
+ * public abstract String fizz();
+ * public abstract String buzz();
+ * public abstract void print(String str);
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check with a threshold of 100:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;NPathComplexity&quot;&amp;gt;
- *   &amp;lt;property name=&quot;max&quot; value=&quot;1000&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;max&quot; value=&quot;100&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public abstract class Test1 {
+ * public void foo() { // violation, NPath complexity is 128 (max allowed is 100)
+ *   int a,b,t,m,n;
+ *   a=b=t=m=n = 0;
  *
+ *   // Complexity is achieved by choosing from 2 options 7 times (2^7 = 128 possible outcomes)
+ *   if (a &amp;gt; b) { // non-nested if-else decision tree multiplies complexity by 2
+ *     bar();
+ *   } else {
+ *     baz();
+ *   }
+ *
+ *   print(t &amp;gt; 1 ? bar() : baz()); // 5 ternary statements multiply complexity by 2^5
+ *   print(t &amp;gt; 2 ? bar() : baz());
+ *   print(t &amp;gt; 3 ? bar() : baz());
+ *   print(t &amp;gt; 4 ? bar() : baz());
+ *   print(t &amp;gt; 5 ? bar() : baz());
+ *
+ *   if (m &amp;gt; n) { // multiplies complexity by 2
+ *     baz();
+ *   } else {
+ *     bar();
+ *   }
+ * }
+ *
+ * public abstract String bar();
+ * public abstract String baz();
+ * public abstract void print(String str);
+ * }
+ * &lt;/pre&gt;
  * @since 3.4
  */
 // -@cs[AbbreviationAsWordInName] Can't change check name
 @FileStatefulCheck
-<span class="fc" id="L134">public final class NPathComplexityCheck extends AbstractCheck {</span>
+<span class="fc" id="L222">public final class NPathComplexityCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -143,30 +231,30 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     private static final int DEFAULT_MAX = 200;
 
     /** The initial current value. */
-<span class="fc" id="L146">    private static final BigInteger INITIAL_VALUE = BigInteger.ZERO;</span>
+<span class="fc" id="L234">    private static final BigInteger INITIAL_VALUE = BigInteger.ZERO;</span>
 
     /**
      * Stack of NP values for ranges.
      */
-<span class="fc" id="L151">    private final Deque&lt;BigInteger&gt; rangeValues = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L239">    private final Deque&lt;BigInteger&gt; rangeValues = new ArrayDeque&lt;&gt;();</span>
 
     /** Stack of NP values for expressions. */
-<span class="fc" id="L154">    private final Deque&lt;Integer&gt; expressionValues = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L242">    private final Deque&lt;Integer&gt; expressionValues = new ArrayDeque&lt;&gt;();</span>
 
     /** Stack of belongs to range values for question operator. */
-<span class="fc" id="L157">    private final Deque&lt;Boolean&gt; afterValues = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L245">    private final Deque&lt;Boolean&gt; afterValues = new ArrayDeque&lt;&gt;();</span>
 
     /**
      * Range of the last processed expression. Used for checking that ternary operation
      * which is a part of expression won't be processed for second time.
      */
-<span class="fc" id="L163">    private final TokenEnd processingTokenEnd = new TokenEnd();</span>
+<span class="fc" id="L251">    private final TokenEnd processingTokenEnd = new TokenEnd();</span>
 
     /** NP value for current range. */
-<span class="fc" id="L166">    private BigInteger currentRangeValue = INITIAL_VALUE;</span>
+<span class="fc" id="L254">    private BigInteger currentRangeValue = INITIAL_VALUE;</span>
 
     /** Specify the maximum threshold allowed. */
-<span class="fc" id="L169">    private int max = DEFAULT_MAX;</span>
+<span class="fc" id="L257">    private int max = DEFAULT_MAX;</span>
 
     /** True, when branch is visited, but not leaved. */
     private boolean branchVisited;
@@ -177,22 +265,22 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param max the maximum threshold
      */
     public void setMax(int max) {
-<span class="fc" id="L180">        this.max = max;</span>
-<span class="fc" id="L181">    }</span>
+<span class="fc" id="L268">        this.max = max;</span>
+<span class="fc" id="L269">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L185">        return getRequiredTokens();</span>
+<span class="fc" id="L273">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L190">        return getRequiredTokens();</span>
+<span class="fc" id="L278">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L195">        return new int[] {</span>
+<span class="fc" id="L283">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.STATIC_INIT,
@@ -214,96 +302,96 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L217">        rangeValues.clear();</span>
-<span class="fc" id="L218">        expressionValues.clear();</span>
-<span class="fc" id="L219">        afterValues.clear();</span>
-<span class="fc" id="L220">        processingTokenEnd.reset();</span>
-<span class="fc" id="L221">        currentRangeValue = INITIAL_VALUE;</span>
-<span class="fc" id="L222">        branchVisited = false;</span>
-<span class="fc" id="L223">    }</span>
+<span class="fc" id="L305">        rangeValues.clear();</span>
+<span class="fc" id="L306">        expressionValues.clear();</span>
+<span class="fc" id="L307">        afterValues.clear();</span>
+<span class="fc" id="L308">        processingTokenEnd.reset();</span>
+<span class="fc" id="L309">        currentRangeValue = INITIAL_VALUE;</span>
+<span class="fc" id="L310">        branchVisited = false;</span>
+<span class="fc" id="L311">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L227" title="All 8 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L315" title="All 8 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.LITERAL_IF:
             case TokenTypes.LITERAL_SWITCH:
             case TokenTypes.LITERAL_WHILE:
             case TokenTypes.LITERAL_DO:
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L233">                visitConditional(ast, 1);</span>
-<span class="fc" id="L234">                break;</span>
+<span class="fc" id="L321">                visitConditional(ast, 1);</span>
+<span class="fc" id="L322">                break;</span>
             case TokenTypes.QUESTION:
-<span class="fc" id="L236">                visitUnitaryOperator(ast, 2);</span>
-<span class="fc" id="L237">                break;</span>
+<span class="fc" id="L324">                visitUnitaryOperator(ast, 2);</span>
+<span class="fc" id="L325">                break;</span>
             case TokenTypes.LITERAL_RETURN:
-<span class="fc" id="L239">                visitUnitaryOperator(ast, 0);</span>
-<span class="fc" id="L240">                break;</span>
+<span class="fc" id="L327">                visitUnitaryOperator(ast, 0);</span>
+<span class="fc" id="L328">                break;</span>
             case TokenTypes.CASE_GROUP:
-<span class="fc" id="L242">                final int caseNumber = countCaseTokens(ast);</span>
-<span class="fc" id="L243">                branchVisited = true;</span>
-<span class="fc" id="L244">                pushValue(caseNumber);</span>
-<span class="fc" id="L245">                break;</span>
+<span class="fc" id="L330">                final int caseNumber = countCaseTokens(ast);</span>
+<span class="fc" id="L331">                branchVisited = true;</span>
+<span class="fc" id="L332">                pushValue(caseNumber);</span>
+<span class="fc" id="L333">                break;</span>
             case TokenTypes.LITERAL_ELSE:
-<span class="fc" id="L247">                branchVisited = true;</span>
-<span class="fc bfc" id="L248" title="All 2 branches covered.">                if (currentRangeValue.equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L249">                    currentRangeValue = BigInteger.ONE;</span>
+<span class="fc" id="L335">                branchVisited = true;</span>
+<span class="fc bfc" id="L336" title="All 2 branches covered.">                if (currentRangeValue.equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L337">                    currentRangeValue = BigInteger.ONE;</span>
                 }
-<span class="fc" id="L251">                pushValue(0);</span>
-<span class="fc" id="L252">                break;</span>
+<span class="fc" id="L339">                pushValue(0);</span>
+<span class="fc" id="L340">                break;</span>
             case TokenTypes.LITERAL_TRY:
             case TokenTypes.LITERAL_CATCH:
             case TokenTypes.LITERAL_DEFAULT:
-<span class="fc" id="L256">                pushValue(1);</span>
-<span class="fc" id="L257">                break;</span>
+<span class="fc" id="L344">                pushValue(1);</span>
+<span class="fc" id="L345">                break;</span>
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
             case TokenTypes.INSTANCE_INIT:
             case TokenTypes.STATIC_INIT:
-<span class="fc" id="L262">                pushValue(0);</span>
-<span class="fc" id="L263">                break;</span>
+<span class="fc" id="L350">                pushValue(0);</span>
+<span class="fc" id="L351">                break;</span>
             default:
                 break;
         }
-<span class="fc" id="L267">    }</span>
+<span class="fc" id="L355">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L271" title="All 8 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L359" title="All 8 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.LITERAL_WHILE:
             case TokenTypes.LITERAL_DO:
             case TokenTypes.LITERAL_FOR:
             case TokenTypes.LITERAL_IF:
             case TokenTypes.LITERAL_SWITCH:
-<span class="fc" id="L277">                leaveConditional();</span>
-<span class="fc" id="L278">                break;</span>
+<span class="fc" id="L365">                leaveConditional();</span>
+<span class="fc" id="L366">                break;</span>
             case TokenTypes.LITERAL_TRY:
-<span class="fc" id="L280">                leaveMultiplyingConditional();</span>
-<span class="fc" id="L281">                break;</span>
+<span class="fc" id="L368">                leaveMultiplyingConditional();</span>
+<span class="fc" id="L369">                break;</span>
             case TokenTypes.LITERAL_RETURN:
             case TokenTypes.QUESTION:
-<span class="fc" id="L284">                leaveUnitaryOperator();</span>
-<span class="fc" id="L285">                break;</span>
+<span class="fc" id="L372">                leaveUnitaryOperator();</span>
+<span class="fc" id="L373">                break;</span>
             case TokenTypes.LITERAL_CATCH:
-<span class="fc" id="L287">                leaveAddingConditional();</span>
-<span class="fc" id="L288">                break;</span>
+<span class="fc" id="L375">                leaveAddingConditional();</span>
+<span class="fc" id="L376">                break;</span>
             case TokenTypes.LITERAL_DEFAULT:
-<span class="fc" id="L290">                leaveBranch();</span>
-<span class="fc" id="L291">                break;</span>
+<span class="fc" id="L378">                leaveBranch();</span>
+<span class="fc" id="L379">                break;</span>
             case TokenTypes.LITERAL_ELSE:
             case TokenTypes.CASE_GROUP:
-<span class="fc" id="L294">                leaveBranch();</span>
-<span class="fc" id="L295">                branchVisited = false;</span>
-<span class="fc" id="L296">                break;</span>
+<span class="fc" id="L382">                leaveBranch();</span>
+<span class="fc" id="L383">                branchVisited = false;</span>
+<span class="fc" id="L384">                break;</span>
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
             case TokenTypes.INSTANCE_INIT:
             case TokenTypes.STATIC_INIT:
-<span class="fc" id="L301">                leaveMethodDef(ast);</span>
-<span class="fc" id="L302">                break;</span>
+<span class="fc" id="L389">                leaveMethodDef(ast);</span>
+<span class="fc" id="L390">                break;</span>
             default:
                 break;
         }
-<span class="fc" id="L306">    }</span>
+<span class="fc" id="L394">    }</span>
 
     /**
      * Visits if, while, do-while, for and switch tokens - all of them have expression in
@@ -312,16 +400,16 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param basicBranchingFactor default number of branches added.
      */
     private void visitConditional(DetailAST ast, int basicBranchingFactor) {
-<span class="fc" id="L315">        int expressionValue = basicBranchingFactor;</span>
+<span class="fc" id="L403">        int expressionValue = basicBranchingFactor;</span>
         DetailAST bracketed;
-<span class="fc" id="L317">        for (bracketed = ast.findFirstToken(TokenTypes.LPAREN).getNextSibling();</span>
-<span class="fc bfc" id="L318" title="All 2 branches covered.">                bracketed.getType() != TokenTypes.RPAREN;</span>
-<span class="fc" id="L319">                bracketed = bracketed.getNextSibling()) {</span>
-<span class="fc" id="L320">            expressionValue += countConditionalOperators(bracketed);</span>
+<span class="fc" id="L405">        for (bracketed = ast.findFirstToken(TokenTypes.LPAREN).getNextSibling();</span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">                bracketed.getType() != TokenTypes.RPAREN;</span>
+<span class="fc" id="L407">                bracketed = bracketed.getNextSibling()) {</span>
+<span class="fc" id="L408">            expressionValue += countConditionalOperators(bracketed);</span>
         }
-<span class="fc" id="L322">        processingTokenEnd.setToken(bracketed);</span>
-<span class="fc" id="L323">        pushValue(expressionValue);</span>
-<span class="fc" id="L324">    }</span>
+<span class="fc" id="L410">        processingTokenEnd.setToken(bracketed);</span>
+<span class="fc" id="L411">        pushValue(expressionValue);</span>
+<span class="fc" id="L412">    }</span>
 
     /**
      * Visits ternary operator (?:) and return tokens. They differ from those processed by
@@ -330,77 +418,77 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param basicBranchingFactor number of branches inherently added by this token.
      */
     private void visitUnitaryOperator(DetailAST ast, int basicBranchingFactor) {
-<span class="fc" id="L333">        final boolean isAfter = processingTokenEnd.isAfter(ast);</span>
-<span class="fc" id="L334">        afterValues.push(isAfter);</span>
-<span class="fc bfc" id="L335" title="All 2 branches covered.">        if (!isAfter) {</span>
-<span class="fc" id="L336">            processingTokenEnd.setToken(getLastToken(ast));</span>
-<span class="fc" id="L337">            final int expressionValue = basicBranchingFactor + countConditionalOperators(ast);</span>
-<span class="fc" id="L338">            pushValue(expressionValue);</span>
+<span class="fc" id="L421">        final boolean isAfter = processingTokenEnd.isAfter(ast);</span>
+<span class="fc" id="L422">        afterValues.push(isAfter);</span>
+<span class="fc bfc" id="L423" title="All 2 branches covered.">        if (!isAfter) {</span>
+<span class="fc" id="L424">            processingTokenEnd.setToken(getLastToken(ast));</span>
+<span class="fc" id="L425">            final int expressionValue = basicBranchingFactor + countConditionalOperators(ast);</span>
+<span class="fc" id="L426">            pushValue(expressionValue);</span>
         }
-<span class="fc" id="L340">    }</span>
+<span class="fc" id="L428">    }</span>
 
     /**
      * Leaves ternary operator (?:) and return tokens.
      */
     private void leaveUnitaryOperator() {
-<span class="fc bfc" id="L346" title="All 2 branches covered.">        if (Boolean.FALSE.equals(afterValues.pop())) {</span>
-<span class="fc" id="L347">            final Values valuePair = popValue();</span>
-<span class="fc" id="L348">            BigInteger basicRangeValue = valuePair.getRangeValue();</span>
-<span class="fc" id="L349">            BigInteger expressionValue = valuePair.getExpressionValue();</span>
-<span class="fc bfc" id="L350" title="All 2 branches covered.">            if (expressionValue.equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L351">                expressionValue = BigInteger.ONE;</span>
+<span class="fc bfc" id="L434" title="All 2 branches covered.">        if (Boolean.FALSE.equals(afterValues.pop())) {</span>
+<span class="fc" id="L435">            final Values valuePair = popValue();</span>
+<span class="fc" id="L436">            BigInteger basicRangeValue = valuePair.getRangeValue();</span>
+<span class="fc" id="L437">            BigInteger expressionValue = valuePair.getExpressionValue();</span>
+<span class="fc bfc" id="L438" title="All 2 branches covered.">            if (expressionValue.equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L439">                expressionValue = BigInteger.ONE;</span>
             }
-<span class="fc bfc" id="L353" title="All 2 branches covered.">            if (basicRangeValue.equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L354">                basicRangeValue = BigInteger.ONE;</span>
+<span class="fc bfc" id="L441" title="All 2 branches covered.">            if (basicRangeValue.equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L442">                basicRangeValue = BigInteger.ONE;</span>
             }
-<span class="fc" id="L356">            currentRangeValue = currentRangeValue.add(expressionValue).multiply(basicRangeValue);</span>
+<span class="fc" id="L444">            currentRangeValue = currentRangeValue.add(expressionValue).multiply(basicRangeValue);</span>
         }
-<span class="fc" id="L358">    }</span>
+<span class="fc" id="L446">    }</span>
 
     /** Leaves while, do, for, if, ternary (?::), return or switch. */
     private void leaveConditional() {
-<span class="fc" id="L362">        final Values valuePair = popValue();</span>
-<span class="fc" id="L363">        final BigInteger expressionValue = valuePair.getExpressionValue();</span>
-<span class="fc" id="L364">        BigInteger basicRangeValue = valuePair.getRangeValue();</span>
-<span class="fc bfc" id="L365" title="All 2 branches covered.">        if (currentRangeValue.equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L366">            currentRangeValue = BigInteger.ONE;</span>
+<span class="fc" id="L450">        final Values valuePair = popValue();</span>
+<span class="fc" id="L451">        final BigInteger expressionValue = valuePair.getExpressionValue();</span>
+<span class="fc" id="L452">        BigInteger basicRangeValue = valuePair.getRangeValue();</span>
+<span class="fc bfc" id="L453" title="All 2 branches covered.">        if (currentRangeValue.equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L454">            currentRangeValue = BigInteger.ONE;</span>
         }
-<span class="fc bfc" id="L368" title="All 2 branches covered.">        if (basicRangeValue.equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L369">            basicRangeValue = BigInteger.ONE;</span>
+<span class="fc bfc" id="L456" title="All 2 branches covered.">        if (basicRangeValue.equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L457">            basicRangeValue = BigInteger.ONE;</span>
         }
-<span class="fc" id="L371">        currentRangeValue = currentRangeValue.add(expressionValue).multiply(basicRangeValue);</span>
-<span class="fc" id="L372">    }</span>
+<span class="fc" id="L459">        currentRangeValue = currentRangeValue.add(expressionValue).multiply(basicRangeValue);</span>
+<span class="fc" id="L460">    }</span>
 
     /** Leaves else, default or case group tokens. */
     private void leaveBranch() {
-<span class="fc" id="L376">        final Values valuePair = popValue();</span>
-<span class="fc" id="L377">        final BigInteger basicRangeValue = valuePair.getRangeValue();</span>
-<span class="fc" id="L378">        final BigInteger expressionValue = valuePair.getExpressionValue();</span>
-<span class="fc bfc" id="L379" title="All 4 branches covered.">        if (branchVisited &amp;&amp; currentRangeValue.equals(BigInteger.ZERO)) {</span>
-<span class="fc" id="L380">            currentRangeValue = BigInteger.ONE;</span>
+<span class="fc" id="L464">        final Values valuePair = popValue();</span>
+<span class="fc" id="L465">        final BigInteger basicRangeValue = valuePair.getRangeValue();</span>
+<span class="fc" id="L466">        final BigInteger expressionValue = valuePair.getExpressionValue();</span>
+<span class="fc bfc" id="L467" title="All 4 branches covered.">        if (branchVisited &amp;&amp; currentRangeValue.equals(BigInteger.ZERO)) {</span>
+<span class="fc" id="L468">            currentRangeValue = BigInteger.ONE;</span>
         }
-<span class="fc" id="L382">        currentRangeValue = currentRangeValue.subtract(BigInteger.ONE)</span>
-<span class="fc" id="L383">                .add(basicRangeValue)</span>
-<span class="fc" id="L384">                .add(expressionValue);</span>
-<span class="fc" id="L385">    }</span>
+<span class="fc" id="L470">        currentRangeValue = currentRangeValue.subtract(BigInteger.ONE)</span>
+<span class="fc" id="L471">                .add(basicRangeValue)</span>
+<span class="fc" id="L472">                .add(expressionValue);</span>
+<span class="fc" id="L473">    }</span>
 
     /**
      * Process the end of a method definition.
      * @param ast the token type representing the method definition
      */
     private void leaveMethodDef(DetailAST ast) {
-<span class="fc" id="L392">        final BigInteger bigIntegerMax = BigInteger.valueOf(max);</span>
-<span class="fc bfc" id="L393" title="All 2 branches covered.">        if (currentRangeValue.compareTo(bigIntegerMax) &gt; 0) {</span>
-<span class="fc" id="L394">            log(ast, MSG_KEY, currentRangeValue, bigIntegerMax);</span>
+<span class="fc" id="L480">        final BigInteger bigIntegerMax = BigInteger.valueOf(max);</span>
+<span class="fc bfc" id="L481" title="All 2 branches covered.">        if (currentRangeValue.compareTo(bigIntegerMax) &gt; 0) {</span>
+<span class="fc" id="L482">            log(ast, MSG_KEY, currentRangeValue, bigIntegerMax);</span>
         }
-<span class="fc" id="L396">        popValue();</span>
-<span class="fc" id="L397">        currentRangeValue = INITIAL_VALUE;</span>
-<span class="fc" id="L398">    }</span>
+<span class="fc" id="L484">        popValue();</span>
+<span class="fc" id="L485">        currentRangeValue = INITIAL_VALUE;</span>
+<span class="fc" id="L486">    }</span>
 
     /** Leaves catch. */
     private void leaveAddingConditional() {
-<span class="fc" id="L402">        currentRangeValue = currentRangeValue.add(popValue().getRangeValue().add(BigInteger.ONE));</span>
-<span class="fc" id="L403">    }</span>
+<span class="fc" id="L490">        currentRangeValue = currentRangeValue.add(popValue().getRangeValue().add(BigInteger.ONE));</span>
+<span class="fc" id="L491">    }</span>
 
     /**
      * Pushes the current range value on the range value stack. Pushes this token expression value
@@ -408,25 +496,25 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param expressionValue value of expression calculated for current token.
      */
     private void pushValue(Integer expressionValue) {
-<span class="fc" id="L411">        rangeValues.push(currentRangeValue);</span>
-<span class="fc" id="L412">        expressionValues.push(expressionValue);</span>
-<span class="fc" id="L413">        currentRangeValue = INITIAL_VALUE;</span>
-<span class="fc" id="L414">    }</span>
+<span class="fc" id="L499">        rangeValues.push(currentRangeValue);</span>
+<span class="fc" id="L500">        expressionValues.push(expressionValue);</span>
+<span class="fc" id="L501">        currentRangeValue = INITIAL_VALUE;</span>
+<span class="fc" id="L502">    }</span>
 
     /**
      * Pops values from both stack of expression values and stack of range values.
      * @return pair of head values from both of the stacks.
      */
     private Values popValue() {
-<span class="fc" id="L421">        final int expressionValue = expressionValues.pop();</span>
-<span class="fc" id="L422">        return new Values(rangeValues.pop(), BigInteger.valueOf(expressionValue));</span>
+<span class="fc" id="L509">        final int expressionValue = expressionValues.pop();</span>
+<span class="fc" id="L510">        return new Values(rangeValues.pop(), BigInteger.valueOf(expressionValue));</span>
     }
 
     /** Leaves try. */
     private void leaveMultiplyingConditional() {
-<span class="fc" id="L427">        currentRangeValue = currentRangeValue.add(BigInteger.ONE)</span>
-<span class="fc" id="L428">                .multiply(popValue().getRangeValue().add(BigInteger.ONE));</span>
-<span class="fc" id="L429">    }</span>
+<span class="fc" id="L515">        currentRangeValue = currentRangeValue.add(BigInteger.ONE)</span>
+<span class="fc" id="L516">                .multiply(popValue().getRangeValue().add(BigInteger.ONE));</span>
+<span class="fc" id="L517">    }</span>
 
     /**
      * Calculates number of conditional operators, including inline ternary operator, for a token.
@@ -440,19 +528,19 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * Java Language Specification, &amp;sect;15.25&lt;/a&gt;
      */
     private static int countConditionalOperators(DetailAST ast) {
-<span class="fc" id="L443">        int number = 0;</span>
-<span class="fc bfc" id="L444" title="All 2 branches covered.">        for (DetailAST child = ast.getFirstChild(); child != null;</span>
-<span class="fc" id="L445">                child = child.getNextSibling()) {</span>
-<span class="fc" id="L446">            final int type = child.getType();</span>
-<span class="fc bfc" id="L447" title="All 4 branches covered.">            if (type == TokenTypes.LOR || type == TokenTypes.LAND) {</span>
-<span class="fc" id="L448">                number++;</span>
+<span class="fc" id="L531">        int number = 0;</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">        for (DetailAST child = ast.getFirstChild(); child != null;</span>
+<span class="fc" id="L533">                child = child.getNextSibling()) {</span>
+<span class="fc" id="L534">            final int type = child.getType();</span>
+<span class="fc bfc" id="L535" title="All 4 branches covered.">            if (type == TokenTypes.LOR || type == TokenTypes.LAND) {</span>
+<span class="fc" id="L536">                number++;</span>
             }
-<span class="fc bfc" id="L450" title="All 2 branches covered.">            else if (type == TokenTypes.QUESTION) {</span>
-<span class="fc" id="L451">                number += 2;</span>
+<span class="fc bfc" id="L538" title="All 2 branches covered.">            else if (type == TokenTypes.QUESTION) {</span>
+<span class="fc" id="L539">                number += 2;</span>
             }
-<span class="fc" id="L453">            number += countConditionalOperators(child);</span>
+<span class="fc" id="L541">            number += countConditionalOperators(child);</span>
         }
-<span class="fc" id="L455">        return number;</span>
+<span class="fc" id="L543">        return number;</span>
     }
 
     /**
@@ -461,15 +549,15 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return the leaf.
      */
     private static DetailAST getLastToken(DetailAST ast) {
-<span class="fc" id="L464">        final DetailAST lastChild = ast.getLastChild();</span>
+<span class="fc" id="L552">        final DetailAST lastChild = ast.getLastChild();</span>
         final DetailAST result;
-<span class="fc bfc" id="L466" title="All 2 branches covered.">        if (lastChild.getFirstChild() == null) {</span>
-<span class="fc" id="L467">            result = lastChild;</span>
+<span class="fc bfc" id="L554" title="All 2 branches covered.">        if (lastChild.getFirstChild() == null) {</span>
+<span class="fc" id="L555">            result = lastChild;</span>
         }
         else {
-<span class="fc" id="L470">            result = getLastToken(lastChild);</span>
+<span class="fc" id="L558">            result = getLastToken(lastChild);</span>
         }
-<span class="fc" id="L472">        return result;</span>
+<span class="fc" id="L560">        return result;</span>
     }
 
     /**
@@ -478,14 +566,14 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return number of case tokens.
      */
     private static int countCaseTokens(DetailAST ast) {
-<span class="fc" id="L481">        int counter = 0;</span>
-<span class="fc bfc" id="L482" title="All 2 branches covered.">        for (DetailAST iterator = ast.getFirstChild(); iterator != null;</span>
-<span class="fc" id="L483">                iterator = iterator.getNextSibling()) {</span>
-<span class="fc bfc" id="L484" title="All 2 branches covered.">            if (iterator.getType() == TokenTypes.LITERAL_CASE) {</span>
-<span class="fc" id="L485">                counter++;</span>
+<span class="fc" id="L569">        int counter = 0;</span>
+<span class="fc bfc" id="L570" title="All 2 branches covered.">        for (DetailAST iterator = ast.getFirstChild(); iterator != null;</span>
+<span class="fc" id="L571">                iterator = iterator.getNextSibling()) {</span>
+<span class="fc bfc" id="L572" title="All 2 branches covered.">            if (iterator.getType() == TokenTypes.LITERAL_CASE) {</span>
+<span class="fc" id="L573">                counter++;</span>
             }
         }
-<span class="fc" id="L488">        return counter;</span>
+<span class="fc" id="L576">        return counter;</span>
     }
 
     /**
@@ -505,17 +593,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @param endToken token.
          */
         public void setToken(DetailAST endToken) {
-<span class="fc bfc" id="L508" title="All 2 branches covered.">            if (!isAfter(endToken)) {</span>
-<span class="fc" id="L509">                endLineNo = endToken.getLineNo();</span>
-<span class="fc" id="L510">                endColumnNo = endToken.getColumnNo();</span>
+<span class="fc bfc" id="L596" title="All 2 branches covered.">            if (!isAfter(endToken)) {</span>
+<span class="fc" id="L597">                endLineNo = endToken.getLineNo();</span>
+<span class="fc" id="L598">                endColumnNo = endToken.getColumnNo();</span>
             }
-<span class="fc" id="L512">        }</span>
+<span class="fc" id="L600">        }</span>
 
         /** Sets end token coordinates to the start of the file. */
         public void reset() {
-<span class="fc" id="L516">            endLineNo = 0;</span>
-<span class="fc" id="L517">            endColumnNo = 0;</span>
-<span class="fc" id="L518">        }</span>
+<span class="fc" id="L604">            endLineNo = 0;</span>
+<span class="fc" id="L605">            endColumnNo = 0;</span>
+<span class="fc" id="L606">        }</span>
 
         /**
          * Checks if saved coordinates located after given token.
@@ -523,15 +611,15 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return true, if saved coordinates located after given token.
          */
         public boolean isAfter(DetailAST ast) {
-<span class="fc" id="L526">            final int lineNo = ast.getLineNo();</span>
-<span class="fc" id="L527">            final int columnNo = ast.getColumnNo();</span>
-<span class="fc" id="L528">            boolean isAfter = true;</span>
-<span class="fc bfc" id="L529" title="All 6 branches covered.">            if (lineNo &gt; endLineNo</span>
+<span class="fc" id="L614">            final int lineNo = ast.getLineNo();</span>
+<span class="fc" id="L615">            final int columnNo = ast.getColumnNo();</span>
+<span class="fc" id="L616">            boolean isAfter = true;</span>
+<span class="fc bfc" id="L617" title="All 6 branches covered.">            if (lineNo &gt; endLineNo</span>
                     || lineNo == endLineNo
                     &amp;&amp; columnNo &gt; endColumnNo) {
-<span class="fc" id="L532">                isAfter = false;</span>
+<span class="fc" id="L620">                isAfter = false;</span>
             }
-<span class="fc" id="L534">            return isAfter;</span>
+<span class="fc" id="L622">            return isAfter;</span>
         }
 
     }
@@ -552,17 +640,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @param valueOfRange NP value for range
          * @param valueOfExpression NP value for expression
          */
-<span class="fc" id="L555">        /* package */ Values(BigInteger valueOfRange, BigInteger valueOfExpression) {</span>
-<span class="fc" id="L556">            rangeValue = valueOfRange;</span>
-<span class="fc" id="L557">            expressionValue = valueOfExpression;</span>
-<span class="fc" id="L558">        }</span>
+<span class="fc" id="L643">        /* package */ Values(BigInteger valueOfRange, BigInteger valueOfExpression) {</span>
+<span class="fc" id="L644">            rangeValue = valueOfRange;</span>
+<span class="fc" id="L645">            expressionValue = valueOfExpression;</span>
+<span class="fc" id="L646">        }</span>
 
         /**
          * Returns NP value for range.
          * @return NP value for range
          */
         public BigInteger getRangeValue() {
-<span class="fc" id="L565">            return rangeValue;</span>
+<span class="fc" id="L653">            return rangeValue;</span>
         }
 
         /**
@@ -570,7 +658,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return NP value for expression
          */
         public BigInteger getExpressionValue() {
-<span class="fc" id="L573">            return expressionValue;</span>
+<span class="fc" id="L661">            return expressionValue;</span>
         }
 
     }

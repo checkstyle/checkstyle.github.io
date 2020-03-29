@@ -57,11 +57,55 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &lt;pre&gt;
  * &amp;lt;module name=&amp;quot;InnerAssignment&quot;/&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * class MyClass {
+ *
+ *   void foo() {
+ *     int a, b;
+ *     a = b = 5; // violation, assignment to each variable should be in a separate statement
+ *     a = b += 5; // violation
+ *
+ *     a = 5; // OK
+ *     b = 5; // OK
+ *     a = 5; b = 5; // OK
+ *
+ *     double myDouble;
+ *     double[] doubleArray = new double[] {myDouble = 4.5, 15.5}; // violation
+ *
+ *     String nameOne;
+ *     List&amp;lt;String&amp;gt; myList = new ArrayList&amp;lt;String&amp;gt;();
+ *     myList.add(nameOne = &quot;tom&quot;); // violation
+
+ *     for (int k = 0; k &amp;lt; 10; k = k + 2) { // OK
+ *       // some code
+ *     }
+ *
+ *     boolean someVal;
+ *     if (someVal = true) { // violation
+ *       // some code
+ *     }
+ *
+ *     while (someVal = false) {} // violation
+ *
+ *     InputStream is = new FileInputStream(&quot;textFile.txt&quot;);
+ *     while ((b = is.read()) != -1) { // OK, this is a common idiom
+ *       // some code
+ *     }
+ *
+ *   }
+ *
+ *   boolean testMethod() {
+ *     boolean val;
+ *     return val = true; // violation
+ *   }
+ * }
+ * &lt;/pre&gt;
  *
  * @since 3.0
  */
 @StatelessCheck
-<span class="fc" id="L64">public class InnerAssignmentCheck</span>
+<span class="fc" id="L108">public class InnerAssignmentCheck</span>
         extends AbstractCheck {
 
     /**
@@ -74,7 +118,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * List of allowed AST types from an assignment AST node
      * towards the root.
      */
-<span class="fc" id="L77">    private static final int[][] ALLOWED_ASSIGNMENT_CONTEXT = {</span>
+<span class="fc" id="L121">    private static final int[][] ALLOWED_ASSIGNMENT_CONTEXT = {</span>
         {TokenTypes.EXPR, TokenTypes.SLIST},
         {TokenTypes.VARIABLE_DEF},
         {TokenTypes.EXPR, TokenTypes.ELIST, TokenTypes.FOR_INIT},
@@ -91,7 +135,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * List of allowed AST types from an assignment AST node
      * towards the root.
      */
-<span class="fc" id="L94">    private static final int[][] CONTROL_CONTEXT = {</span>
+<span class="fc" id="L138">    private static final int[][] CONTROL_CONTEXT = {</span>
         {TokenTypes.EXPR, TokenTypes.LITERAL_DO},
         {TokenTypes.EXPR, TokenTypes.LITERAL_FOR},
         {TokenTypes.EXPR, TokenTypes.LITERAL_WHILE},
@@ -103,14 +147,14 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * List of allowed AST types from a comparison node (above an assignment)
      * towards the root.
      */
-<span class="fc" id="L106">    private static final int[][] ALLOWED_ASSIGNMENT_IN_COMPARISON_CONTEXT = {</span>
+<span class="fc" id="L150">    private static final int[][] ALLOWED_ASSIGNMENT_IN_COMPARISON_CONTEXT = {</span>
         {TokenTypes.EXPR, TokenTypes.LITERAL_WHILE, },
     };
 
     /**
      * The token types that identify comparison operators.
      */
-<span class="fc" id="L113">    private static final int[] COMPARISON_TYPES = {</span>
+<span class="fc" id="L157">    private static final int[] COMPARISON_TYPES = {</span>
         TokenTypes.EQUAL,
         TokenTypes.GE,
         TokenTypes.GT,
@@ -122,7 +166,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     /**
      * The token types that are ignored while checking &quot;while-idiom&quot;.
      */
-<span class="fc" id="L125">    private static final int[] WHILE_IDIOM_IGNORED_PARENTS = {</span>
+<span class="fc" id="L169">    private static final int[] WHILE_IDIOM_IGNORED_PARENTS = {</span>
         TokenTypes.LAND,
         TokenTypes.LOR,
         TokenTypes.LNOT,
@@ -131,23 +175,23 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     };
 
     static {
-<span class="fc" id="L134">        Arrays.sort(COMPARISON_TYPES);</span>
-<span class="fc" id="L135">        Arrays.sort(WHILE_IDIOM_IGNORED_PARENTS);</span>
-<span class="fc" id="L136">    }</span>
+<span class="fc" id="L178">        Arrays.sort(COMPARISON_TYPES);</span>
+<span class="fc" id="L179">        Arrays.sort(WHILE_IDIOM_IGNORED_PARENTS);</span>
+<span class="fc" id="L180">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L140">        return getRequiredTokens();</span>
+<span class="fc" id="L184">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L145">        return getRequiredTokens();</span>
+<span class="fc" id="L189">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L150">        return new int[] {</span>
+<span class="fc" id="L194">        return new int[] {</span>
             TokenTypes.ASSIGN,            // '='
             TokenTypes.DIV_ASSIGN,        // &quot;/=&quot;
             TokenTypes.PLUS_ASSIGN,       // &quot;+=&quot;
@@ -165,12 +209,12 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L168" title="All 2 branches covered.">        if (!isInContext(ast, ALLOWED_ASSIGNMENT_CONTEXT)</span>
-<span class="fc bfc" id="L169" title="All 2 branches covered.">                &amp;&amp; !isInNoBraceControlStatement(ast)</span>
-<span class="fc bfc" id="L170" title="All 2 branches covered.">                &amp;&amp; !isInWhileIdiom(ast)) {</span>
-<span class="fc" id="L171">            log(ast, MSG_KEY);</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">        if (!isInContext(ast, ALLOWED_ASSIGNMENT_CONTEXT)</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">                &amp;&amp; !isInNoBraceControlStatement(ast)</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">                &amp;&amp; !isInWhileIdiom(ast)) {</span>
+<span class="fc" id="L215">            log(ast, MSG_KEY);</span>
         }
-<span class="fc" id="L173">    }</span>
+<span class="fc" id="L217">    }</span>
 
     /**
      * Determines if ast is in the body of a flow control statement without
@@ -202,13 +246,13 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return whether ast is in the body of a flow control statement
      */
     private static boolean isInNoBraceControlStatement(DetailAST ast) {
-<span class="fc" id="L205">        boolean result = false;</span>
-<span class="fc bfc" id="L206" title="All 2 branches covered.">        if (isInContext(ast, CONTROL_CONTEXT)) {</span>
-<span class="fc" id="L207">            final DetailAST expr = ast.getParent();</span>
-<span class="fc" id="L208">            final DetailAST exprNext = expr.getNextSibling();</span>
-<span class="fc bfc" id="L209" title="All 2 branches covered.">            result = exprNext.getType() == TokenTypes.SEMI;</span>
+<span class="fc" id="L249">        boolean result = false;</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">        if (isInContext(ast, CONTROL_CONTEXT)) {</span>
+<span class="fc" id="L251">            final DetailAST expr = ast.getParent();</span>
+<span class="fc" id="L252">            final DetailAST exprNext = expr.getNextSibling();</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">            result = exprNext.getType() == TokenTypes.SEMI;</span>
         }
-<span class="fc" id="L211">        return result;</span>
+<span class="fc" id="L255">        return result;</span>
     }
 
     /**
@@ -227,14 +271,14 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return whether the context of the assignment AST indicates the idiom
      */
     private static boolean isInWhileIdiom(DetailAST ast) {
-<span class="fc" id="L230">        boolean result = false;</span>
-<span class="fc bfc" id="L231" title="All 2 branches covered.">        if (isComparison(ast.getParent())) {</span>
-<span class="fc" id="L232">            result = isInContext(ast.getParent(),</span>
+<span class="fc" id="L274">        boolean result = false;</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">        if (isComparison(ast.getParent())) {</span>
+<span class="fc" id="L276">            result = isInContext(ast.getParent(),</span>
                 ALLOWED_ASSIGNMENT_IN_COMPARISON_CONTEXT,
                 WHILE_IDIOM_IGNORED_PARENTS
             );
         }
-<span class="fc" id="L237">        return result;</span>
+<span class="fc" id="L281">        return result;</span>
     }
 
     /**
@@ -243,8 +287,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true iff ast is a comparison operator.
      */
     private static boolean isComparison(DetailAST ast) {
-<span class="fc" id="L246">        final int astType = ast.getType();</span>
-<span class="fc bfc" id="L247" title="All 2 branches covered.">        return Arrays.binarySearch(COMPARISON_TYPES, astType) &gt;= 0;</span>
+<span class="fc" id="L290">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">        return Arrays.binarySearch(COMPARISON_TYPES, astType) &gt;= 0;</span>
     }
 
     /**
@@ -258,25 +302,25 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return whether the parents nodes of ast match one of the allowed type paths.
      */
     private static boolean isInContext(DetailAST ast, int[][] contextSet, int... skipTokens) {
-<span class="fc" id="L261">        boolean found = false;</span>
-<span class="fc bfc" id="L262" title="All 2 branches covered.">        for (int[] element : contextSet) {</span>
-<span class="fc" id="L263">            DetailAST current = ast;</span>
-<span class="fc bfc" id="L264" title="All 2 branches covered.">            for (int anElement : element) {</span>
-<span class="fc" id="L265">                current = getParent(current, skipTokens);</span>
-<span class="fc bfc" id="L266" title="All 2 branches covered.">                if (current.getType() == anElement) {</span>
-<span class="fc" id="L267">                    found = true;</span>
+<span class="fc" id="L305">        boolean found = false;</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">        for (int[] element : contextSet) {</span>
+<span class="fc" id="L307">            DetailAST current = ast;</span>
+<span class="fc bfc" id="L308" title="All 2 branches covered.">            for (int anElement : element) {</span>
+<span class="fc" id="L309">                current = getParent(current, skipTokens);</span>
+<span class="fc bfc" id="L310" title="All 2 branches covered.">                if (current.getType() == anElement) {</span>
+<span class="fc" id="L311">                    found = true;</span>
                 }
                 else {
-<span class="fc" id="L270">                    found = false;</span>
-<span class="fc" id="L271">                    break;</span>
+<span class="fc" id="L314">                    found = false;</span>
+<span class="fc" id="L315">                    break;</span>
                 }
             }
 
-<span class="fc bfc" id="L275" title="All 2 branches covered.">            if (found) {</span>
-<span class="fc" id="L276">                break;</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">            if (found) {</span>
+<span class="fc" id="L320">                break;</span>
             }
         }
-<span class="fc" id="L279">        return found;</span>
+<span class="fc" id="L323">        return found;</span>
     }
 
     /**
@@ -287,11 +331,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return first not ignored parent of ast
      */
     private static DetailAST getParent(DetailAST ast, int... skipTokens) {
-<span class="fc" id="L290">        DetailAST result = ast.getParent();</span>
-<span class="fc bfc" id="L291" title="All 2 branches covered.">        while (Arrays.binarySearch(skipTokens, result.getType()) &gt; -1) {</span>
-<span class="fc" id="L292">            result = result.getParent();</span>
+<span class="fc" id="L334">        DetailAST result = ast.getParent();</span>
+<span class="fc bfc" id="L335" title="All 2 branches covered.">        while (Arrays.binarySearch(skipTokens, result.getType()) &gt; -1) {</span>
+<span class="fc" id="L336">            result = result.getParent();</span>
         }
-<span class="fc" id="L294">        return result;</span>
+<span class="fc" id="L338">        return result;</span>
     }
 
 }

@@ -74,13 +74,44 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;BooleanExpressionComplexity&quot;/&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Code Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test
+ * {
+ * public static void main(String ... args)
+ * {
+ * boolean a = true;
+ * boolean b = false;
+ *
+ * boolean c = (a &amp;amp; b) | (b ^ a);       // OK, 1(&amp;amp;) + 1(|) + 1(^) = 3 (max allowed 3)
+ *
+ * boolean d = (a &amp;amp; b) ^ (a || b) | a;  // violation, 1(&amp;amp;) + 1(^) + 1(||) + 1(|) = 4
+ * }
+ * }
+ * &lt;/pre&gt;
  * &lt;p&gt;
- * To configure the check with 7 allowed operation in boolean expression:
+ * To configure the check with 5 allowed operation in boolean expression:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;BooleanExpressionComplexity&quot;&amp;gt;
- *   &amp;lt;property name=&quot;max&quot; value=&quot;7&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;max&quot; value=&quot;5&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Code Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test
+ * {
+ *  public static void main(String ... args)
+ *  {
+ *   boolean a = true;
+ *   boolean b = false;
+ *
+ *   boolean c = (a &amp;amp; b) | (b ^ a) | (a ^ b);   // OK, 1(&amp;amp;) + 1(|) + 1(^) + 1(|) + 1(^) = 5
+ *
+ *   boolean d = (a | b) ^ (a | b) ^ (a || b) &amp;amp; b; // violation,
+ *                                               // 1(|) + 1(^) + 1(|) + 1(^) + 1(||) + 1(&amp;amp;) = 6
+ *  }
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure the check to ignore {@code &amp;amp;} and {@code |}:
@@ -90,6 +121,24 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  *   &amp;lt;property name=&quot;tokens&quot; value=&quot;BXOR,LAND,LOR&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Code Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test
+ * {
+ *  public static void main(String ... args)
+ *   {
+ *     boolean a = true;
+ *     boolean b = false;
+ *
+ *     boolean c = (!a &amp;amp;&amp;amp; b) | (a || !b) ^ a;    // OK, 1(&amp;amp;&amp;amp;) + 1(||) + 1(^) = 3
+ *                                                // | is ignored here
+ *
+ *     boolean d = a ^ (a || b) ^ (b || a) &amp;amp; a; // violation, 1(^) + 1(||) + 1(^) + 1(||) = 4
+ *                                               // &amp;amp; is ignored here
+ *    }
+ *  }
+ * &lt;/pre&gt;
+ *
  *
  * @since 3.4
  */
@@ -106,20 +155,20 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
     private static final int DEFAULT_MAX = 3;
 
     /** Stack of contexts. */
-<span class="fc" id="L109">    private final Deque&lt;Context&gt; contextStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L158">    private final Deque&lt;Context&gt; contextStack = new ArrayDeque&lt;&gt;();</span>
     /** Specify the maximum number of boolean operations allowed in one expression. */
     private int max;
     /** Current context. */
-<span class="fc" id="L113">    private Context context = new Context(false);</span>
+<span class="fc" id="L162">    private Context context = new Context(false);</span>
 
     /** Creates new instance of the check. */
-<span class="fc" id="L116">    public BooleanExpressionComplexityCheck() {</span>
-<span class="fc" id="L117">        max = DEFAULT_MAX;</span>
-<span class="fc" id="L118">    }</span>
+<span class="fc" id="L165">    public BooleanExpressionComplexityCheck() {</span>
+<span class="fc" id="L166">        max = DEFAULT_MAX;</span>
+<span class="fc" id="L167">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L122">        return new int[] {</span>
+<span class="fc" id="L171">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.EXPR,
@@ -133,7 +182,7 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L136">        return new int[] {</span>
+<span class="fc" id="L185">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.EXPR,
@@ -142,7 +191,7 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L145">        return new int[] {</span>
+<span class="fc" id="L194">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.EXPR,
@@ -160,38 +209,38 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
      * @param max new maximum allowed complexity.
      */
     public void setMax(int max) {
-<span class="fc" id="L163">        this.max = max;</span>
-<span class="fc" id="L164">    }</span>
+<span class="fc" id="L212">        this.max = max;</span>
+<span class="fc" id="L213">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L168" title="All 6 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L217" title="All 6 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
-<span class="fc" id="L171">                visitMethodDef(ast);</span>
-<span class="fc" id="L172">                break;</span>
+<span class="fc" id="L220">                visitMethodDef(ast);</span>
+<span class="fc" id="L221">                break;</span>
             case TokenTypes.EXPR:
-<span class="fc" id="L174">                visitExpr();</span>
-<span class="fc" id="L175">                break;</span>
+<span class="fc" id="L223">                visitExpr();</span>
+<span class="fc" id="L224">                break;</span>
             case TokenTypes.BOR:
-<span class="fc bfc" id="L177" title="All 4 branches covered.">                if (!isPipeOperator(ast) &amp;&amp; !isPassedInParameter(ast)) {</span>
-<span class="fc" id="L178">                    context.visitBooleanOperator();</span>
+<span class="fc bfc" id="L226" title="All 4 branches covered.">                if (!isPipeOperator(ast) &amp;&amp; !isPassedInParameter(ast)) {</span>
+<span class="fc" id="L227">                    context.visitBooleanOperator();</span>
                 }
                 break;
             case TokenTypes.BAND:
             case TokenTypes.BXOR:
-<span class="fc bfc" id="L183" title="All 2 branches covered.">                if (!isPassedInParameter(ast)) {</span>
-<span class="fc" id="L184">                    context.visitBooleanOperator();</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">                if (!isPassedInParameter(ast)) {</span>
+<span class="fc" id="L233">                    context.visitBooleanOperator();</span>
                 }
                 break;
             case TokenTypes.LAND:
             case TokenTypes.LOR:
-<span class="fc" id="L189">                context.visitBooleanOperator();</span>
-<span class="fc" id="L190">                break;</span>
+<span class="fc" id="L238">                context.visitBooleanOperator();</span>
+<span class="fc" id="L239">                break;</span>
             default:
-<span class="fc" id="L192">                throw new IllegalArgumentException(&quot;Unknown type: &quot; + ast);</span>
+<span class="fc" id="L241">                throw new IllegalArgumentException(&quot;Unknown type: &quot; + ast);</span>
         }
-<span class="fc" id="L194">    }</span>
+<span class="fc" id="L243">    }</span>
 
     /**
      * Checks if logical operator is part of constructor or method call.
@@ -199,7 +248,7 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
      * @return true if logical operator is part of constructor or method call
      */
     private static boolean isPassedInParameter(DetailAST logicalOperator) {
-<span class="fc bfc" id="L202" title="All 2 branches covered.">        return logicalOperator.getParent().getParent().getType() == TokenTypes.ELIST;</span>
+<span class="fc bfc" id="L251" title="All 2 branches covered.">        return logicalOperator.getParent().getParent().getType() == TokenTypes.ELIST;</span>
     }
 
     /**
@@ -211,53 +260,53 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
      * @return true if binary or is applied to exceptions in multi-catch.
      */
     private static boolean isPipeOperator(DetailAST binaryOr) {
-<span class="fc bfc" id="L214" title="All 2 branches covered.">        return binaryOr.getParent().getType() == TokenTypes.TYPE;</span>
+<span class="fc bfc" id="L263" title="All 2 branches covered.">        return binaryOr.getParent().getType() == TokenTypes.TYPE;</span>
     }
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L219" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L268" title="All 3 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.CTOR_DEF:
             case TokenTypes.METHOD_DEF:
-<span class="fc" id="L222">                leaveMethodDef();</span>
-<span class="fc" id="L223">                break;</span>
+<span class="fc" id="L271">                leaveMethodDef();</span>
+<span class="fc" id="L272">                break;</span>
             case TokenTypes.EXPR:
-<span class="fc" id="L225">                leaveExpr(ast);</span>
-<span class="fc" id="L226">                break;</span>
+<span class="fc" id="L274">                leaveExpr(ast);</span>
+<span class="fc" id="L275">                break;</span>
             default:
                 // Do nothing
         }
-<span class="fc" id="L230">    }</span>
+<span class="fc" id="L279">    }</span>
 
     /**
      * Creates new context for a given method.
      * @param ast a method we start to check.
      */
     private void visitMethodDef(DetailAST ast) {
-<span class="fc" id="L237">        contextStack.push(context);</span>
-<span class="fc bfc" id="L238" title="All 2 branches covered.">        final boolean check = !CheckUtil.isEqualsMethod(ast);</span>
-<span class="fc" id="L239">        context = new Context(check);</span>
-<span class="fc" id="L240">    }</span>
+<span class="fc" id="L286">        contextStack.push(context);</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        final boolean check = !CheckUtil.isEqualsMethod(ast);</span>
+<span class="fc" id="L288">        context = new Context(check);</span>
+<span class="fc" id="L289">    }</span>
 
     /** Removes old context. */
     private void leaveMethodDef() {
-<span class="fc" id="L244">        context = contextStack.pop();</span>
-<span class="fc" id="L245">    }</span>
+<span class="fc" id="L293">        context = contextStack.pop();</span>
+<span class="fc" id="L294">    }</span>
 
     /** Creates and pushes new context. */
     private void visitExpr() {
-<span class="fc" id="L249">        contextStack.push(context);</span>
-<span class="fc" id="L250">        context = new Context(context.isChecking());</span>
-<span class="fc" id="L251">    }</span>
+<span class="fc" id="L298">        contextStack.push(context);</span>
+<span class="fc" id="L299">        context = new Context(context.isChecking());</span>
+<span class="fc" id="L300">    }</span>
 
     /**
      * Restores previous context.
      * @param ast expression we leave.
      */
     private void leaveExpr(DetailAST ast) {
-<span class="fc" id="L258">        context.checkCount(ast);</span>
-<span class="fc" id="L259">        context = contextStack.pop();</span>
-<span class="fc" id="L260">    }</span>
+<span class="fc" id="L307">        context.checkCount(ast);</span>
+<span class="fc" id="L308">        context = contextStack.pop();</span>
+<span class="fc" id="L309">    }</span>
 
     /**
      * Represents context (method/expression) in which we check complexity.
@@ -277,35 +326,35 @@ public final class BooleanExpressionComplexityCheck extends AbstractCheck {
          * Creates new instance.
          * @param checking should we check in current context or not.
          */
-<span class="fc" id="L280">        /* package */ Context(boolean checking) {</span>
-<span class="fc" id="L281">            this.checking = checking;</span>
-<span class="fc" id="L282">            count = 0;</span>
-<span class="fc" id="L283">        }</span>
+<span class="fc" id="L329">        /* package */ Context(boolean checking) {</span>
+<span class="fc" id="L330">            this.checking = checking;</span>
+<span class="fc" id="L331">            count = 0;</span>
+<span class="fc" id="L332">        }</span>
 
         /**
          * Getter for checking property.
          * @return should we check in current context or not.
          */
         public boolean isChecking() {
-<span class="fc" id="L290">            return checking;</span>
+<span class="fc" id="L339">            return checking;</span>
         }
 
         /** Increases operator counter. */
         public void visitBooleanOperator() {
-<span class="fc" id="L295">            ++count;</span>
-<span class="fc" id="L296">        }</span>
+<span class="fc" id="L344">            ++count;</span>
+<span class="fc" id="L345">        }</span>
 
         /**
          * Checks if we violates maximum allowed complexity.
          * @param ast a node we check now.
          */
         public void checkCount(DetailAST ast) {
-<span class="fc bfc" id="L303" title="All 4 branches covered.">            if (checking &amp;&amp; count &gt; max) {</span>
-<span class="fc" id="L304">                final DetailAST parentAST = ast.getParent();</span>
+<span class="fc bfc" id="L352" title="All 4 branches covered.">            if (checking &amp;&amp; count &gt; max) {</span>
+<span class="fc" id="L353">                final DetailAST parentAST = ast.getParent();</span>
 
-<span class="fc" id="L306">                log(parentAST, MSG_KEY, count, max);</span>
+<span class="fc" id="L355">                log(parentAST, MSG_KEY, count, max);</span>
             }
-<span class="fc" id="L308">        }</span>
+<span class="fc" id="L357">        }</span>
 
     }
 
