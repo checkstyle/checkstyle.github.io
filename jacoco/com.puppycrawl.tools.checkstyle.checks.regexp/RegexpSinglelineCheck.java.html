@@ -62,25 +62,53 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
- * To configure the check to find trailing whitespace at the end of a line:
+ *   To configure the check with default values:
  * &lt;/p&gt;
  * &lt;pre&gt;
- * &amp;lt;module name=&quot;RegexpSingleline&quot;&amp;gt;
- *   &amp;lt;!-- \s matches whitespace character, $ matches end of line. --&amp;gt;
- *   &amp;lt;property name=&quot;format&quot; value=&quot;\s+$&quot;/&amp;gt;
- * &amp;lt;/module&amp;gt;
+ * &amp;lt;module name=&quot;RegexpSingleline&quot; /&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * To configure the check to find trailing whitespace at the end of a line,
- * with some &lt;i&gt;slack&lt;/i&gt; of allowing two occurrences per file:
+ *   This configuration does not match to anything,
+ *   so we do not provide any code example for it
+ *   as no violation will ever be reported.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the check to find occurrences of 'System.exit('
+ * with some &lt;i&gt;slack&lt;/i&gt; of allowing only one occurrence per file:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;RegexpSingleline&quot;&amp;gt;
- *   &amp;lt;property name=&quot;format&quot; value=&quot;\s+$&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;format&quot; value=&quot;System.exit\(&quot;/&amp;gt;
  *   &amp;lt;!-- next line not required as 0 is the default --&amp;gt;
  *   &amp;lt;property name=&quot;minimum&quot; value=&quot;0&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;maximum&quot; value=&quot;2&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;maximum&quot; value=&quot;1&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * class MyClass {
+ *      void myFunction() {
+ *          try {
+ *             doSomething();
+ *          } catch (Exception e) {
+ *             System.exit(1); // OK, as only there is only one occurrence.
+ *          }
+ *      }
+ *      void doSomething(){};
+ * }
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * class MyClass {
+ *     void myFunction() {
+ *         try {
+ *             doSomething();
+ *             System.exit(0);
+ *         } catch (Exception e) {
+ *             System.exit(1); // Violation, as there are more than one occurrence.
+ *         }
+ *     }
+ *     void doSomething(){};
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * An example of how to configure the check to make sure a copyright statement
@@ -94,14 +122,60 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
  *   &amp;lt;property name=&quot;maximum&quot; value=&quot;10&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;**
+ * * This file is copyrighted under CC. // Ok, as the file contains a copyright statement.
+ * *&amp;#47;
+ * class MyClass {
+ *
+ * }
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * &amp;#47;** // violation, as the file doesn't contain a copyright statement.
+ * * MyClass as a configuration example.
+ * *&amp;#47;
+ * class MyClass {
+ *
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ *  An example of how to configure the check to make sure sql files contains the term 'license'.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;RegexpSingleline&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;format&quot; value=&quot;license&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;minimum&quot; value=&quot;1&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;maximum&quot; value=&quot;9999&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreCase&quot; value=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;!--  Configure a message to be shown on violation of the Check. --&amp;gt;
+ *     &amp;lt;property name=&quot;message&quot;
+ *           value=&quot;File must contain at least one occurrence of 'license' term&quot;/&amp;gt;
+*      &amp;lt;!--  Perform the Check only on files with java extension. --&amp;gt;
+ *     &amp;lt;property name=&quot;fileExtensions&quot; value=&quot;sql&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;*
+ * AP 2.0 License. // Ok, Check ignores the case of the term.
+ * *&amp;#47;
+ * CREATE DATABASE MyDB;
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * &amp;#47;* // violation, file doesn't contain the term.
+ * Example sql file.
+ * *&amp;#47;
+ * CREATE DATABASE MyDB;
+ * &lt;/pre&gt;
  *
  * @since 5.0
  */
 @StatelessCheck
-<span class="fc" id="L101">public class RegexpSinglelineCheck extends AbstractFileSetCheck {</span>
+<span class="fc" id="L175">public class RegexpSinglelineCheck extends AbstractFileSetCheck {</span>
 
     /** Specify the format of the regular expression to match. */
-<span class="fc" id="L104">    private String format = &quot;$.&quot;;</span>
+<span class="fc" id="L178">    private String format = &quot;$.&quot;;</span>
     /**
      * Specify the message which is used to notify about violations,
      * if empty then default (hard-coded) message is used.
@@ -119,22 +193,22 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
 
     @Override
     public void beginProcessing(String charset) {
-<span class="fc" id="L122">        final DetectorOptions options = DetectorOptions.newBuilder()</span>
-<span class="fc" id="L123">            .reporter(this)</span>
-<span class="fc" id="L124">            .compileFlags(0)</span>
-<span class="fc" id="L125">            .format(format)</span>
-<span class="fc" id="L126">            .message(message)</span>
-<span class="fc" id="L127">            .minimum(minimum)</span>
-<span class="fc" id="L128">            .maximum(maximum)</span>
-<span class="fc" id="L129">            .ignoreCase(ignoreCase)</span>
-<span class="fc" id="L130">            .build();</span>
-<span class="fc" id="L131">        detector = new SinglelineDetector(options);</span>
-<span class="fc" id="L132">    }</span>
+<span class="fc" id="L196">        final DetectorOptions options = DetectorOptions.newBuilder()</span>
+<span class="fc" id="L197">            .reporter(this)</span>
+<span class="fc" id="L198">            .compileFlags(0)</span>
+<span class="fc" id="L199">            .format(format)</span>
+<span class="fc" id="L200">            .message(message)</span>
+<span class="fc" id="L201">            .minimum(minimum)</span>
+<span class="fc" id="L202">            .maximum(maximum)</span>
+<span class="fc" id="L203">            .ignoreCase(ignoreCase)</span>
+<span class="fc" id="L204">            .build();</span>
+<span class="fc" id="L205">        detector = new SinglelineDetector(options);</span>
+<span class="fc" id="L206">    }</span>
 
     @Override
     protected void processFiltered(File file, FileText fileText) {
-<span class="fc" id="L136">        detector.processLines(fileText);</span>
-<span class="fc" id="L137">    }</span>
+<span class="fc" id="L210">        detector.processLines(fileText);</span>
+<span class="fc" id="L211">    }</span>
 
     /**
      * Setter to specify the format of the regular expression to match.
@@ -142,8 +216,8 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
      * @param format the format of the regular expression to match.
      */
     public void setFormat(String format) {
-<span class="fc" id="L145">        this.format = format;</span>
-<span class="fc" id="L146">    }</span>
+<span class="fc" id="L219">        this.format = format;</span>
+<span class="fc" id="L220">    }</span>
 
     /**
      * Setter to specify the message which is used to notify about violations,
@@ -152,8 +226,8 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
      * @param message the message to report for a match.
      */
     public void setMessage(String message) {
-<span class="fc" id="L155">        this.message = message;</span>
-<span class="fc" id="L156">    }</span>
+<span class="fc" id="L229">        this.message = message;</span>
+<span class="fc" id="L230">    }</span>
 
     /**
      * Setter to specify the minimum number of matches required in each file.
@@ -161,8 +235,8 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
      * @param minimum the minimum number of matches required in each file.
      */
     public void setMinimum(int minimum) {
-<span class="fc" id="L164">        this.minimum = minimum;</span>
-<span class="fc" id="L165">    }</span>
+<span class="fc" id="L238">        this.minimum = minimum;</span>
+<span class="fc" id="L239">    }</span>
 
     /**
      * Setter to specify the maximum number of matches required in each file.
@@ -170,8 +244,8 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
      * @param maximum the maximum number of matches required in each file.
      */
     public void setMaximum(int maximum) {
-<span class="fc" id="L173">        this.maximum = maximum;</span>
-<span class="fc" id="L174">    }</span>
+<span class="fc" id="L247">        this.maximum = maximum;</span>
+<span class="fc" id="L248">    }</span>
 
     /**
      * Setter to control whether to ignore case when searching.
@@ -179,8 +253,8 @@ import com.puppycrawl.tools.checkstyle.api.FileText;
      * @param ignoreCase whether to ignore case when searching.
      */
     public void setIgnoreCase(boolean ignoreCase) {
-<span class="fc" id="L182">        this.ignoreCase = ignoreCase;</span>
-<span class="fc" id="L183">    }</span>
+<span class="fc" id="L256">        this.ignoreCase = ignoreCase;</span>
+<span class="fc" id="L257">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

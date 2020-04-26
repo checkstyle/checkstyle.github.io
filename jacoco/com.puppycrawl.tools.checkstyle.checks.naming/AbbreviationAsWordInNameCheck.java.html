@@ -50,6 +50,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * is what should be used to enforce strict camel casing. The identifier 'MyTest' would
  * be allowed, but 'MyTEst' would not be.
  * &lt;/p&gt;
+ * &lt;p&gt;
+ * {@code ignoreFinal}, {@code ignoreStatic}, and {@code ignoreStaticFinal}
+ * control whether variables with the respective modifiers are to be ignored.
+ * Note that a variable that is both static and final will always be considered under
+ * {@code ignoreStaticFinal} only, regardless of the values of {@code ignoreFinal}
+ * and {@code ignoreStatic}. So for example if {@code ignoreStatic} is true but
+ * {@code ignoreStaticFinal} is false, then static final variables will not be ignored.
+ * &lt;/p&gt;
  * &lt;ul&gt;
  * &lt;li&gt;
  * Property {@code allowedAbbreviationLength} - Indicate the number of consecutive capital
@@ -67,6 +75,10 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;li&gt;
  * Property {@code ignoreStatic} - Allow to skip variables with {@code static} modifier. Default
  * value is {@code true}.
+ * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code ignoreStaticFinal} - Allow to skip variables with both {@code static} and
+ * {@code final} modifiers. Default value is {@code true}.
  * &lt;/li&gt;
  * &lt;li&gt;
  * Property {@code ignoreOverriddenMethods} - Allow to ignore methods tagged with {@code @Override}
@@ -93,10 +105,67 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
- * Default configuration
+ * To configure the check:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;AbbreviationAsWordInName&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyClass extends SuperClass { // OK, camel case
+ *   int CURRENT_COUNTER; // violation, at most 4 consecutive capital letters allowed
+ *   static int GLOBAL_COUNTER; // OK, static is ignored
+ *   final Set&amp;lt;String&amp;gt; stringsFOUND = new HashSet&amp;lt;&amp;gt;(); // OK, final is ignored
+ *
+ *   &amp;#64;Override
+ *   void printCOUNTER() { // OK, overridden method is ignored
+ *     System.out.println(CURRENT_COUNTER); // OK, only definitions are checked
+ *   }
+ *
+ *   void incrementCOUNTER() { // violation, at most 4 consecutive capital letters allowed
+ *     CURRENT_COUNTER++; // OK, only definitions are checked
+ *   }
+ *
+ *   static void incrementGLOBAL() { // violation, static method is not ignored
+ *     GLOBAL_COUNTER++; // OK, only definitions are checked
+ *   }
+ *
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure to include static variables and methods tagged with
+ * {@code @Override} annotation.
+ * &lt;/p&gt;
+ * &lt;p&gt;Configuration:&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;AbbreviationAsWordInName&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;ignoreStatic&quot; value=&quot;false&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;ignoreOverriddenMethods&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyClass extends SuperClass { // OK, camel case
+ *   int CURRENT_COUNTER; // violation, at most 4 consecutive capital letters allowed
+ *   static int GLOBAL_COUNTER; // violation, static is not ignored
+ *   final Set&amp;lt;String&amp;gt; stringsFOUND = new HashSet&amp;lt;&amp;gt;(); // OK, final is ignored
+ *
+ *   &amp;#64;Override
+ *   void printCOUNTER() { // violation, overridden method is not ignored
+ *     System.out.println(CURRENT_COUNTER); // OK, only definitions are checked
+ *   }
+ *
+ *   void incrementCOUNTER() { // violation, at most 4 consecutive capital letters allowed
+ *     CURRENT_COUNTER++; // OK, only definitions are checked
+ *   }
+ *
+ *   static void incrementGLOBAL() { // violation, at most 4 consecutive capital letters allowed
+ *     GLOBAL_COUNTER++; // OK, only definitions are checked
+ *   }
+ *
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure to check all variables and identifiers
@@ -123,6 +192,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  *                         // and only 1 consecutive capital letter is allowed
  *   String firstXML; // OK, XML abbreviation is allowed
  *   String firstURL; // OK, URL abbreviation is allowed
+ *   final int TOTAL = 5; // OK, final is ignored
+ *   static final int LIMIT = 10; // OK, static final is ignored
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
@@ -152,13 +223,61 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  *                         // would be ignored
  *   String firstCSV; // OK, CSV abbreviation is allowed
  *   String firstXML; // violation, XML abbreviation is not allowed
+ *   final int TOTAL = 5; // OK, final is ignored
+ *   static final int LIMIT = 10; // OK, static final is ignored
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure to check variables, enforcing no abbreviations
+ * except for variables that are both static and final.
+ * &lt;/p&gt;
+ * &lt;p&gt;Configuration:&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;AbbreviationAsWordInName&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreFinal&quot; value=&quot;false&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreStatic&quot; value=&quot;false&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreStaticFinal&quot; value=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;allowedAbbreviationLength&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyClass {
+ *     public int counterXYZ = 1;                // violation
+ *     public final int customerID = 2;          // violation
+ *     public static int nextID = 3;             // violation
+ *     public static final int MAX_ALLOWED = 4;  // OK, ignored
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure to check variables, enforcing no abbreviations
+ * and ignoring static (but non-final) variables only.
+ * &lt;/p&gt;
+ * &lt;p&gt;Configuration:&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;AbbreviationAsWordInName&quot;&amp;gt;
+ *     &amp;lt;property name=&quot;tokens&quot; value=&quot;VARIABLE_DEF&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreFinal&quot; value=&quot;false&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreStatic&quot; value=&quot;true&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;ignoreStaticFinal&quot; value=&quot;false&quot;/&amp;gt;
+ *     &amp;lt;property name=&quot;allowedAbbreviationLength&quot; value=&quot;0&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyClass {
+ *     public int counterXYZ = 1;                // violation
+ *     public final int customerID = 2;          // violation
+ *     public static int nextID = 3;             // OK, ignored
+ *     public static final int MAX_ALLOWED = 4;  // violation
  * }
  * &lt;/pre&gt;
  *
  * @since 5.8
  */
 @StatelessCheck
-<span class="fc" id="L161">public class AbbreviationAsWordInNameCheck extends AbstractCheck {</span>
+<span class="fc" id="L280">public class AbbreviationAsWordInNameCheck extends AbstractCheck {</span>
 
     /**
      * Warning message key.
@@ -175,82 +294,99 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * targeted identifiers (abbreviations in the classes, interfaces, variables
      * and methods names, ... ).
      */
-<span class="fc" id="L178">    private int allowedAbbreviationLength =</span>
+<span class="fc" id="L297">    private int allowedAbbreviationLength =</span>
             DEFAULT_ALLOWED_ABBREVIATIONS_LENGTH;
 
     /**
      * Specify list of abbreviations that must be skipped for checking. Abbreviations
      * should be separated by comma.
      */
-<span class="fc" id="L185">    private Set&lt;String&gt; allowedAbbreviations = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L304">    private Set&lt;String&gt; allowedAbbreviations = new HashSet&lt;&gt;();</span>
 
     /** Allow to skip variables with {@code final} modifier. */
-<span class="fc" id="L188">    private boolean ignoreFinal = true;</span>
+<span class="fc" id="L307">    private boolean ignoreFinal = true;</span>
 
     /** Allow to skip variables with {@code static} modifier. */
-<span class="fc" id="L191">    private boolean ignoreStatic = true;</span>
+<span class="fc" id="L310">    private boolean ignoreStatic = true;</span>
+
+    /** Allow to skip variables with both {@code static} and {@code final} modifiers. */
+<span class="fc" id="L313">    private boolean ignoreStaticFinal = true;</span>
 
     /**
      * Allow to ignore methods tagged with {@code @Override} annotation (that
      * usually mean inherited name).
      */
-<span class="fc" id="L197">    private boolean ignoreOverriddenMethods = true;</span>
+<span class="fc" id="L319">    private boolean ignoreOverriddenMethods = true;</span>
 
     /**
      * Setter to allow to skip variables with {@code final} modifier.
+     *
      * @param ignoreFinal
      *        Defines if ignore variables with 'final' modifier or not.
      */
     public void setIgnoreFinal(boolean ignoreFinal) {
-<span class="fc" id="L205">        this.ignoreFinal = ignoreFinal;</span>
-<span class="fc" id="L206">    }</span>
+<span class="fc" id="L328">        this.ignoreFinal = ignoreFinal;</span>
+<span class="fc" id="L329">    }</span>
 
     /**
      * Setter to allow to skip variables with {@code static} modifier.
+     *
      * @param ignoreStatic
      *        Defines if ignore variables with 'static' modifier or not.
      */
     public void setIgnoreStatic(boolean ignoreStatic) {
-<span class="fc" id="L214">        this.ignoreStatic = ignoreStatic;</span>
-<span class="fc" id="L215">    }</span>
+<span class="fc" id="L338">        this.ignoreStatic = ignoreStatic;</span>
+<span class="fc" id="L339">    }</span>
+
+    /**
+     * Setter to allow to skip variables with both {@code static} and {@code final} modifiers.
+     * @param ignoreStaticFinal
+     *        Defines if ignore variables with both 'static' and 'final' modifiers or not.
+     */
+    public void setIgnoreStaticFinal(boolean ignoreStaticFinal) {
+<span class="fc" id="L347">        this.ignoreStaticFinal = ignoreStaticFinal;</span>
+<span class="fc" id="L348">    }</span>
 
     /**
      * Setter to allow to ignore methods tagged with {@code @Override}
      * annotation (that usually mean inherited name).
+     *
      * @param ignoreOverriddenMethods
      *        Defines if ignore methods with &quot;@Override&quot; annotation or not.
      */
     public void setIgnoreOverriddenMethods(boolean ignoreOverriddenMethods) {
-<span class="fc" id="L224">        this.ignoreOverriddenMethods = ignoreOverriddenMethods;</span>
-<span class="fc" id="L225">    }</span>
+<span class="fc" id="L358">        this.ignoreOverriddenMethods = ignoreOverriddenMethods;</span>
+<span class="fc" id="L359">    }</span>
 
     /**
      * Setter to indicate the number of consecutive capital letters allowed
      * in targeted identifiers (abbreviations in the classes, interfaces,
      * variables and methods names, ... ).
+     *
      * @param allowedAbbreviationLength amount of allowed capital letters in
      *        abbreviation.
      */
     public void setAllowedAbbreviationLength(int allowedAbbreviationLength) {
-<span class="fc" id="L235">        this.allowedAbbreviationLength = allowedAbbreviationLength;</span>
-<span class="fc" id="L236">    }</span>
+<span class="fc" id="L370">        this.allowedAbbreviationLength = allowedAbbreviationLength;</span>
+<span class="fc" id="L371">    }</span>
 
     /**
      * Setter to specify list of abbreviations that must be skipped for checking.
      * Abbreviations should be separated by comma.
+     *
      * @param allowedAbbreviations an string of abbreviations that must be
      *        skipped from checking, each abbreviation separated by comma.
      */
     public void setAllowedAbbreviations(String... allowedAbbreviations) {
-<span class="fc bfc" id="L245" title="All 2 branches covered.">        if (allowedAbbreviations != null) {</span>
-<span class="fc" id="L246">            this.allowedAbbreviations =</span>
-<span class="fc" id="L247">                Arrays.stream(allowedAbbreviations).collect(Collectors.toSet());</span>
+<span class="fc bfc" id="L381" title="All 2 branches covered.">        if (allowedAbbreviations != null) {</span>
+<span class="fc" id="L382">            this.allowedAbbreviations =</span>
+<span class="fc" id="L383">                Arrays.stream(allowedAbbreviations).collect(Collectors.toSet());</span>
         }
-<span class="fc" id="L249">    }</span>
+<span class="fc" id="L385">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L253">        return new int[] {</span>
+<span class="fc" id="L389">        return new int[] {</span>
             TokenTypes.CLASS_DEF,
             TokenTypes.INTERFACE_DEF,
             TokenTypes.ENUM_DEF,
@@ -264,7 +400,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L267">        return new int[] {</span>
+<span class="fc" id="L403">        return new int[] {</span>
             TokenTypes.CLASS_DEF,
             TokenTypes.INTERFACE_DEF,
             TokenTypes.ENUM_DEF,
@@ -279,136 +415,154 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L282">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L418">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L287" title="All 2 branches covered.">        if (!isIgnoreSituation(ast)) {</span>
-<span class="fc" id="L288">            final DetailAST nameAst = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L289">            final String typeName = nameAst.getText();</span>
+<span class="fc bfc" id="L423" title="All 2 branches covered.">        if (!isIgnoreSituation(ast)) {</span>
+<span class="fc" id="L424">            final DetailAST nameAst = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L425">            final String typeName = nameAst.getText();</span>
 
-<span class="fc" id="L291">            final String abbr = getDisallowedAbbreviation(typeName);</span>
-<span class="fc bfc" id="L292" title="All 2 branches covered.">            if (abbr != null) {</span>
-<span class="fc" id="L293">                log(nameAst, MSG_KEY, typeName, allowedAbbreviationLength + 1);</span>
+<span class="fc" id="L427">            final String abbr = getDisallowedAbbreviation(typeName);</span>
+<span class="fc bfc" id="L428" title="All 2 branches covered.">            if (abbr != null) {</span>
+<span class="fc" id="L429">                log(nameAst, MSG_KEY, typeName, allowedAbbreviationLength + 1);</span>
             }
         }
-<span class="fc" id="L296">    }</span>
+<span class="fc" id="L432">    }</span>
 
     /**
      * Checks if it is an ignore situation.
+     *
      * @param ast input DetailAST node.
      * @return true if it is an ignore situation found for given input DetailAST
      *         node.
-     * @noinspection SimplifiableIfStatement
      */
     private boolean isIgnoreSituation(DetailAST ast) {
-<span class="fc" id="L306">        final DetailAST modifiers = ast.getFirstChild();</span>
+<span class="fc" id="L442">        final DetailAST modifiers = ast.getFirstChild();</span>
 
         final boolean result;
-<span class="fc bfc" id="L309" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.VARIABLE_DEF) {</span>
-<span class="fc bfc" id="L310" title="All 4 branches covered.">            if ((ignoreFinal || ignoreStatic)</span>
-<span class="fc bfc" id="L311" title="All 2 branches covered.">                    &amp;&amp; isInterfaceDeclaration(ast)) {</span>
+<span class="fc bfc" id="L445" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc bfc" id="L446" title="All 2 branches covered.">            if (isInterfaceDeclaration(ast)) {</span>
                 // field declarations in interface are static/final
-<span class="fc" id="L313">                result = true;</span>
+<span class="fc" id="L448">                result = ignoreStaticFinal;</span>
             }
             else {
-<span class="fc bfc" id="L316" title="All 2 branches covered.">                result = ignoreFinal</span>
-<span class="fc bfc" id="L317" title="All 4 branches covered.">                          &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) != null</span>
-                    || ignoreStatic
-<span class="fc bfc" id="L319" title="All 2 branches covered.">                        &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+<span class="fc" id="L451">                result = hasIgnoredModifiers(modifiers);</span>
             }
         }
-<span class="fc bfc" id="L322" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
-<span class="fc bfc" id="L323" title="All 4 branches covered.">            result = ignoreOverriddenMethods &amp;&amp; hasOverrideAnnotation(modifiers);</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="fc bfc" id="L455" title="All 4 branches covered.">            result = ignoreOverriddenMethods &amp;&amp; hasOverrideAnnotation(modifiers);</span>
         }
         else {
-<span class="fc" id="L326">            result = CheckUtil.isReceiverParameter(ast);</span>
+<span class="fc" id="L458">            result = CheckUtil.isReceiverParameter(ast);</span>
         }
-<span class="fc" id="L328">        return result;</span>
+<span class="fc" id="L460">        return result;</span>
+    }
+
+    /**
+     * Checks if a variable is to be ignored based on its modifiers.
+     * @param modifiers modifiers of the variable to be checked
+     * @return true if there is a modifier to be ignored
+     */
+    private boolean hasIgnoredModifiers(DetailAST modifiers) {
+<span class="fc bfc" id="L469" title="All 2 branches covered.">        final boolean isStatic = modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+<span class="fc bfc" id="L470" title="All 2 branches covered.">        final boolean isFinal = modifiers.findFirstToken(TokenTypes.FINAL) != null;</span>
+        final boolean result;
+<span class="fc bfc" id="L472" title="All 4 branches covered.">        if (isStatic &amp;&amp; isFinal) {</span>
+<span class="fc" id="L473">            result = ignoreStaticFinal;</span>
+        }
+        else {
+<span class="fc bfc" id="L476" title="All 8 branches covered.">            result = ignoreStatic &amp;&amp; isStatic || ignoreFinal &amp;&amp; isFinal;</span>
+        }
+<span class="fc" id="L478">        return result;</span>
     }
 
     /**
      * Check that variable definition in interface or @interface definition.
+     *
      * @param variableDefAst variable definition.
      * @return true if variable definition(variableDefAst) is in interface
      *     or @interface definition.
      */
     private static boolean isInterfaceDeclaration(DetailAST variableDefAst) {
-<span class="fc" id="L338">        boolean result = false;</span>
-<span class="fc" id="L339">        final DetailAST astBlock = variableDefAst.getParent();</span>
-<span class="fc" id="L340">        final DetailAST astParent2 = astBlock.getParent();</span>
+<span class="fc" id="L489">        boolean result = false;</span>
+<span class="fc" id="L490">        final DetailAST astBlock = variableDefAst.getParent();</span>
+<span class="fc" id="L491">        final DetailAST astParent2 = astBlock.getParent();</span>
 
-<span class="fc bfc" id="L342" title="All 2 branches covered.">        if (astParent2.getType() == TokenTypes.INTERFACE_DEF</span>
-<span class="fc bfc" id="L343" title="All 2 branches covered.">                || astParent2.getType() == TokenTypes.ANNOTATION_DEF) {</span>
-<span class="fc" id="L344">            result = true;</span>
+<span class="fc bfc" id="L493" title="All 2 branches covered.">        if (astParent2.getType() == TokenTypes.INTERFACE_DEF</span>
+<span class="fc bfc" id="L494" title="All 2 branches covered.">                || astParent2.getType() == TokenTypes.ANNOTATION_DEF) {</span>
+<span class="fc" id="L495">            result = true;</span>
         }
-<span class="fc" id="L346">        return result;</span>
+<span class="fc" id="L497">        return result;</span>
     }
 
     /**
      * Checks that the method has &quot;@Override&quot; annotation.
+     *
      * @param methodModifiersAST
      *        A DetailAST nod is related to the given method modifiers
      *        (MODIFIERS type).
      * @return true if method has &quot;@Override&quot; annotation.
      */
     private static boolean hasOverrideAnnotation(DetailAST methodModifiersAST) {
-<span class="fc" id="L357">        boolean result = false;</span>
-<span class="fc bfc" id="L358" title="All 2 branches covered.">        for (DetailAST child : getChildren(methodModifiersAST)) {</span>
-<span class="fc" id="L359">            final DetailAST annotationIdent = child.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L509">        boolean result = false;</span>
+<span class="fc bfc" id="L510" title="All 2 branches covered.">        for (DetailAST child : getChildren(methodModifiersAST)) {</span>
+<span class="fc" id="L511">            final DetailAST annotationIdent = child.findFirstToken(TokenTypes.IDENT);</span>
 
-<span class="fc bfc" id="L361" title="All 4 branches covered.">            if (annotationIdent != null &amp;&amp; &quot;Override&quot;.equals(annotationIdent.getText())) {</span>
-<span class="fc" id="L362">                result = true;</span>
-<span class="fc" id="L363">                break;</span>
+<span class="fc bfc" id="L513" title="All 4 branches covered.">            if (annotationIdent != null &amp;&amp; &quot;Override&quot;.equals(annotationIdent.getText())) {</span>
+<span class="fc" id="L514">                result = true;</span>
+<span class="fc" id="L515">                break;</span>
             }
-<span class="fc" id="L365">        }</span>
-<span class="fc" id="L366">        return result;</span>
+<span class="fc" id="L517">        }</span>
+<span class="fc" id="L518">        return result;</span>
     }
 
     /**
      * Gets the disallowed abbreviation contained in given String.
+     *
      * @param str
      *        the given String.
      * @return the disallowed abbreviation contained in given String as a
      *         separate String.
      */
     private String getDisallowedAbbreviation(String str) {
-<span class="fc" id="L377">        int beginIndex = 0;</span>
-<span class="fc" id="L378">        boolean abbrStarted = false;</span>
-<span class="fc" id="L379">        String result = null;</span>
+<span class="fc" id="L530">        int beginIndex = 0;</span>
+<span class="fc" id="L531">        boolean abbrStarted = false;</span>
+<span class="fc" id="L532">        String result = null;</span>
 
-<span class="fc bfc" id="L381" title="All 2 branches covered.">        for (int index = 0; index &lt; str.length(); index++) {</span>
-<span class="fc" id="L382">            final char symbol = str.charAt(index);</span>
+<span class="fc bfc" id="L534" title="All 2 branches covered.">        for (int index = 0; index &lt; str.length(); index++) {</span>
+<span class="fc" id="L535">            final char symbol = str.charAt(index);</span>
 
-<span class="fc bfc" id="L384" title="All 2 branches covered.">            if (Character.isUpperCase(symbol)) {</span>
-<span class="fc bfc" id="L385" title="All 2 branches covered.">                if (!abbrStarted) {</span>
-<span class="fc" id="L386">                    abbrStarted = true;</span>
-<span class="fc" id="L387">                    beginIndex = index;</span>
+<span class="fc bfc" id="L537" title="All 2 branches covered.">            if (Character.isUpperCase(symbol)) {</span>
+<span class="fc bfc" id="L538" title="All 2 branches covered.">                if (!abbrStarted) {</span>
+<span class="fc" id="L539">                    abbrStarted = true;</span>
+<span class="fc" id="L540">                    beginIndex = index;</span>
                 }
             }
-<span class="fc bfc" id="L390" title="All 2 branches covered.">            else if (abbrStarted) {</span>
-<span class="fc" id="L391">                abbrStarted = false;</span>
+<span class="fc bfc" id="L543" title="All 2 branches covered.">            else if (abbrStarted) {</span>
+<span class="fc" id="L544">                abbrStarted = false;</span>
 
-<span class="fc" id="L393">                final int endIndex = index - 1;</span>
-<span class="fc" id="L394">                result = getAbbreviationIfIllegal(str, beginIndex, endIndex);</span>
-<span class="fc bfc" id="L395" title="All 2 branches covered.">                if (result != null) {</span>
-<span class="fc" id="L396">                    break;</span>
+<span class="fc" id="L546">                final int endIndex = index - 1;</span>
+<span class="fc" id="L547">                result = getAbbreviationIfIllegal(str, beginIndex, endIndex);</span>
+<span class="fc bfc" id="L548" title="All 2 branches covered.">                if (result != null) {</span>
+<span class="fc" id="L549">                    break;</span>
                 }
-<span class="fc" id="L398">                beginIndex = -1;</span>
+<span class="fc" id="L551">                beginIndex = -1;</span>
             }
         }
         // if abbreviation at the end of name (example: scaleX)
-<span class="fc bfc" id="L402" title="All 2 branches covered.">        if (abbrStarted) {</span>
-<span class="fc" id="L403">            final int endIndex = str.length() - 1;</span>
-<span class="fc" id="L404">            result = getAbbreviationIfIllegal(str, beginIndex, endIndex);</span>
+<span class="fc bfc" id="L555" title="All 2 branches covered.">        if (abbrStarted) {</span>
+<span class="fc" id="L556">            final int endIndex = str.length() - 1;</span>
+<span class="fc" id="L557">            result = getAbbreviationIfIllegal(str, beginIndex, endIndex);</span>
         }
-<span class="fc" id="L406">        return result;</span>
+<span class="fc" id="L559">        return result;</span>
     }
 
     /**
      * Get Abbreviation if it is illegal, where {@code beginIndex} and {@code endIndex} are
      * inclusive indexes of a sequence of consecutive upper-case characters.
+     *
      * @param str name
      * @param beginIndex begin index
      * @param endIndex end index
@@ -416,15 +570,15 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      *         ignore list, otherwise {@code null}
      */
     private String getAbbreviationIfIllegal(String str, int beginIndex, int endIndex) {
-<span class="fc" id="L419">        String result = null;</span>
-<span class="fc" id="L420">        final int abbrLength = endIndex - beginIndex;</span>
-<span class="fc bfc" id="L421" title="All 2 branches covered.">        if (abbrLength &gt; allowedAbbreviationLength) {</span>
-<span class="fc" id="L422">            final String abbr = getAbbreviation(str, beginIndex, endIndex);</span>
-<span class="fc bfc" id="L423" title="All 2 branches covered.">            if (!allowedAbbreviations.contains(abbr)) {</span>
-<span class="fc" id="L424">                result = abbr;</span>
+<span class="fc" id="L573">        String result = null;</span>
+<span class="fc" id="L574">        final int abbrLength = endIndex - beginIndex;</span>
+<span class="fc bfc" id="L575" title="All 2 branches covered.">        if (abbrLength &gt; allowedAbbreviationLength) {</span>
+<span class="fc" id="L576">            final String abbr = getAbbreviation(str, beginIndex, endIndex);</span>
+<span class="fc bfc" id="L577" title="All 2 branches covered.">            if (!allowedAbbreviations.contains(abbr)) {</span>
+<span class="fc" id="L578">                result = abbr;</span>
             }
         }
-<span class="fc" id="L427">        return result;</span>
+<span class="fc" id="L581">        return result;</span>
     }
 
     /**
@@ -439,6 +593,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * For example, {@code getAbbreviation(&quot;getXMLParser&quot;, 3, 6)} returns &quot;XML&quot;
      * (not &quot;XMLP&quot;), and so does {@code getAbbreviation(&quot;parseXML&quot;, 5, 7)}.
      * &lt;/p&gt;
+     *
      * @param str name
      * @param beginIndex begin index
      * @param endIndex end index
@@ -446,30 +601,31 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private static String getAbbreviation(String str, int beginIndex, int endIndex) {
         final String result;
-<span class="fc bfc" id="L449" title="All 2 branches covered.">        if (endIndex == str.length() - 1) {</span>
-<span class="fc" id="L450">            result = str.substring(beginIndex);</span>
+<span class="fc bfc" id="L604" title="All 2 branches covered.">        if (endIndex == str.length() - 1) {</span>
+<span class="fc" id="L605">            result = str.substring(beginIndex);</span>
         }
         else {
-<span class="fc" id="L453">            result = str.substring(beginIndex, endIndex);</span>
+<span class="fc" id="L608">            result = str.substring(beginIndex, endIndex);</span>
         }
-<span class="fc" id="L455">        return result;</span>
+<span class="fc" id="L610">        return result;</span>
     }
 
     /**
      * Gets all the children which are one level below on the current DetailAST
      * parent node.
+     *
      * @param node
      *        Current parent node.
      * @return The list of children one level below on the current parent node.
      */
     private static List&lt;DetailAST&gt; getChildren(final DetailAST node) {
-<span class="fc" id="L466">        final List&lt;DetailAST&gt; result = new LinkedList&lt;&gt;();</span>
-<span class="fc" id="L467">        DetailAST curNode = node.getFirstChild();</span>
-<span class="fc bfc" id="L468" title="All 2 branches covered.">        while (curNode != null) {</span>
-<span class="fc" id="L469">            result.add(curNode);</span>
-<span class="fc" id="L470">            curNode = curNode.getNextSibling();</span>
+<span class="fc" id="L622">        final List&lt;DetailAST&gt; result = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L623">        DetailAST curNode = node.getFirstChild();</span>
+<span class="fc bfc" id="L624" title="All 2 branches covered.">        while (curNode != null) {</span>
+<span class="fc" id="L625">            result.add(curNode);</span>
+<span class="fc" id="L626">            curNode = curNode.getNextSibling();</span>
         }
-<span class="fc" id="L472">        return result;</span>
+<span class="fc" id="L628">        return result;</span>
     }
 
 }

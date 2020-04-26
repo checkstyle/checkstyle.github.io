@@ -147,6 +147,20 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;JavadocStyle&quot;/&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *     &amp;#47;**
+ *      * Some description here. // OK
+ *      *&amp;#47;
+ *     private void methodWithValidCommentStyle() {}
+ *
+ *     &amp;#47;**
+ *      * Some description here // violation, the sentence must end with a proper punctuation
+ *      *&amp;#47;
+ *     private void methodWithInvalidCommentStyle() {}
+ * }
+ * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure the check for {@code public} scope:
  * &lt;/p&gt;
@@ -154,6 +168,20 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  * &amp;lt;module name=&quot;JavadocStyle&quot;&amp;gt;
  *   &amp;lt;property name=&quot;scope&quot; value=&quot;public&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *     &amp;#47;**
+ *      * Some description here // violation, the sentence must end with a proper punctuation
+ *      *&amp;#47;
+ *     public void test1() {}
+ *
+ *     &amp;#47;**
+ *      * Some description here // OK
+ *      *&amp;#47;
+ *     private void test2() {}
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure the check for javadoc which is in {@code private}, but not in {@code package} scope:
@@ -164,6 +192,20 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  *   &amp;lt;property name=&quot;excludeScope&quot; value=&quot;package&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *     &amp;#47;**
+ *      * Some description here // violation, the sentence must end with a proper punctuation
+ *      *&amp;#47;
+ *     private void test1() {}
+ *
+ *     &amp;#47;**
+ *      * Some description here // OK
+ *      *&amp;#47;
+ *     void test2() {}
+ * }
+ * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure the check to turn off first sentence checking:
  * &lt;/p&gt;
@@ -172,23 +214,71 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  *   &amp;lt;property name=&quot;checkFirstSentence&quot; value=&quot;false&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *     &amp;#47;**
+ *      * Some description here // OK
+ *      * Second line of description // violation, the sentence must end with a proper punctuation
+ *      *&amp;#47;
+ *     private void test1() {}
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to turn off validation of incomplete html tags:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;JavadocStyle&quot;&amp;gt;
+ * &amp;lt;property name=&quot;checkHtml&quot; value=&quot;false&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *     &amp;#47;**
+ *      * Some description here // violation, the sentence must end with a proper punctuation
+ *      * &amp;lt;p // OK
+ *      *&amp;#47;
+ *     private void test1() {}
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check for only class definitions:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;JavadocStyle&quot;&amp;gt;
+ * &amp;lt;property name=&quot;tokens&quot; value=&quot;CLASS_DEF&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;**
+ *  * Some description here // violation, the sentence must end with a proper punctuation
+ *  *&amp;#47;
+ * public class Test {
+ *     &amp;#47;**
+ *      * Some description here // OK
+ *      *&amp;#47;
+ *     private void test1() {}
+ * }
+ * &lt;/pre&gt;
  *
  * @since 3.2
  */
 @StatelessCheck
-<span class="fc" id="L179">public class JavadocStyleCheck</span>
+<span class="fc" id="L269">public class JavadocStyleCheck</span>
     extends AbstractCheck {
 
-    /** Message property key for the Unclosed HTML message. */
+    /** Message property key for the Missing Javadoc message. */
     public static final String MSG_JAVADOC_MISSING = &quot;javadoc.missing&quot;;
 
-    /** Message property key for the Unclosed HTML message. */
+    /** Message property key for the Empty Javadoc message. */
     public static final String MSG_EMPTY = &quot;javadoc.empty&quot;;
 
-    /** Message property key for the Unclosed HTML message. */
+    /** Message property key for the No Javadoc end of Sentence Period message. */
     public static final String MSG_NO_PERIOD = &quot;javadoc.noPeriod&quot;;
 
-    /** Message property key for the Unclosed HTML message. */
+    /** Message property key for the Incomplete Tag message. */
     public static final String MSG_INCOMPLETE_TAG = &quot;javadoc.incompleteTag&quot;;
 
     /** Message property key for the Unclosed HTML message. */
@@ -198,17 +288,17 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     public static final String MSG_EXTRA_HTML = &quot;javadoc.extraHtml&quot;;
 
     /** HTML tags that do not require a close tag. */
-<span class="fc" id="L201">    private static final Set&lt;String&gt; SINGLE_TAGS = Collections.unmodifiableSortedSet(</span>
-<span class="fc" id="L202">        Arrays.stream(new String[] {&quot;br&quot;, &quot;li&quot;, &quot;dt&quot;, &quot;dd&quot;, &quot;hr&quot;, &quot;img&quot;, &quot;p&quot;, &quot;td&quot;, &quot;tr&quot;, &quot;th&quot;, })</span>
-<span class="fc" id="L203">            .collect(Collectors.toCollection(TreeSet::new)));</span>
+<span class="fc" id="L291">    private static final Set&lt;String&gt; SINGLE_TAGS = Collections.unmodifiableSortedSet(</span>
+<span class="fc" id="L292">        Arrays.stream(new String[] {&quot;br&quot;, &quot;li&quot;, &quot;dt&quot;, &quot;dd&quot;, &quot;hr&quot;, &quot;img&quot;, &quot;p&quot;, &quot;td&quot;, &quot;tr&quot;, &quot;th&quot;, })</span>
+<span class="fc" id="L293">            .collect(Collectors.toCollection(TreeSet::new)));</span>
 
     /**
      * HTML tags that are allowed in java docs.
      * From https://www.w3schools.com/tags/default.asp
      * The forms and structure tags are not allowed
      */
-<span class="fc" id="L210">    private static final Set&lt;String&gt; ALLOWED_TAGS = Collections.unmodifiableSortedSet(</span>
-<span class="fc" id="L211">        Arrays.stream(new String[] {</span>
+<span class="fc" id="L300">    private static final Set&lt;String&gt; ALLOWED_TAGS = Collections.unmodifiableSortedSet(</span>
+<span class="fc" id="L301">        Arrays.stream(new String[] {</span>
             &quot;a&quot;, &quot;abbr&quot;, &quot;acronym&quot;, &quot;address&quot;, &quot;area&quot;, &quot;b&quot;, &quot;bdo&quot;, &quot;big&quot;,
             &quot;blockquote&quot;, &quot;br&quot;, &quot;caption&quot;, &quot;cite&quot;, &quot;code&quot;, &quot;colgroup&quot;, &quot;dd&quot;,
             &quot;del&quot;, &quot;dfn&quot;, &quot;div&quot;, &quot;dl&quot;, &quot;dt&quot;, &quot;em&quot;, &quot;fieldset&quot;, &quot;font&quot;, &quot;h1&quot;,
@@ -216,26 +306,26 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
             &quot;li&quot;, &quot;ol&quot;, &quot;p&quot;, &quot;pre&quot;, &quot;q&quot;, &quot;samp&quot;, &quot;small&quot;, &quot;span&quot;, &quot;strong&quot;,
             &quot;sub&quot;, &quot;sup&quot;, &quot;table&quot;, &quot;tbody&quot;, &quot;td&quot;, &quot;tfoot&quot;, &quot;th&quot;, &quot;thead&quot;,
             &quot;tr&quot;, &quot;tt&quot;, &quot;u&quot;, &quot;ul&quot;, &quot;var&quot;, })
-<span class="fc" id="L219">        .collect(Collectors.toCollection(TreeSet::new)));</span>
+<span class="fc" id="L309">        .collect(Collectors.toCollection(TreeSet::new)));</span>
 
     /** Specify the visibility scope where Javadoc comments are checked. */
-<span class="fc" id="L222">    private Scope scope = Scope.PRIVATE;</span>
+<span class="fc" id="L312">    private Scope scope = Scope.PRIVATE;</span>
 
     /** Specify the visibility scope where Javadoc comments are not checked. */
     private Scope excludeScope;
 
     /** Specify the format for matching the end of a sentence. */
-<span class="fc" id="L228">    private Pattern endOfSentenceFormat = Pattern.compile(&quot;([.?!][ \t\n\r\f&lt;])|([.?!]$)&quot;);</span>
+<span class="fc" id="L318">    private Pattern endOfSentenceFormat = Pattern.compile(&quot;([.?!][ \t\n\r\f&lt;])|([.?!]$)&quot;);</span>
 
     /**
      * Control whether to check the first sentence for proper end of sentence.
      */
-<span class="fc" id="L233">    private boolean checkFirstSentence = true;</span>
+<span class="fc" id="L323">    private boolean checkFirstSentence = true;</span>
 
     /**
      * Control whether to check for incomplete HTML tags.
      */
-<span class="fc" id="L238">    private boolean checkHtml = true;</span>
+<span class="fc" id="L328">    private boolean checkHtml = true;</span>
 
     /**
      * Control whether to check if the Javadoc is missing a describing text.
@@ -244,12 +334,12 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L247">        return getAcceptableTokens();</span>
+<span class="fc" id="L337">        return getAcceptableTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L252">        return new int[] {</span>
+<span class="fc" id="L342">        return new int[] {</span>
             TokenTypes.ANNOTATION_DEF,
             TokenTypes.ANNOTATION_FIELD_DEF,
             TokenTypes.CLASS_DEF,
@@ -265,54 +355,55 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L268">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L358">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L273" title="All 2 branches covered.">        if (shouldCheck(ast)) {</span>
-<span class="fc" id="L274">            final FileContents contents = getFileContents();</span>
+<span class="fc bfc" id="L363" title="All 2 branches covered.">        if (shouldCheck(ast)) {</span>
+<span class="fc" id="L364">            final FileContents contents = getFileContents();</span>
             // Need to start searching for the comment before the annotations
             // that may exist. Even if annotations are not defined on the
             // package, the ANNOTATIONS AST is defined.
-<span class="fc" id="L278">            final TextBlock textBlock =</span>
-<span class="fc" id="L279">                contents.getJavadocBefore(ast.getFirstChild().getLineNo());</span>
+<span class="fc" id="L368">            final TextBlock textBlock =</span>
+<span class="fc" id="L369">                contents.getJavadocBefore(ast.getFirstChild().getLineNo());</span>
 
-<span class="fc" id="L281">            checkComment(ast, textBlock);</span>
+<span class="fc" id="L371">            checkComment(ast, textBlock);</span>
         }
-<span class="fc" id="L283">    }</span>
+<span class="fc" id="L373">    }</span>
 
     /**
      * Whether we should check this node.
+     *
      * @param ast a given node.
      * @return whether we should check a given node.
      */
     private boolean shouldCheck(final DetailAST ast) {
-<span class="fc" id="L291">        boolean check = false;</span>
+<span class="fc" id="L382">        boolean check = false;</span>
 
-<span class="fc bfc" id="L293" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
-<span class="fc" id="L294">            check = getFileContents().inPackageInfo();</span>
+<span class="fc bfc" id="L384" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
+<span class="fc" id="L385">            check = getFileContents().inPackageInfo();</span>
         }
-<span class="fc bfc" id="L296" title="All 2 branches covered.">        else if (!ScopeUtil.isInCodeBlock(ast)) {</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">        else if (!ScopeUtil.isInCodeBlock(ast)) {</span>
             final Scope customScope;
 
-<span class="fc bfc" id="L299" title="All 2 branches covered.">            if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)</span>
-<span class="fc bfc" id="L300" title="All 2 branches covered.">                    || ast.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
-<span class="fc" id="L301">                customScope = Scope.PUBLIC;</span>
+<span class="fc bfc" id="L390" title="All 2 branches covered.">            if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)</span>
+<span class="fc bfc" id="L391" title="All 2 branches covered.">                    || ast.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
+<span class="fc" id="L392">                customScope = Scope.PUBLIC;</span>
             }
             else {
-<span class="fc" id="L304">                customScope = ScopeUtil.getScopeFromMods(ast.findFirstToken(TokenTypes.MODIFIERS));</span>
+<span class="fc" id="L395">                customScope = ScopeUtil.getScopeFromMods(ast.findFirstToken(TokenTypes.MODIFIERS));</span>
             }
-<span class="fc" id="L306">            final Scope surroundingScope = ScopeUtil.getSurroundingScope(ast);</span>
+<span class="fc" id="L397">            final Scope surroundingScope = ScopeUtil.getSurroundingScope(ast);</span>
 
-<span class="fc bfc" id="L308" title="All 4 branches covered.">            check = customScope.isIn(scope)</span>
-<span class="fc bfc" id="L309" title="All 4 branches covered.">                    &amp;&amp; (surroundingScope == null || surroundingScope.isIn(scope))</span>
+<span class="fc bfc" id="L399" title="All 4 branches covered.">            check = customScope.isIn(scope)</span>
+<span class="fc bfc" id="L400" title="All 4 branches covered.">                    &amp;&amp; (surroundingScope == null || surroundingScope.isIn(scope))</span>
                     &amp;&amp; (excludeScope == null
-<span class="fc bfc" id="L311" title="All 4 branches covered.">                        || !customScope.isIn(excludeScope)</span>
+<span class="fc bfc" id="L402" title="All 4 branches covered.">                        || !customScope.isIn(excludeScope)</span>
                         || surroundingScope != null
-<span class="fc bfc" id="L313" title="All 2 branches covered.">                            &amp;&amp; !surroundingScope.isIn(excludeScope));</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">                            &amp;&amp; !surroundingScope.isIn(excludeScope));</span>
         }
-<span class="fc" id="L315">        return check;</span>
+<span class="fc" id="L406">        return check;</span>
     }
 
     /**
@@ -325,29 +416,29 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @see #checkHtmlTags(DetailAST, TextBlock)
      */
     private void checkComment(final DetailAST ast, final TextBlock comment) {
-<span class="fc bfc" id="L328" title="All 2 branches covered.">        if (comment == null) {</span>
+<span class="fc bfc" id="L419" title="All 2 branches covered.">        if (comment == null) {</span>
             // checking for missing docs in JavadocStyleCheck is not consistent
             // with the rest of CheckStyle...  Even though, I didn't think it
             // made sense to make another check just to ensure that the
             // package-info.java file actually contains package Javadocs.
-<span class="fc bfc" id="L333" title="All 2 branches covered.">            if (getFileContents().inPackageInfo()) {</span>
-<span class="fc" id="L334">                log(ast, MSG_JAVADOC_MISSING);</span>
+<span class="fc bfc" id="L424" title="All 2 branches covered.">            if (getFileContents().inPackageInfo()) {</span>
+<span class="fc" id="L425">                log(ast, MSG_JAVADOC_MISSING);</span>
             }
         }
         else {
-<span class="fc bfc" id="L338" title="All 2 branches covered.">            if (checkFirstSentence) {</span>
-<span class="fc" id="L339">                checkFirstSentenceEnding(ast, comment);</span>
+<span class="fc bfc" id="L429" title="All 2 branches covered.">            if (checkFirstSentence) {</span>
+<span class="fc" id="L430">                checkFirstSentenceEnding(ast, comment);</span>
             }
 
-<span class="fc bfc" id="L342" title="All 2 branches covered.">            if (checkHtml) {</span>
-<span class="fc" id="L343">                checkHtmlTags(ast, comment);</span>
+<span class="fc bfc" id="L433" title="All 2 branches covered.">            if (checkHtml) {</span>
+<span class="fc" id="L434">                checkHtmlTags(ast, comment);</span>
             }
 
-<span class="fc bfc" id="L346" title="All 2 branches covered.">            if (checkEmptyJavadoc) {</span>
-<span class="fc" id="L347">                checkJavadocIsNotEmpty(comment);</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">            if (checkEmptyJavadoc) {</span>
+<span class="fc" id="L438">                checkJavadocIsNotEmpty(comment);</span>
             }
         }
-<span class="fc" id="L350">    }</span>
+<span class="fc" id="L441">    }</span>
 
     /**
      * Checks that the first sentence ends with proper punctuation.  This method
@@ -360,15 +451,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param comment the source lines that make up the Javadoc comment.
      */
     private void checkFirstSentenceEnding(final DetailAST ast, TextBlock comment) {
-<span class="fc" id="L363">        final String commentText = getCommentText(comment.getText());</span>
+<span class="fc" id="L454">        final String commentText = getCommentText(comment.getText());</span>
 
-<span class="fc bfc" id="L365" title="All 2 branches covered.">        if (!commentText.isEmpty()</span>
-<span class="fc bfc" id="L366" title="All 2 branches covered.">            &amp;&amp; !endOfSentenceFormat.matcher(commentText).find()</span>
-<span class="fc bfc" id="L367" title="All 2 branches covered.">            &amp;&amp; !(commentText.startsWith(&quot;{@inheritDoc}&quot;)</span>
-<span class="fc bfc" id="L368" title="All 2 branches covered.">            &amp;&amp; JavadocTagInfo.INHERIT_DOC.isValidOn(ast))) {</span>
-<span class="fc" id="L369">            log(comment.getStartLineNo(), MSG_NO_PERIOD);</span>
+<span class="fc bfc" id="L456" title="All 2 branches covered.">        if (!commentText.isEmpty()</span>
+<span class="fc bfc" id="L457" title="All 2 branches covered.">            &amp;&amp; !endOfSentenceFormat.matcher(commentText).find()</span>
+<span class="fc bfc" id="L458" title="All 2 branches covered.">            &amp;&amp; !(commentText.startsWith(&quot;{@inheritDoc}&quot;)</span>
+<span class="fc bfc" id="L459" title="All 2 branches covered.">            &amp;&amp; JavadocTagInfo.INHERIT_DOC.isValidOn(ast))) {</span>
+<span class="fc" id="L460">            log(comment.getStartLineNo(), MSG_NO_PERIOD);</span>
         }
-<span class="fc" id="L371">    }</span>
+<span class="fc" id="L462">    }</span>
 
     /**
      * Checks that the Javadoc is not empty.
@@ -376,92 +467,95 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param comment the source lines that make up the Javadoc comment.
      */
     private void checkJavadocIsNotEmpty(TextBlock comment) {
-<span class="fc" id="L379">        final String commentText = getCommentText(comment.getText());</span>
+<span class="fc" id="L470">        final String commentText = getCommentText(comment.getText());</span>
 
-<span class="fc bfc" id="L381" title="All 2 branches covered.">        if (commentText.isEmpty()) {</span>
-<span class="fc" id="L382">            log(comment.getStartLineNo(), MSG_EMPTY);</span>
+<span class="fc bfc" id="L472" title="All 2 branches covered.">        if (commentText.isEmpty()) {</span>
+<span class="fc" id="L473">            log(comment.getStartLineNo(), MSG_EMPTY);</span>
         }
-<span class="fc" id="L384">    }</span>
+<span class="fc" id="L475">    }</span>
 
     /**
      * Returns the comment text from the Javadoc.
+     *
      * @param comments the lines of Javadoc.
      * @return a comment text String.
      */
     private static String getCommentText(String... comments) {
-<span class="fc" id="L392">        final StringBuilder builder = new StringBuilder(1024);</span>
-<span class="fc bfc" id="L393" title="All 2 branches covered.">        for (final String line : comments) {</span>
-<span class="fc" id="L394">            final int textStart = findTextStart(line);</span>
+<span class="fc" id="L484">        final StringBuilder builder = new StringBuilder(1024);</span>
+<span class="fc bfc" id="L485" title="All 2 branches covered.">        for (final String line : comments) {</span>
+<span class="fc" id="L486">            final int textStart = findTextStart(line);</span>
 
-<span class="fc bfc" id="L396" title="All 2 branches covered.">            if (textStart != -1) {</span>
-<span class="fc bfc" id="L397" title="All 2 branches covered.">                if (line.charAt(textStart) == '@') {</span>
+<span class="fc bfc" id="L488" title="All 2 branches covered.">            if (textStart != -1) {</span>
+<span class="fc bfc" id="L489" title="All 2 branches covered.">                if (line.charAt(textStart) == '@') {</span>
                     // we have found the tag section
-<span class="fc" id="L399">                    break;</span>
+<span class="fc" id="L491">                    break;</span>
                 }
-<span class="fc" id="L401">                builder.append(line.substring(textStart));</span>
-<span class="fc" id="L402">                trimTail(builder);</span>
-<span class="fc" id="L403">                builder.append('\n');</span>
+<span class="fc" id="L493">                builder.append(line.substring(textStart));</span>
+<span class="fc" id="L494">                trimTail(builder);</span>
+<span class="fc" id="L495">                builder.append('\n');</span>
             }
         }
 
-<span class="fc" id="L407">        return builder.toString().trim();</span>
+<span class="fc" id="L499">        return builder.toString().trim();</span>
     }
 
     /**
      * Finds the index of the first non-whitespace character ignoring the
      * Javadoc comment start and end strings (&amp;#47** and *&amp;#47) as well as any
      * leading asterisk.
+     *
      * @param line the Javadoc comment line of text to scan.
      * @return the int index relative to 0 for the start of text
      *         or -1 if not found.
      */
     private static int findTextStart(String line) {
-<span class="fc" id="L419">        int textStart = -1;</span>
-<span class="fc" id="L420">        int index = 0;</span>
-<span class="fc bfc" id="L421" title="All 2 branches covered.">        while (index &lt; line.length()) {</span>
-<span class="fc bfc" id="L422" title="All 2 branches covered.">            if (!Character.isWhitespace(line.charAt(index))) {</span>
-<span class="fc bfc" id="L423" title="All 2 branches covered.">                if (line.regionMatches(index, &quot;/**&quot;, 0, &quot;/**&quot;.length())) {</span>
-<span class="fc" id="L424">                    index += 2;</span>
+<span class="fc" id="L512">        int textStart = -1;</span>
+<span class="fc" id="L513">        int index = 0;</span>
+<span class="fc bfc" id="L514" title="All 2 branches covered.">        while (index &lt; line.length()) {</span>
+<span class="fc bfc" id="L515" title="All 2 branches covered.">            if (!Character.isWhitespace(line.charAt(index))) {</span>
+<span class="fc bfc" id="L516" title="All 2 branches covered.">                if (line.regionMatches(index, &quot;/**&quot;, 0, &quot;/**&quot;.length())) {</span>
+<span class="fc" id="L517">                    index += 2;</span>
                 }
-<span class="fc bfc" id="L426" title="All 2 branches covered.">                else if (line.regionMatches(index, &quot;*/&quot;, 0, 2)) {</span>
-<span class="fc" id="L427">                    index++;</span>
+<span class="fc bfc" id="L519" title="All 2 branches covered.">                else if (line.regionMatches(index, &quot;*/&quot;, 0, 2)) {</span>
+<span class="fc" id="L520">                    index++;</span>
                 }
-<span class="fc bfc" id="L429" title="All 2 branches covered.">                else if (line.charAt(index) != '*') {</span>
-<span class="fc" id="L430">                    textStart = index;</span>
-<span class="fc" id="L431">                    break;</span>
+<span class="fc bfc" id="L522" title="All 2 branches covered.">                else if (line.charAt(index) != '*') {</span>
+<span class="fc" id="L523">                    textStart = index;</span>
+<span class="fc" id="L524">                    break;</span>
                 }
             }
-<span class="fc" id="L434">            index++;</span>
+<span class="fc" id="L527">            index++;</span>
         }
-<span class="fc" id="L436">        return textStart;</span>
+<span class="fc" id="L529">        return textStart;</span>
     }
 
     /**
      * Trims any trailing whitespace or the end of Javadoc comment string.
+     *
      * @param builder the StringBuilder to trim.
      */
     private static void trimTail(StringBuilder builder) {
-<span class="fc" id="L444">        int index = builder.length() - 1;</span>
+<span class="fc" id="L538">        int index = builder.length() - 1;</span>
         while (true) {
-<span class="fc bfc" id="L446" title="All 2 branches covered.">            if (Character.isWhitespace(builder.charAt(index))) {</span>
-<span class="fc" id="L447">                builder.deleteCharAt(index);</span>
+<span class="fc bfc" id="L540" title="All 2 branches covered.">            if (Character.isWhitespace(builder.charAt(index))) {</span>
+<span class="fc" id="L541">                builder.deleteCharAt(index);</span>
             }
-<span class="fc bfc" id="L449" title="All 4 branches covered.">            else if (index &gt; 0 &amp;&amp; builder.charAt(index) == '/'</span>
-<span class="fc bfc" id="L450" title="All 2 branches covered.">                    &amp;&amp; builder.charAt(index - 1) == '*') {</span>
-<span class="fc" id="L451">                builder.deleteCharAt(index);</span>
-<span class="fc" id="L452">                builder.deleteCharAt(index - 1);</span>
-<span class="fc" id="L453">                index--;</span>
-<span class="fc bfc" id="L454" title="All 2 branches covered.">                while (builder.charAt(index - 1) == '*') {</span>
-<span class="fc" id="L455">                    builder.deleteCharAt(index - 1);</span>
-<span class="fc" id="L456">                    index--;</span>
+<span class="fc bfc" id="L543" title="All 4 branches covered.">            else if (index &gt; 0 &amp;&amp; builder.charAt(index) == '/'</span>
+<span class="fc bfc" id="L544" title="All 2 branches covered.">                    &amp;&amp; builder.charAt(index - 1) == '*') {</span>
+<span class="fc" id="L545">                builder.deleteCharAt(index);</span>
+<span class="fc" id="L546">                builder.deleteCharAt(index - 1);</span>
+<span class="fc" id="L547">                index--;</span>
+<span class="fc bfc" id="L548" title="All 2 branches covered.">                while (builder.charAt(index - 1) == '*') {</span>
+<span class="fc" id="L549">                    builder.deleteCharAt(index - 1);</span>
+<span class="fc" id="L550">                    index--;</span>
                 }
             }
             else {
                 break;
             }
-<span class="fc" id="L462">            index--;</span>
+<span class="fc" id="L556">            index--;</span>
         }
-<span class="fc" id="L464">    }</span>
+<span class="fc" id="L558">    }</span>
 
     /**
      * Checks the comment for HTML tags that do not have a corresponding close
@@ -475,61 +569,61 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     // -@cs[ReturnCount] Too complex to break apart.
     private void checkHtmlTags(final DetailAST ast, final TextBlock comment) {
-<span class="fc" id="L478">        final int lineNo = comment.getStartLineNo();</span>
-<span class="fc" id="L479">        final Deque&lt;HtmlTag&gt; htmlStack = new ArrayDeque&lt;&gt;();</span>
-<span class="fc" id="L480">        final String[] text = comment.getText();</span>
+<span class="fc" id="L572">        final int lineNo = comment.getStartLineNo();</span>
+<span class="fc" id="L573">        final Deque&lt;HtmlTag&gt; htmlStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L574">        final String[] text = comment.getText();</span>
 
-<span class="fc" id="L482">        final TagParser parser = new TagParser(text, lineNo);</span>
+<span class="fc" id="L576">        final TagParser parser = new TagParser(text, lineNo);</span>
 
-<span class="fc bfc" id="L484" title="All 2 branches covered.">        while (parser.hasNextTag()) {</span>
-<span class="fc" id="L485">            final HtmlTag tag = parser.nextTag();</span>
+<span class="fc bfc" id="L578" title="All 2 branches covered.">        while (parser.hasNextTag()) {</span>
+<span class="fc" id="L579">            final HtmlTag tag = parser.nextTag();</span>
 
-<span class="fc bfc" id="L487" title="All 2 branches covered.">            if (tag.isIncompleteTag()) {</span>
-<span class="fc" id="L488">                log(tag.getLineNo(), MSG_INCOMPLETE_TAG,</span>
-<span class="fc" id="L489">                    text[tag.getLineNo() - lineNo]);</span>
-<span class="fc" id="L490">                return;</span>
+<span class="fc bfc" id="L581" title="All 2 branches covered.">            if (tag.isIncompleteTag()) {</span>
+<span class="fc" id="L582">                log(tag.getLineNo(), MSG_INCOMPLETE_TAG,</span>
+<span class="fc" id="L583">                    text[tag.getLineNo() - lineNo]);</span>
+<span class="fc" id="L584">                return;</span>
             }
-<span class="fc bfc" id="L492" title="All 2 branches covered.">            if (tag.isClosedTag()) {</span>
+<span class="fc bfc" id="L586" title="All 2 branches covered.">            if (tag.isClosedTag()) {</span>
                 // do nothing
-<span class="fc" id="L494">                continue;</span>
+<span class="fc" id="L588">                continue;</span>
             }
-<span class="fc bfc" id="L496" title="All 2 branches covered.">            if (tag.isCloseTag()) {</span>
+<span class="fc bfc" id="L590" title="All 2 branches covered.">            if (tag.isCloseTag()) {</span>
                 // We have found a close tag.
-<span class="fc bfc" id="L498" title="All 2 branches covered.">                if (isExtraHtml(tag.getId(), htmlStack)) {</span>
+<span class="fc bfc" id="L592" title="All 2 branches covered.">                if (isExtraHtml(tag.getId(), htmlStack)) {</span>
                     // No corresponding open tag was found on the stack.
-<span class="fc" id="L500">                    log(tag.getLineNo(),</span>
-<span class="fc" id="L501">                        tag.getPosition(),</span>
+<span class="fc" id="L594">                    log(tag.getLineNo(),</span>
+<span class="fc" id="L595">                        tag.getPosition(),</span>
                         MSG_EXTRA_HTML,
-<span class="fc" id="L503">                        tag.getText());</span>
+<span class="fc" id="L597">                        tag.getText());</span>
                 }
                 else {
                     // See if there are any unclosed tags that were opened
                     // after this one.
-<span class="fc" id="L508">                    checkUnclosedTags(htmlStack, tag.getId());</span>
+<span class="fc" id="L602">                    checkUnclosedTags(htmlStack, tag.getId());</span>
                 }
             }
             else {
                 // We only push html tags that are allowed
-<span class="fc bfc" id="L513" title="All 2 branches covered.">                if (isAllowedTag(tag)) {</span>
-<span class="fc" id="L514">                    htmlStack.push(tag);</span>
+<span class="fc bfc" id="L607" title="All 2 branches covered.">                if (isAllowedTag(tag)) {</span>
+<span class="fc" id="L608">                    htmlStack.push(tag);</span>
                 }
             }
-<span class="fc" id="L517">        }</span>
+<span class="fc" id="L611">        }</span>
 
         // Identify any tags left on the stack.
         // Skip multiples, like &lt;b&gt;...&lt;b&gt;
-<span class="fc" id="L521">        String lastFound = &quot;&quot;;</span>
-<span class="fc" id="L522">        final List&lt;String&gt; typeParameters = CheckUtil.getTypeParameterNames(ast);</span>
-<span class="fc bfc" id="L523" title="All 2 branches covered.">        for (final HtmlTag htmlTag : htmlStack) {</span>
-<span class="fc bfc" id="L524" title="All 2 branches covered.">            if (!isSingleTag(htmlTag)</span>
-<span class="fc bfc" id="L525" title="All 2 branches covered.">                &amp;&amp; !htmlTag.getId().equals(lastFound)</span>
-<span class="fc bfc" id="L526" title="All 2 branches covered.">                &amp;&amp; !typeParameters.contains(htmlTag.getId())) {</span>
-<span class="fc" id="L527">                log(htmlTag.getLineNo(), htmlTag.getPosition(),</span>
-<span class="fc" id="L528">                        MSG_UNCLOSED_HTML, htmlTag.getText());</span>
-<span class="fc" id="L529">                lastFound = htmlTag.getId();</span>
+<span class="fc" id="L615">        String lastFound = &quot;&quot;;</span>
+<span class="fc" id="L616">        final List&lt;String&gt; typeParameters = CheckUtil.getTypeParameterNames(ast);</span>
+<span class="fc bfc" id="L617" title="All 2 branches covered.">        for (final HtmlTag htmlTag : htmlStack) {</span>
+<span class="fc bfc" id="L618" title="All 2 branches covered.">            if (!isSingleTag(htmlTag)</span>
+<span class="fc bfc" id="L619" title="All 2 branches covered.">                &amp;&amp; !htmlTag.getId().equals(lastFound)</span>
+<span class="fc bfc" id="L620" title="All 2 branches covered.">                &amp;&amp; !typeParameters.contains(htmlTag.getId())) {</span>
+<span class="fc" id="L621">                log(htmlTag.getLineNo(), htmlTag.getPosition(),</span>
+<span class="fc" id="L622">                        MSG_UNCLOSED_HTML, htmlTag.getText());</span>
+<span class="fc" id="L623">                lastFound = htmlTag.getId();</span>
             }
-<span class="fc" id="L531">        }</span>
-<span class="fc" id="L532">    }</span>
+<span class="fc" id="L625">        }</span>
+<span class="fc" id="L626">    }</span>
 
     /**
      * Checks to see if there are any unclosed tags on the stack.  The token
@@ -541,35 +635,35 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param token the current HTML tag name that has been closed.
      */
     private void checkUnclosedTags(Deque&lt;HtmlTag&gt; htmlStack, String token) {
-<span class="fc" id="L544">        final Deque&lt;HtmlTag&gt; unclosedTags = new ArrayDeque&lt;&gt;();</span>
-<span class="fc" id="L545">        HtmlTag lastOpenTag = htmlStack.pop();</span>
-<span class="fc bfc" id="L546" title="All 2 branches covered.">        while (!token.equalsIgnoreCase(lastOpenTag.getId())) {</span>
+<span class="fc" id="L638">        final Deque&lt;HtmlTag&gt; unclosedTags = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L639">        HtmlTag lastOpenTag = htmlStack.pop();</span>
+<span class="fc bfc" id="L640" title="All 2 branches covered.">        while (!token.equalsIgnoreCase(lastOpenTag.getId())) {</span>
             // Find unclosed elements. Put them on a stack so the
             // output order won't be back-to-front.
-<span class="fc bfc" id="L549" title="All 2 branches covered.">            if (isSingleTag(lastOpenTag)) {</span>
-<span class="fc" id="L550">                lastOpenTag = htmlStack.pop();</span>
+<span class="fc bfc" id="L643" title="All 2 branches covered.">            if (isSingleTag(lastOpenTag)) {</span>
+<span class="fc" id="L644">                lastOpenTag = htmlStack.pop();</span>
             }
             else {
-<span class="fc" id="L553">                unclosedTags.push(lastOpenTag);</span>
-<span class="fc" id="L554">                lastOpenTag = htmlStack.pop();</span>
+<span class="fc" id="L647">                unclosedTags.push(lastOpenTag);</span>
+<span class="fc" id="L648">                lastOpenTag = htmlStack.pop();</span>
             }
         }
 
         // Output the unterminated tags, if any
         // Skip multiples, like &lt;b&gt;..&lt;b&gt;
-<span class="fc" id="L560">        String lastFound = &quot;&quot;;</span>
-<span class="fc bfc" id="L561" title="All 2 branches covered.">        for (final HtmlTag htag : unclosedTags) {</span>
-<span class="fc" id="L562">            lastOpenTag = htag;</span>
-<span class="fc bfc" id="L563" title="All 2 branches covered.">            if (lastOpenTag.getId().equals(lastFound)) {</span>
-<span class="fc" id="L564">                continue;</span>
+<span class="fc" id="L654">        String lastFound = &quot;&quot;;</span>
+<span class="fc bfc" id="L655" title="All 2 branches covered.">        for (final HtmlTag htag : unclosedTags) {</span>
+<span class="fc" id="L656">            lastOpenTag = htag;</span>
+<span class="fc bfc" id="L657" title="All 2 branches covered.">            if (lastOpenTag.getId().equals(lastFound)) {</span>
+<span class="fc" id="L658">                continue;</span>
             }
-<span class="fc" id="L566">            lastFound = lastOpenTag.getId();</span>
-<span class="fc" id="L567">            log(lastOpenTag.getLineNo(),</span>
-<span class="fc" id="L568">                lastOpenTag.getPosition(),</span>
+<span class="fc" id="L660">            lastFound = lastOpenTag.getId();</span>
+<span class="fc" id="L661">            log(lastOpenTag.getLineNo(),</span>
+<span class="fc" id="L662">                lastOpenTag.getPosition(),</span>
                 MSG_UNCLOSED_HTML,
-<span class="fc" id="L570">                lastOpenTag.getText());</span>
-<span class="fc" id="L571">        }</span>
-<span class="fc" id="L572">    }</span>
+<span class="fc" id="L664">                lastOpenTag.getText());</span>
+<span class="fc" id="L665">        }</span>
+<span class="fc" id="L666">    }</span>
 
     /**
      * Determines if the HtmlTag is one which does not require a close tag.
@@ -582,7 +676,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
         // Can't simply not put them on the stack, since singletons
         // like &lt;dt&gt; and &lt;dd&gt; (unhappily) may either be terminated
         // or not terminated. Both options are legal.
-<span class="fc" id="L585">        return SINGLE_TAGS.contains(tag.getId().toLowerCase(Locale.ENGLISH));</span>
+<span class="fc" id="L679">        return SINGLE_TAGS.contains(tag.getId().toLowerCase(Locale.ENGLISH));</span>
     }
 
     /**
@@ -592,7 +686,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return {@code true} if the HtmlTag is an allowed html tag.
      */
     private static boolean isAllowedTag(HtmlTag tag) {
-<span class="fc" id="L595">        return ALLOWED_TAGS.contains(tag.getId().toLowerCase(Locale.ENGLISH));</span>
+<span class="fc" id="L689">        return ALLOWED_TAGS.contains(tag.getId().toLowerCase(Locale.ENGLISH));</span>
     }
 
     /**
@@ -605,19 +699,19 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      *         for the token.
      */
     private static boolean isExtraHtml(String token, Deque&lt;HtmlTag&gt; htmlStack) {
-<span class="fc" id="L608">        boolean isExtra = true;</span>
-<span class="fc bfc" id="L609" title="All 2 branches covered.">        for (final HtmlTag tag : htmlStack) {</span>
+<span class="fc" id="L702">        boolean isExtra = true;</span>
+<span class="fc bfc" id="L703" title="All 2 branches covered.">        for (final HtmlTag tag : htmlStack) {</span>
             // Loop, looking for tags that are closed.
             // The loop is needed in case there are unclosed
             // tags on the stack. In that case, the stack would
             // not be empty, but this tag would still be extra.
-<span class="fc bfc" id="L614" title="All 2 branches covered.">            if (token.equalsIgnoreCase(tag.getId())) {</span>
-<span class="fc" id="L615">                isExtra = false;</span>
-<span class="fc" id="L616">                break;</span>
+<span class="fc bfc" id="L708" title="All 2 branches covered.">            if (token.equalsIgnoreCase(tag.getId())) {</span>
+<span class="fc" id="L709">                isExtra = false;</span>
+<span class="fc" id="L710">                break;</span>
             }
-<span class="fc" id="L618">        }</span>
+<span class="fc" id="L712">        }</span>
 
-<span class="fc" id="L620">        return isExtra;</span>
+<span class="fc" id="L714">        return isExtra;</span>
     }
 
     /**
@@ -626,8 +720,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param scope a scope.
      */
     public void setScope(Scope scope) {
-<span class="fc" id="L629">        this.scope = scope;</span>
-<span class="fc" id="L630">    }</span>
+<span class="fc" id="L723">        this.scope = scope;</span>
+<span class="fc" id="L724">    }</span>
 
     /**
      * Setter to specify the visibility scope where Javadoc comments are not checked.
@@ -635,8 +729,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param excludeScope a scope.
      */
     public void setExcludeScope(Scope excludeScope) {
-<span class="fc" id="L638">        this.excludeScope = excludeScope;</span>
-<span class="fc" id="L639">    }</span>
+<span class="fc" id="L732">        this.excludeScope = excludeScope;</span>
+<span class="fc" id="L733">    }</span>
 
     /**
      * Setter to specify the format for matching the end of a sentence.
@@ -644,8 +738,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param pattern a pattern.
      */
     public void setEndOfSentenceFormat(Pattern pattern) {
-<span class="fc" id="L647">        endOfSentenceFormat = pattern;</span>
-<span class="fc" id="L648">    }</span>
+<span class="fc" id="L741">        endOfSentenceFormat = pattern;</span>
+<span class="fc" id="L742">    }</span>
 
     /**
      * Setter to control whether to check the first sentence for proper end of sentence.
@@ -653,8 +747,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param flag {@code true} if the first sentence is to be checked
      */
     public void setCheckFirstSentence(boolean flag) {
-<span class="fc" id="L656">        checkFirstSentence = flag;</span>
-<span class="fc" id="L657">    }</span>
+<span class="fc" id="L750">        checkFirstSentence = flag;</span>
+<span class="fc" id="L751">    }</span>
 
     /**
      * Setter to control whether to check for incomplete HTML tags.
@@ -662,8 +756,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param flag {@code true} if HTML checking is to be performed.
      */
     public void setCheckHtml(boolean flag) {
-<span class="fc" id="L665">        checkHtml = flag;</span>
-<span class="fc" id="L666">    }</span>
+<span class="fc" id="L759">        checkHtml = flag;</span>
+<span class="fc" id="L760">    }</span>
 
     /**
      * Setter to control whether to check if the Javadoc is missing a describing text.
@@ -671,8 +765,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param flag {@code true} if empty Javadoc checking should be done.
      */
     public void setCheckEmptyJavadoc(boolean flag) {
-<span class="fc" id="L674">        checkEmptyJavadoc = flag;</span>
-<span class="fc" id="L675">    }</span>
+<span class="fc" id="L768">        checkEmptyJavadoc = flag;</span>
+<span class="fc" id="L769">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
