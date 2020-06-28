@@ -725,15 +725,12 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 <span class="fc bfc" id="L725" title="All 2 branches covered.">            while (child != null) {</span>
 <span class="fc bfc" id="L726" title="All 2 branches covered.">                if (child.getType() == TokenTypes.IDENT</span>
 <span class="fc bfc" id="L727" title="All 2 branches covered.">                        || child.getType() == TokenTypes.DOT) {</span>
-<span class="fc" id="L728">                    final FullIdent ident = FullIdent.createFullIdent(child);</span>
-<span class="fc" id="L729">                    final ExceptionInfo exceptionInfo = new ExceptionInfo(</span>
-                            new ClassInfo(new Token(ident)));
-<span class="fc" id="L731">                    returnValue.add(exceptionInfo);</span>
+<span class="fc" id="L728">                    returnValue.add(getExceptionInfo(child));</span>
                 }
-<span class="fc" id="L733">                child = child.getNextSibling();</span>
+<span class="fc" id="L730">                child = child.getNextSibling();</span>
             }
         }
-<span class="fc" id="L736">        return returnValue;</span>
+<span class="fc" id="L733">        return returnValue;</span>
     }
 
     /**
@@ -743,24 +740,49 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return list of ExceptionInfo
      */
     private static List&lt;ExceptionInfo&gt; getThrowed(DetailAST methodAst) {
-<span class="fc" id="L746">        final List&lt;ExceptionInfo&gt; returnValue = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L747">        final DetailAST blockAst = methodAst.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc bfc" id="L748" title="All 2 branches covered.">        if (blockAst != null) {</span>
-<span class="fc" id="L749">            final List&lt;DetailAST&gt; throwLiterals = findTokensInAstByType(blockAst,</span>
+<span class="fc" id="L743">        final List&lt;ExceptionInfo&gt; returnValue = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L744">        final DetailAST blockAst = methodAst.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc bfc" id="L745" title="All 2 branches covered.">        if (blockAst != null) {</span>
+<span class="fc" id="L746">            final List&lt;DetailAST&gt; throwLiterals = findTokensInAstByType(blockAst,</span>
                     TokenTypes.LITERAL_THROW);
-<span class="fc bfc" id="L751" title="All 2 branches covered.">            for (DetailAST throwAst : throwLiterals) {</span>
-<span class="fc bfc" id="L752" title="All 2 branches covered.">                if (!isInIgnoreBlock(blockAst, throwAst)) {</span>
-<span class="fc" id="L753">                    final DetailAST newAst = throwAst.getFirstChild().getFirstChild();</span>
-<span class="fc bfc" id="L754" title="All 2 branches covered.">                    if (newAst.getType() == TokenTypes.LITERAL_NEW) {</span>
-<span class="fc" id="L755">                        final FullIdent ident = FullIdent.createFullIdent(newAst.getFirstChild());</span>
-<span class="fc" id="L756">                        final ExceptionInfo exceptionInfo = new ExceptionInfo(</span>
-                                new ClassInfo(new Token(ident)));
-<span class="fc" id="L758">                        returnValue.add(exceptionInfo);</span>
+<span class="fc bfc" id="L748" title="All 2 branches covered.">            for (DetailAST throwAst : throwLiterals) {</span>
+<span class="fc bfc" id="L749" title="All 2 branches covered.">                if (!isInIgnoreBlock(blockAst, throwAst)) {</span>
+<span class="fc" id="L750">                    final DetailAST newAst = throwAst.getFirstChild().getFirstChild();</span>
+<span class="fc bfc" id="L751" title="All 2 branches covered.">                    if (newAst.getType() == TokenTypes.LITERAL_NEW) {</span>
+<span class="fc" id="L752">                        final DetailAST child = newAst.getFirstChild();</span>
+<span class="fc" id="L753">                        returnValue.add(getExceptionInfo(child));</span>
                     }
                 }
-<span class="fc" id="L761">            }</span>
+<span class="fc" id="L756">            }</span>
         }
-<span class="fc" id="L763">        return returnValue;</span>
+<span class="fc" id="L758">        return returnValue;</span>
+    }
+
+    /**
+     * Get ExceptionInfo instance.
+     *
+     * @param ast DetailAST object where to find exceptions node;
+     * @return ExceptionInfo
+     */
+    private static ExceptionInfo getExceptionInfo(DetailAST ast) {
+<span class="fc" id="L768">        final FullIdent ident = FullIdent.createFullIdent(ast);</span>
+<span class="fc" id="L769">        final DetailAST firstClassNameNode = getFirstClassNameNode(ast);</span>
+<span class="fc" id="L770">        return new ExceptionInfo(firstClassNameNode,</span>
+                new ClassInfo(new Token(ident)));
+    }
+
+    /**
+     * Get node where class name of exception starts.
+     *
+     * @param ast DetailAST object where to find exceptions node;
+     * @return exception node where class name starts
+     */
+    private static DetailAST getFirstClassNameNode(DetailAST ast) {
+<span class="fc" id="L781">        DetailAST startNode = ast;</span>
+<span class="fc bfc" id="L782" title="All 2 branches covered.">        while (startNode.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L783">            startNode = startNode.getFirstChild();</span>
+        }
+<span class="fc" id="L785">        return startNode;</span>
     }
 
     /**
@@ -772,25 +794,25 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if throwAst is inside a block that should be ignored
      */
     private static boolean isInIgnoreBlock(DetailAST methodBodyAst, DetailAST throwAst) {
-<span class="fc" id="L775">        DetailAST ancestor = throwAst.getParent();</span>
-<span class="fc bfc" id="L776" title="All 2 branches covered.">        while (ancestor != methodBodyAst) {</span>
-<span class="fc bfc" id="L777" title="All 2 branches covered.">            if (ancestor.getType() == TokenTypes.LITERAL_TRY</span>
-<span class="fc bfc" id="L778" title="All 2 branches covered.">                    &amp;&amp; ancestor.findFirstToken(TokenTypes.LITERAL_CATCH) != null</span>
-<span class="fc bfc" id="L779" title="All 2 branches covered.">                    || ancestor.getType() == TokenTypes.LAMBDA</span>
-<span class="fc bfc" id="L780" title="All 2 branches covered.">                    || ancestor.getType() == TokenTypes.OBJBLOCK) {</span>
+<span class="fc" id="L797">        DetailAST ancestor = throwAst.getParent();</span>
+<span class="fc bfc" id="L798" title="All 2 branches covered.">        while (ancestor != methodBodyAst) {</span>
+<span class="fc bfc" id="L799" title="All 2 branches covered.">            if (ancestor.getType() == TokenTypes.LITERAL_TRY</span>
+<span class="fc bfc" id="L800" title="All 2 branches covered.">                    &amp;&amp; ancestor.findFirstToken(TokenTypes.LITERAL_CATCH) != null</span>
+<span class="fc bfc" id="L801" title="All 2 branches covered.">                    || ancestor.getType() == TokenTypes.LAMBDA</span>
+<span class="fc bfc" id="L802" title="All 2 branches covered.">                    || ancestor.getType() == TokenTypes.OBJBLOCK) {</span>
                 // throw is inside a try block, and there is a catch block,
                 // or throw is inside a lambda expression/anonymous class/local class
-<span class="fc" id="L783">                break;</span>
+<span class="fc" id="L805">                break;</span>
             }
-<span class="fc bfc" id="L785" title="All 2 branches covered.">            if (ancestor.getType() == TokenTypes.LITERAL_CATCH</span>
-<span class="fc bfc" id="L786" title="All 2 branches covered.">                    || ancestor.getType() == TokenTypes.LITERAL_FINALLY) {</span>
+<span class="fc bfc" id="L807" title="All 2 branches covered.">            if (ancestor.getType() == TokenTypes.LITERAL_CATCH</span>
+<span class="fc bfc" id="L808" title="All 2 branches covered.">                    || ancestor.getType() == TokenTypes.LITERAL_FINALLY) {</span>
                 // if the throw is inside a catch or finally block,
                 // skip the immediate ancestor (try token)
-<span class="fc" id="L789">                ancestor = ancestor.getParent();</span>
+<span class="fc" id="L811">                ancestor = ancestor.getParent();</span>
             }
-<span class="fc" id="L791">            ancestor = ancestor.getParent();</span>
+<span class="fc" id="L813">            ancestor = ancestor.getParent();</span>
         }
-<span class="fc bfc" id="L793" title="All 2 branches covered.">        return ancestor != methodBodyAst;</span>
+<span class="fc bfc" id="L815" title="All 2 branches covered.">        return ancestor != methodBodyAst;</span>
     }
 
     /**
@@ -802,13 +824,13 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     private static List&lt;ExceptionInfo&gt; combineExceptionInfo(List&lt;ExceptionInfo&gt; list1,
                                                      List&lt;ExceptionInfo&gt; list2) {
-<span class="fc" id="L805">        final List&lt;ExceptionInfo&gt; result = new ArrayList&lt;&gt;(list1);</span>
-<span class="fc bfc" id="L806" title="All 2 branches covered.">        for (ExceptionInfo exceptionInfo : list2) {</span>
-<span class="fc bfc" id="L807" title="All 2 branches covered.">            if (result.stream().noneMatch(item -&gt; isExceptionInfoSame(item, exceptionInfo))) {</span>
-<span class="fc" id="L808">                result.add(exceptionInfo);</span>
+<span class="fc" id="L827">        final List&lt;ExceptionInfo&gt; result = new ArrayList&lt;&gt;(list1);</span>
+<span class="fc bfc" id="L828" title="All 2 branches covered.">        for (ExceptionInfo exceptionInfo : list2) {</span>
+<span class="fc bfc" id="L829" title="All 2 branches covered.">            if (result.stream().noneMatch(item -&gt; isExceptionInfoSame(item, exceptionInfo))) {</span>
+<span class="fc" id="L830">                result.add(exceptionInfo);</span>
             }
-<span class="fc" id="L810">        }</span>
-<span class="fc" id="L811">        return result;</span>
+<span class="fc" id="L832">        }</span>
+<span class="fc" id="L833">        return result;</span>
     }
 
     /**
@@ -820,24 +842,24 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return {@link List} of {@link DetailAST} nodes which matches the predicate.
      */
     public static List&lt;DetailAST&gt; findTokensInAstByType(DetailAST root, int astType) {
-<span class="fc" id="L823">        final List&lt;DetailAST&gt; result = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L824">        DetailAST curNode = root;</span>
-<span class="fc bfc" id="L825" title="All 2 branches covered.">        while (curNode != null) {</span>
-<span class="fc" id="L826">            DetailAST toVisit = curNode.getFirstChild();</span>
-<span class="pc bpc" id="L827" title="1 of 4 branches missed.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
-<span class="fc" id="L828">                toVisit = curNode.getNextSibling();</span>
-<span class="fc" id="L829">                curNode = curNode.getParent();</span>
-<span class="fc bfc" id="L830" title="All 2 branches covered.">                if (curNode == root) {</span>
-<span class="fc" id="L831">                    toVisit = null;</span>
-<span class="fc" id="L832">                    break;</span>
+<span class="fc" id="L845">        final List&lt;DetailAST&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L846">        DetailAST curNode = root;</span>
+<span class="fc bfc" id="L847" title="All 2 branches covered.">        while (curNode != null) {</span>
+<span class="fc" id="L848">            DetailAST toVisit = curNode.getFirstChild();</span>
+<span class="pc bpc" id="L849" title="1 of 4 branches missed.">            while (curNode != null &amp;&amp; toVisit == null) {</span>
+<span class="fc" id="L850">                toVisit = curNode.getNextSibling();</span>
+<span class="fc" id="L851">                curNode = curNode.getParent();</span>
+<span class="fc bfc" id="L852" title="All 2 branches covered.">                if (curNode == root) {</span>
+<span class="fc" id="L853">                    toVisit = null;</span>
+<span class="fc" id="L854">                    break;</span>
                 }
             }
-<span class="fc" id="L835">            curNode = toVisit;</span>
-<span class="fc bfc" id="L836" title="All 4 branches covered.">            if (curNode != null &amp;&amp; curNode.getType() == astType) {</span>
-<span class="fc" id="L837">                result.add(curNode);</span>
+<span class="fc" id="L857">            curNode = toVisit;</span>
+<span class="fc bfc" id="L858" title="All 4 branches covered.">            if (curNode != null &amp;&amp; curNode.getType() == astType) {</span>
+<span class="fc" id="L859">                result.add(curNode);</span>
             }
-<span class="fc" id="L839">        }</span>
-<span class="fc" id="L840">        return result;</span>
+<span class="fc" id="L861">        }</span>
+<span class="fc" id="L862">        return result;</span>
     }
 
     /**
@@ -850,52 +872,52 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     private void checkParamTags(final List&lt;JavadocTag&gt; tags,
             final DetailAST parent, boolean reportExpectedTags) {
-<span class="fc" id="L853">        final List&lt;DetailAST&gt; params = getParameters(parent);</span>
-<span class="fc" id="L854">        final List&lt;DetailAST&gt; typeParams = CheckUtil</span>
-<span class="fc" id="L855">                .getTypeParameters(parent);</span>
+<span class="fc" id="L875">        final List&lt;DetailAST&gt; params = getParameters(parent);</span>
+<span class="fc" id="L876">        final List&lt;DetailAST&gt; typeParams = CheckUtil</span>
+<span class="fc" id="L877">                .getTypeParameters(parent);</span>
 
         // Loop over the tags, checking to see they exist in the params.
-<span class="fc" id="L858">        final ListIterator&lt;JavadocTag&gt; tagIt = tags.listIterator();</span>
-<span class="fc bfc" id="L859" title="All 2 branches covered.">        while (tagIt.hasNext()) {</span>
-<span class="fc" id="L860">            final JavadocTag tag = tagIt.next();</span>
+<span class="fc" id="L880">        final ListIterator&lt;JavadocTag&gt; tagIt = tags.listIterator();</span>
+<span class="fc bfc" id="L881" title="All 2 branches covered.">        while (tagIt.hasNext()) {</span>
+<span class="fc" id="L882">            final JavadocTag tag = tagIt.next();</span>
 
-<span class="fc bfc" id="L862" title="All 2 branches covered.">            if (!tag.isParamTag()) {</span>
-<span class="fc" id="L863">                continue;</span>
+<span class="fc bfc" id="L884" title="All 2 branches covered.">            if (!tag.isParamTag()) {</span>
+<span class="fc" id="L885">                continue;</span>
             }
 
-<span class="fc" id="L866">            tagIt.remove();</span>
+<span class="fc" id="L888">            tagIt.remove();</span>
 
-<span class="fc" id="L868">            final String arg1 = tag.getFirstArg();</span>
-<span class="fc" id="L869">            boolean found = removeMatchingParam(params, arg1);</span>
+<span class="fc" id="L890">            final String arg1 = tag.getFirstArg();</span>
+<span class="fc" id="L891">            boolean found = removeMatchingParam(params, arg1);</span>
 
-<span class="fc bfc" id="L871" title="All 4 branches covered.">            if (CommonUtil.startsWithChar(arg1, '&lt;') &amp;&amp; CommonUtil.endsWithChar(arg1, '&gt;')) {</span>
-<span class="fc" id="L872">                found = searchMatchingTypeParameter(typeParams,</span>
-<span class="fc" id="L873">                        arg1.substring(1, arg1.length() - 1));</span>
+<span class="fc bfc" id="L893" title="All 4 branches covered.">            if (CommonUtil.startsWithChar(arg1, '&lt;') &amp;&amp; CommonUtil.endsWithChar(arg1, '&gt;')) {</span>
+<span class="fc" id="L894">                found = searchMatchingTypeParameter(typeParams,</span>
+<span class="fc" id="L895">                        arg1.substring(1, arg1.length() - 1));</span>
             }
 
             // Handle extra JavadocTag
-<span class="fc bfc" id="L877" title="All 2 branches covered.">            if (!found) {</span>
-<span class="fc" id="L878">                log(tag.getLineNo(), tag.getColumnNo(), MSG_UNUSED_TAG,</span>
+<span class="fc bfc" id="L899" title="All 2 branches covered.">            if (!found) {</span>
+<span class="fc" id="L900">                log(tag.getLineNo(), tag.getColumnNo(), MSG_UNUSED_TAG,</span>
                         &quot;@param&quot;, arg1);
             }
-<span class="fc" id="L881">        }</span>
+<span class="fc" id="L903">        }</span>
 
         // Now dump out all type parameters/parameters without tags :- unless
         // the user has chosen to suppress these problems
-<span class="fc bfc" id="L885" title="All 4 branches covered.">        if (!allowMissingParamTags &amp;&amp; reportExpectedTags) {</span>
-<span class="fc bfc" id="L886" title="All 2 branches covered.">            for (DetailAST param : params) {</span>
-<span class="fc" id="L887">                log(param, MSG_EXPECTED_TAG,</span>
-<span class="fc" id="L888">                    JavadocTagInfo.PARAM.getText(), param.getText());</span>
-<span class="fc" id="L889">            }</span>
+<span class="fc bfc" id="L907" title="All 4 branches covered.">        if (!allowMissingParamTags &amp;&amp; reportExpectedTags) {</span>
+<span class="fc bfc" id="L908" title="All 2 branches covered.">            for (DetailAST param : params) {</span>
+<span class="fc" id="L909">                log(param, MSG_EXPECTED_TAG,</span>
+<span class="fc" id="L910">                    JavadocTagInfo.PARAM.getText(), param.getText());</span>
+<span class="fc" id="L911">            }</span>
 
-<span class="fc bfc" id="L891" title="All 2 branches covered.">            for (DetailAST typeParam : typeParams) {</span>
-<span class="fc" id="L892">                log(typeParam, MSG_EXPECTED_TAG,</span>
-<span class="fc" id="L893">                    JavadocTagInfo.PARAM.getText(),</span>
-<span class="fc" id="L894">                    &quot;&lt;&quot; + typeParam.findFirstToken(TokenTypes.IDENT).getText()</span>
+<span class="fc bfc" id="L913" title="All 2 branches covered.">            for (DetailAST typeParam : typeParams) {</span>
+<span class="fc" id="L914">                log(typeParam, MSG_EXPECTED_TAG,</span>
+<span class="fc" id="L915">                    JavadocTagInfo.PARAM.getText(),</span>
+<span class="fc" id="L916">                    &quot;&lt;&quot; + typeParam.findFirstToken(TokenTypes.IDENT).getText()</span>
                     + &quot;&gt;&quot;);
-<span class="fc" id="L896">            }</span>
+<span class="fc" id="L918">            }</span>
         }
-<span class="fc" id="L898">    }</span>
+<span class="fc" id="L920">    }</span>
 
     /**
      * Returns true if required type found in type parameters.
@@ -909,18 +931,18 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     private static boolean searchMatchingTypeParameter(List&lt;DetailAST&gt; typeParams,
             String requiredTypeName) {
         // Loop looking for matching type param
-<span class="fc" id="L912">        final Iterator&lt;DetailAST&gt; typeParamsIt = typeParams.iterator();</span>
-<span class="fc" id="L913">        boolean found = false;</span>
-<span class="fc bfc" id="L914" title="All 2 branches covered.">        while (typeParamsIt.hasNext()) {</span>
-<span class="fc" id="L915">            final DetailAST typeParam = typeParamsIt.next();</span>
-<span class="fc" id="L916">            if (typeParam.findFirstToken(TokenTypes.IDENT).getText()</span>
-<span class="fc bfc" id="L917" title="All 2 branches covered.">                    .equals(requiredTypeName)) {</span>
-<span class="fc" id="L918">                found = true;</span>
-<span class="fc" id="L919">                typeParamsIt.remove();</span>
-<span class="fc" id="L920">                break;</span>
+<span class="fc" id="L934">        final Iterator&lt;DetailAST&gt; typeParamsIt = typeParams.iterator();</span>
+<span class="fc" id="L935">        boolean found = false;</span>
+<span class="fc bfc" id="L936" title="All 2 branches covered.">        while (typeParamsIt.hasNext()) {</span>
+<span class="fc" id="L937">            final DetailAST typeParam = typeParamsIt.next();</span>
+<span class="fc" id="L938">            if (typeParam.findFirstToken(TokenTypes.IDENT).getText()</span>
+<span class="fc bfc" id="L939" title="All 2 branches covered.">                    .equals(requiredTypeName)) {</span>
+<span class="fc" id="L940">                found = true;</span>
+<span class="fc" id="L941">                typeParamsIt.remove();</span>
+<span class="fc" id="L942">                break;</span>
             }
-<span class="fc" id="L922">        }</span>
-<span class="fc" id="L923">        return found;</span>
+<span class="fc" id="L944">        }</span>
+<span class="fc" id="L945">        return found;</span>
     }
 
     /**
@@ -931,17 +953,17 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true if parameter found and removed
      */
     private static boolean removeMatchingParam(List&lt;DetailAST&gt; params, String paramName) {
-<span class="fc" id="L934">        boolean found = false;</span>
-<span class="fc" id="L935">        final Iterator&lt;DetailAST&gt; paramIt = params.iterator();</span>
-<span class="fc bfc" id="L936" title="All 2 branches covered.">        while (paramIt.hasNext()) {</span>
-<span class="fc" id="L937">            final DetailAST param = paramIt.next();</span>
-<span class="fc bfc" id="L938" title="All 2 branches covered.">            if (param.getText().equals(paramName)) {</span>
-<span class="fc" id="L939">                found = true;</span>
-<span class="fc" id="L940">                paramIt.remove();</span>
-<span class="fc" id="L941">                break;</span>
+<span class="fc" id="L956">        boolean found = false;</span>
+<span class="fc" id="L957">        final Iterator&lt;DetailAST&gt; paramIt = params.iterator();</span>
+<span class="fc bfc" id="L958" title="All 2 branches covered.">        while (paramIt.hasNext()) {</span>
+<span class="fc" id="L959">            final DetailAST param = paramIt.next();</span>
+<span class="fc bfc" id="L960" title="All 2 branches covered.">            if (param.getText().equals(paramName)) {</span>
+<span class="fc" id="L961">                found = true;</span>
+<span class="fc" id="L962">                paramIt.remove();</span>
+<span class="fc" id="L963">                break;</span>
             }
-<span class="fc" id="L943">        }</span>
-<span class="fc" id="L944">        return found;</span>
+<span class="fc" id="L965">        }</span>
+<span class="fc" id="L966">        return found;</span>
     }
 
     /**
@@ -957,27 +979,27 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
         boolean reportExpectedTags) {
         // Loop over tags finding return tags. After the first one, report an
         // violation.
-<span class="fc" id="L960">        boolean found = false;</span>
-<span class="fc" id="L961">        final ListIterator&lt;JavadocTag&gt; it = tags.listIterator();</span>
-<span class="fc bfc" id="L962" title="All 2 branches covered.">        while (it.hasNext()) {</span>
-<span class="fc" id="L963">            final JavadocTag javadocTag = it.next();</span>
-<span class="fc bfc" id="L964" title="All 2 branches covered.">            if (javadocTag.isReturnTag()) {</span>
-<span class="fc bfc" id="L965" title="All 2 branches covered.">                if (found) {</span>
-<span class="fc" id="L966">                    log(javadocTag.getLineNo(), javadocTag.getColumnNo(),</span>
+<span class="fc" id="L982">        boolean found = false;</span>
+<span class="fc" id="L983">        final ListIterator&lt;JavadocTag&gt; it = tags.listIterator();</span>
+<span class="fc bfc" id="L984" title="All 2 branches covered.">        while (it.hasNext()) {</span>
+<span class="fc" id="L985">            final JavadocTag javadocTag = it.next();</span>
+<span class="fc bfc" id="L986" title="All 2 branches covered.">            if (javadocTag.isReturnTag()) {</span>
+<span class="fc bfc" id="L987" title="All 2 branches covered.">                if (found) {</span>
+<span class="fc" id="L988">                    log(javadocTag.getLineNo(), javadocTag.getColumnNo(),</span>
                             MSG_DUPLICATE_TAG,
-<span class="fc" id="L968">                            JavadocTagInfo.RETURN.getText());</span>
+<span class="fc" id="L990">                            JavadocTagInfo.RETURN.getText());</span>
                 }
-<span class="fc" id="L970">                found = true;</span>
-<span class="fc" id="L971">                it.remove();</span>
+<span class="fc" id="L992">                found = true;</span>
+<span class="fc" id="L993">                it.remove();</span>
             }
-<span class="fc" id="L973">        }</span>
+<span class="fc" id="L995">        }</span>
 
         // Handle there being no @return tags :- unless
         // the user has chosen to suppress these problems
-<span class="fc bfc" id="L977" title="All 6 branches covered.">        if (!found &amp;&amp; !allowMissingReturnTag &amp;&amp; reportExpectedTags) {</span>
-<span class="fc" id="L978">            log(lineNo, MSG_RETURN_EXPECTED);</span>
+<span class="fc bfc" id="L999" title="All 6 branches covered.">        if (!found &amp;&amp; !allowMissingReturnTag &amp;&amp; reportExpectedTags) {</span>
+<span class="fc" id="L1000">            log(lineNo, MSG_RETURN_EXPECTED);</span>
         }
-<span class="fc" id="L980">    }</span>
+<span class="fc" id="L1002">    }</span>
 
     /**
      * Checks a set of tags for matching throws.
@@ -991,34 +1013,34 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
             List&lt;ExceptionInfo&gt; throwsList, boolean reportExpectedTags) {
         // Loop over the tags, checking to see they exist in the throws.
         // The foundThrows used for performance only
-<span class="fc" id="L994">        final Set&lt;String&gt; foundThrows = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L995">        final ListIterator&lt;JavadocTag&gt; tagIt = tags.listIterator();</span>
-<span class="fc bfc" id="L996" title="All 2 branches covered.">        while (tagIt.hasNext()) {</span>
-<span class="fc" id="L997">            final JavadocTag tag = tagIt.next();</span>
+<span class="fc" id="L1016">        final Set&lt;String&gt; foundThrows = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L1017">        final ListIterator&lt;JavadocTag&gt; tagIt = tags.listIterator();</span>
+<span class="fc bfc" id="L1018" title="All 2 branches covered.">        while (tagIt.hasNext()) {</span>
+<span class="fc" id="L1019">            final JavadocTag tag = tagIt.next();</span>
 
-<span class="fc bfc" id="L999" title="All 2 branches covered.">            if (!tag.isThrowsTag()) {</span>
-<span class="fc" id="L1000">                continue;</span>
+<span class="fc bfc" id="L1021" title="All 2 branches covered.">            if (!tag.isThrowsTag()) {</span>
+<span class="fc" id="L1022">                continue;</span>
             }
-<span class="fc" id="L1002">            tagIt.remove();</span>
+<span class="fc" id="L1024">            tagIt.remove();</span>
 
             // Loop looking for matching throw
-<span class="fc" id="L1005">            final Token token = new Token(tag.getFirstArg(), tag.getLineNo(), tag</span>
-<span class="fc" id="L1006">                    .getColumnNo());</span>
-<span class="fc" id="L1007">            final ClassInfo documentedClassInfo = new ClassInfo(token);</span>
-<span class="fc" id="L1008">            processThrows(throwsList, documentedClassInfo, foundThrows);</span>
-<span class="fc" id="L1009">        }</span>
+<span class="fc" id="L1027">            final Token token = new Token(tag.getFirstArg(), tag.getLineNo(), tag</span>
+<span class="fc" id="L1028">                    .getColumnNo());</span>
+<span class="fc" id="L1029">            final ClassInfo documentedClassInfo = new ClassInfo(token);</span>
+<span class="fc" id="L1030">            processThrows(throwsList, documentedClassInfo, foundThrows);</span>
+<span class="fc" id="L1031">        }</span>
         // Now dump out all throws without tags :- unless
         // the user has chosen to suppress these problems
-<span class="fc bfc" id="L1012" title="All 4 branches covered.">        if (validateThrows &amp;&amp; reportExpectedTags) {</span>
-<span class="fc bfc" id="L1013" title="All 2 branches covered.">            throwsList.stream().filter(exceptionInfo -&gt; !exceptionInfo.isFound())</span>
-<span class="fc" id="L1014">                .forEach(exceptionInfo -&gt; {</span>
-<span class="fc" id="L1015">                    final Token token = exceptionInfo.getName();</span>
-<span class="fc" id="L1016">                    log(token.getLineNo(), token.getColumnNo(),</span>
+<span class="fc bfc" id="L1034" title="All 4 branches covered.">        if (validateThrows &amp;&amp; reportExpectedTags) {</span>
+<span class="fc bfc" id="L1035" title="All 2 branches covered.">            throwsList.stream().filter(exceptionInfo -&gt; !exceptionInfo.isFound())</span>
+<span class="fc" id="L1036">                .forEach(exceptionInfo -&gt; {</span>
+<span class="fc" id="L1037">                    final Token token = exceptionInfo.getName();</span>
+<span class="fc" id="L1038">                    log(exceptionInfo.getAst(),</span>
                         MSG_EXPECTED_TAG,
-<span class="fc" id="L1018">                        JavadocTagInfo.THROWS.getText(), token.getText());</span>
-<span class="fc" id="L1019">                });</span>
+<span class="fc" id="L1040">                        JavadocTagInfo.THROWS.getText(), token.getText());</span>
+<span class="fc" id="L1041">                });</span>
         }
-<span class="fc" id="L1021">    }</span>
+<span class="fc" id="L1043">    }</span>
 
     /**
      * Verifies that documented exception is in throws.
@@ -1029,22 +1051,22 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     private static void processThrows(List&lt;ExceptionInfo&gt; throwsList,
                                       ClassInfo documentedClassInfo, Set&lt;String&gt; foundThrows) {
-<span class="fc" id="L1032">        ExceptionInfo foundException = null;</span>
+<span class="fc" id="L1054">        ExceptionInfo foundException = null;</span>
 
         // First look for matches on the exception name
-<span class="fc bfc" id="L1035" title="All 2 branches covered.">        for (ExceptionInfo exceptionInfo : throwsList) {</span>
-<span class="fc bfc" id="L1036" title="All 2 branches covered.">            if (isClassNamesSame(exceptionInfo.getName().getText(),</span>
-<span class="fc" id="L1037">                    documentedClassInfo.getName().getText())) {</span>
-<span class="fc" id="L1038">                foundException = exceptionInfo;</span>
-<span class="fc" id="L1039">                break;</span>
+<span class="fc bfc" id="L1057" title="All 2 branches covered.">        for (ExceptionInfo exceptionInfo : throwsList) {</span>
+<span class="fc bfc" id="L1058" title="All 2 branches covered.">            if (isClassNamesSame(exceptionInfo.getName().getText(),</span>
+<span class="fc" id="L1059">                    documentedClassInfo.getName().getText())) {</span>
+<span class="fc" id="L1060">                foundException = exceptionInfo;</span>
+<span class="fc" id="L1061">                break;</span>
             }
-<span class="fc" id="L1041">        }</span>
+<span class="fc" id="L1063">        }</span>
 
-<span class="fc bfc" id="L1043" title="All 2 branches covered.">        if (foundException != null) {</span>
-<span class="fc" id="L1044">            foundException.setFound();</span>
-<span class="fc" id="L1045">            foundThrows.add(documentedClassInfo.getName().getText());</span>
+<span class="fc bfc" id="L1065" title="All 2 branches covered.">        if (foundException != null) {</span>
+<span class="fc" id="L1066">            foundException.setFound();</span>
+<span class="fc" id="L1067">            foundThrows.add(documentedClassInfo.getName().getText());</span>
         }
-<span class="fc" id="L1047">    }</span>
+<span class="fc" id="L1069">    }</span>
 
     /**
      * Check that ExceptionInfo objects are same by name.
@@ -1054,8 +1076,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true is ExceptionInfo object have the same name
      */
     private static boolean isExceptionInfoSame(ExceptionInfo info1, ExceptionInfo info2) {
-<span class="fc" id="L1057">        return isClassNamesSame(info1.getName().getText(),</span>
-<span class="fc" id="L1058">                                    info2.getName().getText());</span>
+<span class="fc" id="L1079">        return isClassNamesSame(info1.getName().getText(),</span>
+<span class="fc" id="L1080">                                    info2.getName().getText());</span>
     }
 
     /**
@@ -1067,21 +1089,21 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return true is ExceptionInfo object have the same name
      */
     private static boolean isClassNamesSame(String class1, String class2) {
-<span class="fc" id="L1070">        boolean result = false;</span>
-<span class="fc bfc" id="L1071" title="All 2 branches covered.">        if (class1.equals(class2)) {</span>
-<span class="fc" id="L1072">            result = true;</span>
+<span class="fc" id="L1092">        boolean result = false;</span>
+<span class="fc bfc" id="L1093" title="All 2 branches covered.">        if (class1.equals(class2)) {</span>
+<span class="fc" id="L1094">            result = true;</span>
         }
         else {
-<span class="fc" id="L1075">            final String separator = &quot;.&quot;;</span>
-<span class="fc bfc" id="L1076" title="All 4 branches covered.">            if (class1.contains(separator) || class2.contains(separator)) {</span>
-<span class="fc" id="L1077">                final String class1ShortName = class1</span>
-<span class="fc" id="L1078">                        .substring(class1.lastIndexOf('.') + 1);</span>
-<span class="fc" id="L1079">                final String class2ShortName = class2</span>
-<span class="fc" id="L1080">                        .substring(class2.lastIndexOf('.') + 1);</span>
-<span class="fc" id="L1081">                result = class1ShortName.equals(class2ShortName);</span>
+<span class="fc" id="L1097">            final String separator = &quot;.&quot;;</span>
+<span class="fc bfc" id="L1098" title="All 4 branches covered.">            if (class1.contains(separator) || class2.contains(separator)) {</span>
+<span class="fc" id="L1099">                final String class1ShortName = class1</span>
+<span class="fc" id="L1100">                        .substring(class1.lastIndexOf('.') + 1);</span>
+<span class="fc" id="L1101">                final String class2ShortName = class2</span>
+<span class="fc" id="L1102">                        .substring(class2.lastIndexOf('.') + 1);</span>
+<span class="fc" id="L1103">                result = class1ShortName.equals(class2ShortName);</span>
             }
         }
-<span class="fc" id="L1084">        return result;</span>
+<span class="fc" id="L1106">        return result;</span>
     }
 
     /**
@@ -1090,12 +1112,12 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param ast class definition to process.
      */
     private void processClass(DetailAST ast) {
-<span class="fc" id="L1093">        final DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L1094">        String innerClass = ident.getText();</span>
+<span class="fc" id="L1115">        final DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L1116">        String innerClass = ident.getText();</span>
 
-<span class="fc" id="L1096">        innerClass = &quot;$&quot; + innerClass;</span>
-<span class="fc" id="L1097">        currentClassName += innerClass;</span>
-<span class="fc" id="L1098">    }</span>
+<span class="fc" id="L1118">        innerClass = &quot;$&quot; + innerClass;</span>
+<span class="fc" id="L1119">        currentClassName += innerClass;</span>
+<span class="fc" id="L1120">    }</span>
 
     /**
      * Contains class's {@code Token}.
@@ -1111,9 +1133,9 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @param className token which represents class name.
          * @throws IllegalArgumentException when className is nulls
          */
-<span class="fc" id="L1114">        protected ClassInfo(final Token className) {</span>
-<span class="fc" id="L1115">            name = className;</span>
-<span class="fc" id="L1116">        }</span>
+<span class="fc" id="L1136">        protected ClassInfo(final Token className) {</span>
+<span class="fc" id="L1137">            name = className;</span>
+<span class="fc" id="L1138">        }</span>
 
         /**
          * Gets class name.
@@ -1121,7 +1143,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return class name
          */
         public final Token getName() {
-<span class="fc" id="L1124">            return name;</span>
+<span class="fc" id="L1146">            return name;</span>
         }
 
     }
@@ -1145,40 +1167,22 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @param lineNo token's line number
          * @param columnNo token's column number
          */
-<span class="fc" id="L1148">        /* package */ Token(String text, int lineNo, int columnNo) {</span>
-<span class="fc" id="L1149">            this.text = text;</span>
-<span class="fc" id="L1150">            this.lineNo = lineNo;</span>
-<span class="fc" id="L1151">            this.columnNo = columnNo;</span>
-<span class="fc" id="L1152">        }</span>
+<span class="fc" id="L1170">        /* package */ Token(String text, int lineNo, int columnNo) {</span>
+<span class="fc" id="L1171">            this.text = text;</span>
+<span class="fc" id="L1172">            this.lineNo = lineNo;</span>
+<span class="fc" id="L1173">            this.columnNo = columnNo;</span>
+<span class="fc" id="L1174">        }</span>
 
         /**
          * Converts FullIdent to Token.
          *
          * @param fullIdent full ident to convert.
          */
-<span class="fc" id="L1159">        /* package */ Token(FullIdent fullIdent) {</span>
-<span class="fc" id="L1160">            text = fullIdent.getText();</span>
-<span class="fc" id="L1161">            lineNo = fullIdent.getLineNo();</span>
-<span class="fc" id="L1162">            columnNo = fullIdent.getColumnNo();</span>
-<span class="fc" id="L1163">        }</span>
-
-        /**
-         * Gets line number of the token.
-         *
-         * @return line number of the token
-         */
-        public int getLineNo() {
-<span class="fc" id="L1171">            return lineNo;</span>
-        }
-
-        /**
-         * Gets column number of the token.
-         *
-         * @return column number of the token
-         */
-        public int getColumnNo() {
-<span class="fc" id="L1180">            return columnNo;</span>
-        }
+<span class="fc" id="L1181">        /* package */ Token(FullIdent fullIdent) {</span>
+<span class="fc" id="L1182">            text = fullIdent.getText();</span>
+<span class="fc" id="L1183">            lineNo = fullIdent.getLineNo();</span>
+<span class="fc" id="L1184">            columnNo = fullIdent.getColumnNo();</span>
+<span class="fc" id="L1185">        }</span>
 
         /**
          * Gets text of the token.
@@ -1186,12 +1190,12 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return text of the token
          */
         public String getText() {
-<span class="fc" id="L1189">            return text;</span>
+<span class="fc" id="L1193">            return text;</span>
         }
 
         @Override
         public String toString() {
-<span class="fc" id="L1194">            return &quot;Token[&quot; + text + &quot;(&quot; + lineNo</span>
+<span class="fc" id="L1198">            return &quot;Token[&quot; + text + &quot;(&quot; + lineNo</span>
                 + &quot;x&quot; + columnNo + &quot;)]&quot;;
         }
 
@@ -1199,6 +1203,9 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     /** Stores useful information about declared exception. */
     private static class ExceptionInfo {
+
+        /** AST node representing this exception. */
+        private final DetailAST ast;
 
         /** Class information associated with this exception. */
         private final ClassInfo classInfo;
@@ -1208,16 +1215,27 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
         /**
          * Creates new instance for {@code FullIdent}.
          *
+         * @param ast AST node representing this exception
          * @param classInfo class info
          */
-<span class="fc" id="L1213">        /* package */ ExceptionInfo(ClassInfo classInfo) {</span>
-<span class="fc" id="L1214">            this.classInfo = classInfo;</span>
-<span class="fc" id="L1215">        }</span>
+<span class="fc" id="L1221">        /* package */ ExceptionInfo(DetailAST ast, ClassInfo classInfo) {</span>
+<span class="fc" id="L1222">            this.ast = ast;</span>
+<span class="fc" id="L1223">            this.classInfo = classInfo;</span>
+<span class="fc" id="L1224">        }</span>
+
+        /**
+         * Gets the AST node representing this exception.
+         *
+         * @return the AST node representing this exception
+         */
+        private DetailAST getAst() {
+<span class="fc" id="L1232">            return ast;</span>
+        }
 
         /** Mark that the exception has associated throws tag. */
         private void setFound() {
-<span class="fc" id="L1219">            found = true;</span>
-<span class="fc" id="L1220">        }</span>
+<span class="fc" id="L1237">            found = true;</span>
+<span class="fc" id="L1238">        }</span>
 
         /**
          * Checks that the exception has throws tag associated with it.
@@ -1225,7 +1243,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return whether the exception has throws tag associated with
          */
         private boolean isFound() {
-<span class="fc" id="L1228">            return found;</span>
+<span class="fc" id="L1246">            return found;</span>
         }
 
         /**
@@ -1234,7 +1252,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
          * @return exception's name
          */
         private Token getName() {
-<span class="fc" id="L1237">            return classInfo.getName();</span>
+<span class="fc" id="L1255">            return classInfo.getName();</span>
         }
 
     }

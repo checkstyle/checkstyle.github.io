@@ -143,25 +143,25 @@ public abstract class AbstractExpressionHandler {
 <span class="fc bfc" id="L143" title="All 2 branches covered.">        if (expectedIndent.isMultiLevel()) {</span>
 <span class="fc" id="L144">            messageKey = IndentationCheck.MSG_ERROR_MULTI;</span>
         }
-<span class="fc" id="L146">        indentCheck.indentationLog(ast.getLineNo(), messageKey,</span>
+<span class="fc" id="L146">        indentCheck.indentationLog(ast, messageKey,</span>
 <span class="fc" id="L147">            typeName + typeStr, actualIndent, expectedIndent);</span>
 <span class="fc" id="L148">    }</span>
 
     /**
      * Log child indentation error.
      *
-     * @param line           the expression that caused the error
+     * @param ast            the abstract syntax tree that causes the error
      * @param actualIndent   the actual indent level of the expression
      * @param expectedIndent the expected indent level of the expression
      */
-    private void logChildError(int line,
+    private void logChildError(DetailAST ast,
                                int actualIndent,
                                IndentLevel expectedIndent) {
 <span class="fc" id="L160">        String messageKey = IndentationCheck.MSG_CHILD_ERROR;</span>
 <span class="fc bfc" id="L161" title="All 2 branches covered.">        if (expectedIndent.isMultiLevel()) {</span>
 <span class="fc" id="L162">            messageKey = IndentationCheck.MSG_CHILD_ERROR_MULTI;</span>
         }
-<span class="fc" id="L164">        indentCheck.indentationLog(line, messageKey,</span>
+<span class="fc" id="L164">        indentCheck.indentationLog(ast, messageKey,</span>
 <span class="fc" id="L165">            typeName, actualIndent, expectedIndent);</span>
 <span class="fc" id="L166">    }</span>
 
@@ -251,26 +251,32 @@ public abstract class AbstractExpressionHandler {
     /**
      * Check the indentation for a set of lines.
      *
-     * @param lines              the set of lines to check
+     * @param astSet             the set of abstract syntax tree to check
      * @param indentLevel        the indentation level
      * @param firstLineMatches   whether or not the first line has to match
      * @param firstLine          first line of whole expression
+     * @param allowNesting       whether or not subtree nesting is allowed
      */
-    private void checkLinesIndent(LineSet lines,
+    private void checkLinesIndent(DetailAstSet astSet,
                                   IndentLevel indentLevel,
                                   boolean firstLineMatches,
-                                  int firstLine) {
-<span class="fc bfc" id="L263" title="All 2 branches covered.">        if (!lines.isEmpty()) {</span>
+                                  int firstLine,
+                                  boolean allowNesting) {
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        if (!astSet.isEmpty()) {</span>
             // check first line
-<span class="fc" id="L265">            final int startLine = lines.firstLine();</span>
-<span class="fc" id="L266">            final int endLine = lines.lastLine();</span>
-<span class="fc" id="L267">            final int startCol = lines.firstLineCol();</span>
+<span class="fc" id="L267">            final DetailAST startLineAst = astSet.firstLine();</span>
+<span class="fc" id="L268">            final int endLine = astSet.lastLine();</span>
+<span class="fc" id="L269">            int startCol = expandedTabsColumnNo(astSet.firstLine());</span>
 
-<span class="fc" id="L269">            final int realStartCol =</span>
-<span class="fc" id="L270">                getLineStart(indentCheck.getLine(startLine - 1));</span>
+<span class="fc" id="L271">            final int realStartCol =</span>
+<span class="fc" id="L272">                getLineStart(indentCheck.getLine(startLineAst.getLineNo() - 1));</span>
 
-<span class="fc bfc" id="L272" title="All 2 branches covered.">            if (realStartCol == startCol) {</span>
-<span class="fc" id="L273">                checkLineIndent(startLine, startCol, indentLevel,</span>
+<span class="fc bfc" id="L274" title="All 4 branches covered.">            if (firstLineMatches &amp;&amp; !allowNesting) {</span>
+<span class="fc" id="L275">                startCol = realStartCol;</span>
+            }
+
+<span class="fc bfc" id="L278" title="All 2 branches covered.">            if (realStartCol == startCol) {</span>
+<span class="fc" id="L279">                checkLineIndent(startLineAst, indentLevel,</span>
                     firstLineMatches);
             }
 
@@ -280,47 +286,47 @@ public abstract class AbstractExpressionHandler {
             // doesn't start the line) then don't indent more, the first
             // indentation is absorbed by the nesting
 
-<span class="fc" id="L283">            IndentLevel theLevel = indentLevel;</span>
-<span class="fc bfc" id="L284" title="All 2 branches covered.">            if (firstLineMatches</span>
-<span class="fc bfc" id="L285" title="All 4 branches covered.">                || firstLine &gt; mainAst.getLineNo() &amp;&amp; shouldIncreaseIndent()) {</span>
-<span class="fc" id="L286">                theLevel = new IndentLevel(indentLevel, getBasicOffset());</span>
+<span class="fc" id="L289">            IndentLevel theLevel = indentLevel;</span>
+<span class="fc bfc" id="L290" title="All 2 branches covered.">            if (firstLineMatches</span>
+<span class="fc bfc" id="L291" title="All 4 branches covered.">                || firstLine &gt; mainAst.getLineNo() &amp;&amp; shouldIncreaseIndent()) {</span>
+<span class="fc" id="L292">                theLevel = new IndentLevel(indentLevel, getBasicOffset());</span>
             }
 
             // check following lines
-<span class="fc bfc" id="L290" title="All 2 branches covered.">            for (int i = startLine + 1; i &lt;= endLine; i++) {</span>
-<span class="fc" id="L291">                final Integer col = lines.getStartColumn(i);</span>
+<span class="fc bfc" id="L296" title="All 2 branches covered.">            for (int i = startLineAst.getLineNo() + 1; i &lt;= endLine; i++) {</span>
+<span class="fc" id="L297">                final Integer col = astSet.getStartColumn(i);</span>
                 // startCol could be null if this line didn't have an
                 // expression that was required to be checked (it could be
                 // checked by a child expression)
 
-<span class="fc bfc" id="L296" title="All 2 branches covered.">                if (col != null) {</span>
-<span class="fc" id="L297">                    checkLineIndent(i, col, theLevel, false);</span>
+<span class="fc bfc" id="L302" title="All 2 branches covered.">                if (col != null) {</span>
+<span class="fc" id="L303">                    checkLineIndent(astSet.getAst(i), theLevel, false);</span>
                 }
             }
         }
-<span class="fc" id="L301">    }</span>
+<span class="fc" id="L307">    }</span>
 
     /**
      * Check the indentation for a single line.
      *
-     * @param lineNum       the number of the line to check
-     * @param colNum        the column number we are starting at
+     * @param ast           the abstract syntax tree to check
      * @param indentLevel   the indentation level
      * @param mustMatch     whether or not the indentation level must match
      */
-    private void checkLineIndent(int lineNum, int colNum,
+    private void checkLineIndent(DetailAST ast,
         IndentLevel indentLevel, boolean mustMatch) {
-<span class="fc" id="L313">        final String line = indentCheck.getLine(lineNum - 1);</span>
-<span class="fc" id="L314">        final int start = getLineStart(line);</span>
+<span class="fc" id="L318">        final String line = indentCheck.getLine(ast.getLineNo() - 1);</span>
+<span class="fc" id="L319">        final int start = getLineStart(line);</span>
+<span class="fc" id="L320">        final int columnNumber = expandedTabsColumnNo(ast);</span>
         // if must match is set, it is a violation if the line start is not
         // at the correct indention level; otherwise, it is an only an
         // violation if this statement starts the line and it is less than
         // the correct indentation level
-<span class="fc bfc" id="L319" title="All 8 branches covered.">        if (mustMatch &amp;&amp; !indentLevel.isAcceptable(start)</span>
-<span class="fc bfc" id="L320" title="All 2 branches covered.">                || !mustMatch &amp;&amp; colNum == start &amp;&amp; indentLevel.isGreaterThan(start)) {</span>
-<span class="fc" id="L321">            logChildError(lineNum, start, indentLevel);</span>
+<span class="fc bfc" id="L325" title="All 8 branches covered.">        if (mustMatch &amp;&amp; !indentLevel.isAcceptable(start)</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">                || !mustMatch &amp;&amp; columnNumber == start &amp;&amp; indentLevel.isGreaterThan(start)) {</span>
+<span class="fc" id="L327">            logChildError(ast, start, indentLevel);</span>
         }
-<span class="fc" id="L323">    }</span>
+<span class="fc" id="L329">    }</span>
 
     /**
      * Checks indentation on wrapped lines between and including
@@ -330,8 +336,8 @@ public abstract class AbstractExpressionHandler {
      * @param lastNode Last node to examine inclusively.
      */
     protected void checkWrappingIndentation(DetailAST firstNode, DetailAST lastNode) {
-<span class="fc" id="L333">        indentCheck.getLineWrappingHandler().checkIndentation(firstNode, lastNode);</span>
-<span class="fc" id="L334">    }</span>
+<span class="fc" id="L339">        indentCheck.getLineWrappingHandler().checkIndentation(firstNode, lastNode);</span>
+<span class="fc" id="L340">    }</span>
 
     /**
      * Checks indentation on wrapped lines between and including
@@ -345,10 +351,10 @@ public abstract class AbstractExpressionHandler {
      */
     protected void checkWrappingIndentation(DetailAST firstNode, DetailAST lastNode,
             int wrappedIndentLevel, int startIndent, boolean ignoreFirstLine) {
-<span class="fc" id="L348">        indentCheck.getLineWrappingHandler().checkIndentation(firstNode, lastNode,</span>
+<span class="fc" id="L354">        indentCheck.getLineWrappingHandler().checkIndentation(firstNode, lastNode,</span>
                 wrappedIndentLevel, startIndent,
-<span class="fc" id="L350">                LineWrappingHandler.LineWrappingOptions.ofBoolean(ignoreFirstLine));</span>
-<span class="fc" id="L351">    }</span>
+<span class="fc" id="L356">                LineWrappingHandler.LineWrappingOptions.ofBoolean(ignoreFirstLine));</span>
+<span class="fc" id="L357">    }</span>
 
     /**
      * Check the indent level of the children of the specified parent
@@ -365,16 +371,16 @@ public abstract class AbstractExpressionHandler {
                                        IndentLevel startIndent,
                                        boolean firstLineMatches,
                                        boolean allowNesting) {
-<span class="fc" id="L368">        Arrays.sort(tokenTypes);</span>
-<span class="fc" id="L369">        for (DetailAST child = parentNode.getFirstChild();</span>
-<span class="fc bfc" id="L370" title="All 2 branches covered.">                child != null;</span>
-<span class="fc" id="L371">                child = child.getNextSibling()) {</span>
-<span class="fc bfc" id="L372" title="All 2 branches covered.">            if (Arrays.binarySearch(tokenTypes, child.getType()) &gt;= 0) {</span>
-<span class="fc" id="L373">                checkExpressionSubtree(child, startIndent,</span>
+<span class="fc" id="L374">        Arrays.sort(tokenTypes);</span>
+<span class="fc" id="L375">        for (DetailAST child = parentNode.getFirstChild();</span>
+<span class="fc bfc" id="L376" title="All 2 branches covered.">                child != null;</span>
+<span class="fc" id="L377">                child = child.getNextSibling()) {</span>
+<span class="fc bfc" id="L378" title="All 2 branches covered.">            if (Arrays.binarySearch(tokenTypes, child.getType()) &gt;= 0) {</span>
+<span class="fc" id="L379">                checkExpressionSubtree(child, startIndent,</span>
                     firstLineMatches, allowNesting);
             }
         }
-<span class="fc" id="L377">    }</span>
+<span class="fc" id="L383">    }</span>
 
     /**
      * Check the indentation level for an expression subtree.
@@ -390,40 +396,54 @@ public abstract class AbstractExpressionHandler {
         boolean firstLineMatches,
         boolean allowNesting
     ) {
-<span class="fc" id="L393">        final LineSet subtreeLines = new LineSet();</span>
-<span class="fc" id="L394">        final int firstLine = getFirstLine(Integer.MAX_VALUE, tree);</span>
-<span class="fc bfc" id="L395" title="All 4 branches covered.">        if (firstLineMatches &amp;&amp; !allowNesting) {</span>
-<span class="fc" id="L396">            subtreeLines.addLineAndCol(firstLine,</span>
-<span class="fc" id="L397">                getLineStart(indentCheck.getLine(firstLine - 1)));</span>
+<span class="fc" id="L399">        final DetailAstSet subtreeAst = new DetailAstSet(indentCheck);</span>
+<span class="fc" id="L400">        final int firstLine = getFirstLine(tree);</span>
+<span class="fc bfc" id="L401" title="All 4 branches covered.">        if (firstLineMatches &amp;&amp; !allowNesting) {</span>
+<span class="fc" id="L402">            final DetailAST firstAst = getFirstAst(tree, tree);</span>
+<span class="fc" id="L403">            subtreeAst.addAst(firstAst);</span>
         }
-<span class="fc" id="L399">        findSubtreeLines(subtreeLines, tree, allowNesting);</span>
+<span class="fc" id="L405">        findSubtreeAst(subtreeAst, tree, allowNesting);</span>
 
-<span class="fc" id="L401">        checkLinesIndent(subtreeLines, indentLevel, firstLineMatches, firstLine);</span>
-<span class="fc" id="L402">    }</span>
+<span class="fc" id="L407">        checkLinesIndent(subtreeAst, indentLevel, firstLineMatches, firstLine, allowNesting);</span>
+<span class="fc" id="L408">    }</span>
 
     /**
-     * Get the first line for a given expression.
+     * Get the first line number for given expression.
      *
-     * @param startLine   the line we are starting from
+     * @param tree      the expression to find the first line for
+     * @return          the first line of expression
+     */
+    protected static int getFirstLine(DetailAST tree) {
+<span class="fc" id="L417">        return getFirstAst(tree, tree).getLineNo();</span>
+    }
+
+    /**
+     * Get the first ast for given expression.
+     *
+     * @param ast         the current ast that may have minimum line number
      * @param tree        the expression to find the first line for
      *
-     * @return the first line of the expression
+     * @return the first ast of the expression
      */
-    protected static int getFirstLine(int startLine, DetailAST tree) {
-<span class="fc" id="L413">        int realStart = startLine;</span>
-<span class="fc" id="L414">        final int currLine = tree.getLineNo();</span>
-<span class="fc bfc" id="L415" title="All 2 branches covered.">        if (currLine &lt; realStart) {</span>
-<span class="fc" id="L416">            realStart = currLine;</span>
+    protected static DetailAST getFirstAst(DetailAST ast, DetailAST tree) {
+<span class="fc" id="L429">        DetailAST realStart = ast;</span>
+
+<span class="fc bfc" id="L431" title="All 2 branches covered.">        if (tree.getLineNo() &lt; realStart.getLineNo()) {</span>
+<span class="fc" id="L432">            realStart = tree;</span>
+        }
+<span class="fc bfc" id="L434" title="All 2 branches covered.">        else if (tree.getLineNo() == realStart.getLineNo()</span>
+<span class="fc bfc" id="L435" title="All 2 branches covered.">                &amp;&amp; tree.getColumnNo() &lt; realStart.getColumnNo()) {</span>
+<span class="fc" id="L436">            realStart = tree;</span>
         }
 
         // check children
-<span class="fc" id="L420">        for (DetailAST node = tree.getFirstChild();</span>
-<span class="fc bfc" id="L421" title="All 2 branches covered.">            node != null;</span>
-<span class="fc" id="L422">            node = node.getNextSibling()) {</span>
-<span class="fc" id="L423">            realStart = getFirstLine(realStart, node);</span>
+<span class="fc" id="L440">        for (DetailAST node = tree.getFirstChild();</span>
+<span class="fc bfc" id="L441" title="All 2 branches covered.">            node != null;</span>
+<span class="fc" id="L442">            node = node.getNextSibling()) {</span>
+<span class="fc" id="L443">            realStart = getFirstAst(realStart, node);</span>
         }
 
-<span class="fc" id="L426">        return realStart;</span>
+<span class="fc" id="L446">        return realStart;</span>
     }
 
     /**
@@ -435,56 +455,56 @@ public abstract class AbstractExpressionHandler {
      * @return the column number for the start of the expression
      */
     protected final int expandedTabsColumnNo(DetailAST ast) {
-<span class="fc" id="L438">        final String line =</span>
-<span class="fc" id="L439">            indentCheck.getLine(ast.getLineNo() - 1);</span>
+<span class="fc" id="L458">        final String line =</span>
+<span class="fc" id="L459">            indentCheck.getLine(ast.getLineNo() - 1);</span>
 
-<span class="fc" id="L441">        return CommonUtil.lengthExpandedTabs(line, ast.getColumnNo(),</span>
-<span class="fc" id="L442">            indentCheck.getIndentationTabWidth());</span>
+<span class="fc" id="L461">        return CommonUtil.lengthExpandedTabs(line, ast.getColumnNo(),</span>
+<span class="fc" id="L462">            indentCheck.getIndentationTabWidth());</span>
     }
 
     /**
-     * Find the set of lines for a given subtree.
+     * Find the set of abstract syntax tree for a given subtree.
      *
-     * @param lines          the set of lines to add to
+     * @param astSet         the set of ast to add
      * @param tree           the subtree to examine
      * @param allowNesting   whether or not to allow nested subtrees
      */
-    protected final void findSubtreeLines(LineSet lines, DetailAST tree,
+    protected final void findSubtreeAst(DetailAstSet astSet, DetailAST tree,
         boolean allowNesting) {
-<span class="fc bfc" id="L454" title="All 2 branches covered.">        if (!indentCheck.getHandlerFactory().isHandledType(tree.getType())) {</span>
-<span class="fc" id="L455">            final int lineNum = tree.getLineNo();</span>
-<span class="fc" id="L456">            final Integer colNum = lines.getStartColumn(lineNum);</span>
+<span class="fc bfc" id="L474" title="All 2 branches covered.">        if (!indentCheck.getHandlerFactory().isHandledType(tree.getType())) {</span>
+<span class="fc" id="L475">            final int lineNum = tree.getLineNo();</span>
+<span class="fc" id="L476">            final Integer colNum = astSet.getStartColumn(lineNum);</span>
 
-<span class="fc" id="L458">            final int thisLineColumn = expandedTabsColumnNo(tree);</span>
-<span class="fc bfc" id="L459" title="All 4 branches covered.">            if (colNum == null || thisLineColumn &lt; colNum) {</span>
-<span class="fc" id="L460">                lines.addLineAndCol(lineNum, thisLineColumn);</span>
+<span class="fc" id="L478">            final int thisLineColumn = expandedTabsColumnNo(tree);</span>
+<span class="fc bfc" id="L479" title="All 4 branches covered.">            if (colNum == null || thisLineColumn &lt; colNum) {</span>
+<span class="fc" id="L480">                astSet.addAst(tree);</span>
             }
 
             // check children
-<span class="fc" id="L464">            for (DetailAST node = tree.getFirstChild();</span>
-<span class="fc bfc" id="L465" title="All 2 branches covered.">                node != null;</span>
-<span class="fc" id="L466">                node = node.getNextSibling()) {</span>
-<span class="fc" id="L467">                findSubtreeLines(lines, node, allowNesting);</span>
+<span class="fc" id="L484">            for (DetailAST node = tree.getFirstChild();</span>
+<span class="fc bfc" id="L485" title="All 2 branches covered.">                node != null;</span>
+<span class="fc" id="L486">                node = node.getNextSibling()) {</span>
+<span class="fc" id="L487">                findSubtreeAst(astSet, node, allowNesting);</span>
             }
         }
-<span class="fc" id="L470">    }</span>
+<span class="fc" id="L490">    }</span>
 
     /**
      * Check the indentation level of modifiers.
      */
     protected void checkModifiers() {
-<span class="fc" id="L476">        final DetailAST modifiers =</span>
-<span class="fc" id="L477">            mainAst.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L478">        for (DetailAST modifier = modifiers.getFirstChild();</span>
-<span class="fc bfc" id="L479" title="All 2 branches covered.">             modifier != null;</span>
-<span class="fc" id="L480">             modifier = modifier.getNextSibling()) {</span>
-<span class="fc bfc" id="L481" title="All 2 branches covered.">            if (isOnStartOfLine(modifier)</span>
-<span class="fc bfc" id="L482" title="All 2 branches covered.">                &amp;&amp; !getIndent().isAcceptable(expandedTabsColumnNo(modifier))) {</span>
-<span class="fc" id="L483">                logError(modifier, &quot;modifier&quot;,</span>
-<span class="fc" id="L484">                    expandedTabsColumnNo(modifier));</span>
+<span class="fc" id="L496">        final DetailAST modifiers =</span>
+<span class="fc" id="L497">            mainAst.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L498">        for (DetailAST modifier = modifiers.getFirstChild();</span>
+<span class="fc bfc" id="L499" title="All 2 branches covered.">             modifier != null;</span>
+<span class="fc" id="L500">             modifier = modifier.getNextSibling()) {</span>
+<span class="fc bfc" id="L501" title="All 2 branches covered.">            if (isOnStartOfLine(modifier)</span>
+<span class="fc bfc" id="L502" title="All 2 branches covered.">                &amp;&amp; !getIndent().isAcceptable(expandedTabsColumnNo(modifier))) {</span>
+<span class="fc" id="L503">                logError(modifier, &quot;modifier&quot;,</span>
+<span class="fc" id="L504">                    expandedTabsColumnNo(modifier));</span>
             }
         }
-<span class="fc" id="L487">    }</span>
+<span class="fc" id="L507">    }</span>
 
     /**
      * Accessor for the IndentCheck attribute.
@@ -492,7 +512,7 @@ public abstract class AbstractExpressionHandler {
      * @return the IndentCheck attribute
      */
     protected final IndentationCheck getIndentCheck() {
-<span class="fc" id="L495">        return indentCheck;</span>
+<span class="fc" id="L515">        return indentCheck;</span>
     }
 
     /**
@@ -501,7 +521,7 @@ public abstract class AbstractExpressionHandler {
      * @return the MainAst attribute
      */
     protected final DetailAST getMainAst() {
-<span class="fc" id="L504">        return mainAst;</span>
+<span class="fc" id="L524">        return mainAst;</span>
     }
 
     /**
@@ -510,7 +530,7 @@ public abstract class AbstractExpressionHandler {
      * @return the Parent attribute
      */
     protected final AbstractExpressionHandler getParent() {
-<span class="fc" id="L513">        return parent;</span>
+<span class="fc" id="L533">        return parent;</span>
     }
 
     /**
@@ -519,7 +539,7 @@ public abstract class AbstractExpressionHandler {
      * @return value of basicOffset property of {@code IndentationCheck}
      */
     protected final int getBasicOffset() {
-<span class="fc" id="L522">        return indentCheck.getBasicOffset();</span>
+<span class="fc" id="L542">        return indentCheck.getBasicOffset();</span>
     }
 
     /**
@@ -529,7 +549,7 @@ public abstract class AbstractExpressionHandler {
      *         of {@code IndentationCheck}
      */
     protected final int getBraceAdjustment() {
-<span class="fc" id="L532">        return indentCheck.getBraceAdjustment();</span>
+<span class="fc" id="L552">        return indentCheck.getBraceAdjustment();</span>
     }
 
     /**
@@ -539,20 +559,20 @@ public abstract class AbstractExpressionHandler {
      * @param lparen left parenthesis associated with aRparen
      */
     protected final void checkRightParen(DetailAST lparen, DetailAST rparen) {
-<span class="fc bfc" id="L542" title="All 2 branches covered.">        if (rparen != null) {</span>
+<span class="fc bfc" id="L562" title="All 2 branches covered.">        if (rparen != null) {</span>
             // the rcurly can either be at the correct indentation,
             // or not first on the line
-<span class="fc" id="L545">            final int rparenLevel = expandedTabsColumnNo(rparen);</span>
+<span class="fc" id="L565">            final int rparenLevel = expandedTabsColumnNo(rparen);</span>
             // or has &lt;lparen level&gt; + 1 indentation
-<span class="fc" id="L547">            final int lparenLevel = expandedTabsColumnNo(lparen);</span>
+<span class="fc" id="L567">            final int lparenLevel = expandedTabsColumnNo(lparen);</span>
 
-<span class="fc bfc" id="L549" title="All 2 branches covered.">            if (rparenLevel != lparenLevel + 1</span>
-<span class="fc bfc" id="L550" title="All 2 branches covered.">                    &amp;&amp; !getIndent().isAcceptable(rparenLevel)</span>
-<span class="fc bfc" id="L551" title="All 2 branches covered.">                    &amp;&amp; isOnStartOfLine(rparen)) {</span>
-<span class="fc" id="L552">                logError(rparen, &quot;rparen&quot;, rparenLevel);</span>
+<span class="fc bfc" id="L569" title="All 2 branches covered.">            if (rparenLevel != lparenLevel + 1</span>
+<span class="fc bfc" id="L570" title="All 2 branches covered.">                    &amp;&amp; !getIndent().isAcceptable(rparenLevel)</span>
+<span class="fc bfc" id="L571" title="All 2 branches covered.">                    &amp;&amp; isOnStartOfLine(rparen)) {</span>
+<span class="fc" id="L572">                logError(rparen, &quot;rparen&quot;, rparenLevel);</span>
             }
         }
-<span class="fc" id="L555">    }</span>
+<span class="fc" id="L575">    }</span>
 
     /**
      * Check the indentation of the left parenthesis.
@@ -562,12 +582,12 @@ public abstract class AbstractExpressionHandler {
     protected final void checkLeftParen(final DetailAST lparen) {
         // the rcurly can either be at the correct indentation, or on the
         // same line as the lcurly
-<span class="fc bfc" id="L565" title="All 2 branches covered.">        if (lparen != null</span>
-<span class="fc bfc" id="L566" title="All 2 branches covered.">                &amp;&amp; !getIndent().isAcceptable(expandedTabsColumnNo(lparen))</span>
-<span class="fc bfc" id="L567" title="All 2 branches covered.">                &amp;&amp; isOnStartOfLine(lparen)) {</span>
-<span class="fc" id="L568">            logError(lparen, &quot;lparen&quot;, expandedTabsColumnNo(lparen));</span>
+<span class="fc bfc" id="L585" title="All 2 branches covered.">        if (lparen != null</span>
+<span class="fc bfc" id="L586" title="All 2 branches covered.">                &amp;&amp; !getIndent().isAcceptable(expandedTabsColumnNo(lparen))</span>
+<span class="fc bfc" id="L587" title="All 2 branches covered.">                &amp;&amp; isOnStartOfLine(lparen)) {</span>
+<span class="fc" id="L588">            logError(lparen, &quot;lparen&quot;, expandedTabsColumnNo(lparen));</span>
         }
-<span class="fc" id="L570">    }</span>
+<span class="fc" id="L590">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
