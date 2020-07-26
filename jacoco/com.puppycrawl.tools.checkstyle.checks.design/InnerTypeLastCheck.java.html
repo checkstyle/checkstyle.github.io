@@ -19,6 +19,9 @@
 
 package com.puppycrawl.tools.checkstyle.checks.design;
 
+import java.util.Arrays;
+import java.util.List;
+
 import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
@@ -28,7 +31,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 /**
  * &lt;p&gt;
  * Checks nested (internal) classes/interfaces are declared at the bottom of the
- * primary (top-level) class after all method and field declarations.
+ * primary (top-level) class after all init and static init blocks,
+ * method, constructor and field declarations.
  * &lt;/p&gt;
  * &lt;p&gt;
  * To configure the check:
@@ -45,16 +49,33 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  * }
  *
  * class Test2 {
+ *     static {}; // OK
+ *     class InnerTest1 {}
+ *     public Test2() {} // violation, constructor should be declared before inner types.
+ * }
+ *
+ * class Test3 {
  *     private String s; // OK
  *     public void test() {} // OK
  *     class InnerTest1 {}
  * }
  * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Violation Message Keys:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code arrangement.members.before.inner}
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
  *
  * @since 5.2
  */
 @FileStatefulCheck
-<span class="fc" id="L57">public class InnerTypeLastCheck extends AbstractCheck {</span>
+<span class="fc" id="L78">public class InnerTypeLastCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -62,55 +83,63 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     public static final String MSG_KEY = &quot;arrangement.members.before.inner&quot;;
 
+    /** List of class member tokens. */
+<span class="fc" id="L87">    private static final List&lt;Integer&gt; CLASS_MEMBER_TOKENS = Arrays.asList(</span>
+<span class="fc" id="L88">            TokenTypes.VARIABLE_DEF,</span>
+<span class="fc" id="L89">            TokenTypes.METHOD_DEF,</span>
+<span class="fc" id="L90">            TokenTypes.CTOR_DEF,</span>
+<span class="fc" id="L91">            TokenTypes.INSTANCE_INIT,</span>
+<span class="fc" id="L92">            TokenTypes.STATIC_INIT</span>
+    );
+
     /** Meet a root class. */
-<span class="fc" id="L66">    private boolean rootClass = true;</span>
+<span class="fc" id="L96">    private boolean rootClass = true;</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L70">        return getRequiredTokens();</span>
+<span class="fc" id="L100">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L75">        return getRequiredTokens();</span>
+<span class="fc" id="L105">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L80">        return new int[] {TokenTypes.CLASS_DEF, TokenTypes.INTERFACE_DEF};</span>
+<span class="fc" id="L110">        return new int[] {TokenTypes.CLASS_DEF, TokenTypes.INTERFACE_DEF};</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L85">        rootClass = true;</span>
-<span class="fc" id="L86">    }</span>
+<span class="fc" id="L115">        rootClass = true;</span>
+<span class="fc" id="L116">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
         // First root class
-<span class="fc bfc" id="L91" title="All 2 branches covered.">        if (rootClass) {</span>
-<span class="fc" id="L92">            rootClass = false;</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">        if (rootClass) {</span>
+<span class="fc" id="L122">            rootClass = false;</span>
         }
         else {
-<span class="fc" id="L95">            DetailAST nextSibling = ast.getNextSibling();</span>
-<span class="fc bfc" id="L96" title="All 2 branches covered.">            while (nextSibling != null) {</span>
-<span class="fc bfc" id="L97" title="All 2 branches covered.">                if (!ScopeUtil.isInCodeBlock(ast)</span>
-<span class="fc bfc" id="L98" title="All 2 branches covered.">                    &amp;&amp; (nextSibling.getType() == TokenTypes.VARIABLE_DEF</span>
-<span class="fc bfc" id="L99" title="All 2 branches covered.">                        || nextSibling.getType() == TokenTypes.METHOD_DEF)) {</span>
-<span class="fc" id="L100">                    log(nextSibling, MSG_KEY);</span>
+<span class="fc" id="L125">            DetailAST nextSibling = ast.getNextSibling();</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">            while (nextSibling != null) {</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">                if (!ScopeUtil.isInCodeBlock(ast)</span>
+<span class="fc bfc" id="L128" title="All 2 branches covered.">                    &amp;&amp; CLASS_MEMBER_TOKENS.contains(nextSibling.getType())) {</span>
+<span class="fc" id="L129">                    log(nextSibling, MSG_KEY);</span>
                 }
-<span class="fc" id="L102">                nextSibling = nextSibling.getNextSibling();</span>
+<span class="fc" id="L131">                nextSibling = nextSibling.getNextSibling();</span>
             }
         }
-<span class="fc" id="L105">    }</span>
+<span class="fc" id="L134">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
         // Is this a root class
-<span class="fc bfc" id="L110" title="All 2 branches covered.">        if (ast.getParent() == null) {</span>
-<span class="fc" id="L111">            rootClass = true;</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (ast.getParent() == null) {</span>
+<span class="fc" id="L140">            rootClass = true;</span>
         }
-<span class="fc" id="L113">    }</span>
+<span class="fc" id="L142">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
