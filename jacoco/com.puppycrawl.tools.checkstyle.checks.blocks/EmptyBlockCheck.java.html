@@ -43,27 +43,9 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
- * This check processes LITERAL_CASE and LITERAL_DEFAULT separately.
- * So, if tokens=LITERAL_DEFAULT, following code will not trigger any violation,
- * as the empty block belongs to LITERAL_CASE:
+ * NOTE: This check processes LITERAL_CASE and LITERAL_DEFAULT separately.
+ * Verification empty block is done for single most nearest {@code case} or {@code default}.
  * &lt;/p&gt;
- * &lt;p&gt;
- * Configuration:
- * &lt;/p&gt;
- * &lt;pre&gt;
- * &amp;lt;module name=&amp;quot;EmptyBlock&amp;quot;&amp;gt;
- *   &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;LITERAL_DEFAULT&amp;quot;/&amp;gt;
- * &amp;lt;/module&amp;gt;
- * &lt;/pre&gt;
- * &lt;p&gt;
- * Result:
- * &lt;/p&gt;
- * &lt;pre&gt;
- * switch (a) {
- *   default:        // no violation for &quot;default:&quot; as empty block belong to &quot;case 1:&quot;
- *   case 1: { }
- * }
- * &lt;/pre&gt;
  * &lt;ul&gt;
  * &lt;li&gt;
  * Property {@code option} - specify the policy on block contents.
@@ -72,7 +54,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;/li&gt;
  * &lt;li&gt;
  * Property {@code tokens} - tokens to check
- * Type is {@code int[]}.
+ * Type is {@code java.lang.String[]}.
+ * Validation type is {@code tokenSet}.
  * Default value is:
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_WHILE&quot;&gt;
  * LITERAL_WHILE&lt;/a&gt;,
@@ -114,6 +97,29 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
+ * To configure the check for default in switch block:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;EmptyBlock&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;LITERAL_DEFAULT&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Result:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * switch (a) {
+ *   default:        // no violation for &quot;default:&quot; as empty block belong to &quot;case 1:&quot;
+ *   case 1: { }
+ * }
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * switch (a) {
+ *   case 1:
+ *   default: { }  // violation
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
  * &lt;/p&gt;
  * &lt;p&gt;
@@ -131,7 +137,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 3.0
  */
 @StatelessCheck
-<span class="fc" id="L134">public class EmptyBlockCheck</span>
+<span class="fc" id="L140">public class EmptyBlockCheck</span>
     extends AbstractCheck {
 
     /**
@@ -147,7 +153,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     public static final String MSG_KEY_BLOCK_EMPTY = &quot;block.empty&quot;;
 
     /** Specify the policy on block contents. */
-<span class="fc" id="L150">    private BlockOption option = BlockOption.STATEMENT;</span>
+<span class="fc" id="L156">    private BlockOption option = BlockOption.STATEMENT;</span>
 
     /**
      * Setter to specify the policy on block contents.
@@ -156,12 +162,12 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @throws IllegalArgumentException if unable to decode
      */
     public void setOption(String optionStr) {
-<span class="fc" id="L159">        option = BlockOption.valueOf(optionStr.trim().toUpperCase(Locale.ENGLISH));</span>
-<span class="fc" id="L160">    }</span>
+<span class="fc" id="L165">        option = BlockOption.valueOf(optionStr.trim().toUpperCase(Locale.ENGLISH));</span>
+<span class="fc" id="L166">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L164">        return new int[] {</span>
+<span class="fc" id="L170">        return new int[] {</span>
             TokenTypes.LITERAL_WHILE,
             TokenTypes.LITERAL_TRY,
             TokenTypes.LITERAL_FINALLY,
@@ -178,7 +184,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L181">        return new int[] {</span>
+<span class="fc" id="L187">        return new int[] {</span>
             TokenTypes.LITERAL_WHILE,
             TokenTypes.LITERAL_TRY,
             TokenTypes.LITERAL_CATCH,
@@ -199,34 +205,36 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L202">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L208">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L207">        final DetailAST leftCurly = findLeftCurly(ast);</span>
-<span class="fc bfc" id="L208" title="All 2 branches covered.">        if (leftCurly != null) {</span>
-<span class="fc bfc" id="L209" title="All 2 branches covered.">            if (option == BlockOption.STATEMENT) {</span>
+<span class="fc" id="L213">        final DetailAST leftCurly = findLeftCurly(ast);</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">        if (leftCurly != null) {</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">            if (option == BlockOption.STATEMENT) {</span>
                 final boolean emptyBlock;
-<span class="fc bfc" id="L211" title="All 2 branches covered.">                if (leftCurly.getType() == TokenTypes.LCURLY) {</span>
-<span class="fc bfc" id="L212" title="All 2 branches covered.">                    emptyBlock = leftCurly.getNextSibling().getType() != TokenTypes.CASE_GROUP;</span>
-                }
+<span class="fc bfc" id="L217" title="All 2 branches covered.">                if (leftCurly.getType() == TokenTypes.LCURLY) {</span>
+<span class="fc" id="L218">                    final DetailAST nextSibling = leftCurly.getNextSibling();</span>
+<span class="fc bfc" id="L219" title="All 2 branches covered.">                    emptyBlock = nextSibling.getType() != TokenTypes.CASE_GROUP</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">                            &amp;&amp; nextSibling.getType() != TokenTypes.SWITCH_RULE;</span>
+<span class="fc" id="L221">                }</span>
                 else {
-<span class="fc bfc" id="L215" title="All 2 branches covered.">                    emptyBlock = leftCurly.getChildCount() &lt;= 1;</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">                    emptyBlock = leftCurly.getChildCount() &lt;= 1;</span>
                 }
-<span class="fc bfc" id="L217" title="All 2 branches covered.">                if (emptyBlock) {</span>
-<span class="fc" id="L218">                    log(leftCurly,</span>
+<span class="fc bfc" id="L225" title="All 2 branches covered.">                if (emptyBlock) {</span>
+<span class="fc" id="L226">                    log(leftCurly,</span>
                         MSG_KEY_BLOCK_NO_STATEMENT,
-<span class="fc" id="L220">                        ast.getText());</span>
+<span class="fc" id="L228">                        ast.getText());</span>
                 }
-<span class="fc" id="L222">            }</span>
-<span class="fc bfc" id="L223" title="All 2 branches covered.">            else if (!hasText(leftCurly)) {</span>
-<span class="fc" id="L224">                log(leftCurly,</span>
+<span class="fc" id="L230">            }</span>
+<span class="fc bfc" id="L231" title="All 2 branches covered.">            else if (!hasText(leftCurly)) {</span>
+<span class="fc" id="L232">                log(leftCurly,</span>
                     MSG_KEY_BLOCK_EMPTY,
-<span class="fc" id="L226">                    ast.getText());</span>
+<span class="fc" id="L234">                    ast.getText());</span>
             }
         }
-<span class="fc" id="L229">    }</span>
+<span class="fc" id="L237">    }</span>
 
     /**
      * Checks if SLIST token contains any text.
@@ -235,37 +243,37 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return whether the SLIST token contains any text.
      */
     private boolean hasText(final DetailAST slistAST) {
-<span class="fc" id="L238">        final DetailAST rightCurly = slistAST.findFirstToken(TokenTypes.RCURLY);</span>
+<span class="fc" id="L246">        final DetailAST rightCurly = slistAST.findFirstToken(TokenTypes.RCURLY);</span>
         final DetailAST rcurlyAST;
 
-<span class="fc bfc" id="L241" title="All 2 branches covered.">        if (rightCurly == null) {</span>
-<span class="fc" id="L242">            rcurlyAST = slistAST.getParent().findFirstToken(TokenTypes.RCURLY);</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">        if (rightCurly == null) {</span>
+<span class="fc" id="L250">            rcurlyAST = slistAST.getParent().findFirstToken(TokenTypes.RCURLY);</span>
         }
         else {
-<span class="fc" id="L245">            rcurlyAST = rightCurly;</span>
+<span class="fc" id="L253">            rcurlyAST = rightCurly;</span>
         }
-<span class="fc" id="L247">        final int slistLineNo = slistAST.getLineNo();</span>
-<span class="fc" id="L248">        final int slistColNo = slistAST.getColumnNo();</span>
-<span class="fc" id="L249">        final int rcurlyLineNo = rcurlyAST.getLineNo();</span>
-<span class="fc" id="L250">        final int rcurlyColNo = rcurlyAST.getColumnNo();</span>
-<span class="fc" id="L251">        final String[] lines = getLines();</span>
-<span class="fc" id="L252">        boolean returnValue = false;</span>
-<span class="fc bfc" id="L253" title="All 2 branches covered.">        if (slistLineNo == rcurlyLineNo) {</span>
+<span class="fc" id="L255">        final int slistLineNo = slistAST.getLineNo();</span>
+<span class="fc" id="L256">        final int slistColNo = slistAST.getColumnNo();</span>
+<span class="fc" id="L257">        final int rcurlyLineNo = rcurlyAST.getLineNo();</span>
+<span class="fc" id="L258">        final int rcurlyColNo = rcurlyAST.getColumnNo();</span>
+<span class="fc" id="L259">        final String[] lines = getLines();</span>
+<span class="fc" id="L260">        boolean returnValue = false;</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">        if (slistLineNo == rcurlyLineNo) {</span>
             // Handle braces on the same line
-<span class="fc" id="L255">            final String txt = lines[slistLineNo - 1]</span>
-<span class="fc" id="L256">                    .substring(slistColNo + 1, rcurlyColNo);</span>
-<span class="fc bfc" id="L257" title="All 2 branches covered.">            if (!CommonUtil.isBlank(txt)) {</span>
-<span class="fc" id="L258">                returnValue = true;</span>
+<span class="fc" id="L263">            final String txt = lines[slistLineNo - 1]</span>
+<span class="fc" id="L264">                    .substring(slistColNo + 1, rcurlyColNo);</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">            if (!CommonUtil.isBlank(txt)) {</span>
+<span class="fc" id="L266">                returnValue = true;</span>
             }
-<span class="fc" id="L260">        }</span>
+<span class="fc" id="L268">        }</span>
         else {
-<span class="fc" id="L262">            final String firstLine = lines[slistLineNo - 1].substring(slistColNo + 1);</span>
-<span class="fc" id="L263">            final String lastLine = lines[rcurlyLineNo - 1].substring(0, rcurlyColNo);</span>
+<span class="fc" id="L270">            final String firstLine = lines[slistLineNo - 1].substring(slistColNo + 1);</span>
+<span class="fc" id="L271">            final String lastLine = lines[rcurlyLineNo - 1].substring(0, rcurlyColNo);</span>
             // check if all lines are also only whitespace
-<span class="fc bfc" id="L265" title="All 4 branches covered.">            returnValue = !(CommonUtil.isBlank(firstLine) &amp;&amp; CommonUtil.isBlank(lastLine))</span>
-<span class="fc bfc" id="L266" title="All 2 branches covered.">                    || !checkIsAllLinesAreWhitespace(lines, slistLineNo, rcurlyLineNo);</span>
+<span class="fc bfc" id="L273" title="All 4 branches covered.">            returnValue = !(CommonUtil.isBlank(firstLine) &amp;&amp; CommonUtil.isBlank(lastLine))</span>
+<span class="fc bfc" id="L274" title="All 2 branches covered.">                    || !checkIsAllLinesAreWhitespace(lines, slistLineNo, rcurlyLineNo);</span>
         }
-<span class="fc" id="L268">        return returnValue;</span>
+<span class="fc" id="L276">        return returnValue;</span>
     }
 
     /**
@@ -280,14 +288,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if lines contain only whitespaces
      */
     private static boolean checkIsAllLinesAreWhitespace(String[] lines, int lineFrom, int lineTo) {
-<span class="fc" id="L283">        boolean result = true;</span>
-<span class="fc bfc" id="L284" title="All 2 branches covered.">        for (int i = lineFrom; i &lt; lineTo - 1; i++) {</span>
-<span class="fc bfc" id="L285" title="All 2 branches covered.">            if (!CommonUtil.isBlank(lines[i])) {</span>
-<span class="fc" id="L286">                result = false;</span>
-<span class="fc" id="L287">                break;</span>
+<span class="fc" id="L291">        boolean result = true;</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">        for (int i = lineFrom; i &lt; lineTo - 1; i++) {</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">            if (!CommonUtil.isBlank(lines[i])) {</span>
+<span class="fc" id="L294">                result = false;</span>
+<span class="fc" id="L295">                break;</span>
             }
         }
-<span class="fc" id="L290">        return result;</span>
+<span class="fc" id="L298">        return result;</span>
     }
 
     /**
@@ -298,21 +306,21 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     private static DetailAST findLeftCurly(DetailAST ast) {
         final DetailAST leftCurly;
-<span class="fc" id="L301">        final DetailAST slistAST = ast.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc bfc" id="L302" title="All 2 branches covered.">        if ((ast.getType() == TokenTypes.LITERAL_CASE</span>
-<span class="fc bfc" id="L303" title="All 2 branches covered.">                || ast.getType() == TokenTypes.LITERAL_DEFAULT)</span>
-<span class="fc bfc" id="L304" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling() != null</span>
-<span class="fc bfc" id="L305" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling().getFirstChild() != null</span>
-<span class="fc bfc" id="L306" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling().getFirstChild().getType() == TokenTypes.SLIST) {</span>
-<span class="fc" id="L307">            leftCurly = ast.getNextSibling().getFirstChild();</span>
+<span class="fc" id="L309">        final DetailAST slistAST = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc bfc" id="L310" title="All 2 branches covered.">        if ((ast.getType() == TokenTypes.LITERAL_CASE</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">                || ast.getType() == TokenTypes.LITERAL_DEFAULT)</span>
+<span class="fc bfc" id="L312" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling() != null</span>
+<span class="fc bfc" id="L313" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling().getFirstChild() != null</span>
+<span class="fc bfc" id="L314" title="All 2 branches covered.">                &amp;&amp; ast.getNextSibling().getFirstChild().getType() == TokenTypes.SLIST) {</span>
+<span class="fc" id="L315">            leftCurly = ast.getNextSibling().getFirstChild();</span>
         }
-<span class="fc bfc" id="L309" title="All 2 branches covered.">        else if (slistAST == null) {</span>
-<span class="fc" id="L310">            leftCurly = ast.findFirstToken(TokenTypes.LCURLY);</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">        else if (slistAST == null) {</span>
+<span class="fc" id="L318">            leftCurly = ast.findFirstToken(TokenTypes.LCURLY);</span>
         }
         else {
-<span class="fc" id="L313">            leftCurly = slistAST;</span>
+<span class="fc" id="L321">            leftCurly = slistAST;</span>
         }
-<span class="fc" id="L315">        return leftCurly;</span>
+<span class="fc" id="L323">        return leftCurly;</span>
     }
 
 }

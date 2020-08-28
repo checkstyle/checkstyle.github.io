@@ -19,6 +19,8 @@
 
 package com.puppycrawl.tools.checkstyle.checks.coding;
 
+import java.util.regex.Pattern;
+
 import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
@@ -52,7 +54,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;ul&gt;
  * &lt;li&gt;
  * Property {@code tokens} - tokens to check
- * Type is {@code int[]}.
+ * Type is {@code java.lang.String[]}.
+ * Validation type is {@code tokenSet}.
  * Default value is:
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#EXPR&quot;&gt;
  * EXPR&lt;/a&gt;,
@@ -99,7 +102,9 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#STAR_ASSIGN&quot;&gt;
  * STAR_ASSIGN&lt;/a&gt;,
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAMBDA&quot;&gt;
- * LAMBDA&lt;/a&gt;.
+ * LAMBDA&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#TEXT_BLOCK_LITERAL_BEGIN&quot;&gt;
+ * TEXT_BLOCK_LITERAL_BEGIN&lt;/a&gt;.
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
@@ -160,7 +165,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 3.4
  */
 @FileStatefulCheck
-<span class="fc" id="L163">public class UnnecessaryParenthesesCheck extends AbstractCheck {</span>
+<span class="fc" id="L168">public class UnnecessaryParenthesesCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -204,11 +209,21 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      */
     public static final String MSG_LAMBDA = &quot;unnecessary.paren.lambda&quot;;
 
+    /**
+     * Compiled pattern used to match newline control characters, for replacement.
+     */
+<span class="fc" id="L215">    private static final Pattern NEWLINE = Pattern.compile(&quot;\\R&quot;);</span>
+
+    /**
+     * String used to amend TEXT_BLOCK_CONTENT so that it matches STRING_LITERAL.
+     */
+    private static final String QUOTE = &quot;\&quot;&quot;;
+
     /** The maximum string length before we chop the string. */
     private static final int MAX_QUOTED_LENGTH = 25;
 
     /** Token types for literals. */
-<span class="fc" id="L211">    private static final int[] LITERALS = {</span>
+<span class="fc" id="L226">    private static final int[] LITERALS = {</span>
         TokenTypes.NUM_DOUBLE,
         TokenTypes.NUM_FLOAT,
         TokenTypes.NUM_INT,
@@ -217,10 +232,11 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
         TokenTypes.LITERAL_NULL,
         TokenTypes.LITERAL_FALSE,
         TokenTypes.LITERAL_TRUE,
+        TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,
     };
 
     /** Token types for assignment operations. */
-<span class="fc" id="L223">    private static final int[] ASSIGNMENTS = {</span>
+<span class="fc" id="L239">    private static final int[] ASSIGNMENTS = {</span>
         TokenTypes.ASSIGN,
         TokenTypes.BAND_ASSIGN,
         TokenTypes.BOR_ASSIGN,
@@ -245,7 +261,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L248">        return new int[] {</span>
+<span class="fc" id="L264">        return new int[] {</span>
             TokenTypes.EXPR,
             TokenTypes.IDENT,
             TokenTypes.NUM_DOUBLE,
@@ -269,12 +285,13 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
             TokenTypes.SR_ASSIGN,
             TokenTypes.STAR_ASSIGN,
             TokenTypes.LAMBDA,
+            TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,
         };
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L277">        return new int[] {</span>
+<span class="fc" id="L294">        return new int[] {</span>
             TokenTypes.EXPR,
             TokenTypes.IDENT,
             TokenTypes.NUM_DOUBLE,
@@ -298,87 +315,97 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
             TokenTypes.SR_ASSIGN,
             TokenTypes.STAR_ASSIGN,
             TokenTypes.LAMBDA,
+            TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,
         };
     }
 
     @Override
     public int[] getRequiredTokens() {
         // Check can work with any of acceptable tokens
-<span class="fc" id="L307">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L325">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     // -@cs[CyclomaticComplexity] All logs should be in visit token.
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L313">        final int type = ast.getType();</span>
-<span class="fc" id="L314">        final DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L331">        final int type = ast.getType();</span>
+<span class="fc" id="L332">        final DetailAST parent = ast.getParent();</span>
 
-<span class="fc bfc" id="L316" title="All 4 branches covered.">        if (type == TokenTypes.LAMBDA &amp;&amp; isLambdaSingleParameterSurrounded(ast)) {</span>
-<span class="fc" id="L317">            log(ast, MSG_LAMBDA, ast.getText());</span>
+<span class="fc bfc" id="L334" title="All 4 branches covered.">        if (type == TokenTypes.LAMBDA &amp;&amp; isLambdaSingleParameterSurrounded(ast)) {</span>
+<span class="fc" id="L335">            log(ast, MSG_LAMBDA, ast.getText());</span>
         }
-<span class="fc bfc" id="L319" title="All 2 branches covered.">        else if (type != TokenTypes.ASSIGN</span>
-<span class="fc bfc" id="L320" title="All 2 branches covered.">            || parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</span>
-<span class="fc" id="L321">            final boolean surrounded = isSurrounded(ast);</span>
+<span class="fc bfc" id="L337" title="All 2 branches covered.">        else if (type != TokenTypes.ASSIGN</span>
+<span class="fc bfc" id="L338" title="All 2 branches covered.">            || parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</span>
+<span class="fc" id="L339">            final boolean surrounded = isSurrounded(ast);</span>
             // An identifier surrounded by parentheses.
-<span class="fc bfc" id="L323" title="All 4 branches covered.">            if (surrounded &amp;&amp; type == TokenTypes.IDENT) {</span>
-<span class="fc" id="L324">                parentToSkip = ast.getParent();</span>
-<span class="fc" id="L325">                log(ast, MSG_IDENT, ast.getText());</span>
+<span class="fc bfc" id="L341" title="All 4 branches covered.">            if (surrounded &amp;&amp; type == TokenTypes.IDENT) {</span>
+<span class="fc" id="L342">                parentToSkip = ast.getParent();</span>
+<span class="fc" id="L343">                log(ast, MSG_IDENT, ast.getText());</span>
             }
             // A literal (numeric or string) surrounded by parentheses.
-<span class="fc bfc" id="L328" title="All 4 branches covered.">            else if (surrounded &amp;&amp; isInTokenList(type, LITERALS)) {</span>
-<span class="fc" id="L329">                parentToSkip = ast.getParent();</span>
-<span class="fc bfc" id="L330" title="All 2 branches covered.">                if (type == TokenTypes.STRING_LITERAL) {</span>
-<span class="fc" id="L331">                    log(ast, MSG_STRING,</span>
-<span class="fc" id="L332">                        chopString(ast.getText()));</span>
+<span class="fc bfc" id="L346" title="All 4 branches covered.">            else if (surrounded &amp;&amp; isInTokenList(type, LITERALS)) {</span>
+<span class="fc" id="L347">                parentToSkip = ast.getParent();</span>
+<span class="fc bfc" id="L348" title="All 2 branches covered.">                if (type == TokenTypes.STRING_LITERAL) {</span>
+<span class="fc" id="L349">                    log(ast, MSG_STRING,</span>
+<span class="fc" id="L350">                        chopString(ast.getText()));</span>
                 }
+<span class="fc bfc" id="L352" title="All 2 branches covered.">                else if (type == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN) {</span>
+                    // Strip newline control characters to keep message as single line, add
+                    // quotes to make string consistent with STRING_LITERAL
+<span class="fc" id="L355">                    final String logString = QUOTE</span>
+<span class="fc" id="L356">                        + NEWLINE.matcher(</span>
+<span class="fc" id="L357">                            ast.getFirstChild().getText()).replaceAll(&quot;\\\\n&quot;)</span>
+                        + QUOTE;
+<span class="fc" id="L359">                    log(ast, MSG_STRING, chopString(logString));</span>
+<span class="fc" id="L360">                }</span>
                 else {
-<span class="fc" id="L335">                    log(ast, MSG_LITERAL, ast.getText());</span>
+<span class="fc" id="L362">                    log(ast, MSG_LITERAL, ast.getText());</span>
                 }
             }
             // The rhs of an assignment surrounded by parentheses.
-<span class="fc bfc" id="L339" title="All 2 branches covered.">            else if (isInTokenList(type, ASSIGNMENTS)) {</span>
-<span class="fc" id="L340">                assignDepth++;</span>
-<span class="fc" id="L341">                final DetailAST last = ast.getLastChild();</span>
-<span class="fc bfc" id="L342" title="All 2 branches covered.">                if (last.getType() == TokenTypes.RPAREN) {</span>
-<span class="fc" id="L343">                    log(ast, MSG_ASSIGN);</span>
+<span class="fc bfc" id="L366" title="All 2 branches covered.">            else if (isInTokenList(type, ASSIGNMENTS)) {</span>
+<span class="fc" id="L367">                assignDepth++;</span>
+<span class="fc" id="L368">                final DetailAST last = ast.getLastChild();</span>
+<span class="fc bfc" id="L369" title="All 2 branches covered.">                if (last.getType() == TokenTypes.RPAREN) {</span>
+<span class="fc" id="L370">                    log(ast, MSG_ASSIGN);</span>
                 }
             }
         }
-<span class="fc" id="L347">    }</span>
+<span class="fc" id="L374">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc" id="L351">        final int type = ast.getType();</span>
-<span class="fc" id="L352">        final DetailAST parent = ast.getParent();</span>
+<span class="fc" id="L378">        final int type = ast.getType();</span>
+<span class="fc" id="L379">        final DetailAST parent = ast.getParent();</span>
 
         // shouldn't process assign in annotation pairs
-<span class="fc bfc" id="L355" title="All 2 branches covered.">        if (type != TokenTypes.ASSIGN</span>
-<span class="fc bfc" id="L356" title="All 2 branches covered.">            || parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">        if (type != TokenTypes.ASSIGN</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">            || parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</span>
             // An expression is surrounded by parentheses.
-<span class="fc bfc" id="L358" title="All 2 branches covered.">            if (type == TokenTypes.EXPR) {</span>
+<span class="fc bfc" id="L385" title="All 2 branches covered.">            if (type == TokenTypes.EXPR) {</span>
                 // If 'parentToSkip' == 'ast', then we've already logged a
                 // warning about an immediate child node in visitToken, so we don't
                 // need to log another one here.
 
-<span class="fc bfc" id="L363" title="All 4 branches covered.">                if (parentToSkip != ast &amp;&amp; isExprSurrounded(ast)) {</span>
-<span class="fc bfc" id="L364" title="All 2 branches covered.">                    if (assignDepth &gt;= 1) {</span>
-<span class="fc" id="L365">                        log(ast, MSG_ASSIGN);</span>
+<span class="fc bfc" id="L390" title="All 4 branches covered.">                if (parentToSkip != ast &amp;&amp; isExprSurrounded(ast)) {</span>
+<span class="fc bfc" id="L391" title="All 2 branches covered.">                    if (assignDepth &gt;= 1) {</span>
+<span class="fc" id="L392">                        log(ast, MSG_ASSIGN);</span>
                     }
-<span class="fc bfc" id="L367" title="All 2 branches covered.">                    else if (ast.getParent().getType() == TokenTypes.LITERAL_RETURN) {</span>
-<span class="fc" id="L368">                        log(ast, MSG_RETURN);</span>
+<span class="fc bfc" id="L394" title="All 2 branches covered.">                    else if (ast.getParent().getType() == TokenTypes.LITERAL_RETURN) {</span>
+<span class="fc" id="L395">                        log(ast, MSG_RETURN);</span>
                     }
                     else {
-<span class="fc" id="L371">                        log(ast, MSG_EXPR);</span>
+<span class="fc" id="L398">                        log(ast, MSG_EXPR);</span>
                     }
                 }
 
-<span class="fc" id="L375">                parentToSkip = null;</span>
+<span class="fc" id="L402">                parentToSkip = null;</span>
             }
-<span class="fc bfc" id="L377" title="All 2 branches covered.">            else if (isInTokenList(type, ASSIGNMENTS)) {</span>
-<span class="fc" id="L378">                assignDepth--;</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">            else if (isInTokenList(type, ASSIGNMENTS)) {</span>
+<span class="fc" id="L405">                assignDepth--;</span>
             }
         }
-<span class="fc" id="L381">    }</span>
+<span class="fc" id="L408">    }</span>
 
     /**
      * Tests if the given {@code DetailAST} is surrounded by parentheses.
@@ -394,8 +421,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     private static boolean isSurrounded(DetailAST ast) {
         // if previous sibling is left parenthesis,
         // next sibling can't be other than right parenthesis
-<span class="fc" id="L397">        final DetailAST prev = ast.getPreviousSibling();</span>
-<span class="fc bfc" id="L398" title="All 4 branches covered.">        return prev != null &amp;&amp; prev.getType() == TokenTypes.LPAREN;</span>
+<span class="fc" id="L424">        final DetailAST prev = ast.getPreviousSibling();</span>
+<span class="fc bfc" id="L425" title="All 4 branches covered.">        return prev != null &amp;&amp; prev.getType() == TokenTypes.LPAREN;</span>
     }
 
     /**
@@ -407,7 +434,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      *         parentheses.
      */
     private static boolean isExprSurrounded(DetailAST ast) {
-<span class="fc bfc" id="L410" title="All 2 branches covered.">        return ast.getFirstChild().getType() == TokenTypes.LPAREN;</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">        return ast.getFirstChild().getType() == TokenTypes.LPAREN;</span>
     }
 
     /**
@@ -420,16 +447,16 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      *         surrounded by parentheses.
      */
     private static boolean isLambdaSingleParameterSurrounded(DetailAST ast) {
-<span class="fc" id="L423">        final DetailAST firstChild = ast.getFirstChild();</span>
-<span class="fc" id="L424">        boolean result = false;</span>
-<span class="fc bfc" id="L425" title="All 2 branches covered.">        if (firstChild.getType() == TokenTypes.LPAREN) {</span>
-<span class="fc" id="L426">            final DetailAST parameters = firstChild.getNextSibling();</span>
-<span class="fc bfc" id="L427" title="All 2 branches covered.">            if (parameters.getChildCount(TokenTypes.PARAMETER_DEF) == 1</span>
-<span class="fc bfc" id="L428" title="All 2 branches covered.">                    &amp;&amp; !parameters.getFirstChild().findFirstToken(TokenTypes.TYPE).hasChildren()) {</span>
-<span class="fc" id="L429">                result = true;</span>
+<span class="fc" id="L450">        final DetailAST firstChild = ast.getFirstChild();</span>
+<span class="fc" id="L451">        boolean result = false;</span>
+<span class="fc bfc" id="L452" title="All 4 branches covered.">        if (firstChild != null &amp;&amp; firstChild.getType() == TokenTypes.LPAREN) {</span>
+<span class="fc" id="L453">            final DetailAST parameters = firstChild.getNextSibling();</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">            if (parameters.getChildCount(TokenTypes.PARAMETER_DEF) == 1</span>
+<span class="fc bfc" id="L455" title="All 2 branches covered.">                    &amp;&amp; !parameters.getFirstChild().findFirstToken(TokenTypes.TYPE).hasChildren()) {</span>
+<span class="fc" id="L456">                result = true;</span>
             }
         }
-<span class="fc" id="L432">        return result;</span>
+<span class="fc" id="L459">        return result;</span>
     }
 
     /**
@@ -445,11 +472,11 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
         //       it's worth bothering with doing a binary search or using a
         //       HashMap to do the searches.
 
-<span class="fc" id="L448">        boolean found = false;</span>
-<span class="fc bfc" id="L449" title="All 4 branches covered.">        for (int i = 0; i &lt; tokens.length &amp;&amp; !found; i++) {</span>
-<span class="fc bfc" id="L450" title="All 2 branches covered.">            found = tokens[i] == type;</span>
+<span class="fc" id="L475">        boolean found = false;</span>
+<span class="fc bfc" id="L476" title="All 4 branches covered.">        for (int i = 0; i &lt; tokens.length &amp;&amp; !found; i++) {</span>
+<span class="fc bfc" id="L477" title="All 2 branches covered.">            found = tokens[i] == type;</span>
         }
-<span class="fc" id="L452">        return found;</span>
+<span class="fc" id="L479">        return found;</span>
     }
 
     /**
@@ -462,11 +489,11 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      *         {@code MAX_QUOTED_LENGTH}; otherwise {@code string}.
      */
     private static String chopString(String value) {
-<span class="fc" id="L465">        String result = value;</span>
-<span class="fc bfc" id="L466" title="All 2 branches covered.">        if (value.length() &gt; MAX_QUOTED_LENGTH) {</span>
-<span class="fc" id="L467">            result = value.substring(0, MAX_QUOTED_LENGTH) + &quot;...\&quot;&quot;;</span>
+<span class="fc" id="L492">        String result = value;</span>
+<span class="fc bfc" id="L493" title="All 2 branches covered.">        if (value.length() &gt; MAX_QUOTED_LENGTH) {</span>
+<span class="fc" id="L494">            result = value.substring(0, MAX_QUOTED_LENGTH) + &quot;...\&quot;&quot;;</span>
         }
-<span class="fc" id="L469">        return result;</span>
+<span class="fc" id="L496">        return result;</span>
     }
 
 }

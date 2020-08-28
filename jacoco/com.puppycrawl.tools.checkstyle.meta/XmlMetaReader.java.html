@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>XmlMetaReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.meta</a> &gt; <span class="el_source">XmlMetaReader.java</span></div><h1>XmlMetaReader.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2020 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.meta;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+
+import org.reflections.Reflections;
+import org.reflections.scanners.ResourcesScanner;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+/**
+ * Class having utilities required to read module details from an XML metadata file of a module.
+ */
+public final class XmlMetaReader {
+
+    /** Name tag of metadata XML files. */
+    private static final String XML_TAG_NAME = &quot;name&quot;;
+
+    /** Description tag of metadata XML files. */
+    private static final String XML_TAG_DESCRIPTION = &quot;description&quot;;
+
+    /**
+     * Do no allow {@code XmlMetaReader} instances to be created.
+     */
+    private XmlMetaReader() {
+    }
+
+    /**
+     * Utility to load all the metadata files present in the checkstyle JAR including third parties'
+     * module metadata files.
+     * checkstyle metadata files are grouped in a folder hierarchy similar to that of their
+     * corresponding source files.
+     * Third party(e.g. SevNTU Checks) metadata files are prefixed with {@code checkstylemeta-}
+     * to their file names.
+     *
+     * @param thirdPartyPackages list of fully qualified third party package names(can be only a
+     *                           hint, e.g. for SevNTU it can be com.github.sevntu / com.github)
+     * @return list of module details found in the classpath satisfying the above conditions
+     */
+    public static List&lt;ModuleDetails&gt; readAllModulesIncludingThirdPartyIfAny(
+            String... thirdPartyPackages) {
+<span class="nc" id="L72">        final Set&lt;String&gt; standardModuleFileNames =</span>
+                new Reflections(&quot;com.puppycrawl.tools.checkstyle.meta&quot;,
+<span class="nc" id="L74">                        new ResourcesScanner()).getResources(Pattern.compile(&quot;.*\\.xml&quot;));</span>
+<span class="nc" id="L75">        final Set&lt;String&gt; allMetadataSources = new HashSet&lt;&gt;(standardModuleFileNames);</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        for (String packageName : thirdPartyPackages) {</span>
+<span class="nc" id="L77">            final Set&lt;String&gt; thirdPartyModuleFileNames =</span>
+                    new Reflections(packageName, new ResourcesScanner())
+<span class="nc" id="L79">                            .getResources(Pattern.compile(&quot;.*checkstylemeta-.*\\.xml&quot;));</span>
+<span class="nc" id="L80">            allMetadataSources.addAll(thirdPartyModuleFileNames);</span>
+        }
+
+<span class="nc" id="L83">        final List&lt;ModuleDetails&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">        for (String fileName : allMetadataSources) {</span>
+            final ModuleType moduleType;
+<span class="nc bnc" id="L86" title="All 2 branches missed.">            if (fileName.endsWith(&quot;FileFilter.xml&quot;)) {</span>
+<span class="nc" id="L87">                moduleType = ModuleType.FILEFILTER;</span>
+            }
+<span class="nc bnc" id="L89" title="All 2 branches missed.">            else if (fileName.endsWith(&quot;Filter.xml&quot;)) {</span>
+<span class="nc" id="L90">                moduleType = ModuleType.FILTER;</span>
+            }
+            else {
+<span class="nc" id="L93">                moduleType = ModuleType.CHECK;</span>
+            }
+            final ModuleDetails moduleDetails;
+            try {
+<span class="nc" id="L97">                moduleDetails = read(XmlMetaReader.class.getResourceAsStream(&quot;/&quot; + fileName),</span>
+                        moduleType);
+            }
+<span class="nc" id="L100">            catch (ParserConfigurationException | IOException | SAXException ex) {</span>
+<span class="nc" id="L101">                throw new IllegalStateException(&quot;Problem to read all modules including third &quot;</span>
+                        + &quot;party if any. Problem detected at file: &quot; + fileName, ex);
+<span class="nc" id="L103">            }</span>
+<span class="nc" id="L104">            result.add(moduleDetails);</span>
+<span class="nc" id="L105">        }</span>
+
+<span class="nc" id="L107">        return result;</span>
+    }
+
+    /**
+     * Read the module details from the supplied input stream of the module's XML metadata file.
+     *
+     * @param moduleMetadataStream input stream object of a module's metadata file
+     * @param moduleType type of module
+     * @return module detail object extracted from the XML metadata file
+     * @throws ParserConfigurationException if a parser configuration exception occurs
+     * @throws IOException if a IO exception occurs
+     * @throws SAXException if a SAX exception occurs during parsing the XML file
+     */
+    public static ModuleDetails read(InputStream moduleMetadataStream, ModuleType moduleType)
+            throws ParserConfigurationException, IOException, SAXException {
+<span class="nc" id="L122">        final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();</span>
+<span class="nc" id="L123">        final DocumentBuilder builder = factory.newDocumentBuilder();</span>
+<span class="nc" id="L124">        final Document document = builder.parse(moduleMetadataStream);</span>
+<span class="nc" id="L125">        final Element root = document.getDocumentElement();</span>
+<span class="nc" id="L126">        final Element element = getDirectChildsByTag(root, &quot;module&quot;).get(0);</span>
+<span class="nc" id="L127">        Element module = null;</span>
+<span class="nc" id="L128">        final ModuleDetails moduleDetails = new ModuleDetails();</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">        if (moduleType == ModuleType.CHECK) {</span>
+<span class="nc" id="L130">            module = getDirectChildsByTag(element, &quot;check&quot;).get(0);</span>
+<span class="nc" id="L131">            moduleDetails.setModuleType(ModuleType.CHECK);</span>
+        }
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        else if (moduleType == ModuleType.FILTER) {</span>
+<span class="nc" id="L134">            module = getDirectChildsByTag(element, &quot;filter&quot;).get(0);</span>
+<span class="nc" id="L135">            moduleDetails.setModuleType(ModuleType.FILTER);</span>
+        }
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        else if (moduleType == ModuleType.FILEFILTER) {</span>
+<span class="nc" id="L138">            module = getDirectChildsByTag(element, &quot;file-filter&quot;).get(0);</span>
+<span class="nc" id="L139">            moduleDetails.setModuleType(ModuleType.FILEFILTER);</span>
+        }
+<span class="nc" id="L141">        ModuleDetails result = null;</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        if (module != null) {</span>
+<span class="nc" id="L143">            result = createModule(module, moduleDetails);</span>
+        }
+<span class="nc" id="L145">        return result;</span>
+    }
+
+    /**
+     * Create the module detail object from XML metadata.
+     *
+     * @param mod root XML document element
+     * @param moduleDetails module detail object, which is to be updated
+     * @return module detail object containing all metadata
+     */
+    private static ModuleDetails createModule(Element mod, ModuleDetails moduleDetails) {
+<span class="nc" id="L156">        moduleDetails.setName(getAttributeValue(mod, XML_TAG_NAME));</span>
+<span class="nc" id="L157">        moduleDetails.setFullQualifiedName(getAttributeValue(mod, &quot;fully-qualified-name&quot;));</span>
+<span class="nc" id="L158">        moduleDetails.setParent(getAttributeValue(mod, &quot;parent&quot;));</span>
+<span class="nc" id="L159">        moduleDetails.setDescription(getDirectChildsByTag(mod, XML_TAG_DESCRIPTION).get(0)</span>
+<span class="nc" id="L160">                .getFirstChild().getNodeValue());</span>
+<span class="nc" id="L161">        final List&lt;Element&gt; properties = getDirectChildsByTag(mod, &quot;properties&quot;);</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (!properties.isEmpty()) {</span>
+<span class="nc" id="L163">            final List&lt;ModulePropertyDetails&gt; modulePropertyDetailsList =</span>
+<span class="nc" id="L164">                    createProperties(properties.get(0));</span>
+<span class="nc" id="L165">            moduleDetails.addToProperties(modulePropertyDetailsList);</span>
+        }
+<span class="nc" id="L167">        final List&lt;String&gt; messageKeys =</span>
+<span class="nc" id="L168">                getListContentByAttribute(mod,</span>
+                        &quot;message-keys&quot;, &quot;message-key&quot;, &quot;key&quot;);
+<span class="nc bnc" id="L170" title="All 2 branches missed.">        if (messageKeys != null) {</span>
+<span class="nc" id="L171">            moduleDetails.addToViolationMessages(messageKeys);</span>
+        }
+<span class="nc" id="L173">        return moduleDetails;</span>
+    }
+
+    /**
+     * Create module property details from the XML metadata.
+     *
+     * @param properties parent document element which contains property's metadata
+     * @return list of property details object created
+     */
+    private static List&lt;ModulePropertyDetails&gt; createProperties(Element properties) {
+<span class="nc" id="L183">        final List&lt;ModulePropertyDetails&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L184">        final NodeList propertyList = properties.getElementsByTagName(&quot;property&quot;);</span>
+<span class="nc bnc" id="L185" title="All 2 branches missed.">        for (int i = 0; i &lt; propertyList.getLength(); i++) {</span>
+<span class="nc" id="L186">            final ModulePropertyDetails propertyDetails = new ModulePropertyDetails();</span>
+<span class="nc" id="L187">            final Element prop = (Element) propertyList.item(i);</span>
+<span class="nc" id="L188">            propertyDetails.setName(getAttributeValue(prop, XML_TAG_NAME));</span>
+<span class="nc" id="L189">            propertyDetails.setType(getAttributeValue(prop, &quot;type&quot;));</span>
+<span class="nc" id="L190">            final String defaultValueTag = &quot;default-value&quot;;</span>
+<span class="nc bnc" id="L191" title="All 2 branches missed.">            if (prop.hasAttribute(defaultValueTag)) {</span>
+<span class="nc" id="L192">                propertyDetails.setDefaultValue(getAttributeValue(prop, defaultValueTag));</span>
+            }
+<span class="nc" id="L194">            final String validationTypeTag = &quot;validation-type&quot;;</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">            if (prop.hasAttribute(validationTypeTag)) {</span>
+<span class="nc" id="L196">                propertyDetails.setValidationType(getAttributeValue(prop, validationTypeTag));</span>
+            }
+<span class="nc" id="L198">            propertyDetails.setDescription(getDirectChildsByTag(prop, XML_TAG_DESCRIPTION)</span>
+<span class="nc" id="L199">                    .get(0).getFirstChild().getNodeValue());</span>
+<span class="nc" id="L200">            result.add(propertyDetails);</span>
+        }
+<span class="nc" id="L202">        return result;</span>
+    }
+
+    /**
+     * Utility to get the list contents by the attribute specified.
+     *
+     * @param element doc element
+     * @param listParent parent element of list
+     * @param listOption child list element
+     * @param attribute attribute key
+     * @return list of strings containing the XML list data
+     */
+    private static List&lt;String&gt; getListContentByAttribute(Element element, String listParent,
+                                                         String listOption, String attribute) {
+<span class="nc" id="L216">        final List&lt;Element&gt; children = getDirectChildsByTag(element, listParent);</span>
+<span class="nc" id="L217">        List&lt;String&gt; result = null;</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        if (!children.isEmpty()) {</span>
+<span class="nc" id="L219">            final NodeList nodeList = children.get(0).getElementsByTagName(listOption);</span>
+<span class="nc" id="L220">            final List&lt;String&gt; listContent = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L221" title="All 2 branches missed.">            for (int j = 0; j &lt; nodeList.getLength(); j++) {</span>
+<span class="nc" id="L222">                listContent.add(getAttributeValue((Element) nodeList.item(j), attribute));</span>
+            }
+<span class="nc" id="L224">            result = listContent;</span>
+        }
+<span class="nc" id="L226">        return result;</span>
+    }
+
+    /**
+     * Utility to get the children of an element by tag name.
+     *
+     * @param element parent element
+     * @param sTagName tag name of children required
+     * @return list of elements retrieved
+     */
+    private static List&lt;Element&gt; getDirectChildsByTag(Element element, String sTagName) {
+<span class="nc" id="L237">        final NodeList children = element.getElementsByTagName(sTagName);</span>
+<span class="nc" id="L238">        final List&lt;Element&gt; res = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L239" title="All 2 branches missed.">        for (int i = 0; i &lt; children.getLength(); i++) {</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">            if (children.item(i).getParentNode().equals(element)) {</span>
+<span class="nc" id="L241">                res.add((Element) children.item(i));</span>
+            }
+        }
+<span class="nc" id="L244">        return res;</span>
+    }
+
+    /**
+     * Utility to get attribute value of an element.
+     *
+     * @param element target element
+     * @param attribute attribute key
+     * @return attribute value
+     */
+    private static String getAttributeValue(Element element, String attribute) {
+<span class="nc" id="L255">        return element.getAttributes().getNamedItem(attribute).getNodeValue();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

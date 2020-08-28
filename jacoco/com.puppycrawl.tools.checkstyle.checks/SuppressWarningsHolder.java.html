@@ -25,6 +25,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
@@ -106,7 +107,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * @since 5.7
  */
 @StatelessCheck
-<span class="fc" id="L109">public class SuppressWarningsHolder</span>
+<span class="fc" id="L110">public class SuppressWarningsHolder</span>
     extends AbstractCheck {
 
     /**
@@ -128,14 +129,24 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     private static final String ALL_WARNING_MATCHING_ID = &quot;all&quot;;
 
     /** A map from check source names to suppression aliases. */
-<span class="fc" id="L131">    private static final Map&lt;String, String&gt; CHECK_ALIAS_MAP = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L132">    private static final Map&lt;String, String&gt; CHECK_ALIAS_MAP = new HashMap&lt;&gt;();</span>
 
     /**
      * A thread-local holder for the list of suppression entries for the last
      * file parsed.
      */
-<span class="fc" id="L137">    private static final ThreadLocal&lt;List&lt;Entry&gt;&gt; ENTRIES =</span>
-<span class="fc" id="L138">            ThreadLocal.withInitial(LinkedList::new);</span>
+<span class="fc" id="L138">    private static final ThreadLocal&lt;List&lt;Entry&gt;&gt; ENTRIES =</span>
+<span class="fc" id="L139">            ThreadLocal.withInitial(LinkedList::new);</span>
+
+    /**
+     * Compiled pattern used to match whitespace in text block content.
+     */
+<span class="fc" id="L144">    private static final Pattern WHITESPACE = Pattern.compile(&quot;\\s+&quot;);</span>
+
+    /**
+     * Compiled pattern used to match preceding newline in text block content.
+     */
+<span class="fc" id="L149">    private static final Pattern NEWLINE = Pattern.compile(&quot;\\n&quot;);</span>
 
     /**
      * Returns the default alias for the source name of a check, which is the
@@ -147,12 +158,12 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return the default alias for the given check
      */
     public static String getDefaultAlias(String sourceName) {
-<span class="fc" id="L150">        int endIndex = sourceName.length();</span>
-<span class="fc bfc" id="L151" title="All 2 branches covered.">        if (sourceName.endsWith(CHECK_SUFFIX)) {</span>
-<span class="fc" id="L152">            endIndex -= CHECK_SUFFIX.length();</span>
+<span class="fc" id="L161">        int endIndex = sourceName.length();</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        if (sourceName.endsWith(CHECK_SUFFIX)) {</span>
+<span class="fc" id="L163">            endIndex -= CHECK_SUFFIX.length();</span>
         }
-<span class="fc" id="L154">        final int startIndex = sourceName.lastIndexOf('.') + 1;</span>
-<span class="fc" id="L155">        return sourceName.substring(startIndex, endIndex).toLowerCase(Locale.ENGLISH);</span>
+<span class="fc" id="L165">        final int startIndex = sourceName.lastIndexOf('.') + 1;</span>
+<span class="fc" id="L166">        return sourceName.substring(startIndex, endIndex).toLowerCase(Locale.ENGLISH);</span>
     }
 
     /**
@@ -165,11 +176,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return the current alias for the given check
      */
     public static String getAlias(String sourceName) {
-<span class="fc" id="L168">        String checkAlias = CHECK_ALIAS_MAP.get(sourceName);</span>
-<span class="fc bfc" id="L169" title="All 2 branches covered.">        if (checkAlias == null) {</span>
-<span class="fc" id="L170">            checkAlias = getDefaultAlias(sourceName);</span>
+<span class="fc" id="L179">        String checkAlias = CHECK_ALIAS_MAP.get(sourceName);</span>
+<span class="fc bfc" id="L180" title="All 2 branches covered.">        if (checkAlias == null) {</span>
+<span class="fc" id="L181">            checkAlias = getDefaultAlias(sourceName);</span>
         }
-<span class="fc" id="L172">        return checkAlias;</span>
+<span class="fc" id="L183">        return checkAlias;</span>
     }
 
     /**
@@ -180,8 +191,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param checkAlias the alias used in {@link SuppressWarnings} annotations
      */
     private static void registerAlias(String sourceName, String checkAlias) {
-<span class="fc" id="L183">        CHECK_ALIAS_MAP.put(sourceName, checkAlias);</span>
-<span class="fc" id="L184">    }</span>
+<span class="fc" id="L194">        CHECK_ALIAS_MAP.put(sourceName, checkAlias);</span>
+<span class="fc" id="L195">    }</span>
 
     /**
      * Setter to specify aliases for check names that can be used in code
@@ -191,18 +202,18 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @throws IllegalArgumentException when alias item does not have '='
      */
     public void setAliasList(String... aliasList) {
-<span class="fc bfc" id="L194" title="All 2 branches covered.">        for (String sourceAlias : aliasList) {</span>
-<span class="fc" id="L195">            final int index = sourceAlias.indexOf('=');</span>
-<span class="fc bfc" id="L196" title="All 2 branches covered.">            if (index &gt; 0) {</span>
-<span class="fc" id="L197">                registerAlias(sourceAlias.substring(0, index), sourceAlias</span>
-<span class="fc" id="L198">                    .substring(index + 1));</span>
+<span class="fc bfc" id="L205" title="All 2 branches covered.">        for (String sourceAlias : aliasList) {</span>
+<span class="fc" id="L206">            final int index = sourceAlias.indexOf('=');</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">            if (index &gt; 0) {</span>
+<span class="fc" id="L208">                registerAlias(sourceAlias.substring(0, index), sourceAlias</span>
+<span class="fc" id="L209">                    .substring(index + 1));</span>
             }
-<span class="fc bfc" id="L200" title="All 2 branches covered.">            else if (!sourceAlias.isEmpty()) {</span>
-<span class="fc" id="L201">                throw new IllegalArgumentException(</span>
+<span class="fc bfc" id="L211" title="All 2 branches covered.">            else if (!sourceAlias.isEmpty()) {</span>
+<span class="fc" id="L212">                throw new IllegalArgumentException(</span>
                     &quot;'=' expected in alias list item: &quot; + sourceAlias);
             }
         }
-<span class="fc" id="L205">    }</span>
+<span class="fc" id="L216">    }</span>
 
     /**
      * Checks for a suppression of a check with the given source name and
@@ -213,26 +224,26 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      *         source location
      */
     public static boolean isSuppressed(AuditEvent event) {
-<span class="fc" id="L216">        final List&lt;Entry&gt; entries = ENTRIES.get();</span>
-<span class="fc" id="L217">        final String sourceName = event.getSourceName();</span>
-<span class="fc" id="L218">        final String checkAlias = getAlias(sourceName);</span>
-<span class="fc" id="L219">        final int line = event.getLine();</span>
-<span class="fc" id="L220">        final int column = event.getColumn();</span>
-<span class="fc" id="L221">        boolean suppressed = false;</span>
-<span class="fc bfc" id="L222" title="All 2 branches covered.">        for (Entry entry : entries) {</span>
-<span class="fc" id="L223">            final boolean afterStart = isSuppressedAfterEventStart(line, column, entry);</span>
-<span class="fc" id="L224">            final boolean beforeEnd = isSuppressedBeforeEventEnd(line, column, entry);</span>
-<span class="fc" id="L225">            final boolean nameMatches =</span>
-<span class="fc bfc" id="L226" title="All 2 branches covered.">                ALL_WARNING_MATCHING_ID.equals(entry.getCheckName())</span>
-<span class="fc bfc" id="L227" title="All 2 branches covered.">                    || entry.getCheckName().equalsIgnoreCase(checkAlias);</span>
-<span class="fc bfc" id="L228" title="All 2 branches covered.">            final boolean idMatches = event.getModuleId() != null</span>
-<span class="fc bfc" id="L229" title="All 2 branches covered.">                &amp;&amp; event.getModuleId().equals(entry.getCheckName());</span>
-<span class="fc bfc" id="L230" title="All 8 branches covered.">            if (afterStart &amp;&amp; beforeEnd &amp;&amp; (nameMatches || idMatches)) {</span>
-<span class="fc" id="L231">                suppressed = true;</span>
-<span class="fc" id="L232">                break;</span>
+<span class="fc" id="L227">        final List&lt;Entry&gt; entries = ENTRIES.get();</span>
+<span class="fc" id="L228">        final String sourceName = event.getSourceName();</span>
+<span class="fc" id="L229">        final String checkAlias = getAlias(sourceName);</span>
+<span class="fc" id="L230">        final int line = event.getLine();</span>
+<span class="fc" id="L231">        final int column = event.getColumn();</span>
+<span class="fc" id="L232">        boolean suppressed = false;</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        for (Entry entry : entries) {</span>
+<span class="fc" id="L234">            final boolean afterStart = isSuppressedAfterEventStart(line, column, entry);</span>
+<span class="fc" id="L235">            final boolean beforeEnd = isSuppressedBeforeEventEnd(line, column, entry);</span>
+<span class="fc" id="L236">            final boolean nameMatches =</span>
+<span class="fc bfc" id="L237" title="All 2 branches covered.">                ALL_WARNING_MATCHING_ID.equals(entry.getCheckName())</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">                    || entry.getCheckName().equalsIgnoreCase(checkAlias);</span>
+<span class="fc bfc" id="L239" title="All 2 branches covered.">            final boolean idMatches = event.getModuleId() != null</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">                &amp;&amp; event.getModuleId().equals(entry.getCheckName());</span>
+<span class="fc bfc" id="L241" title="All 8 branches covered.">            if (afterStart &amp;&amp; beforeEnd &amp;&amp; (nameMatches || idMatches)) {</span>
+<span class="fc" id="L242">                suppressed = true;</span>
+<span class="fc" id="L243">                break;</span>
             }
-<span class="fc" id="L234">        }</span>
-<span class="fc" id="L235">        return suppressed;</span>
+<span class="fc" id="L245">        }</span>
+<span class="fc" id="L246">        return suppressed;</span>
     }
 
     /**
@@ -246,9 +257,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      *         in the source file.
      */
     private static boolean isSuppressedAfterEventStart(int line, int column, Entry entry) {
-<span class="fc bfc" id="L249" title="All 2 branches covered.">        return entry.getFirstLine() &lt; line</span>
-<span class="fc bfc" id="L250" title="All 4 branches covered.">            || entry.getFirstLine() == line</span>
-<span class="fc bfc" id="L251" title="All 2 branches covered.">            &amp;&amp; (column == 0 || entry.getFirstColumn() &lt;= column);</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">        return entry.getFirstLine() &lt; line</span>
+<span class="fc bfc" id="L261" title="All 4 branches covered.">            || entry.getFirstLine() == line</span>
+<span class="fc bfc" id="L262" title="All 2 branches covered.">            &amp;&amp; (column == 0 || entry.getFirstColumn() &lt;= column);</span>
     }
 
     /**
@@ -262,71 +273,71 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      *         in the source file.
      */
     private static boolean isSuppressedBeforeEventEnd(int line, int column, Entry entry) {
-<span class="fc bfc" id="L265" title="All 2 branches covered.">        return entry.getLastLine() &gt; line</span>
-<span class="fc bfc" id="L266" title="All 2 branches covered.">            || entry.getLastLine() == line &amp;&amp; entry</span>
-<span class="fc bfc" id="L267" title="All 2 branches covered.">                .getLastColumn() &gt;= column;</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">        return entry.getLastLine() &gt; line</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">            || entry.getLastLine() == line &amp;&amp; entry</span>
+<span class="fc bfc" id="L278" title="All 2 branches covered.">                .getLastColumn() &gt;= column;</span>
     }
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L272">        return getRequiredTokens();</span>
+<span class="fc" id="L283">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L277">        return getRequiredTokens();</span>
+<span class="fc" id="L288">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L282">        return new int[] {TokenTypes.ANNOTATION};</span>
+<span class="fc" id="L293">        return new int[] {TokenTypes.ANNOTATION};</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L287">        ENTRIES.get().clear();</span>
-<span class="fc" id="L288">    }</span>
+<span class="fc" id="L298">        ENTRIES.get().clear();</span>
+<span class="fc" id="L299">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
         // check whether annotation is SuppressWarnings
         // expected children: AT ( IDENT | DOT ) LPAREN &lt;values&gt; RPAREN
-<span class="fc" id="L294">        String identifier = getIdentifier(getNthChild(ast, 1));</span>
-<span class="fc bfc" id="L295" title="All 2 branches covered.">        if (identifier.startsWith(JAVA_LANG_PREFIX)) {</span>
-<span class="fc" id="L296">            identifier = identifier.substring(JAVA_LANG_PREFIX.length());</span>
+<span class="fc" id="L305">        String identifier = getIdentifier(getNthChild(ast, 1));</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">        if (identifier.startsWith(JAVA_LANG_PREFIX)) {</span>
+<span class="fc" id="L307">            identifier = identifier.substring(JAVA_LANG_PREFIX.length());</span>
         }
-<span class="fc bfc" id="L298" title="All 2 branches covered.">        if (&quot;SuppressWarnings&quot;.equals(identifier)) {</span>
-<span class="fc" id="L299">            final List&lt;String&gt; values = getAllAnnotationValues(ast);</span>
-<span class="fc bfc" id="L300" title="All 2 branches covered.">            if (!isAnnotationEmpty(values)) {</span>
-<span class="fc" id="L301">                final DetailAST targetAST = getAnnotationTarget(ast);</span>
+<span class="fc bfc" id="L309" title="All 2 branches covered.">        if (&quot;SuppressWarnings&quot;.equals(identifier)) {</span>
+<span class="fc" id="L310">            final List&lt;String&gt; values = getAllAnnotationValues(ast);</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">            if (!isAnnotationEmpty(values)) {</span>
+<span class="fc" id="L312">                final DetailAST targetAST = getAnnotationTarget(ast);</span>
 
                 // get text range of target
-<span class="fc" id="L304">                final int firstLine = targetAST.getLineNo();</span>
-<span class="fc" id="L305">                final int firstColumn = targetAST.getColumnNo();</span>
-<span class="fc" id="L306">                final DetailAST nextAST = targetAST.getNextSibling();</span>
+<span class="fc" id="L315">                final int firstLine = targetAST.getLineNo();</span>
+<span class="fc" id="L316">                final int firstColumn = targetAST.getColumnNo();</span>
+<span class="fc" id="L317">                final DetailAST nextAST = targetAST.getNextSibling();</span>
                 final int lastLine;
                 final int lastColumn;
-<span class="fc bfc" id="L309" title="All 2 branches covered.">                if (nextAST == null) {</span>
-<span class="fc" id="L310">                    lastLine = Integer.MAX_VALUE;</span>
-<span class="fc" id="L311">                    lastColumn = Integer.MAX_VALUE;</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">                if (nextAST == null) {</span>
+<span class="fc" id="L321">                    lastLine = Integer.MAX_VALUE;</span>
+<span class="fc" id="L322">                    lastColumn = Integer.MAX_VALUE;</span>
                 }
                 else {
-<span class="fc" id="L314">                    lastLine = nextAST.getLineNo();</span>
-<span class="fc" id="L315">                    lastColumn = nextAST.getColumnNo() - 1;</span>
+<span class="fc" id="L325">                    lastLine = nextAST.getLineNo();</span>
+<span class="fc" id="L326">                    lastColumn = nextAST.getColumnNo() - 1;</span>
                 }
 
                 // add suppression entries for listed checks
-<span class="fc" id="L319">                final List&lt;Entry&gt; entries = ENTRIES.get();</span>
-<span class="fc bfc" id="L320" title="All 2 branches covered.">                for (String value : values) {</span>
-<span class="fc" id="L321">                    String checkName = value;</span>
+<span class="fc" id="L330">                final List&lt;Entry&gt; entries = ENTRIES.get();</span>
+<span class="fc bfc" id="L331" title="All 2 branches covered.">                for (String value : values) {</span>
+<span class="fc" id="L332">                    String checkName = value;</span>
                     // strip off the checkstyle-only prefix if present
-<span class="fc" id="L323">                    checkName = removeCheckstylePrefixIfExists(checkName);</span>
-<span class="fc" id="L324">                    entries.add(new Entry(checkName, firstLine, firstColumn,</span>
+<span class="fc" id="L334">                    checkName = removeCheckstylePrefixIfExists(checkName);</span>
+<span class="fc" id="L335">                    entries.add(new Entry(checkName, firstLine, firstColumn,</span>
                             lastLine, lastColumn));
-<span class="fc" id="L326">                }</span>
+<span class="fc" id="L337">                }</span>
             }
         }
-<span class="fc" id="L329">    }</span>
+<span class="fc" id="L340">    }</span>
 
     /**
      * Method removes checkstyle prefix (checkstyle:) from check name if exists.
@@ -336,11 +347,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return check name without prefix
      */
     private static String removeCheckstylePrefixIfExists(String checkName) {
-<span class="fc" id="L339">        String result = checkName;</span>
-<span class="fc bfc" id="L340" title="All 2 branches covered.">        if (checkName.startsWith(CHECKSTYLE_PREFIX)) {</span>
-<span class="fc" id="L341">            result = checkName.substring(CHECKSTYLE_PREFIX.length());</span>
+<span class="fc" id="L350">        String result = checkName;</span>
+<span class="fc bfc" id="L351" title="All 2 branches covered.">        if (checkName.startsWith(CHECKSTYLE_PREFIX)) {</span>
+<span class="fc" id="L352">            result = checkName.substring(CHECKSTYLE_PREFIX.length());</span>
         }
-<span class="fc" id="L343">        return result;</span>
+<span class="fc" id="L354">        return result;</span>
     }
 
     /**
@@ -351,33 +362,33 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static List&lt;String&gt; getAllAnnotationValues(DetailAST ast) {
         // get values of annotation
-<span class="fc" id="L354">        List&lt;String&gt; values = null;</span>
-<span class="fc" id="L355">        final DetailAST lparenAST = ast.findFirstToken(TokenTypes.LPAREN);</span>
-<span class="fc bfc" id="L356" title="All 2 branches covered.">        if (lparenAST != null) {</span>
-<span class="fc" id="L357">            final DetailAST nextAST = lparenAST.getNextSibling();</span>
-<span class="fc" id="L358">            final int nextType = nextAST.getType();</span>
-<span class="fc bfc" id="L359" title="All 4 branches covered.">            switch (nextType) {</span>
+<span class="fc" id="L365">        List&lt;String&gt; values = null;</span>
+<span class="fc" id="L366">        final DetailAST lparenAST = ast.findFirstToken(TokenTypes.LPAREN);</span>
+<span class="fc bfc" id="L367" title="All 2 branches covered.">        if (lparenAST != null) {</span>
+<span class="fc" id="L368">            final DetailAST nextAST = lparenAST.getNextSibling();</span>
+<span class="fc" id="L369">            final int nextType = nextAST.getType();</span>
+<span class="fc bfc" id="L370" title="All 4 branches covered.">            switch (nextType) {</span>
                 case TokenTypes.EXPR:
                 case TokenTypes.ANNOTATION_ARRAY_INIT:
-<span class="fc" id="L362">                    values = getAnnotationValues(nextAST);</span>
-<span class="fc" id="L363">                    break;</span>
+<span class="fc" id="L373">                    values = getAnnotationValues(nextAST);</span>
+<span class="fc" id="L374">                    break;</span>
 
                 case TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR:
                     // expected children: IDENT ASSIGN ( EXPR |
                     // ANNOTATION_ARRAY_INIT )
-<span class="fc" id="L368">                    values = getAnnotationValues(getNthChild(nextAST, 2));</span>
-<span class="fc" id="L369">                    break;</span>
+<span class="fc" id="L379">                    values = getAnnotationValues(getNthChild(nextAST, 2));</span>
+<span class="fc" id="L380">                    break;</span>
 
                 case TokenTypes.RPAREN:
                     // no value present (not valid Java)
-<span class="fc" id="L373">                    break;</span>
+<span class="fc" id="L384">                    break;</span>
 
                 default:
                     // unknown annotation value type (new syntax?)
-<span class="fc" id="L377">                    throw new IllegalArgumentException(&quot;Unexpected AST: &quot; + nextAST);</span>
+<span class="fc" id="L388">                    throw new IllegalArgumentException(&quot;Unexpected AST: &quot; + nextAST);</span>
             }
         }
-<span class="fc" id="L380">        return values;</span>
+<span class="fc" id="L391">        return values;</span>
     }
 
     /**
@@ -387,7 +398,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return whether annotation is empty or contains some values
      */
     private static boolean isAnnotationEmpty(List&lt;String&gt; values) {
-<span class="fc bfc" id="L390" title="All 2 branches covered.">        return values == null;</span>
+<span class="fc bfc" id="L401" title="All 2 branches covered.">        return values == null;</span>
     }
 
     /**
@@ -398,19 +409,19 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static DetailAST getAnnotationTarget(DetailAST ast) {
         final DetailAST targetAST;
-<span class="fc" id="L401">        final DetailAST parentAST = ast.getParent();</span>
-<span class="fc bfc" id="L402" title="All 2 branches covered.">        switch (parentAST.getType()) {</span>
+<span class="fc" id="L412">        final DetailAST parentAST = ast.getParent();</span>
+<span class="fc bfc" id="L413" title="All 2 branches covered.">        switch (parentAST.getType()) {</span>
             case TokenTypes.MODIFIERS:
             case TokenTypes.ANNOTATIONS:
             case TokenTypes.ANNOTATION:
             case TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR:
-<span class="fc" id="L407">                targetAST = parentAST.getParent();</span>
-<span class="fc" id="L408">                break;</span>
+<span class="fc" id="L418">                targetAST = parentAST.getParent();</span>
+<span class="fc" id="L419">                break;</span>
             default:
                 // unexpected container type
-<span class="fc" id="L411">                throw new IllegalArgumentException(&quot;Unexpected container AST: &quot; + parentAST);</span>
+<span class="fc" id="L422">                throw new IllegalArgumentException(&quot;Unexpected container AST: &quot; + parentAST);</span>
         }
-<span class="fc" id="L413">        return targetAST;</span>
+<span class="fc" id="L424">        return targetAST;</span>
     }
 
     /**
@@ -421,11 +432,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return the n'th child of the given AST node, or {@code null} if none
      */
     private static DetailAST getNthChild(DetailAST ast, int index) {
-<span class="fc" id="L424">        DetailAST child = ast.getFirstChild();</span>
-<span class="fc bfc" id="L425" title="All 4 branches covered.">        for (int i = 0; i &lt; index &amp;&amp; child != null; ++i) {</span>
-<span class="fc" id="L426">            child = child.getNextSibling();</span>
+<span class="fc" id="L435">        DetailAST child = ast.getFirstChild();</span>
+<span class="fc bfc" id="L436" title="All 4 branches covered.">        for (int i = 0; i &lt; index &amp;&amp; child != null; ++i) {</span>
+<span class="fc" id="L437">            child = child.getNextSibling();</span>
         }
-<span class="fc" id="L428">        return child;</span>
+<span class="fc" id="L439">        return child;</span>
     }
 
     /**
@@ -436,18 +447,18 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @throws IllegalArgumentException if the AST is invalid
      */
     private static String getIdentifier(DetailAST ast) {
-<span class="fc bfc" id="L439" title="All 2 branches covered.">        if (ast == null) {</span>
-<span class="fc" id="L440">            throw new IllegalArgumentException(&quot;Identifier AST expected, but get null.&quot;);</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">        if (ast == null) {</span>
+<span class="fc" id="L451">            throw new IllegalArgumentException(&quot;Identifier AST expected, but get null.&quot;);</span>
         }
         final String identifier;
-<span class="fc bfc" id="L443" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IDENT) {</span>
-<span class="fc" id="L444">            identifier = ast.getText();</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IDENT) {</span>
+<span class="fc" id="L455">            identifier = ast.getText();</span>
         }
         else {
-<span class="fc" id="L447">            identifier = getIdentifier(ast.getFirstChild()) + &quot;.&quot;</span>
-<span class="fc" id="L448">                + getIdentifier(ast.getLastChild());</span>
+<span class="fc" id="L458">            identifier = getIdentifier(ast.getFirstChild()) + &quot;.&quot;</span>
+<span class="fc" id="L459">                + getIdentifier(ast.getLastChild());</span>
         }
-<span class="fc" id="L450">        return identifier;</span>
+<span class="fc" id="L461">        return identifier;</span>
     }
 
     /**
@@ -459,25 +470,29 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @throws IllegalArgumentException if the AST is invalid
      */
     private static String getStringExpr(DetailAST ast) {
-<span class="fc" id="L462">        final DetailAST firstChild = ast.getFirstChild();</span>
-<span class="fc" id="L463">        String expr = &quot;&quot;;</span>
+<span class="fc" id="L473">        final DetailAST firstChild = ast.getFirstChild();</span>
+<span class="fc" id="L474">        String expr = &quot;&quot;;</span>
 
-<span class="fc bfc" id="L465" title="All 4 branches covered.">        switch (firstChild.getType()) {</span>
+<span class="fc bfc" id="L476" title="All 5 branches covered.">        switch (firstChild.getType()) {</span>
             case TokenTypes.STRING_LITERAL:
                 // NOTE: escaped characters are not unescaped
-<span class="fc" id="L468">                final String quotedText = firstChild.getText();</span>
-<span class="fc" id="L469">                expr = quotedText.substring(1, quotedText.length() - 1);</span>
-<span class="fc" id="L470">                break;</span>
+<span class="fc" id="L479">                final String quotedText = firstChild.getText();</span>
+<span class="fc" id="L480">                expr = quotedText.substring(1, quotedText.length() - 1);</span>
+<span class="fc" id="L481">                break;</span>
             case TokenTypes.IDENT:
-<span class="fc" id="L472">                expr = firstChild.getText();</span>
-<span class="fc" id="L473">                break;</span>
+<span class="fc" id="L483">                expr = firstChild.getText();</span>
+<span class="fc" id="L484">                break;</span>
             case TokenTypes.DOT:
-<span class="fc" id="L475">                expr = firstChild.getLastChild().getText();</span>
-<span class="fc" id="L476">                break;</span>
+<span class="fc" id="L486">                expr = firstChild.getLastChild().getText();</span>
+<span class="fc" id="L487">                break;</span>
+            case TokenTypes.TEXT_BLOCK_LITERAL_BEGIN:
+<span class="fc" id="L489">                final String textBlockContent = firstChild.getFirstChild().getText();</span>
+<span class="fc" id="L490">                expr = getContentWithoutPrecedingWhitespace(textBlockContent);</span>
+<span class="fc" id="L491">                break;</span>
             default:
                 // annotations with complex expressions cannot suppress warnings
         }
-<span class="fc" id="L480">        return expr;</span>
+<span class="fc" id="L495">        return expr;</span>
     }
 
     /**
@@ -490,18 +505,18 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      */
     private static List&lt;String&gt; getAnnotationValues(DetailAST ast) {
         final List&lt;String&gt; annotationValues;
-<span class="fc bfc" id="L493" title="All 3 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L508" title="All 3 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.EXPR:
-<span class="fc" id="L495">                annotationValues = Collections.singletonList(getStringExpr(ast));</span>
-<span class="fc" id="L496">                break;</span>
+<span class="fc" id="L510">                annotationValues = Collections.singletonList(getStringExpr(ast));</span>
+<span class="fc" id="L511">                break;</span>
             case TokenTypes.ANNOTATION_ARRAY_INIT:
-<span class="fc" id="L498">                annotationValues = findAllExpressionsInChildren(ast);</span>
-<span class="fc" id="L499">                break;</span>
+<span class="fc" id="L513">                annotationValues = findAllExpressionsInChildren(ast);</span>
+<span class="fc" id="L514">                break;</span>
             default:
-<span class="fc" id="L501">                throw new IllegalArgumentException(</span>
+<span class="fc" id="L516">                throw new IllegalArgumentException(</span>
                         &quot;Expression or annotation array initializer AST expected: &quot; + ast);
         }
-<span class="fc" id="L504">        return annotationValues;</span>
+<span class="fc" id="L519">        return annotationValues;</span>
     }
 
     /**
@@ -511,22 +526,34 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return list of expressions in strings
      */
     private static List&lt;String&gt; findAllExpressionsInChildren(DetailAST parent) {
-<span class="fc" id="L514">        final List&lt;String&gt; valueList = new LinkedList&lt;&gt;();</span>
-<span class="fc" id="L515">        DetailAST childAST = parent.getFirstChild();</span>
-<span class="fc bfc" id="L516" title="All 2 branches covered.">        while (childAST != null) {</span>
-<span class="fc bfc" id="L517" title="All 2 branches covered.">            if (childAST.getType() == TokenTypes.EXPR) {</span>
-<span class="fc" id="L518">                valueList.add(getStringExpr(childAST));</span>
+<span class="fc" id="L529">        final List&lt;String&gt; valueList = new LinkedList&lt;&gt;();</span>
+<span class="fc" id="L530">        DetailAST childAST = parent.getFirstChild();</span>
+<span class="fc bfc" id="L531" title="All 2 branches covered.">        while (childAST != null) {</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">            if (childAST.getType() == TokenTypes.EXPR) {</span>
+<span class="fc" id="L533">                valueList.add(getStringExpr(childAST));</span>
             }
-<span class="fc" id="L520">            childAST = childAST.getNextSibling();</span>
+<span class="fc" id="L535">            childAST = childAST.getNextSibling();</span>
         }
-<span class="fc" id="L522">        return valueList;</span>
+<span class="fc" id="L537">        return valueList;</span>
+    }
+
+    /**
+     * Remove preceding newline and whitespace from the content of a text block.
+     *
+     * @param textBlockContent the actual text in a text block.
+     * @return content of text block with preceding whitespace and newline removed.
+     */
+    private static String getContentWithoutPrecedingWhitespace(String textBlockContent) {
+<span class="fc" id="L547">        final String contentWithNoPrecedingNewline =</span>
+<span class="fc" id="L548">            NEWLINE.matcher(textBlockContent).replaceAll(&quot;&quot;);</span>
+<span class="fc" id="L549">        return WHITESPACE.matcher(contentWithNoPrecedingNewline).replaceAll(&quot;&quot;);</span>
     }
 
     @Override
     public void destroy() {
-<span class="fc" id="L527">        super.destroy();</span>
-<span class="fc" id="L528">        ENTRIES.remove();</span>
-<span class="fc" id="L529">    }</span>
+<span class="fc" id="L554">        super.destroy();</span>
+<span class="fc" id="L555">        ENTRIES.remove();</span>
+<span class="fc" id="L556">    }</span>
 
     /** Records a particular suppression for a region of a file. */
     private static class Entry {
@@ -552,13 +579,13 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @param lastColumn the last column of the suppression region
          */
         /* package */ Entry(String checkName, int firstLine, int firstColumn,
-<span class="fc" id="L555">            int lastLine, int lastColumn) {</span>
-<span class="fc" id="L556">            this.checkName = checkName;</span>
-<span class="fc" id="L557">            this.firstLine = firstLine;</span>
-<span class="fc" id="L558">            this.firstColumn = firstColumn;</span>
-<span class="fc" id="L559">            this.lastLine = lastLine;</span>
-<span class="fc" id="L560">            this.lastColumn = lastColumn;</span>
-<span class="fc" id="L561">        }</span>
+<span class="fc" id="L582">            int lastLine, int lastColumn) {</span>
+<span class="fc" id="L583">            this.checkName = checkName;</span>
+<span class="fc" id="L584">            this.firstLine = firstLine;</span>
+<span class="fc" id="L585">            this.firstColumn = firstColumn;</span>
+<span class="fc" id="L586">            this.lastLine = lastLine;</span>
+<span class="fc" id="L587">            this.lastColumn = lastColumn;</span>
+<span class="fc" id="L588">        }</span>
 
         /**
          * Gets he source name of the suppressed check.
@@ -566,7 +593,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return the source name of the suppressed check
          */
         public String getCheckName() {
-<span class="fc" id="L569">            return checkName;</span>
+<span class="fc" id="L596">            return checkName;</span>
         }
 
         /**
@@ -575,7 +602,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return the first line of the suppression region
          */
         public int getFirstLine() {
-<span class="fc" id="L578">            return firstLine;</span>
+<span class="fc" id="L605">            return firstLine;</span>
         }
 
         /**
@@ -584,7 +611,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return the first column of the suppression region
          */
         public int getFirstColumn() {
-<span class="fc" id="L587">            return firstColumn;</span>
+<span class="fc" id="L614">            return firstColumn;</span>
         }
 
         /**
@@ -593,7 +620,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return the last line of the suppression region
          */
         public int getLastLine() {
-<span class="fc" id="L596">            return lastLine;</span>
+<span class="fc" id="L623">            return lastLine;</span>
         }
 
         /**
@@ -602,7 +629,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return the last column of the suppression region
          */
         public int getLastColumn() {
-<span class="fc" id="L605">            return lastColumn;</span>
+<span class="fc" id="L632">            return lastColumn;</span>
         }
 
     }

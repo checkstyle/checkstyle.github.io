@@ -71,6 +71,12 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * Type is {@code int}.
  * Default value is {@code 2000}.
  * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code recordMaximum} - Specify the maximum allowed number of
+ * non commenting lines in a record.
+ * Type is {@code int}.
+ * Default value is {@code 150}.
+ * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
  * To configure the check:
@@ -178,6 +184,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &lt;li&gt;
  * {@code ncss.method}
  * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code ncss.record}
+ * &lt;/li&gt;
  * &lt;/ul&gt;
  *
  * @since 3.5
@@ -185,7 +194,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 // -@cs[AbbreviationAsWordInName] We can not change it as,
 // check's name is a part of API (used in configurations).
 @FileStatefulCheck
-<span class="fc" id="L188">public class JavaNCSSCheck extends AbstractCheck {</span>
+<span class="fc" id="L197">public class JavaNCSSCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -203,6 +212,12 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
      * file.
      */
+    public static final String MSG_RECORD = &quot;ncss.record&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
     public static final String MSG_FILE = &quot;ncss.file&quot;;
 
     /** Default constant for max file ncss. */
@@ -211,6 +226,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     /** Default constant for max file ncss. */
     private static final int CLASS_MAX_NCSS = 1500;
 
+    /** Default constant for max record ncss. */
+    private static final int RECORD_MAX_NCSS = 150;
+
     /** Default constant for max method ncss. */
     private static final int METHOD_MAX_NCSS = 50;
 
@@ -218,25 +236,28 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * Specify the maximum allowed number of non commenting lines in a file
      * including all top level and nested classes.
      */
-<span class="fc" id="L221">    private int fileMaximum = FILE_MAX_NCSS;</span>
+<span class="fc" id="L239">    private int fileMaximum = FILE_MAX_NCSS;</span>
 
     /** Specify the maximum allowed number of non commenting lines in a class. */
-<span class="fc" id="L224">    private int classMaximum = CLASS_MAX_NCSS;</span>
+<span class="fc" id="L242">    private int classMaximum = CLASS_MAX_NCSS;</span>
+
+    /** Specify the maximum allowed number of non commenting lines in a record. */
+<span class="fc" id="L245">    private int recordMaximum = RECORD_MAX_NCSS;</span>
 
     /** Specify the maximum allowed number of non commenting lines in a method. */
-<span class="fc" id="L227">    private int methodMaximum = METHOD_MAX_NCSS;</span>
+<span class="fc" id="L248">    private int methodMaximum = METHOD_MAX_NCSS;</span>
 
     /** List containing the stacked counters. */
     private Deque&lt;Counter&gt; counters;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L234">        return getRequiredTokens();</span>
+<span class="fc" id="L255">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L239">        return new int[] {</span>
+<span class="fc" id="L260">        return new int[] {</span>
             TokenTypes.CLASS_DEF,
             TokenTypes.INTERFACE_DEF,
             TokenTypes.METHOD_DEF,
@@ -265,78 +286,85 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
             TokenTypes.LABELED_STAT,
             TokenTypes.LITERAL_CASE,
             TokenTypes.LITERAL_DEFAULT,
+            TokenTypes.RECORD_DEF,
+            TokenTypes.COMPACT_CTOR_DEF,
         };
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L273">        return getRequiredTokens();</span>
+<span class="fc" id="L296">        return getRequiredTokens();</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L278">        counters = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L301">        counters = new ArrayDeque&lt;&gt;();</span>
 
         // add a counter for the file
-<span class="fc" id="L281">        counters.push(new Counter());</span>
-<span class="fc" id="L282">    }</span>
+<span class="fc" id="L304">        counters.push(new Counter());</span>
+<span class="fc" id="L305">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L286">        final int tokenType = ast.getType();</span>
+<span class="fc" id="L309">        final int tokenType = ast.getType();</span>
 
-<span class="fc bfc" id="L288" title="All 10 branches covered.">        if (tokenType == TokenTypes.CLASS_DEF</span>
-            || tokenType == TokenTypes.METHOD_DEF
-            || tokenType == TokenTypes.CTOR_DEF
-            || tokenType == TokenTypes.STATIC_INIT
-            || tokenType == TokenTypes.INSTANCE_INIT) {
+<span class="fc bfc" id="L311" title="All 4 branches covered.">        if (tokenType == TokenTypes.CLASS_DEF</span>
+            || tokenType == TokenTypes.RECORD_DEF
+<span class="fc bfc" id="L313" title="All 2 branches covered.">            || isMethodOrCtorOrInitDefinition(tokenType)) {</span>
             // add a counter for this class/method
-<span class="fc" id="L294">            counters.push(new Counter());</span>
+<span class="fc" id="L315">            counters.push(new Counter());</span>
         }
 
         // check if token is countable
-<span class="fc bfc" id="L298" title="All 2 branches covered.">        if (isCountable(ast)) {</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">        if (isCountable(ast)) {</span>
             // increment the stacked counters
-<span class="fc" id="L300">            counters.forEach(Counter::increment);</span>
+<span class="fc" id="L321">            counters.forEach(Counter::increment);</span>
         }
-<span class="fc" id="L302">    }</span>
+<span class="fc" id="L323">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc" id="L306">        final int tokenType = ast.getType();</span>
-<span class="fc bfc" id="L307" title="All 8 branches covered.">        if (tokenType == TokenTypes.METHOD_DEF</span>
-            || tokenType == TokenTypes.CTOR_DEF
-            || tokenType == TokenTypes.STATIC_INIT
-            || tokenType == TokenTypes.INSTANCE_INIT) {
-            // pop counter from the stack
-<span class="fc" id="L312">            final Counter counter = counters.pop();</span>
+<span class="fc" id="L327">        final int tokenType = ast.getType();</span>
 
-<span class="fc" id="L314">            final int count = counter.getCount();</span>
-<span class="fc bfc" id="L315" title="All 2 branches covered.">            if (count &gt; methodMaximum) {</span>
-<span class="fc" id="L316">                log(ast, MSG_METHOD, count, methodMaximum);</span>
+<span class="fc bfc" id="L329" title="All 2 branches covered.">        if (isMethodOrCtorOrInitDefinition(tokenType)) {</span>
+            // pop counter from the stack
+<span class="fc" id="L331">            final Counter counter = counters.pop();</span>
+
+<span class="fc" id="L333">            final int count = counter.getCount();</span>
+<span class="fc bfc" id="L334" title="All 2 branches covered.">            if (count &gt; methodMaximum) {</span>
+<span class="fc" id="L335">                log(ast, MSG_METHOD, count, methodMaximum);</span>
             }
-<span class="fc" id="L318">        }</span>
-<span class="fc bfc" id="L319" title="All 2 branches covered.">        else if (tokenType == TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L337">        }</span>
+<span class="fc bfc" id="L338" title="All 2 branches covered.">        else if (tokenType == TokenTypes.CLASS_DEF) {</span>
             // pop counter from the stack
-<span class="fc" id="L321">            final Counter counter = counters.pop();</span>
+<span class="fc" id="L340">            final Counter counter = counters.pop();</span>
 
-<span class="fc" id="L323">            final int count = counter.getCount();</span>
-<span class="fc bfc" id="L324" title="All 2 branches covered.">            if (count &gt; classMaximum) {</span>
-<span class="fc" id="L325">                log(ast, MSG_CLASS, count, classMaximum);</span>
+<span class="fc" id="L342">            final int count = counter.getCount();</span>
+<span class="fc bfc" id="L343" title="All 2 branches covered.">            if (count &gt; classMaximum) {</span>
+<span class="fc" id="L344">                log(ast, MSG_CLASS, count, classMaximum);</span>
+            }
+<span class="fc" id="L346">        }</span>
+<span class="fc bfc" id="L347" title="All 2 branches covered.">        else if (tokenType == TokenTypes.RECORD_DEF) {</span>
+            // pop counter from the stack
+<span class="fc" id="L349">            final Counter counter = counters.pop();</span>
+
+<span class="fc" id="L351">            final int count = counter.getCount();</span>
+<span class="fc bfc" id="L352" title="All 2 branches covered.">            if (count &gt; recordMaximum) {</span>
+<span class="fc" id="L353">                log(ast, MSG_RECORD, count, recordMaximum);</span>
             }
         }
-<span class="fc" id="L328">    }</span>
+<span class="fc" id="L356">    }</span>
 
     @Override
     public void finishTree(DetailAST rootAST) {
         // pop counter from the stack
-<span class="fc" id="L333">        final Counter counter = counters.pop();</span>
+<span class="fc" id="L361">        final Counter counter = counters.pop();</span>
 
-<span class="fc" id="L335">        final int count = counter.getCount();</span>
-<span class="fc bfc" id="L336" title="All 2 branches covered.">        if (count &gt; fileMaximum) {</span>
-<span class="fc" id="L337">            log(rootAST, MSG_FILE, count, fileMaximum);</span>
+<span class="fc" id="L363">        final int count = counter.getCount();</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">        if (count &gt; fileMaximum) {</span>
+<span class="fc" id="L365">            log(rootAST, MSG_FILE, count, fileMaximum);</span>
         }
-<span class="fc" id="L339">    }</span>
+<span class="fc" id="L367">    }</span>
 
     /**
      * Setter to specify the maximum allowed number of non commenting lines
@@ -346,8 +374,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      *            the maximum ncss
      */
     public void setFileMaximum(int fileMaximum) {
-<span class="fc" id="L349">        this.fileMaximum = fileMaximum;</span>
-<span class="fc" id="L350">    }</span>
+<span class="fc" id="L377">        this.fileMaximum = fileMaximum;</span>
+<span class="fc" id="L378">    }</span>
 
     /**
      * Setter to specify the maximum allowed number of non commenting lines in a class.
@@ -356,8 +384,18 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      *            the maximum ncss
      */
     public void setClassMaximum(int classMaximum) {
-<span class="fc" id="L359">        this.classMaximum = classMaximum;</span>
-<span class="fc" id="L360">    }</span>
+<span class="fc" id="L387">        this.classMaximum = classMaximum;</span>
+<span class="fc" id="L388">    }</span>
+
+    /**
+     * Setter to specify the maximum allowed number of non commenting lines in a record.
+     *
+     * @param recordMaximum
+     *            the maximum ncss
+     */
+    public void setRecordMaximum(int recordMaximum) {
+<span class="fc" id="L397">        this.recordMaximum = recordMaximum;</span>
+<span class="fc" id="L398">    }</span>
 
     /**
      * Setter to specify the maximum allowed number of non commenting lines in a method.
@@ -366,8 +404,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      *            the maximum ncss
      */
     public void setMethodMaximum(int methodMaximum) {
-<span class="fc" id="L369">        this.methodMaximum = methodMaximum;</span>
-<span class="fc" id="L370">    }</span>
+<span class="fc" id="L407">        this.methodMaximum = methodMaximum;</span>
+<span class="fc" id="L408">    }</span>
 
     /**
      * Checks if a token is countable for the ncss metric.
@@ -377,19 +415,19 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if the token is countable
      */
     private static boolean isCountable(DetailAST ast) {
-<span class="fc" id="L380">        boolean countable = true;</span>
+<span class="fc" id="L418">        boolean countable = true;</span>
 
-<span class="fc" id="L382">        final int tokenType = ast.getType();</span>
+<span class="fc" id="L420">        final int tokenType = ast.getType();</span>
 
         // check if an expression is countable
-<span class="fc bfc" id="L385" title="All 2 branches covered.">        if (tokenType == TokenTypes.EXPR) {</span>
-<span class="fc" id="L386">            countable = isExpressionCountable(ast);</span>
+<span class="fc bfc" id="L423" title="All 2 branches covered.">        if (tokenType == TokenTypes.EXPR) {</span>
+<span class="fc" id="L424">            countable = isExpressionCountable(ast);</span>
         }
         // check if an variable definition is countable
-<span class="fc bfc" id="L389" title="All 2 branches covered.">        else if (tokenType == TokenTypes.VARIABLE_DEF) {</span>
-<span class="fc" id="L390">            countable = isVariableDefCountable(ast);</span>
+<span class="fc bfc" id="L427" title="All 2 branches covered.">        else if (tokenType == TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L428">            countable = isVariableDefCountable(ast);</span>
         }
-<span class="fc" id="L392">        return countable;</span>
+<span class="fc" id="L430">        return countable;</span>
     }
 
     /**
@@ -399,25 +437,25 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if the variable definition is countable, false otherwise
      */
     private static boolean isVariableDefCountable(DetailAST ast) {
-<span class="fc" id="L402">        boolean countable = false;</span>
+<span class="fc" id="L440">        boolean countable = false;</span>
 
         // count variable definitions only if they are direct child to a slist or
         // object block
-<span class="fc" id="L406">        final int parentType = ast.getParent().getType();</span>
+<span class="fc" id="L444">        final int parentType = ast.getParent().getType();</span>
 
-<span class="fc bfc" id="L408" title="All 4 branches covered.">        if (parentType == TokenTypes.SLIST</span>
+<span class="fc bfc" id="L446" title="All 4 branches covered.">        if (parentType == TokenTypes.SLIST</span>
             || parentType == TokenTypes.OBJBLOCK) {
-<span class="fc" id="L410">            final DetailAST prevSibling = ast.getPreviousSibling();</span>
+<span class="fc" id="L448">            final DetailAST prevSibling = ast.getPreviousSibling();</span>
 
             // is countable if no previous sibling is found or
             // the sibling is no COMMA.
             // This is done because multiple assignment on one line are counted
             // as 1
-<span class="fc bfc" id="L416" title="All 2 branches covered.">            countable = prevSibling == null</span>
-<span class="fc bfc" id="L417" title="All 2 branches covered.">                    || prevSibling.getType() != TokenTypes.COMMA;</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">            countable = prevSibling == null</span>
+<span class="fc bfc" id="L455" title="All 2 branches covered.">                    || prevSibling.getType() != TokenTypes.COMMA;</span>
         }
 
-<span class="fc" id="L420">        return countable;</span>
+<span class="fc" id="L458">        return countable;</span>
     }
 
     /**
@@ -432,8 +470,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
         // count expressions only if they are direct child to a slist (method
         // body, for loop...)
         // or direct child of label,if,else,do,while,for
-<span class="fc" id="L435">        final int parentType = ast.getParent().getType();</span>
-<span class="fc bfc" id="L436" title="All 2 branches covered.">        switch (parentType) {</span>
+<span class="fc" id="L473">        final int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L474" title="All 2 branches covered.">        switch (parentType) {</span>
             case TokenTypes.SLIST:
             case TokenTypes.LABELED_STAT:
             case TokenTypes.LITERAL_FOR:
@@ -442,15 +480,29 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
             case TokenTypes.LITERAL_IF:
             case TokenTypes.LITERAL_ELSE:
                 // don't count if or loop conditions
-<span class="fc" id="L445">                final DetailAST prevSibling = ast.getPreviousSibling();</span>
-<span class="fc bfc" id="L446" title="All 2 branches covered.">                countable = prevSibling == null</span>
-<span class="fc bfc" id="L447" title="All 2 branches covered.">                    || prevSibling.getType() != TokenTypes.LPAREN;</span>
-<span class="fc" id="L448">                break;</span>
+<span class="fc" id="L483">                final DetailAST prevSibling = ast.getPreviousSibling();</span>
+<span class="fc bfc" id="L484" title="All 2 branches covered.">                countable = prevSibling == null</span>
+<span class="fc bfc" id="L485" title="All 2 branches covered.">                    || prevSibling.getType() != TokenTypes.LPAREN;</span>
+<span class="fc" id="L486">                break;</span>
             default:
-<span class="fc" id="L450">                countable = false;</span>
+<span class="fc" id="L488">                countable = false;</span>
                 break;
         }
-<span class="fc" id="L453">        return countable;</span>
+<span class="fc" id="L491">        return countable;</span>
+    }
+
+    /**
+     * Checks if a token is a method, constructor, or compact constructor definition.
+     *
+     * @param tokenType the type of token we are checking
+     * @return true if token type is method or ctor definition, false otherwise
+     */
+    private static boolean isMethodOrCtorOrInitDefinition(int tokenType) {
+<span class="fc bfc" id="L501" title="All 10 branches covered.">        return tokenType == TokenTypes.METHOD_DEF</span>
+                || tokenType == TokenTypes.COMPACT_CTOR_DEF
+                || tokenType == TokenTypes.CTOR_DEF
+                || tokenType == TokenTypes.STATIC_INIT
+                || tokenType == TokenTypes.INSTANCE_INIT;
     }
 
     /**
@@ -466,8 +518,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * Increments the counter.
          */
         public void increment() {
-<span class="fc" id="L469">            count++;</span>
-<span class="fc" id="L470">        }</span>
+<span class="fc" id="L521">            count++;</span>
+<span class="fc" id="L522">        }</span>
 
         /**
          * Gets the counters value.
@@ -475,7 +527,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
          * @return the counter
          */
         public int getCount() {
-<span class="fc" id="L478">            return count;</span>
+<span class="fc" id="L530">            return count;</span>
         }
 
     }

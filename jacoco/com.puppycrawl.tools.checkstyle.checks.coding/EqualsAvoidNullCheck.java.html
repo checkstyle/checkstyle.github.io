@@ -146,6 +146,9 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
             TokenTypes.LITERAL_NEW,
             TokenTypes.LAMBDA,
             TokenTypes.PATTERN_VARIABLE_DEF,
+            TokenTypes.RECORD_DEF,
+            TokenTypes.COMPACT_CTOR_DEF,
+            TokenTypes.RECORD_COMPONENT_DEF,
         };
     }
 
@@ -156,69 +159,74 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      *    {@code String.equalsIgnoreCase(String)}.
      */
     public void setIgnoreEqualsIgnoreCase(boolean newValue) {
-<span class="fc" id="L159">        ignoreEqualsIgnoreCase = newValue;</span>
-<span class="fc" id="L160">    }</span>
+<span class="fc" id="L162">        ignoreEqualsIgnoreCase = newValue;</span>
+<span class="fc" id="L163">    }</span>
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L164">        currentFrame = new FieldFrame(null);</span>
-<span class="fc" id="L165">    }</span>
+<span class="fc" id="L167">        currentFrame = new FieldFrame(null);</span>
+<span class="fc" id="L168">    }</span>
 
     @Override
     public void visitToken(final DetailAST ast) {
-<span class="fc bfc" id="L169" title="All 6 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L172" title="All 6 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.VARIABLE_DEF:
             case TokenTypes.PARAMETER_DEF:
             case TokenTypes.PATTERN_VARIABLE_DEF:
-<span class="fc" id="L173">                currentFrame.addField(ast);</span>
-<span class="fc" id="L174">                break;</span>
+            case TokenTypes.RECORD_COMPONENT_DEF:
+<span class="fc" id="L177">                currentFrame.addField(ast);</span>
+<span class="fc" id="L178">                break;</span>
             case TokenTypes.METHOD_CALL:
-<span class="fc" id="L176">                processMethodCall(ast);</span>
-<span class="fc" id="L177">                break;</span>
+<span class="fc" id="L180">                processMethodCall(ast);</span>
+<span class="fc" id="L181">                break;</span>
             case TokenTypes.SLIST:
-<span class="fc" id="L179">                processSlist(ast);</span>
-<span class="fc" id="L180">                break;</span>
+<span class="fc" id="L183">                processSlist(ast);</span>
+<span class="fc" id="L184">                break;</span>
             case TokenTypes.LITERAL_NEW:
-<span class="fc" id="L182">                processLiteralNew(ast);</span>
-<span class="fc" id="L183">                break;</span>
+<span class="fc" id="L186">                processLiteralNew(ast);</span>
+<span class="fc" id="L187">                break;</span>
             case TokenTypes.OBJBLOCK:
-<span class="fc" id="L185">                final int parentType = ast.getParent().getType();</span>
-<span class="fc bfc" id="L186" title="All 4 branches covered.">                if (parentType != TokenTypes.CLASS_DEF &amp;&amp; parentType != TokenTypes.ENUM_DEF) {</span>
-<span class="fc" id="L187">                    processFrame(ast);</span>
+<span class="fc" id="L189">                final int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L190" title="All 2 branches covered.">                if (!astTypeIsClassOrEnumOrRecordDef(parentType)) {</span>
+<span class="fc" id="L191">                    processFrame(ast);</span>
                 }
                 break;
             default:
-<span class="fc" id="L191">                processFrame(ast);</span>
+<span class="fc" id="L195">                processFrame(ast);</span>
         }
-<span class="fc" id="L193">    }</span>
+<span class="fc" id="L197">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc" id="L197">        final int astType = ast.getType();</span>
-<span class="fc bfc" id="L198" title="All 2 branches covered.">        if (astType == TokenTypes.SLIST) {</span>
-<span class="fc" id="L199">            leaveSlist(ast);</span>
+<span class="fc bfc" id="L201" title="All 5 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.SLIST:
+<span class="fc" id="L203">                leaveSlist(ast);</span>
+<span class="fc" id="L204">                break;</span>
+            case TokenTypes.LITERAL_NEW:
+<span class="fc" id="L206">                leaveLiteralNew(ast);</span>
+<span class="fc" id="L207">                break;</span>
+            case TokenTypes.OBJBLOCK:
+<span class="fc" id="L209">                final int parentType = ast.getParent().getType();</span>
+<span class="fc bfc" id="L210" title="All 2 branches covered.">                if (!astTypeIsClassOrEnumOrRecordDef(parentType)) {</span>
+<span class="fc" id="L211">                    currentFrame = currentFrame.getParent();</span>
+                }
+                break;
+            case TokenTypes.VARIABLE_DEF:
+            case TokenTypes.PARAMETER_DEF:
+            case TokenTypes.RECORD_COMPONENT_DEF:
+            case TokenTypes.METHOD_CALL:
+            case TokenTypes.PATTERN_VARIABLE_DEF:
+<span class="fc" id="L219">                break;</span>
+            default:
+<span class="fc" id="L221">                currentFrame = currentFrame.getParent();</span>
+                break;
         }
-<span class="fc bfc" id="L201" title="All 2 branches covered.">        else if (astType == TokenTypes.LITERAL_NEW) {</span>
-<span class="fc" id="L202">            leaveLiteralNew(ast);</span>
-        }
-<span class="fc bfc" id="L204" title="All 2 branches covered.">        else if (astType == TokenTypes.OBJBLOCK) {</span>
-<span class="fc" id="L205">            final int parentType = ast.getParent().getType();</span>
-<span class="fc bfc" id="L206" title="All 4 branches covered.">            if (parentType != TokenTypes.CLASS_DEF &amp;&amp; parentType != TokenTypes.ENUM_DEF) {</span>
-<span class="fc" id="L207">                currentFrame = currentFrame.getParent();</span>
-            }
-<span class="fc" id="L209">        }</span>
-<span class="fc bfc" id="L210" title="All 8 branches covered.">        else if (astType != TokenTypes.VARIABLE_DEF</span>
-                &amp;&amp; astType != TokenTypes.PARAMETER_DEF
-                &amp;&amp; astType != TokenTypes.METHOD_CALL
-                &amp;&amp; astType != TokenTypes.PATTERN_VARIABLE_DEF) {
-<span class="fc" id="L214">            currentFrame = currentFrame.getParent();</span>
-        }
-<span class="fc" id="L216">    }</span>
+<span class="fc" id="L224">    }</span>
 
     @Override
     public void finishTree(DetailAST ast) {
-<span class="fc" id="L220">        traverseFieldFrameTree(currentFrame);</span>
-<span class="fc" id="L221">    }</span>
+<span class="fc" id="L228">        traverseFieldFrameTree(currentFrame);</span>
+<span class="fc" id="L229">    }</span>
 
     /**
      * Determine whether SLIST begins a block, determined by braces, and add it as
@@ -227,12 +235,12 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast SLIST ast.
      */
     private void processSlist(DetailAST ast) {
-<span class="fc bfc" id="L230" title="All 2 branches covered.">        if (LEFT_CURLY.equals(ast.getText())) {</span>
-<span class="fc" id="L231">            final FieldFrame frame = new FieldFrame(currentFrame);</span>
-<span class="fc" id="L232">            currentFrame.addChild(frame);</span>
-<span class="fc" id="L233">            currentFrame = frame;</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">        if (LEFT_CURLY.equals(ast.getText())) {</span>
+<span class="fc" id="L239">            final FieldFrame frame = new FieldFrame(currentFrame);</span>
+<span class="fc" id="L240">            currentFrame.addChild(frame);</span>
+<span class="fc" id="L241">            currentFrame = frame;</span>
         }
-<span class="fc" id="L235">    }</span>
+<span class="fc" id="L243">    }</span>
 
     /**
      * Determine whether SLIST begins a block, determined by braces.
@@ -240,10 +248,10 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast SLIST ast.
      */
     private void leaveSlist(DetailAST ast) {
-<span class="fc bfc" id="L243" title="All 2 branches covered.">        if (LEFT_CURLY.equals(ast.getText())) {</span>
-<span class="fc" id="L244">            currentFrame = currentFrame.getParent();</span>
+<span class="fc bfc" id="L251" title="All 2 branches covered.">        if (LEFT_CURLY.equals(ast.getText())) {</span>
+<span class="fc" id="L252">            currentFrame = currentFrame.getParent();</span>
         }
-<span class="fc" id="L246">    }</span>
+<span class="fc" id="L254">    }</span>
 
     /**
      * Process CLASS_DEF, METHOD_DEF, LITERAL_IF, LITERAL_FOR, LITERAL_WHILE, LITERAL_DO,
@@ -252,16 +260,15 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast processed ast.
      */
     private void processFrame(DetailAST ast) {
-<span class="fc" id="L255">        final FieldFrame frame = new FieldFrame(currentFrame);</span>
-<span class="fc" id="L256">        final int astType = ast.getType();</span>
-<span class="fc bfc" id="L257" title="All 4 branches covered.">        if (astType == TokenTypes.CLASS_DEF</span>
-                || astType == TokenTypes.ENUM_DEF) {
-<span class="fc" id="L259">            frame.setClassOrEnumOrEnumConstDef(true);</span>
-<span class="fc" id="L260">            frame.setFrameName(ast.findFirstToken(TokenTypes.IDENT).getText());</span>
+<span class="fc" id="L263">        final FieldFrame frame = new FieldFrame(currentFrame);</span>
+<span class="fc" id="L264">        final int astType = ast.getType();</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        if (astTypeIsClassOrEnumOrRecordDef(astType)) {</span>
+<span class="fc" id="L266">            frame.setClassOrEnumOrRecordDef(true);</span>
+<span class="fc" id="L267">            frame.setFrameName(ast.findFirstToken(TokenTypes.IDENT).getText());</span>
         }
-<span class="fc" id="L262">        currentFrame.addChild(frame);</span>
-<span class="fc" id="L263">        currentFrame = frame;</span>
-<span class="fc" id="L264">    }</span>
+<span class="fc" id="L269">        currentFrame.addChild(frame);</span>
+<span class="fc" id="L270">        currentFrame = frame;</span>
+<span class="fc" id="L271">    }</span>
 
     /**
      * Add the method call to the current frame if it should be processed.
@@ -269,15 +276,15 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param methodCall METHOD_CALL ast.
      */
     private void processMethodCall(DetailAST methodCall) {
-<span class="fc" id="L272">        final DetailAST dot = methodCall.getFirstChild();</span>
-<span class="fc bfc" id="L273" title="All 2 branches covered.">        if (dot.getType() == TokenTypes.DOT) {</span>
-<span class="fc" id="L274">            final String methodName = dot.getLastChild().getText();</span>
-<span class="fc bfc" id="L275" title="All 4 branches covered.">            if (EQUALS.equals(methodName)</span>
-<span class="fc bfc" id="L276" title="All 2 branches covered.">                    || !ignoreEqualsIgnoreCase &amp;&amp; &quot;equalsIgnoreCase&quot;.equals(methodName)) {</span>
-<span class="fc" id="L277">                currentFrame.addMethodCall(methodCall);</span>
+<span class="fc" id="L279">        final DetailAST dot = methodCall.getFirstChild();</span>
+<span class="fc bfc" id="L280" title="All 2 branches covered.">        if (dot.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L281">            final String methodName = dot.getLastChild().getText();</span>
+<span class="fc bfc" id="L282" title="All 4 branches covered.">            if (EQUALS.equals(methodName)</span>
+<span class="fc bfc" id="L283" title="All 2 branches covered.">                    || !ignoreEqualsIgnoreCase &amp;&amp; &quot;equalsIgnoreCase&quot;.equals(methodName)) {</span>
+<span class="fc" id="L284">                currentFrame.addMethodCall(methodCall);</span>
             }
         }
-<span class="fc" id="L280">    }</span>
+<span class="fc" id="L287">    }</span>
 
     /**
      * Determine whether LITERAL_NEW is an anonymous class definition and add it as
@@ -286,12 +293,12 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast LITERAL_NEW ast.
      */
     private void processLiteralNew(DetailAST ast) {
-<span class="fc bfc" id="L289" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.OBJBLOCK) != null) {</span>
-<span class="fc" id="L290">            final FieldFrame frame = new FieldFrame(currentFrame);</span>
-<span class="fc" id="L291">            currentFrame.addChild(frame);</span>
-<span class="fc" id="L292">            currentFrame = frame;</span>
+<span class="fc bfc" id="L296" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.OBJBLOCK) != null) {</span>
+<span class="fc" id="L297">            final FieldFrame frame = new FieldFrame(currentFrame);</span>
+<span class="fc" id="L298">            currentFrame.addChild(frame);</span>
+<span class="fc" id="L299">            currentFrame = frame;</span>
         }
-<span class="fc" id="L294">    }</span>
+<span class="fc" id="L301">    }</span>
 
     /**
      * Determine whether LITERAL_NEW is an anonymous class definition and leave
@@ -300,10 +307,10 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast LITERAL_NEW ast.
      */
     private void leaveLiteralNew(DetailAST ast) {
-<span class="fc bfc" id="L303" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.OBJBLOCK) != null) {</span>
-<span class="fc" id="L304">            currentFrame = currentFrame.getParent();</span>
+<span class="fc bfc" id="L310" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.OBJBLOCK) != null) {</span>
+<span class="fc" id="L311">            currentFrame = currentFrame.getParent();</span>
         }
-<span class="fc" id="L306">    }</span>
+<span class="fc" id="L313">    }</span>
 
     /**
      * Traverse the tree of the field frames to check all equals method calls.
@@ -311,13 +318,13 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param frame to check method calls in.
      */
     private void traverseFieldFrameTree(FieldFrame frame) {
-<span class="fc bfc" id="L314" title="All 2 branches covered.">        for (FieldFrame child: frame.getChildren()) {</span>
-<span class="fc" id="L315">            traverseFieldFrameTree(child);</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">        for (FieldFrame child: frame.getChildren()) {</span>
+<span class="fc" id="L322">            traverseFieldFrameTree(child);</span>
 
-<span class="fc" id="L317">            currentFrame = child;</span>
-<span class="fc" id="L318">            child.getMethodCalls().forEach(this::checkMethodCall);</span>
-<span class="fc" id="L319">        }</span>
-<span class="fc" id="L320">    }</span>
+<span class="fc" id="L324">            currentFrame = child;</span>
+<span class="fc" id="L325">            child.getMethodCalls().forEach(this::checkMethodCall);</span>
+<span class="fc" id="L326">        }</span>
+<span class="fc" id="L327">    }</span>
 
     /**
      * Check whether the method call should be violated.
@@ -325,23 +332,23 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param methodCall method call to check.
      */
     private void checkMethodCall(DetailAST methodCall) {
-<span class="fc" id="L328">        DetailAST objCalledOn = methodCall.getFirstChild().getFirstChild();</span>
-<span class="fc bfc" id="L329" title="All 2 branches covered.">        if (objCalledOn.getType() == TokenTypes.DOT) {</span>
-<span class="fc" id="L330">            objCalledOn = objCalledOn.getLastChild();</span>
+<span class="fc" id="L335">        DetailAST objCalledOn = methodCall.getFirstChild().getFirstChild();</span>
+<span class="fc bfc" id="L336" title="All 2 branches covered.">        if (objCalledOn.getType() == TokenTypes.DOT) {</span>
+<span class="fc" id="L337">            objCalledOn = objCalledOn.getLastChild();</span>
         }
-<span class="fc" id="L332">        final DetailAST expr = methodCall.findFirstToken(TokenTypes.ELIST).getFirstChild();</span>
-<span class="fc bfc" id="L333" title="All 2 branches covered.">        if (containsOneArgument(methodCall)</span>
-<span class="fc bfc" id="L334" title="All 2 branches covered.">                &amp;&amp; containsAllSafeTokens(expr)</span>
-<span class="fc bfc" id="L335" title="All 2 branches covered.">                &amp;&amp; isCalledOnStringFieldOrVariable(objCalledOn)) {</span>
-<span class="fc" id="L336">            final String methodName = methodCall.getFirstChild().getLastChild().getText();</span>
-<span class="fc bfc" id="L337" title="All 2 branches covered.">            if (EQUALS.equals(methodName)) {</span>
-<span class="fc" id="L338">                log(methodCall, MSG_EQUALS_AVOID_NULL);</span>
+<span class="fc" id="L339">        final DetailAST expr = methodCall.findFirstToken(TokenTypes.ELIST).getFirstChild();</span>
+<span class="fc bfc" id="L340" title="All 2 branches covered.">        if (containsOneArgument(methodCall)</span>
+<span class="fc bfc" id="L341" title="All 2 branches covered.">                &amp;&amp; containsAllSafeTokens(expr)</span>
+<span class="fc bfc" id="L342" title="All 2 branches covered.">                &amp;&amp; isCalledOnStringFieldOrVariable(objCalledOn)) {</span>
+<span class="fc" id="L343">            final String methodName = methodCall.getFirstChild().getLastChild().getText();</span>
+<span class="fc bfc" id="L344" title="All 2 branches covered.">            if (EQUALS.equals(methodName)) {</span>
+<span class="fc" id="L345">                log(methodCall, MSG_EQUALS_AVOID_NULL);</span>
             }
             else {
-<span class="fc" id="L341">                log(methodCall, MSG_EQUALS_IGNORE_CASE_AVOID_NULL);</span>
+<span class="fc" id="L348">                log(methodCall, MSG_EQUALS_IGNORE_CASE_AVOID_NULL);</span>
             }
         }
-<span class="fc" id="L344">    }</span>
+<span class="fc" id="L351">    }</span>
 
     /**
      * Verify that method call has one argument.
@@ -350,8 +357,8 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return true if method call has one argument.
      */
     private static boolean containsOneArgument(DetailAST methodCall) {
-<span class="fc" id="L353">        final DetailAST elist = methodCall.findFirstToken(TokenTypes.ELIST);</span>
-<span class="fc bfc" id="L354" title="All 2 branches covered.">        return elist.getChildCount() == 1;</span>
+<span class="fc" id="L360">        final DetailAST elist = methodCall.findFirstToken(TokenTypes.ELIST);</span>
+<span class="fc bfc" id="L361" title="All 2 branches covered.">        return elist.getChildCount() == 1;</span>
     }
 
     /**
@@ -362,24 +369,26 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return - true if any child matches the set of tokens, false if not
      */
     private static boolean containsAllSafeTokens(final DetailAST expr) {
-<span class="fc" id="L365">        DetailAST arg = expr.getFirstChild();</span>
-<span class="fc" id="L366">        arg = skipVariableAssign(arg);</span>
+<span class="fc" id="L372">        DetailAST arg = expr.getFirstChild();</span>
+<span class="fc" id="L373">        arg = skipVariableAssign(arg);</span>
 
-<span class="fc" id="L368">        boolean argIsNotNull = false;</span>
-<span class="fc bfc" id="L369" title="All 2 branches covered.">        if (arg.getType() == TokenTypes.PLUS) {</span>
-<span class="fc" id="L370">            DetailAST child = arg.getFirstChild();</span>
-<span class="fc bfc" id="L371" title="All 4 branches covered.">            while (child != null</span>
+<span class="fc" id="L375">        boolean argIsNotNull = false;</span>
+<span class="fc bfc" id="L376" title="All 2 branches covered.">        if (arg.getType() == TokenTypes.PLUS) {</span>
+<span class="fc" id="L377">            DetailAST child = arg.getFirstChild();</span>
+<span class="fc bfc" id="L378" title="All 4 branches covered.">            while (child != null</span>
                     &amp;&amp; !argIsNotNull) {
-<span class="fc bfc" id="L373" title="All 2 branches covered.">                argIsNotNull = child.getType() == TokenTypes.STRING_LITERAL</span>
-<span class="fc bfc" id="L374" title="All 2 branches covered.">                        || child.getType() == TokenTypes.IDENT;</span>
-<span class="fc" id="L375">                child = child.getNextSibling();</span>
+<span class="fc bfc" id="L380" title="All 2 branches covered.">                argIsNotNull = child.getType() == TokenTypes.STRING_LITERAL</span>
+<span class="fc bfc" id="L381" title="All 2 branches covered.">                        || child.getType() == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">                        || child.getType() == TokenTypes.IDENT;</span>
+<span class="fc" id="L383">                child = child.getNextSibling();</span>
             }
-<span class="fc" id="L377">        }</span>
+<span class="fc" id="L385">        }</span>
         else {
-<span class="fc bfc" id="L379" title="All 2 branches covered.">            argIsNotNull = arg.getType() == TokenTypes.STRING_LITERAL;</span>
+<span class="fc bfc" id="L387" title="All 2 branches covered.">            argIsNotNull = arg.getType() == TokenTypes.STRING_LITERAL</span>
+<span class="fc bfc" id="L388" title="All 2 branches covered.">                    || arg.getType() == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN;</span>
         }
 
-<span class="fc" id="L382">        return argIsNotNull;</span>
+<span class="fc" id="L391">        return argIsNotNull;</span>
     }
 
     /**
@@ -389,14 +398,14 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return the next relevant token
      */
     private static DetailAST skipVariableAssign(final DetailAST currentAST) {
-<span class="fc" id="L392">        DetailAST result = currentAST;</span>
-<span class="fc bfc" id="L393" title="All 2 branches covered.">        while (result.getType() == TokenTypes.LPAREN) {</span>
-<span class="fc" id="L394">            result = result.getNextSibling();</span>
+<span class="fc" id="L401">        DetailAST result = currentAST;</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">        while (result.getType() == TokenTypes.LPAREN) {</span>
+<span class="fc" id="L403">            result = result.getNextSibling();</span>
         }
-<span class="fc bfc" id="L396" title="All 2 branches covered.">        if (result.getType() == TokenTypes.ASSIGN) {</span>
-<span class="fc" id="L397">            result = result.getFirstChild().getNextSibling();</span>
+<span class="fc bfc" id="L405" title="All 2 branches covered.">        if (result.getType() == TokenTypes.ASSIGN) {</span>
+<span class="fc" id="L406">            result = result.getFirstChild().getNextSibling();</span>
         }
-<span class="fc" id="L399">        return result;</span>
+<span class="fc" id="L408">        return result;</span>
     }
 
     /**
@@ -407,20 +416,20 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      */
     private boolean isCalledOnStringFieldOrVariable(DetailAST objCalledOn) {
         final boolean result;
-<span class="fc" id="L410">        final DetailAST previousSiblingAst = objCalledOn.getPreviousSibling();</span>
-<span class="fc bfc" id="L411" title="All 2 branches covered.">        if (previousSiblingAst == null) {</span>
-<span class="fc" id="L412">            result = isStringFieldOrVariable(objCalledOn);</span>
+<span class="fc" id="L419">        final DetailAST previousSiblingAst = objCalledOn.getPreviousSibling();</span>
+<span class="fc bfc" id="L420" title="All 2 branches covered.">        if (previousSiblingAst == null) {</span>
+<span class="fc" id="L421">            result = isStringFieldOrVariable(objCalledOn);</span>
         }
         else {
-<span class="fc bfc" id="L415" title="All 2 branches covered.">            if (previousSiblingAst.getType() == TokenTypes.LITERAL_THIS) {</span>
-<span class="fc" id="L416">                result = isStringFieldOrVariableFromThisInstance(objCalledOn);</span>
+<span class="fc bfc" id="L424" title="All 2 branches covered.">            if (previousSiblingAst.getType() == TokenTypes.LITERAL_THIS) {</span>
+<span class="fc" id="L425">                result = isStringFieldOrVariableFromThisInstance(objCalledOn);</span>
             }
             else {
-<span class="fc" id="L419">                final String className = previousSiblingAst.getText();</span>
-<span class="fc" id="L420">                result = isStringFieldOrVariableFromClass(objCalledOn, className);</span>
+<span class="fc" id="L428">                final String className = previousSiblingAst.getText();</span>
+<span class="fc" id="L429">                result = isStringFieldOrVariableFromClass(objCalledOn, className);</span>
             }
         }
-<span class="fc" id="L423">        return result;</span>
+<span class="fc" id="L432">        return result;</span>
     }
 
     /**
@@ -430,20 +439,20 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return true if the field or the variable is of String type.
      */
     private boolean isStringFieldOrVariable(DetailAST objCalledOn) {
-<span class="fc" id="L433">        boolean result = false;</span>
-<span class="fc" id="L434">        final String name = objCalledOn.getText();</span>
-<span class="fc" id="L435">        FieldFrame frame = currentFrame;</span>
-<span class="fc bfc" id="L436" title="All 2 branches covered.">        while (frame != null) {</span>
-<span class="fc" id="L437">            final DetailAST field = frame.findField(name);</span>
-<span class="fc bfc" id="L438" title="All 2 branches covered.">            if (field != null</span>
-<span class="fc bfc" id="L439" title="All 2 branches covered.">                    &amp;&amp; (frame.isClassOrEnumOrEnumConstDef()</span>
-<span class="fc bfc" id="L440" title="All 2 branches covered.">                            || checkLineNo(field, objCalledOn))) {</span>
-<span class="fc" id="L441">                result = STRING.equals(getFieldType(field));</span>
-<span class="fc" id="L442">                break;</span>
+<span class="fc" id="L442">        boolean result = false;</span>
+<span class="fc" id="L443">        final String name = objCalledOn.getText();</span>
+<span class="fc" id="L444">        FieldFrame frame = currentFrame;</span>
+<span class="fc bfc" id="L445" title="All 2 branches covered.">        while (frame != null) {</span>
+<span class="fc" id="L446">            final DetailAST field = frame.findField(name);</span>
+<span class="fc bfc" id="L447" title="All 2 branches covered.">            if (field != null</span>
+<span class="fc bfc" id="L448" title="All 2 branches covered.">                    &amp;&amp; (frame.isClassOrEnumOrRecordDef()</span>
+<span class="fc bfc" id="L449" title="All 2 branches covered.">                            || checkLineNo(field, objCalledOn))) {</span>
+<span class="fc" id="L450">                result = STRING.equals(getFieldType(field));</span>
+<span class="fc" id="L451">                break;</span>
             }
-<span class="fc" id="L444">            frame = frame.getParent();</span>
-<span class="fc" id="L445">        }</span>
-<span class="fc" id="L446">        return result;</span>
+<span class="fc" id="L453">            frame = frame.getParent();</span>
+<span class="fc" id="L454">        }</span>
+<span class="fc" id="L455">        return result;</span>
     }
 
     /**
@@ -453,9 +462,9 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return true if the field or the variable from THIS instance is of String type.
      */
     private boolean isStringFieldOrVariableFromThisInstance(DetailAST objCalledOn) {
-<span class="fc" id="L456">        final String name = objCalledOn.getText();</span>
-<span class="fc" id="L457">        final DetailAST field = getObjectFrame(currentFrame).findField(name);</span>
-<span class="fc" id="L458">        return STRING.equals(getFieldType(field));</span>
+<span class="fc" id="L465">        final String name = objCalledOn.getText();</span>
+<span class="fc" id="L466">        final DetailAST field = getObjectFrame(currentFrame).findField(name);</span>
+<span class="fc" id="L467">        return STRING.equals(getFieldType(field));</span>
     }
 
     /**
@@ -467,18 +476,18 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      */
     private boolean isStringFieldOrVariableFromClass(DetailAST objCalledOn,
             final String className) {
-<span class="fc" id="L470">        boolean result = false;</span>
-<span class="fc" id="L471">        final String name = objCalledOn.getText();</span>
-<span class="fc" id="L472">        FieldFrame frame = getObjectFrame(currentFrame);</span>
-<span class="fc bfc" id="L473" title="All 2 branches covered.">        while (frame != null) {</span>
-<span class="fc bfc" id="L474" title="All 2 branches covered.">            if (className.equals(frame.getFrameName())) {</span>
-<span class="fc" id="L475">                final DetailAST field = frame.findField(name);</span>
-<span class="fc" id="L476">                result = STRING.equals(getFieldType(field));</span>
-<span class="fc" id="L477">                break;</span>
+<span class="fc" id="L479">        boolean result = false;</span>
+<span class="fc" id="L480">        final String name = objCalledOn.getText();</span>
+<span class="fc" id="L481">        FieldFrame frame = getObjectFrame(currentFrame);</span>
+<span class="fc bfc" id="L482" title="All 2 branches covered.">        while (frame != null) {</span>
+<span class="fc bfc" id="L483" title="All 2 branches covered.">            if (className.equals(frame.getFrameName())) {</span>
+<span class="fc" id="L484">                final DetailAST field = frame.findField(name);</span>
+<span class="fc" id="L485">                result = STRING.equals(getFieldType(field));</span>
+<span class="fc" id="L486">                break;</span>
             }
-<span class="fc" id="L479">            frame = getObjectFrame(frame.getParent());</span>
+<span class="fc" id="L488">            frame = getObjectFrame(frame.getParent());</span>
         }
-<span class="fc" id="L481">        return result;</span>
+<span class="fc" id="L490">        return result;</span>
     }
 
     /**
@@ -488,11 +497,11 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return the nearest parent frame which is CLASS_DEF, ENUM_DEF or ENUM_CONST_DEF.
      */
     private static FieldFrame getObjectFrame(FieldFrame frame) {
-<span class="fc" id="L491">        FieldFrame objectFrame = frame;</span>
-<span class="fc bfc" id="L492" title="All 4 branches covered.">        while (objectFrame != null &amp;&amp; !objectFrame.isClassOrEnumOrEnumConstDef()) {</span>
-<span class="fc" id="L493">            objectFrame = objectFrame.getParent();</span>
+<span class="fc" id="L500">        FieldFrame objectFrame = frame;</span>
+<span class="fc bfc" id="L501" title="All 4 branches covered.">        while (objectFrame != null &amp;&amp; !objectFrame.isClassOrEnumOrRecordDef()) {</span>
+<span class="fc" id="L502">            objectFrame = objectFrame.getParent();</span>
         }
-<span class="fc" id="L495">        return objectFrame;</span>
+<span class="fc" id="L504">        return objectFrame;</span>
     }
 
     /**
@@ -504,11 +513,11 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return true if the field is declared before the method call.
      */
     private static boolean checkLineNo(DetailAST field, DetailAST objCalledOn) {
-<span class="fc" id="L507">        boolean result = false;</span>
-<span class="fc bfc" id="L508" title="All 2 branches covered.">        if (CheckUtil.isBeforeInSource(field, objCalledOn)) {</span>
-<span class="fc" id="L509">            result = true;</span>
+<span class="fc" id="L516">        boolean result = false;</span>
+<span class="fc bfc" id="L517" title="All 2 branches covered.">        if (CheckUtil.isBeforeInSource(field, objCalledOn)) {</span>
+<span class="fc" id="L518">            result = true;</span>
         }
-<span class="fc" id="L511">        return result;</span>
+<span class="fc" id="L520">        return result;</span>
     }
 
     /**
@@ -518,13 +527,25 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return type of the field.
      */
     private static String getFieldType(DetailAST field) {
-<span class="fc" id="L521">        String fieldType = null;</span>
-<span class="fc" id="L522">        final DetailAST identAst = field.findFirstToken(TokenTypes.TYPE)</span>
-<span class="fc" id="L523">                .findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc bfc" id="L524" title="All 2 branches covered.">        if (identAst != null) {</span>
-<span class="fc" id="L525">            fieldType = identAst.getText();</span>
+<span class="fc" id="L530">        String fieldType = null;</span>
+<span class="fc" id="L531">        final DetailAST identAst = field.findFirstToken(TokenTypes.TYPE)</span>
+<span class="fc" id="L532">                .findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc bfc" id="L533" title="All 2 branches covered.">        if (identAst != null) {</span>
+<span class="fc" id="L534">            fieldType = identAst.getText();</span>
         }
-<span class="fc" id="L527">        return fieldType;</span>
+<span class="fc" id="L536">        return fieldType;</span>
+    }
+
+    /**
+     * Verify that a token is either CLASS_DEF, RECORD_DEF, or ENUM_DEF.
+     *
+     * @param tokenType the type of token
+     * @return true if token is of specified type.
+     */
+    private static boolean astTypeIsClassOrEnumOrRecordDef(int tokenType) {
+<span class="fc bfc" id="L546" title="All 6 branches covered.">        return tokenType == TokenTypes.CLASS_DEF</span>
+                || tokenType == TokenTypes.RECORD_DEF
+                || tokenType == TokenTypes.ENUM_DEF;
     }
 
     /**
@@ -536,28 +557,28 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
         private final FieldFrame parent;
 
         /** Set of frame's children. */
-<span class="fc" id="L539">        private final Set&lt;FieldFrame&gt; children = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L560">        private final Set&lt;FieldFrame&gt; children = new HashSet&lt;&gt;();</span>
 
         /** Set of fields. */
-<span class="fc" id="L542">        private final Set&lt;DetailAST&gt; fields = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L563">        private final Set&lt;DetailAST&gt; fields = new HashSet&lt;&gt;();</span>
 
         /** Set of equals calls. */
-<span class="fc" id="L545">        private final Set&lt;DetailAST&gt; methodCalls = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L566">        private final Set&lt;DetailAST&gt; methodCalls = new HashSet&lt;&gt;();</span>
 
         /** Name of the class, enum or enum constant declaration. */
         private String frameName;
 
-        /** Whether the frame is CLASS_DEF, ENUM_DEF or ENUM_CONST_DEF. */
-        private boolean classOrEnumOrEnumConstDef;
+        /** Whether the frame is CLASS_DEF, ENUM_DEF, ENUM_CONST_DEF, or RECORD_DEF. */
+        private boolean classOrEnumOrRecordDef;
 
         /**
          * Creates new frame.
          *
          * @param parent parent frame.
          */
-<span class="fc" id="L558">        /* package */ FieldFrame(FieldFrame parent) {</span>
-<span class="fc" id="L559">            this.parent = parent;</span>
-<span class="fc" id="L560">        }</span>
+<span class="fc" id="L579">        /* package */ FieldFrame(FieldFrame parent) {</span>
+<span class="fc" id="L580">            this.parent = parent;</span>
+<span class="fc" id="L581">        }</span>
 
         /**
          * Set the frame name.
@@ -565,8 +586,8 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @param frameName value to set.
          */
         public void setFrameName(String frameName) {
-<span class="fc" id="L568">            this.frameName = frameName;</span>
-<span class="fc" id="L569">        }</span>
+<span class="fc" id="L589">            this.frameName = frameName;</span>
+<span class="fc" id="L590">        }</span>
 
         /**
          * Getter for the frame name.
@@ -574,7 +595,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @return frame name.
          */
         public String getFrameName() {
-<span class="fc" id="L577">            return frameName;</span>
+<span class="fc" id="L598">            return frameName;</span>
         }
 
         /**
@@ -583,7 +604,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @return parent frame.
          */
         public FieldFrame getParent() {
-<span class="fc" id="L586">            return parent;</span>
+<span class="fc" id="L607">            return parent;</span>
         }
 
         /**
@@ -592,7 +613,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @return children of this frame.
          */
         public Set&lt;FieldFrame&gt; getChildren() {
-<span class="fc" id="L595">            return Collections.unmodifiableSet(children);</span>
+<span class="fc" id="L616">            return Collections.unmodifiableSet(children);</span>
         }
 
         /**
@@ -601,8 +622,8 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @param child frame to add.
          */
         public void addChild(FieldFrame child) {
-<span class="fc" id="L604">            children.add(child);</span>
-<span class="fc" id="L605">        }</span>
+<span class="fc" id="L625">            children.add(child);</span>
+<span class="fc" id="L626">        }</span>
 
         /**
          * Add field to this FieldFrame.
@@ -610,27 +631,27 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @param field the ast of the field.
          */
         public void addField(DetailAST field) {
-<span class="fc bfc" id="L613" title="All 2 branches covered.">            if (field.findFirstToken(TokenTypes.IDENT) != null) {</span>
-<span class="fc" id="L614">                fields.add(field);</span>
+<span class="fc bfc" id="L634" title="All 2 branches covered.">            if (field.findFirstToken(TokenTypes.IDENT) != null) {</span>
+<span class="fc" id="L635">                fields.add(field);</span>
             }
-<span class="fc" id="L616">        }</span>
+<span class="fc" id="L637">        }</span>
 
         /**
-         * Sets isClassOrEnum.
+         * Sets isClassOrEnumOrRecordDef.
          *
          * @param value value to set.
          */
-        public void setClassOrEnumOrEnumConstDef(boolean value) {
-<span class="fc" id="L624">            classOrEnumOrEnumConstDef = value;</span>
-<span class="fc" id="L625">        }</span>
+        public void setClassOrEnumOrRecordDef(boolean value) {
+<span class="fc" id="L645">            classOrEnumOrRecordDef = value;</span>
+<span class="fc" id="L646">        }</span>
 
         /**
-         * Getter for classOrEnumOrEnumConstDef.
+         * Getter for classOrEnumOrRecordDef.
          *
-         * @return classOrEnumOrEnumConstDef.
+         * @return classOrEnumOrRecordDef.
          */
-        public boolean isClassOrEnumOrEnumConstDef() {
-<span class="fc" id="L633">            return classOrEnumOrEnumConstDef;</span>
+        public boolean isClassOrEnumOrRecordDef() {
+<span class="fc" id="L654">            return classOrEnumOrRecordDef;</span>
         }
 
         /**
@@ -639,8 +660,8 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @param methodCall METHOD_CALL ast.
          */
         public void addMethodCall(DetailAST methodCall) {
-<span class="fc" id="L642">            methodCalls.add(methodCall);</span>
-<span class="fc" id="L643">        }</span>
+<span class="fc" id="L663">            methodCalls.add(methodCall);</span>
+<span class="fc" id="L664">        }</span>
 
         /**
          * Determines whether this FieldFrame contains the field.
@@ -649,14 +670,14 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @return true if this FieldFrame contains instance field field.
          */
         public DetailAST findField(String name) {
-<span class="fc" id="L652">            DetailAST resultField = null;</span>
-<span class="fc bfc" id="L653" title="All 2 branches covered.">            for (DetailAST field: fields) {</span>
-<span class="fc bfc" id="L654" title="All 2 branches covered.">                if (getFieldName(field).equals(name)) {</span>
-<span class="fc" id="L655">                    resultField = field;</span>
-<span class="fc" id="L656">                    break;</span>
+<span class="fc" id="L673">            DetailAST resultField = null;</span>
+<span class="fc bfc" id="L674" title="All 2 branches covered.">            for (DetailAST field: fields) {</span>
+<span class="fc bfc" id="L675" title="All 2 branches covered.">                if (getFieldName(field).equals(name)) {</span>
+<span class="fc" id="L676">                    resultField = field;</span>
+<span class="fc" id="L677">                    break;</span>
                 }
-<span class="fc" id="L658">            }</span>
-<span class="fc" id="L659">            return resultField;</span>
+<span class="fc" id="L679">            }</span>
+<span class="fc" id="L680">            return resultField;</span>
         }
 
         /**
@@ -665,7 +686,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @return method calls of this frame.
          */
         public Set&lt;DetailAST&gt; getMethodCalls() {
-<span class="fc" id="L668">            return Collections.unmodifiableSet(methodCalls);</span>
+<span class="fc" id="L689">            return Collections.unmodifiableSet(methodCalls);</span>
         }
 
         /**
@@ -675,7 +696,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
          * @return name of the field.
          */
         private static String getFieldName(DetailAST field) {
-<span class="fc" id="L678">            return field.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L699">            return field.findFirstToken(TokenTypes.IDENT).getText();</span>
         }
 
     }

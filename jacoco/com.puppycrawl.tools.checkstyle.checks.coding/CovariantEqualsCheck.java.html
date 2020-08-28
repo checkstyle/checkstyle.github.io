@@ -31,7 +31,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
 
 /**
  * &lt;p&gt;
- * Checks that classes which define a covariant {@code equals()} method
+ * Checks that classes and records which define a covariant {@code equals()} method
  * also override method {@code equals(Object)}.
  * &lt;/p&gt;
  * &lt;p&gt;
@@ -50,7 +50,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  * Finding Bugs is Easy, chapter '4.5 Bad Covariant Definition of Equals (Eq)'&lt;/a&gt;:
  * &lt;/p&gt;
  * &lt;p&gt;
- * Java classes may override the {@code equals(Object)} method to define
+ * Java classes and records may override the {@code equals(Object)} method to define
  * a predicate for object equality. This method is used by many of the Java
  * runtime library classes; for example, to implement generic containers.
  * &lt;/p&gt;
@@ -105,6 +105,30 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
+ * Another example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * record Test(String str) {
+ *   public boolean equals(Test r) {  // violation
+ *     return false;
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * The same record without violations:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * record Test(String str) {
+ *   public boolean equals(Test r) {  // no violation
+ *     return false;
+ *   }
+ *
+ *   public boolean equals(Object r) {
+ *     return false;
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
  * &lt;/p&gt;
  * &lt;p&gt;
@@ -119,7 +143,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  * @since 3.2
  */
 @FileStatefulCheck
-<span class="fc" id="L122">public class CovariantEqualsCheck extends AbstractCheck {</span>
+<span class="fc" id="L146">public class CovariantEqualsCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -128,54 +152,59 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
     public static final String MSG_KEY = &quot;covariant.equals&quot;;
 
     /** Set of equals method definitions. */
-<span class="fc" id="L131">    private final Set&lt;DetailAST&gt; equalsMethods = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L155">    private final Set&lt;DetailAST&gt; equalsMethods = new HashSet&lt;&gt;();</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L135">        return getRequiredTokens();</span>
+<span class="fc" id="L159">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L140">        return new int[] {TokenTypes.CLASS_DEF, TokenTypes.LITERAL_NEW, TokenTypes.ENUM_DEF, };</span>
+<span class="fc" id="L164">        return new int[] {</span>
+            TokenTypes.CLASS_DEF,
+            TokenTypes.LITERAL_NEW,
+            TokenTypes.ENUM_DEF,
+            TokenTypes.RECORD_DEF,
+        };
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L145">        return getRequiredTokens();</span>
+<span class="fc" id="L174">        return getRequiredTokens();</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L150">        equalsMethods.clear();</span>
+<span class="fc" id="L179">        equalsMethods.clear();</span>
 
         // examine method definitions for equals methods
-<span class="fc" id="L153">        final DetailAST objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);</span>
-<span class="fc bfc" id="L154" title="All 2 branches covered.">        if (objBlock != null) {</span>
-<span class="fc" id="L155">            DetailAST child = objBlock.getFirstChild();</span>
-<span class="fc" id="L156">            boolean hasEqualsObject = false;</span>
-<span class="fc bfc" id="L157" title="All 2 branches covered.">            while (child != null) {</span>
-<span class="fc bfc" id="L158" title="All 2 branches covered.">                if (CheckUtil.isEqualsMethod(child)) {</span>
-<span class="fc bfc" id="L159" title="All 2 branches covered.">                    if (isFirstParameterObject(child)) {</span>
-<span class="fc" id="L160">                        hasEqualsObject = true;</span>
+<span class="fc" id="L182">        final DetailAST objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);</span>
+<span class="fc bfc" id="L183" title="All 2 branches covered.">        if (objBlock != null) {</span>
+<span class="fc" id="L184">            DetailAST child = objBlock.getFirstChild();</span>
+<span class="fc" id="L185">            boolean hasEqualsObject = false;</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">            while (child != null) {</span>
+<span class="fc bfc" id="L187" title="All 2 branches covered.">                if (CheckUtil.isEqualsMethod(child)) {</span>
+<span class="fc bfc" id="L188" title="All 2 branches covered.">                    if (isFirstParameterObject(child)) {</span>
+<span class="fc" id="L189">                        hasEqualsObject = true;</span>
                     }
                     else {
-<span class="fc" id="L163">                        equalsMethods.add(child);</span>
+<span class="fc" id="L192">                        equalsMethods.add(child);</span>
                     }
                 }
-<span class="fc" id="L166">                child = child.getNextSibling();</span>
+<span class="fc" id="L195">                child = child.getNextSibling();</span>
             }
 
             // report equals method definitions
-<span class="fc bfc" id="L170" title="All 2 branches covered.">            if (!hasEqualsObject) {</span>
-<span class="fc bfc" id="L171" title="All 2 branches covered.">                for (DetailAST equalsAST : equalsMethods) {</span>
-<span class="fc" id="L172">                    final DetailAST nameNode = equalsAST</span>
-<span class="fc" id="L173">                            .findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L174">                    log(nameNode, MSG_KEY);</span>
-<span class="fc" id="L175">                }</span>
+<span class="fc bfc" id="L199" title="All 2 branches covered.">            if (!hasEqualsObject) {</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">                for (DetailAST equalsAST : equalsMethods) {</span>
+<span class="fc" id="L201">                    final DetailAST nameNode = equalsAST</span>
+<span class="fc" id="L202">                            .findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L203">                    log(nameNode, MSG_KEY);</span>
+<span class="fc" id="L204">                }</span>
             }
         }
-<span class="fc" id="L178">    }</span>
+<span class="fc" id="L207">    }</span>
 
     /**
      * Tests whether a method's first parameter is an Object.
@@ -185,15 +214,15 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @return true if ast has first parameter of type Object.
      */
     private static boolean isFirstParameterObject(DetailAST methodDefAst) {
-<span class="fc" id="L188">        final DetailAST paramsNode = methodDefAst.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc" id="L217">        final DetailAST paramsNode = methodDefAst.findFirstToken(TokenTypes.PARAMETERS);</span>
 
         // parameter type &quot;Object&quot;?
-<span class="fc" id="L191">        final DetailAST paramNode =</span>
-<span class="fc" id="L192">            paramsNode.findFirstToken(TokenTypes.PARAMETER_DEF);</span>
-<span class="fc" id="L193">        final DetailAST typeNode = paramNode.findFirstToken(TokenTypes.TYPE);</span>
-<span class="fc" id="L194">        final FullIdent fullIdent = FullIdent.createFullIdentBelow(typeNode);</span>
-<span class="fc" id="L195">        final String name = fullIdent.getText();</span>
-<span class="fc bfc" id="L196" title="All 4 branches covered.">        return &quot;Object&quot;.equals(name) || &quot;java.lang.Object&quot;.equals(name);</span>
+<span class="fc" id="L220">        final DetailAST paramNode =</span>
+<span class="fc" id="L221">            paramsNode.findFirstToken(TokenTypes.PARAMETER_DEF);</span>
+<span class="fc" id="L222">        final DetailAST typeNode = paramNode.findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L223">        final FullIdent fullIdent = FullIdent.createFullIdentBelow(typeNode);</span>
+<span class="fc" id="L224">        final String name = fullIdent.getText();</span>
+<span class="fc bfc" id="L225" title="All 4 branches covered.">        return &quot;Object&quot;.equals(name) || &quot;java.lang.Object&quot;.equals(name);</span>
     }
 
 }

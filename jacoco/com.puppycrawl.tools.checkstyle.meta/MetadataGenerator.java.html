@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MetadataGenerator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.meta</a> &gt; <span class="el_source">MetadataGenerator.java</span></div><h1>MetadataGenerator.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2020 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.meta;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import com.puppycrawl.tools.checkstyle.Checker;
+import com.puppycrawl.tools.checkstyle.DefaultConfiguration;
+import com.puppycrawl.tools.checkstyle.TreeWalker;
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+
+/** Class which handles all the metadata generation and writing calls. */
+public final class MetadataGenerator {
+
+    private MetadataGenerator() {
+    }
+
+    /**
+     * Generate metadata from the module source files available in the input argument path.
+     *
+     * @param args arguments
+     * @throws IOException ioException
+     * @throws CheckstyleException checkstyleException
+     */
+    public static void generate(String... args) throws IOException, CheckstyleException {
+<span class="fc" id="L53">        final Checker checker = new Checker();</span>
+<span class="fc" id="L54">        checker.setModuleClassLoader(Checker.class.getClassLoader());</span>
+<span class="fc" id="L55">        final DefaultConfiguration scraperCheckConfig =</span>
+<span class="fc" id="L56">                        new DefaultConfiguration(JavadocMetadataScraper.class.getName());</span>
+<span class="fc" id="L57">        final DefaultConfiguration defaultConfiguration = new DefaultConfiguration(&quot;configuration&quot;);</span>
+<span class="fc" id="L58">        final DefaultConfiguration treeWalkerConfig =</span>
+<span class="fc" id="L59">                new DefaultConfiguration(TreeWalker.class.getName());</span>
+<span class="fc" id="L60">        defaultConfiguration.addAttribute(&quot;charset&quot;, StandardCharsets.UTF_8.name());</span>
+<span class="fc" id="L61">        defaultConfiguration.addChild(treeWalkerConfig);</span>
+<span class="fc" id="L62">        treeWalkerConfig.addChild(scraperCheckConfig);</span>
+<span class="fc" id="L63">        checker.configure(defaultConfiguration);</span>
+<span class="fc" id="L64">        dumpMetadata(checker, args[0]);</span>
+<span class="fc" id="L65">    }</span>
+
+    /**
+     * Process files using the checker passed and write to corresponding XML files.
+     *
+     * @param checker checker
+     * @param path rootPath
+     * @throws CheckstyleException checkstyleException
+     * @throws IOException ioException
+     */
+    private static void dumpMetadata(Checker checker, String path) throws CheckstyleException,
+            IOException {
+<span class="fc" id="L77">        final List&lt;File&gt; validFiles = new ArrayList&lt;&gt;();</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">        if (path.endsWith(&quot;.java&quot;)) {</span>
+<span class="nc" id="L79">            validFiles.add(new File(path));</span>
+        }
+        else {
+<span class="fc" id="L82">            final List&lt;String&gt; moduleFolders = Arrays.asList(&quot;checks&quot;, &quot;filters&quot;, &quot;filefilters&quot;);</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">            for (String folder : moduleFolders) {</span>
+<span class="fc" id="L84">                try (Stream&lt;Path&gt; files = Files.walk(Paths.get(path</span>
+                        + &quot;/&quot; + folder))) {
+<span class="fc" id="L86">                    validFiles.addAll(</span>
+<span class="fc" id="L87">                            files.map(Path::toFile)</span>
+<span class="fc" id="L88">                            .filter(file -&gt; {</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">                                return file.getName().endsWith(&quot;SuppressWarningsHolder.java&quot;)</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">                                        || file.getName().endsWith(&quot;Check.java&quot;)</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">                                        || file.getName().endsWith(&quot;Filter.java&quot;);</span>
+                            })
+<span class="fc" id="L93">                            .collect(Collectors.toList()));</span>
+                }
+<span class="fc" id="L95">            }</span>
+        }
+
+<span class="fc" id="L98">        checker.process(validFiles);</span>
+<span class="fc" id="L99">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

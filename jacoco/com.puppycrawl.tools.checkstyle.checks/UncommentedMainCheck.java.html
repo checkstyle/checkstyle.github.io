@@ -44,7 +44,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * Property {@code excludedClasses} - Specify pattern for qualified names of
  * classes which are allowed to have a {@code main} method.
  * Type is {@code java.util.regex.Pattern}.
- * Default value is {@code &quot;^$&quot; (empty)}.
+ * Default value is {@code &quot;^$&quot;}.
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
@@ -70,6 +70,15 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * public class Start {
  *    public void main(){}                       // OK
  * }
+ *
+ * public record MyRecord1 {
+ *    public void main(){}                       // violation
+ * }
+ *
+ * public record MyRecord2 {
+ *    //public void main(){}                       // OK
+ * }
+ *
  * &lt;/pre&gt;
  * &lt;p&gt;
  * To configure the check to allow the {@code main} method for all classes with &quot;Main&quot; name:
@@ -96,6 +105,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * public class Start {
  *    public void main(){}                       // OK
  * }
+ *
+ * public record MyRecord1 {
+ *    public void main(){}                       // OK
+ * }
+ *
  * &lt;/pre&gt;
  * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
@@ -112,7 +126,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * @since 3.2
  */
 @FileStatefulCheck
-<span class="fc" id="L115">public class UncommentedMainCheck</span>
+<span class="fc" id="L129">public class UncommentedMainCheck</span>
     extends AbstractCheck {
 
     /**
@@ -125,7 +139,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * Specify pattern for qualified names of classes which are allowed to
      * have a {@code main} method.
      */
-<span class="fc" id="L128">    private Pattern excludedClasses = Pattern.compile(&quot;^$&quot;);</span>
+<span class="fc" id="L142">    private Pattern excludedClasses = Pattern.compile(&quot;^$&quot;);</span>
     /** Current class name. */
     private String currentClass;
     /** Current package. */
@@ -140,58 +154,60 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param excludedClasses a pattern
      */
     public void setExcludedClasses(Pattern excludedClasses) {
-<span class="fc" id="L143">        this.excludedClasses = excludedClasses;</span>
-<span class="fc" id="L144">    }</span>
+<span class="fc" id="L157">        this.excludedClasses = excludedClasses;</span>
+<span class="fc" id="L158">    }</span>
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L148">        return getRequiredTokens();</span>
+<span class="fc" id="L162">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L153">        return getRequiredTokens();</span>
+<span class="fc" id="L167">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L158">        return new int[] {</span>
+<span class="fc" id="L172">        return new int[] {</span>
             TokenTypes.METHOD_DEF,
             TokenTypes.CLASS_DEF,
             TokenTypes.PACKAGE_DEF,
+            TokenTypes.RECORD_DEF,
         };
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L167">        packageName = FullIdent.createFullIdent(null);</span>
-<span class="fc" id="L168">        currentClass = null;</span>
-<span class="fc" id="L169">        classDepth = 0;</span>
-<span class="fc" id="L170">    }</span>
+<span class="fc" id="L182">        packageName = FullIdent.createFullIdent(null);</span>
+<span class="fc" id="L183">        currentClass = null;</span>
+<span class="fc" id="L184">        classDepth = 0;</span>
+<span class="fc" id="L185">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L174" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.CLASS_DEF) {</span>
-<span class="fc" id="L175">            classDepth--;</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L190">            classDepth--;</span>
         }
-<span class="fc" id="L177">    }</span>
+<span class="fc" id="L192">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L181" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L196" title="All 4 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.PACKAGE_DEF:
-<span class="fc" id="L183">                visitPackageDef(ast);</span>
-<span class="fc" id="L184">                break;</span>
+<span class="fc" id="L198">                visitPackageDef(ast);</span>
+<span class="fc" id="L199">                break;</span>
+            case TokenTypes.RECORD_DEF:
             case TokenTypes.CLASS_DEF:
-<span class="fc" id="L186">                visitClassDef(ast);</span>
-<span class="fc" id="L187">                break;</span>
+<span class="fc" id="L202">                visitClassOrRecordDef(ast);</span>
+<span class="fc" id="L203">                break;</span>
             case TokenTypes.METHOD_DEF:
-<span class="fc" id="L189">                visitMethodDef(ast);</span>
-<span class="fc" id="L190">                break;</span>
+<span class="fc" id="L205">                visitMethodDef(ast);</span>
+<span class="fc" id="L206">                break;</span>
             default:
-<span class="fc" id="L192">                throw new IllegalStateException(ast.toString());</span>
+<span class="fc" id="L208">                throw new IllegalStateException(ast.toString());</span>
         }
-<span class="fc" id="L194">    }</span>
+<span class="fc" id="L210">    }</span>
 
     /**
      * Sets current package.
@@ -199,24 +215,24 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param packageDef node for package definition
      */
     private void visitPackageDef(DetailAST packageDef) {
-<span class="fc" id="L202">        packageName = FullIdent.createFullIdent(packageDef.getLastChild()</span>
-<span class="fc" id="L203">                .getPreviousSibling());</span>
-<span class="fc" id="L204">    }</span>
+<span class="fc" id="L218">        packageName = FullIdent.createFullIdent(packageDef.getLastChild()</span>
+<span class="fc" id="L219">                .getPreviousSibling());</span>
+<span class="fc" id="L220">    }</span>
 
     /**
      * If not inner class then change current class name.
      *
-     * @param classDef node for class definition
+     * @param classOrRecordDef node for class or record definition
      */
-    private void visitClassDef(DetailAST classDef) {
+    private void visitClassOrRecordDef(DetailAST classOrRecordDef) {
         // we are not use inner classes because they can not
         // have static methods
-<span class="fc bfc" id="L214" title="All 2 branches covered.">        if (classDepth == 0) {</span>
-<span class="fc" id="L215">            final DetailAST ident = classDef.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L216">            currentClass = packageName.getText() + &quot;.&quot; + ident.getText();</span>
-<span class="fc" id="L217">            classDepth++;</span>
+<span class="fc bfc" id="L230" title="All 2 branches covered.">        if (classDepth == 0) {</span>
+<span class="fc" id="L231">            final DetailAST ident = classOrRecordDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L232">            currentClass = packageName.getText() + &quot;.&quot; + ident.getText();</span>
+<span class="fc" id="L233">            classDepth++;</span>
         }
-<span class="fc" id="L219">    }</span>
+<span class="fc" id="L235">    }</span>
 
     /**
      * Checks method definition if this is
@@ -225,16 +241,16 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param method method definition node
      */
     private void visitMethodDef(DetailAST method) {
-<span class="fc bfc" id="L228" title="All 2 branches covered.">        if (classDepth == 1</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">        if (classDepth == 1</span>
                 // method not in inner class or in interface definition
-<span class="fc bfc" id="L230" title="All 2 branches covered.">                &amp;&amp; checkClassName()</span>
-<span class="fc bfc" id="L231" title="All 2 branches covered.">                &amp;&amp; checkName(method)</span>
-<span class="fc bfc" id="L232" title="All 2 branches covered.">                &amp;&amp; checkModifiers(method)</span>
-<span class="fc bfc" id="L233" title="All 2 branches covered.">                &amp;&amp; checkType(method)</span>
-<span class="fc bfc" id="L234" title="All 2 branches covered.">                &amp;&amp; checkParams(method)) {</span>
-<span class="fc" id="L235">            log(method, MSG_KEY);</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">                &amp;&amp; checkClassName()</span>
+<span class="fc bfc" id="L247" title="All 2 branches covered.">                &amp;&amp; checkName(method)</span>
+<span class="fc bfc" id="L248" title="All 2 branches covered.">                &amp;&amp; checkModifiers(method)</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">                &amp;&amp; checkType(method)</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">                &amp;&amp; checkParams(method)) {</span>
+<span class="fc" id="L251">            log(method, MSG_KEY);</span>
         }
-<span class="fc" id="L237">    }</span>
+<span class="fc" id="L253">    }</span>
 
     /**
      * Checks that current class is not excluded.
@@ -242,7 +258,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if check passed, false otherwise
      */
     private boolean checkClassName() {
-<span class="fc bfc" id="L245" title="All 2 branches covered.">        return !excludedClasses.matcher(currentClass).find();</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">        return !excludedClasses.matcher(currentClass).find();</span>
     }
 
     /**
@@ -252,8 +268,8 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if check passed, false otherwise
      */
     private static boolean checkName(DetailAST method) {
-<span class="fc" id="L255">        final DetailAST ident = method.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L256">        return &quot;main&quot;.equals(ident.getText());</span>
+<span class="fc" id="L271">        final DetailAST ident = method.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L272">        return &quot;main&quot;.equals(ident.getText());</span>
     }
 
     /**
@@ -263,11 +279,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if check passed, false otherwise
      */
     private static boolean checkModifiers(DetailAST method) {
-<span class="fc" id="L266">        final DetailAST modifiers =</span>
-<span class="fc" id="L267">            method.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L282">        final DetailAST modifiers =</span>
+<span class="fc" id="L283">            method.findFirstToken(TokenTypes.MODIFIERS);</span>
 
-<span class="fc bfc" id="L269" title="All 2 branches covered.">        return modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null</span>
-<span class="fc bfc" id="L270" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+<span class="fc bfc" id="L285" title="All 2 branches covered.">        return modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null</span>
+<span class="fc bfc" id="L286" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
     }
 
     /**
@@ -277,9 +293,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if check passed, false otherwise
      */
     private static boolean checkType(DetailAST method) {
-<span class="fc" id="L280">        final DetailAST type =</span>
-<span class="fc" id="L281">            method.findFirstToken(TokenTypes.TYPE).getFirstChild();</span>
-<span class="fc bfc" id="L282" title="All 2 branches covered.">        return type.getType() == TokenTypes.LITERAL_VOID;</span>
+<span class="fc" id="L296">        final DetailAST type =</span>
+<span class="fc" id="L297">            method.findFirstToken(TokenTypes.TYPE).getFirstChild();</span>
+<span class="fc bfc" id="L298" title="All 2 branches covered.">        return type.getType() == TokenTypes.LITERAL_VOID;</span>
     }
 
     /**
@@ -289,24 +305,24 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true if check passed, false otherwise
      */
     private static boolean checkParams(DetailAST method) {
-<span class="fc" id="L292">        boolean checkPassed = false;</span>
-<span class="fc" id="L293">        final DetailAST params = method.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc" id="L308">        boolean checkPassed = false;</span>
+<span class="fc" id="L309">        final DetailAST params = method.findFirstToken(TokenTypes.PARAMETERS);</span>
 
-<span class="fc bfc" id="L295" title="All 2 branches covered.">        if (params.getChildCount() == 1) {</span>
-<span class="fc" id="L296">            final DetailAST parameterType = params.getFirstChild().findFirstToken(TokenTypes.TYPE);</span>
-<span class="fc" id="L297">            final Optional&lt;DetailAST&gt; arrayDecl = Optional.ofNullable(</span>
-<span class="fc" id="L298">                parameterType.findFirstToken(TokenTypes.ARRAY_DECLARATOR));</span>
-<span class="fc" id="L299">            final Optional&lt;DetailAST&gt; varargs = Optional.ofNullable(</span>
-<span class="fc" id="L300">                params.getFirstChild().findFirstToken(TokenTypes.ELLIPSIS));</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">        if (params.getChildCount() == 1) {</span>
+<span class="fc" id="L312">            final DetailAST parameterType = params.getFirstChild().findFirstToken(TokenTypes.TYPE);</span>
+<span class="fc" id="L313">            final Optional&lt;DetailAST&gt; arrayDecl = Optional.ofNullable(</span>
+<span class="fc" id="L314">                parameterType.findFirstToken(TokenTypes.ARRAY_DECLARATOR));</span>
+<span class="fc" id="L315">            final Optional&lt;DetailAST&gt; varargs = Optional.ofNullable(</span>
+<span class="fc" id="L316">                params.getFirstChild().findFirstToken(TokenTypes.ELLIPSIS));</span>
 
-<span class="fc bfc" id="L302" title="All 2 branches covered.">            if (arrayDecl.isPresent()) {</span>
-<span class="fc" id="L303">                checkPassed = isStringType(arrayDecl.get().getFirstChild());</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">            if (arrayDecl.isPresent()) {</span>
+<span class="fc" id="L319">                checkPassed = isStringType(arrayDecl.get().getFirstChild());</span>
             }
-<span class="fc bfc" id="L305" title="All 2 branches covered.">            else if (varargs.isPresent()) {</span>
-<span class="fc" id="L306">                checkPassed = isStringType(parameterType.getFirstChild());</span>
+<span class="fc bfc" id="L321" title="All 2 branches covered.">            else if (varargs.isPresent()) {</span>
+<span class="fc" id="L322">                checkPassed = isStringType(parameterType.getFirstChild());</span>
             }
         }
-<span class="fc" id="L309">        return checkPassed;</span>
+<span class="fc" id="L325">        return checkPassed;</span>
     }
 
     /**
@@ -316,9 +332,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return true, if the type is java.lang.String.
      */
     private static boolean isStringType(DetailAST typeAst) {
-<span class="fc" id="L319">        final FullIdent type = FullIdent.createFullIdent(typeAst);</span>
-<span class="fc bfc" id="L320" title="All 2 branches covered.">        return &quot;String&quot;.equals(type.getText())</span>
-<span class="fc bfc" id="L321" title="All 2 branches covered.">            || &quot;java.lang.String&quot;.equals(type.getText());</span>
+<span class="fc" id="L335">        final FullIdent type = FullIdent.createFullIdent(typeAst);</span>
+<span class="fc bfc" id="L336" title="All 2 branches covered.">        return &quot;String&quot;.equals(type.getText())</span>
+<span class="fc bfc" id="L337" title="All 2 branches covered.">            || &quot;java.lang.String&quot;.equals(type.getText());</span>
     }
 
 }

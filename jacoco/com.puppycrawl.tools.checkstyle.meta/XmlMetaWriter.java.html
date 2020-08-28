@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>XmlMetaWriter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.meta</a> &gt; <span class="el_source">XmlMetaWriter.java</span></div><h1>XmlMetaWriter.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2020 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.meta;
+
+import java.io.File;
+import java.util.Locale;
+import java.util.regex.Pattern;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+
+/**
+ * Class to write module details object into an XML file.
+ */
+public final class XmlMetaWriter {
+
+    /** Compiled pattern for {@code .} used for generating file paths from package names. */
+<span class="fc" id="L46">    private static final Pattern FILEPATH_CONVERSION = Pattern.compile(&quot;\\.&quot;);</span>
+
+    /** Name tag of metadata XML files. */
+    private static final String XML_TAG_NAME = &quot;name&quot;;
+
+    /** Description tag of metadata XML files. */
+    private static final String XML_TAG_DESCRIPTION = &quot;description&quot;;
+
+    /** Default(UNIX) file separator. */
+    private static final String DEFAULT_FILE_SEPARATOR = &quot;/&quot;;
+
+    /**
+     * Do no allow {@code XmlMetaWriter} instances to be created.
+     */
+    private XmlMetaWriter() {
+    }
+
+    /**
+     * Helper function to write module details to XML file.
+     *
+     * @param moduleDetails module details
+     * @throws TransformerException if a transformer exception occurs
+     * @throws ParserConfigurationException if a parser configuration exception occurs
+     */
+    public static void write(ModuleDetails moduleDetails) throws TransformerException,
+            ParserConfigurationException {
+<span class="fc" id="L72">        final DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();</span>
+<span class="fc" id="L73">        final DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();</span>
+<span class="fc" id="L74">        final Document doc = dBuilder.newDocument();</span>
+
+<span class="fc" id="L76">        final Element rootElement = doc.createElement(&quot;checkstyle-metadata&quot;);</span>
+<span class="fc" id="L77">        final Element rootChild = doc.createElement(&quot;module&quot;);</span>
+<span class="fc" id="L78">        rootElement.appendChild(rootChild);</span>
+
+<span class="fc" id="L80">        doc.appendChild(rootElement);</span>
+
+<span class="fc" id="L82">        final Element checkModule = doc.createElement(moduleDetails.getModuleType().getLabel());</span>
+<span class="fc" id="L83">        rootChild.appendChild(checkModule);</span>
+
+<span class="fc" id="L85">        checkModule.setAttribute(XML_TAG_NAME, moduleDetails.getName());</span>
+<span class="fc" id="L86">        checkModule.setAttribute(&quot;fully-qualified-name&quot;,</span>
+<span class="fc" id="L87">                moduleDetails.getFullQualifiedName());</span>
+<span class="fc" id="L88">        checkModule.setAttribute(&quot;parent&quot;, moduleDetails.getParent());</span>
+
+<span class="fc" id="L90">        final Element desc = doc.createElement(XML_TAG_DESCRIPTION);</span>
+<span class="fc" id="L91">        final Node cdataDesc = doc.createCDATASection(moduleDetails.getDescription());</span>
+<span class="fc" id="L92">        desc.appendChild(cdataDesc);</span>
+<span class="fc" id="L93">        checkModule.appendChild(desc);</span>
+<span class="fc" id="L94">        createPropertySection(moduleDetails, checkModule, doc);</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (!moduleDetails.getViolationMessageKeys().isEmpty()) {</span>
+<span class="fc" id="L96">            final Element messageKeys = doc.createElement(&quot;message-keys&quot;);</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">            for (String msg : moduleDetails.getViolationMessageKeys()) {</span>
+<span class="fc" id="L98">                final Element messageKey = doc.createElement(&quot;message-key&quot;);</span>
+<span class="fc" id="L99">                messageKey.setAttribute(&quot;key&quot;, msg);</span>
+<span class="fc" id="L100">                messageKeys.appendChild(messageKey);</span>
+<span class="fc" id="L101">            }</span>
+<span class="fc" id="L102">            checkModule.appendChild(messageKeys);</span>
+        }
+
+<span class="fc" id="L105">        writeToFile(doc, moduleDetails);</span>
+<span class="fc" id="L106">    }</span>
+
+    /**
+     * Create the property section of the module detail object.
+     *
+     * @param moduleDetails module details
+     * @param checkModule root doc element
+     * @param doc document object
+     */
+    private static void createPropertySection(ModuleDetails moduleDetails, Element checkModule,
+                                              Document doc) {
+<span class="fc bfc" id="L117" title="All 2 branches covered.">        if (!moduleDetails.getProperties().isEmpty()) {</span>
+<span class="fc" id="L118">            final Element properties = doc.createElement(&quot;properties&quot;);</span>
+<span class="fc" id="L119">            checkModule.appendChild(properties);</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">            for (ModulePropertyDetails modulePropertyDetails : moduleDetails.getProperties()) {</span>
+<span class="fc" id="L121">                final Element property = doc.createElement(&quot;property&quot;);</span>
+<span class="fc" id="L122">                properties.appendChild(property);</span>
+<span class="fc" id="L123">                property.setAttribute(XML_TAG_NAME, modulePropertyDetails.getName());</span>
+<span class="fc" id="L124">                property.setAttribute(&quot;type&quot;, modulePropertyDetails.getType());</span>
+<span class="fc bfc" id="L125" title="All 2 branches covered.">                if (modulePropertyDetails.getDefaultValue() != null) {</span>
+<span class="fc" id="L126">                    property.setAttribute(&quot;default-value&quot;,</span>
+<span class="fc" id="L127">                            modulePropertyDetails.getDefaultValue());</span>
+                }
+<span class="fc bfc" id="L129" title="All 2 branches covered.">                if (modulePropertyDetails.getValidationType() != null) {</span>
+<span class="fc" id="L130">                    property.setAttribute(&quot;validation-type&quot;,</span>
+<span class="fc" id="L131">                            modulePropertyDetails.getValidationType());</span>
+                }
+<span class="fc" id="L133">                final Element propertyDesc = doc.createElement(XML_TAG_DESCRIPTION);</span>
+<span class="fc" id="L134">                propertyDesc.appendChild(doc.createCDATASection(</span>
+<span class="fc" id="L135">                        modulePropertyDetails.getDescription()));</span>
+<span class="fc" id="L136">                property.appendChild(propertyDesc);</span>
+<span class="fc" id="L137">            }</span>
+        }
+<span class="fc" id="L139">    }</span>
+
+    /**
+     * Function to write the prepared document object into an XML file.
+     *
+     * @param document document updated with all module metadata
+     * @param moduleDetails the corresponding module details object
+     * @throws TransformerException if a transformer exception occurs
+     */
+    private static void writeToFile(Document document, ModuleDetails moduleDetails)
+            throws TransformerException {
+<span class="fc" id="L150">        String fileSeparator = DEFAULT_FILE_SEPARATOR;</span>
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">        if (System.getProperty(&quot;os.name&quot;).toLowerCase(Locale.ENGLISH).contains(&quot;win&quot;)) {</span>
+<span class="nc" id="L152">            fileSeparator = &quot;\\&quot; + fileSeparator;</span>
+        }
+        final String modifiedPath;
+<span class="fc" id="L155">        final String xmlExtension = &quot;.xml&quot;;</span>
+<span class="fc" id="L156">        final String rootOutputPath = System.getProperty(&quot;user.dir&quot;) + &quot;/src/main/resources&quot;;</span>
+<span class="pc bpc" id="L157" title="1 of 2 branches missed.">        if (moduleDetails.getFullQualifiedName().startsWith(&quot;com.puppycrawl.tools.checkstyle&quot;)) {</span>
+<span class="fc" id="L158">            final String moduleFilePath = FILEPATH_CONVERSION</span>
+<span class="fc" id="L159">                    .matcher(moduleDetails.getFullQualifiedName())</span>
+<span class="fc" id="L160">                    .replaceAll(fileSeparator);</span>
+<span class="fc" id="L161">            final String checkstyleString = &quot;checkstyle&quot;;</span>
+<span class="fc" id="L162">            final int indexOfCheckstyle =</span>
+<span class="fc" id="L163">                    moduleFilePath.indexOf(checkstyleString) + checkstyleString.length();</span>
+
+<span class="fc" id="L165">            modifiedPath = rootOutputPath + DEFAULT_FILE_SEPARATOR</span>
+<span class="fc" id="L166">                    + moduleFilePath.substring(0, indexOfCheckstyle) + &quot;/meta/&quot;</span>
+<span class="fc" id="L167">                    + moduleFilePath.substring(indexOfCheckstyle + 1) + xmlExtension;</span>
+<span class="fc" id="L168">        }</span>
+        else {
+<span class="nc" id="L170">            String moduleName = moduleDetails.getName();</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            if (moduleDetails.getModuleType() == ModuleType.CHECK) {</span>
+<span class="nc" id="L172">                moduleName += &quot;Check&quot;;</span>
+            }
+<span class="nc" id="L174">            modifiedPath = rootOutputPath + &quot;/checkstylemeta-&quot; + moduleName + xmlExtension;</span>
+        }
+<span class="fc bfc" id="L176" title="All 2 branches covered.">        if (!moduleDetails.getDescription().isEmpty()) {</span>
+<span class="fc" id="L177">            final TransformerFactory transformerFactory = TransformerFactory.newInstance();</span>
+<span class="fc" id="L178">            final Transformer transformer = transformerFactory.newTransformer();</span>
+<span class="fc" id="L179">            transformer.setOutputProperty(OutputKeys.INDENT, &quot;yes&quot;);</span>
+<span class="fc" id="L180">            transformer.setOutputProperty(&quot;{http://xml.apache.org/xslt}indent-amount&quot;, &quot;4&quot;);</span>
+
+<span class="fc" id="L182">            final DOMSource source = new DOMSource(document);</span>
+<span class="fc" id="L183">            final StreamResult result = new StreamResult(new File(modifiedPath));</span>
+<span class="fc" id="L184">            transformer.transform(source, result);</span>
+        }
+<span class="fc" id="L186">    }</span>
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>

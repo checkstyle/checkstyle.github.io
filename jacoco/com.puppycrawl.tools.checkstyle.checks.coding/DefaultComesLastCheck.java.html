@@ -109,6 +109,13 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  *   case 2:
  *     break;
  * }
+ *
+ * // Switch rules are not subject to fall through, so this is still a violation:
+ * switch (i) {
+ *   case 1 -&amp;gt; x = 9;
+ *   default -&amp;gt; x = 10; // violation
+ *   case 2 -&amp;gt; x = 32;
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
@@ -128,7 +135,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * @since 3.4
  */
 @StatelessCheck
-<span class="fc" id="L131">public class DefaultComesLastCheck extends AbstractCheck {</span>
+<span class="fc" id="L138">public class DefaultComesLastCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -148,17 +155,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L151">        return getRequiredTokens();</span>
+<span class="fc" id="L158">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L156">        return getRequiredTokens();</span>
+<span class="fc" id="L163">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L161">        return new int[] {</span>
+<span class="fc" id="L168">        return new int[] {</span>
             TokenTypes.LITERAL_DEFAULT,
         };
     }
@@ -170,27 +177,33 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param newValue whether to ignore checking.
      */
     public void setSkipIfLastAndSharedWithCase(boolean newValue) {
-<span class="fc" id="L173">        skipIfLastAndSharedWithCase = newValue;</span>
-<span class="fc" id="L174">    }</span>
+<span class="fc" id="L180">        skipIfLastAndSharedWithCase = newValue;</span>
+<span class="fc" id="L181">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L178">        final DetailAST defaultGroupAST = ast.getParent();</span>
-<span class="fc bfc" id="L179" title="All 2 branches covered.">        if (skipIfLastAndSharedWithCase) {</span>
-<span class="fc bfc" id="L180" title="All 2 branches covered.">            if (Objects.nonNull(findNextSibling(ast, TokenTypes.LITERAL_CASE))) {</span>
-<span class="fc" id="L181">                log(ast, MSG_KEY_SKIP_IF_LAST_AND_SHARED_WITH_CASE);</span>
+<span class="fc" id="L185">        final DetailAST defaultGroupAST = ast.getParent();</span>
+
+        // Switch rules are not subject to fall through.
+<span class="fc bfc" id="L188" title="All 2 branches covered.">        final boolean isSwitchRule = defaultGroupAST.getType() == TokenTypes.SWITCH_RULE;</span>
+
+<span class="fc bfc" id="L190" title="All 4 branches covered.">        if (skipIfLastAndSharedWithCase &amp;&amp; !isSwitchRule) {</span>
+<span class="fc bfc" id="L191" title="All 2 branches covered.">            if (Objects.nonNull(findNextSibling(ast, TokenTypes.LITERAL_CASE))) {</span>
+<span class="fc" id="L192">                log(ast, MSG_KEY_SKIP_IF_LAST_AND_SHARED_WITH_CASE);</span>
             }
-<span class="fc bfc" id="L183" title="All 2 branches covered.">            else if (ast.getPreviousSibling() == null</span>
-<span class="fc bfc" id="L184" title="All 2 branches covered.">                &amp;&amp; Objects.nonNull(findNextSibling(defaultGroupAST,</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">            else if (ast.getPreviousSibling() == null</span>
+<span class="fc bfc" id="L195" title="All 2 branches covered.">                &amp;&amp; Objects.nonNull(findNextSibling(defaultGroupAST,</span>
                                                    TokenTypes.CASE_GROUP))) {
-<span class="fc" id="L186">                log(ast, MSG_KEY);</span>
+<span class="fc" id="L197">                log(ast, MSG_KEY);</span>
             }
         }
-<span class="fc bfc" id="L189" title="All 2 branches covered.">        else if (Objects.nonNull(findNextSibling(defaultGroupAST,</span>
-                                                 TokenTypes.CASE_GROUP))) {
-<span class="fc" id="L191">            log(ast, MSG_KEY);</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">        else if (Objects.nonNull(findNextSibling(defaultGroupAST,</span>
+                                            TokenTypes.CASE_GROUP))
+<span class="fc bfc" id="L202" title="All 2 branches covered.">                    || Objects.nonNull(findNextSibling(defaultGroupAST,</span>
+                                            TokenTypes.SWITCH_RULE))) {
+<span class="fc" id="L204">            log(ast, MSG_KEY);</span>
         }
-<span class="fc" id="L193">    }</span>
+<span class="fc" id="L206">    }</span>
 
     /**
      * Return token type only if passed tokenType in argument is found or returns -1.
@@ -200,16 +213,16 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return token if desired token is found or else null.
      */
     private static DetailAST findNextSibling(DetailAST ast, int tokenType) {
-<span class="fc" id="L203">        DetailAST token = null;</span>
-<span class="fc" id="L204">        DetailAST node = ast.getNextSibling();</span>
-<span class="fc bfc" id="L205" title="All 2 branches covered.">        while (node != null) {</span>
-<span class="fc bfc" id="L206" title="All 2 branches covered.">            if (node.getType() == tokenType) {</span>
-<span class="fc" id="L207">                token = node;</span>
-<span class="fc" id="L208">                break;</span>
+<span class="fc" id="L216">        DetailAST token = null;</span>
+<span class="fc" id="L217">        DetailAST node = ast.getNextSibling();</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">        while (node != null) {</span>
+<span class="fc bfc" id="L219" title="All 2 branches covered.">            if (node.getType() == tokenType) {</span>
+<span class="fc" id="L220">                token = node;</span>
+<span class="fc" id="L221">                break;</span>
             }
-<span class="fc" id="L210">            node = node.getNextSibling();</span>
+<span class="fc" id="L223">            node = node.getNextSibling();</span>
         }
-<span class="fc" id="L212">        return token;</span>
+<span class="fc" id="L225">        return token;</span>
     }
 
 }
