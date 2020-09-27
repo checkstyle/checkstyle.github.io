@@ -19,6 +19,7 @@
 
 package com.puppycrawl.tools.checkstyle.checks.javadoc;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -37,10 +38,11 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
 import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
 import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
  * &lt;p&gt;
- * Checks the Javadoc comments for annotation/enum/class/interface definitions. By default, does
+ * Checks the Javadoc comments for type definitions. By default, does
  * not check for author or version tags. The scope to verify is specified using the {@code Scope}
  * class and defaults to {@code Scope.PRIVATE}. To verify another scope, set property
  * scope to one of the {@code Scope} constants. To define the format for an author
@@ -53,7 +55,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  * as they should be redundant because of outer class.
  * &lt;/p&gt;
  * &lt;p&gt;
- * Error messages about type parameters for which no param tags are present
+ * Error messages about type parameters and record components for which no param tags are present
  * can be suppressed by defining property {@code allowMissingParamTags}.
  * &lt;/p&gt;
  * &lt;ul&gt;
@@ -199,7 +201,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
  *
  */
 @StatelessCheck
-<span class="fc" id="L202">public class JavadocTypeCheck</span>
+<span class="fc" id="L204">public class JavadocTypeCheck</span>
     extends AbstractCheck {
 
     /**
@@ -238,16 +240,19 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
     /** Close angle bracket literal. */
     private static final String CLOSE_ANGLE_BRACKET = &quot;&gt;&quot;;
 
+    /** Space literal. */
+    private static final String SPACE = &quot; &quot;;
+
     /** Pattern to match type name within angle brackets in javadoc param tag. */
-<span class="fc" id="L242">    private static final Pattern TYPE_NAME_IN_JAVADOC_TAG =</span>
-<span class="fc" id="L243">            Pattern.compile(&quot;\\s*&lt;([^&gt;]+)&gt;.*&quot;);</span>
+<span class="fc" id="L247">    private static final Pattern TYPE_NAME_IN_JAVADOC_TAG =</span>
+<span class="fc" id="L248">            Pattern.compile(&quot;\\s*&lt;([^&gt;]+)&gt;.*&quot;);</span>
 
     /** Pattern to split type name field in javadoc param tag. */
-<span class="fc" id="L246">    private static final Pattern TYPE_NAME_IN_JAVADOC_TAG_SPLITTER =</span>
-<span class="fc" id="L247">            Pattern.compile(&quot;\\s+&quot;);</span>
+<span class="fc" id="L251">    private static final Pattern TYPE_NAME_IN_JAVADOC_TAG_SPLITTER =</span>
+<span class="fc" id="L252">            Pattern.compile(&quot;\\s+&quot;);</span>
 
     /** Specify the visibility scope where Javadoc comments are checked. */
-<span class="fc" id="L250">    private Scope scope = Scope.PRIVATE;</span>
+<span class="fc" id="L255">    private Scope scope = Scope.PRIVATE;</span>
     /** Specify the visibility scope where Javadoc comments are not checked. */
     private Scope excludeScope;
     /** Specify the pattern for {@code @author} tag. */
@@ -266,7 +271,7 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * Specify the list of annotations that allow missed documentation.
      * Only short names are allowed, e.g. {@code Generated}.
      */
-<span class="fc" id="L269">    private List&lt;String&gt; allowedAnnotations = Collections.singletonList(&quot;Generated&quot;);</span>
+<span class="fc" id="L274">    private List&lt;String&gt; allowedAnnotations = Collections.singletonList(&quot;Generated&quot;);</span>
 
     /**
      * Setter to specify the visibility scope where Javadoc comments are checked.
@@ -274,8 +279,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param scope a scope.
      */
     public void setScope(Scope scope) {
-<span class="fc" id="L277">        this.scope = scope;</span>
-<span class="fc" id="L278">    }</span>
+<span class="fc" id="L282">        this.scope = scope;</span>
+<span class="fc" id="L283">    }</span>
 
     /**
      * Setter to specify the visibility scope where Javadoc comments are not checked.
@@ -283,8 +288,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param excludeScope a scope.
      */
     public void setExcludeScope(Scope excludeScope) {
-<span class="fc" id="L286">        this.excludeScope = excludeScope;</span>
-<span class="fc" id="L287">    }</span>
+<span class="fc" id="L291">        this.excludeScope = excludeScope;</span>
+<span class="fc" id="L292">    }</span>
 
     /**
      * Setter to specify the pattern for {@code @author} tag.
@@ -292,8 +297,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param pattern a pattern.
      */
     public void setAuthorFormat(Pattern pattern) {
-<span class="fc" id="L295">        authorFormat = pattern;</span>
-<span class="fc" id="L296">    }</span>
+<span class="fc" id="L300">        authorFormat = pattern;</span>
+<span class="fc" id="L301">    }</span>
 
     /**
      * Setter to specify the pattern for {@code @version} tag.
@@ -301,8 +306,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param pattern a pattern.
      */
     public void setVersionFormat(Pattern pattern) {
-<span class="fc" id="L304">        versionFormat = pattern;</span>
-<span class="fc" id="L305">    }</span>
+<span class="fc" id="L309">        versionFormat = pattern;</span>
+<span class="fc" id="L310">    }</span>
 
     /**
      * Setter to control whether to ignore violations when a class has type parameters but
@@ -311,8 +316,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param flag a {@code Boolean} value
      */
     public void setAllowMissingParamTags(boolean flag) {
-<span class="fc" id="L314">        allowMissingParamTags = flag;</span>
-<span class="fc" id="L315">    }</span>
+<span class="fc" id="L319">        allowMissingParamTags = flag;</span>
+<span class="fc" id="L320">    }</span>
 
     /**
      * Setter to control whether to ignore violations when a Javadoc tag is not recognised.
@@ -320,8 +325,8 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param flag a {@code Boolean} value
      */
     public void setAllowUnknownTags(boolean flag) {
-<span class="fc" id="L323">        allowUnknownTags = flag;</span>
-<span class="fc" id="L324">    }</span>
+<span class="fc" id="L328">        allowUnknownTags = flag;</span>
+<span class="fc" id="L329">    }</span>
 
     /**
      * Setter to specify the list of annotations that allow missed documentation.
@@ -330,17 +335,17 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param userAnnotations user's value.
      */
     public void setAllowedAnnotations(String... userAnnotations) {
-<span class="fc" id="L333">        allowedAnnotations = Arrays.asList(userAnnotations);</span>
-<span class="fc" id="L334">    }</span>
+<span class="fc" id="L338">        allowedAnnotations = Arrays.asList(userAnnotations);</span>
+<span class="fc" id="L339">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L338">        return getAcceptableTokens();</span>
+<span class="fc" id="L343">        return getAcceptableTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L343">        return new int[] {</span>
+<span class="fc" id="L348">        return new int[] {</span>
             TokenTypes.INTERFACE_DEF,
             TokenTypes.CLASS_DEF,
             TokenTypes.ENUM_DEF,
@@ -351,40 +356,45 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L354">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L359">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L359" title="All 2 branches covered.">        if (shouldCheck(ast)) {</span>
-<span class="fc" id="L360">            final FileContents contents = getFileContents();</span>
-<span class="fc" id="L361">            final int lineNo = ast.getLineNo();</span>
-<span class="fc" id="L362">            final TextBlock textBlock = contents.getJavadocBefore(lineNo);</span>
-<span class="fc bfc" id="L363" title="All 2 branches covered.">            if (textBlock != null) {</span>
-<span class="fc" id="L364">                final List&lt;JavadocTag&gt; tags = getJavadocTags(textBlock);</span>
-<span class="fc bfc" id="L365" title="All 2 branches covered.">                if (ScopeUtil.isOuterMostType(ast)) {</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">        if (shouldCheck(ast)) {</span>
+<span class="fc" id="L365">            final FileContents contents = getFileContents();</span>
+<span class="fc" id="L366">            final int lineNo = ast.getLineNo();</span>
+<span class="fc" id="L367">            final TextBlock textBlock = contents.getJavadocBefore(lineNo);</span>
+<span class="fc bfc" id="L368" title="All 2 branches covered.">            if (textBlock != null) {</span>
+<span class="fc" id="L369">                final List&lt;JavadocTag&gt; tags = getJavadocTags(textBlock);</span>
+<span class="fc bfc" id="L370" title="All 2 branches covered.">                if (ScopeUtil.isOuterMostType(ast)) {</span>
                     // don't check author/version for inner classes
-<span class="fc" id="L367">                    checkTag(ast, tags, JavadocTagInfo.AUTHOR.getName(),</span>
+<span class="fc" id="L372">                    checkTag(ast, tags, JavadocTagInfo.AUTHOR.getName(),</span>
                             authorFormat);
-<span class="fc" id="L369">                    checkTag(ast, tags, JavadocTagInfo.VERSION.getName(),</span>
+<span class="fc" id="L374">                    checkTag(ast, tags, JavadocTagInfo.VERSION.getName(),</span>
                             versionFormat);
                 }
 
-<span class="fc" id="L373">                final List&lt;String&gt; typeParamNames =</span>
-<span class="fc" id="L374">                    CheckUtil.getTypeParameterNames(ast);</span>
+<span class="fc" id="L378">                final List&lt;String&gt; typeParamNames =</span>
+<span class="fc" id="L379">                    CheckUtil.getTypeParameterNames(ast);</span>
+<span class="fc" id="L380">                final List&lt;String&gt; recordComponentNames =</span>
+<span class="fc" id="L381">                    getRecordComponentNames(ast);</span>
 
-<span class="fc bfc" id="L376" title="All 2 branches covered.">                if (!allowMissingParamTags) {</span>
-                    // Check type parameters that should exist, do
-<span class="fc bfc" id="L378" title="All 2 branches covered.">                    for (final String typeParamName : typeParamNames) {</span>
-<span class="fc" id="L379">                        checkTypeParamTag(</span>
-                            ast, tags, typeParamName);
-<span class="fc" id="L381">                    }</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">                if (!allowMissingParamTags) {</span>
+
+<span class="fc" id="L385">                    typeParamNames.forEach(typeParamName -&gt; {</span>
+<span class="fc" id="L386">                        checkTypeParamTag(ast, tags, typeParamName);</span>
+<span class="fc" id="L387">                    });</span>
+
+<span class="fc" id="L389">                    recordComponentNames.forEach(componentName -&gt; {</span>
+<span class="fc" id="L390">                        checkComponentParamTag(ast, tags, componentName);</span>
+<span class="fc" id="L391">                    });</span>
                 }
 
-<span class="fc" id="L384">                checkUnusedTypeParamTags(tags, typeParamNames);</span>
+<span class="fc" id="L394">                checkUnusedParamTags(tags, typeParamNames, recordComponentNames);</span>
             }
         }
-<span class="fc" id="L387">    }</span>
+<span class="fc" id="L397">    }</span>
 
     /**
      * Whether we should check this node.
@@ -392,25 +402,25 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param ast a given node.
      * @return whether we should check a given node.
      */
-    private boolean shouldCheck(final DetailAST ast) {
+    private boolean shouldCheck(DetailAST ast) {
         final Scope customScope;
 
-<span class="fc bfc" id="L398" title="All 2 branches covered.">        if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
-<span class="fc" id="L399">            customScope = Scope.PUBLIC;</span>
+<span class="fc bfc" id="L408" title="All 2 branches covered.">        if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
+<span class="fc" id="L409">            customScope = Scope.PUBLIC;</span>
         }
         else {
-<span class="fc" id="L402">            final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L403">            customScope = ScopeUtil.getScopeFromMods(mods);</span>
+<span class="fc" id="L412">            final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L413">            customScope = ScopeUtil.getScopeFromMods(mods);</span>
         }
-<span class="fc" id="L405">        final Scope surroundingScope = ScopeUtil.getSurroundingScope(ast);</span>
+<span class="fc" id="L415">        final Scope surroundingScope = ScopeUtil.getSurroundingScope(ast);</span>
 
-<span class="fc bfc" id="L407" title="All 4 branches covered.">        return customScope.isIn(scope)</span>
-<span class="fc bfc" id="L408" title="All 4 branches covered.">            &amp;&amp; (surroundingScope == null || surroundingScope.isIn(scope))</span>
+<span class="fc bfc" id="L417" title="All 4 branches covered.">        return customScope.isIn(scope)</span>
+<span class="fc bfc" id="L418" title="All 4 branches covered.">            &amp;&amp; (surroundingScope == null || surroundingScope.isIn(scope))</span>
             &amp;&amp; (excludeScope == null
-<span class="fc bfc" id="L410" title="All 4 branches covered.">                || !customScope.isIn(excludeScope)</span>
+<span class="fc bfc" id="L420" title="All 4 branches covered.">                || !customScope.isIn(excludeScope)</span>
                 || surroundingScope != null
-<span class="fc bfc" id="L412" title="All 2 branches covered.">                &amp;&amp; !surroundingScope.isIn(excludeScope))</span>
-<span class="fc bfc" id="L413" title="All 2 branches covered.">            &amp;&amp; !AnnotationUtil.containsAnnotation(ast, allowedAnnotations);</span>
+<span class="fc bfc" id="L422" title="All 2 branches covered.">                &amp;&amp; !surroundingScope.isIn(excludeScope))</span>
+<span class="fc bfc" id="L423" title="All 2 branches covered.">            &amp;&amp; !AnnotationUtil.containsAnnotation(ast, allowedAnnotations);</span>
     }
 
     /**
@@ -420,15 +430,15 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @return all standalone tags from the given javadoc.
      */
     private List&lt;JavadocTag&gt; getJavadocTags(TextBlock textBlock) {
-<span class="fc" id="L423">        final JavadocTags tags = JavadocUtil.getJavadocTags(textBlock,</span>
+<span class="fc" id="L433">        final JavadocTags tags = JavadocUtil.getJavadocTags(textBlock,</span>
             JavadocUtil.JavadocTagType.BLOCK);
-<span class="fc bfc" id="L425" title="All 2 branches covered.">        if (!allowUnknownTags) {</span>
-<span class="fc bfc" id="L426" title="All 2 branches covered.">            for (final InvalidJavadocTag tag : tags.getInvalidTags()) {</span>
-<span class="fc" id="L427">                log(tag.getLine(), tag.getCol(), MSG_UNKNOWN_TAG,</span>
-<span class="fc" id="L428">                    tag.getName());</span>
-<span class="fc" id="L429">            }</span>
+<span class="fc bfc" id="L435" title="All 2 branches covered.">        if (!allowUnknownTags) {</span>
+<span class="fc bfc" id="L436" title="All 2 branches covered.">            for (final InvalidJavadocTag tag : tags.getInvalidTags()) {</span>
+<span class="fc" id="L437">                log(tag.getLine(), tag.getCol(), MSG_UNKNOWN_TAG,</span>
+<span class="fc" id="L438">                    tag.getName());</span>
+<span class="fc" id="L439">            }</span>
         }
-<span class="fc" id="L431">        return tags.getValidTags();</span>
+<span class="fc" id="L441">        return tags.getValidTags();</span>
     }
 
     /**
@@ -441,23 +451,46 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      */
     private void checkTag(DetailAST ast, List&lt;JavadocTag&gt; tags, String tagName,
                           Pattern formatPattern) {
-<span class="fc bfc" id="L444" title="All 2 branches covered.">        if (formatPattern != null) {</span>
-<span class="fc" id="L445">            boolean hasTag = false;</span>
-<span class="fc" id="L446">            final String tagPrefix = &quot;@&quot;;</span>
-<span class="fc bfc" id="L447" title="All 2 branches covered.">            for (int i = tags.size() - 1; i &gt;= 0; i--) {</span>
-<span class="fc" id="L448">                final JavadocTag tag = tags.get(i);</span>
-<span class="fc bfc" id="L449" title="All 2 branches covered.">                if (tag.getTagName().equals(tagName)) {</span>
-<span class="fc" id="L450">                    hasTag = true;</span>
-<span class="fc bfc" id="L451" title="All 2 branches covered.">                    if (!formatPattern.matcher(tag.getFirstArg()).find()) {</span>
-<span class="fc" id="L452">                        log(ast, MSG_TAG_FORMAT, tagPrefix + tagName, formatPattern.pattern());</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">        if (formatPattern != null) {</span>
+<span class="fc" id="L455">            boolean hasTag = false;</span>
+<span class="fc" id="L456">            final String tagPrefix = &quot;@&quot;;</span>
+
+<span class="fc bfc" id="L458" title="All 2 branches covered.">            for (final JavadocTag tag :tags) {</span>
+<span class="fc bfc" id="L459" title="All 2 branches covered.">                if (tag.getTagName().equals(tagName)) {</span>
+<span class="fc" id="L460">                    hasTag = true;</span>
+<span class="fc bfc" id="L461" title="All 2 branches covered.">                    if (!formatPattern.matcher(tag.getFirstArg()).find()) {</span>
+<span class="fc" id="L462">                        log(ast, MSG_TAG_FORMAT, tagPrefix + tagName, formatPattern.pattern());</span>
                     }
                 }
-            }
-<span class="fc bfc" id="L456" title="All 2 branches covered.">            if (!hasTag) {</span>
-<span class="fc" id="L457">                log(ast, MSG_MISSING_TAG, tagPrefix + tagName);</span>
+<span class="fc" id="L465">            }</span>
+<span class="fc bfc" id="L466" title="All 2 branches covered.">            if (!hasTag) {</span>
+<span class="fc" id="L467">                log(ast, MSG_MISSING_TAG, tagPrefix + tagName);</span>
             }
         }
-<span class="fc" id="L460">    }</span>
+<span class="fc" id="L470">    }</span>
+
+    /**
+     * Verifies that a record definition has the specified param tag for
+     * the specified record component name.
+     *
+     * @param ast the AST node for the record definition.
+     * @param tags tags from the Javadoc comment for the record definition.
+     * @param recordComponentName the name of the type parameter
+     */
+    private void checkComponentParamTag(DetailAST ast,
+                                        List&lt;JavadocTag&gt; tags,
+                                        String recordComponentName) {
+
+<span class="fc" id="L484">        final boolean found = tags</span>
+<span class="fc" id="L485">            .stream()</span>
+<span class="fc" id="L486">            .filter(JavadocTag::isParamTag)</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">            .anyMatch(tag -&gt; tag.getFirstArg().indexOf(recordComponentName) == 0);</span>
+
+<span class="fc bfc" id="L489" title="All 2 branches covered.">        if (!found) {</span>
+<span class="fc" id="L490">            log(ast, MSG_MISSING_TAG, JavadocTagInfo.PARAM.getText()</span>
+                + SPACE + recordComponentName);
+        }
+<span class="fc" id="L493">    }</span>
 
     /**
      * Verifies that a type definition has the specified param tag for
@@ -467,66 +500,90 @@ import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
      * @param tags tags from the Javadoc comment for the type definition.
      * @param typeParamName the name of the type parameter
      */
-    private void checkTypeParamTag(final DetailAST ast,
-            final List&lt;JavadocTag&gt; tags, final String typeParamName) {
-<span class="fc" id="L472">        boolean found = false;</span>
-<span class="fc bfc" id="L473" title="All 2 branches covered.">        for (int i = tags.size() - 1; i &gt;= 0; i--) {</span>
-<span class="fc" id="L474">            final JavadocTag tag = tags.get(i);</span>
-<span class="fc bfc" id="L475" title="All 2 branches covered.">            if (tag.isParamTag()</span>
-<span class="fc bfc" id="L476" title="All 2 branches covered.">                &amp;&amp; tag.getFirstArg().indexOf(OPEN_ANGLE_BRACKET</span>
-                        + typeParamName + CLOSE_ANGLE_BRACKET) == 0) {
-<span class="fc" id="L478">                found = true;</span>
-<span class="fc" id="L479">                break;</span>
-            }
+    private void checkTypeParamTag(DetailAST ast,
+            List&lt;JavadocTag&gt; tags, String typeParamName) {
+<span class="fc" id="L505">        final String typeParamNameWithBrackets =</span>
+            OPEN_ANGLE_BRACKET + typeParamName + CLOSE_ANGLE_BRACKET;
+
+<span class="fc" id="L508">        final boolean found = tags</span>
+<span class="fc" id="L509">            .stream()</span>
+<span class="fc" id="L510">            .filter(JavadocTag::isParamTag)</span>
+<span class="fc bfc" id="L511" title="All 2 branches covered.">            .anyMatch(tag -&gt; tag.getFirstArg().indexOf(typeParamNameWithBrackets) == 0);</span>
+
+<span class="fc bfc" id="L513" title="All 2 branches covered.">        if (!found) {</span>
+<span class="fc" id="L514">            log(ast, MSG_MISSING_TAG, JavadocTagInfo.PARAM.getText()</span>
+                + SPACE + typeParamNameWithBrackets);
         }
-<span class="fc bfc" id="L482" title="All 2 branches covered.">        if (!found) {</span>
-<span class="fc" id="L483">            log(ast, MSG_MISSING_TAG, JavadocTagInfo.PARAM.getText()</span>
-                + &quot; &quot; + OPEN_ANGLE_BRACKET + typeParamName + CLOSE_ANGLE_BRACKET);
-        }
-<span class="fc" id="L486">    }</span>
+<span class="fc" id="L517">    }</span>
 
     /**
-     * Checks for unused param tags for type parameters.
+     * Checks for unused param tags for type parameters and record components.
      *
      * @param tags tags from the Javadoc comment for the type definition.
      * @param typeParamNames names of type parameters
+     * @param recordComponentNames list of record component names in this definition
      */
-    private void checkUnusedTypeParamTags(
-        final List&lt;JavadocTag&gt; tags,
-        final List&lt;String&gt; typeParamNames) {
-<span class="fc bfc" id="L497" title="All 2 branches covered.">        for (int i = tags.size() - 1; i &gt;= 0; i--) {</span>
-<span class="fc" id="L498">            final JavadocTag tag = tags.get(i);</span>
-<span class="fc bfc" id="L499" title="All 2 branches covered.">            if (tag.isParamTag()) {</span>
-<span class="fc" id="L500">                final String typeParamName = extractTypeParamNameFromTag(tag);</span>
+    private void checkUnusedParamTags(
+        List&lt;JavadocTag&gt; tags,
+        List&lt;String&gt; typeParamNames,
+        List&lt;String&gt; recordComponentNames) {
 
-<span class="fc bfc" id="L502" title="All 2 branches covered.">                if (!typeParamNames.contains(typeParamName)) {</span>
-<span class="fc" id="L503">                    log(tag.getLineNo(), tag.getColumnNo(),</span>
-                            MSG_UNUSED_TAG,
-<span class="fc" id="L505">                            JavadocTagInfo.PARAM.getText(),</span>
-                            OPEN_ANGLE_BRACKET + typeParamName + CLOSE_ANGLE_BRACKET);
+<span class="fc bfc" id="L531" title="All 2 branches covered.">        for (final JavadocTag tag: tags) {</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">            if (tag.isParamTag()) {</span>
+<span class="fc" id="L533">                final String paramName = extractParamNameFromTag(tag);</span>
+<span class="fc bfc" id="L534" title="All 2 branches covered.">                final boolean found = typeParamNames.contains(paramName)</span>
+<span class="fc bfc" id="L535" title="All 2 branches covered.">                        || recordComponentNames.contains(paramName);</span>
+
+<span class="fc bfc" id="L537" title="All 2 branches covered.">                if (!found) {</span>
+<span class="fc" id="L538">                    final String actualParamName =</span>
+<span class="fc" id="L539">                        TYPE_NAME_IN_JAVADOC_TAG_SPLITTER.split(tag.getFirstArg())[0];</span>
+<span class="fc" id="L540">                    log(tag.getLineNo(), tag.getColumnNo(),</span>
+                        MSG_UNUSED_TAG,
+<span class="fc" id="L542">                        JavadocTagInfo.PARAM.getText(), actualParamName);</span>
                 }
             }
-        }
-<span class="fc" id="L510">    }</span>
+<span class="fc" id="L545">        }</span>
+
+<span class="fc" id="L547">    }</span>
 
     /**
-     * Extracts type parameter name from tag.
+     * Extracts parameter name from tag.
      *
      * @param tag javadoc tag to extract parameter name
      * @return extracts type parameter name from tag
      */
-    private static String extractTypeParamNameFromTag(JavadocTag tag) {
+    private static String extractParamNameFromTag(JavadocTag tag) {
         final String typeParamName;
-<span class="fc" id="L520">        final Matcher matchInAngleBrackets =</span>
-<span class="fc" id="L521">                TYPE_NAME_IN_JAVADOC_TAG.matcher(tag.getFirstArg());</span>
-<span class="fc bfc" id="L522" title="All 2 branches covered.">        if (matchInAngleBrackets.find()) {</span>
-<span class="fc" id="L523">            typeParamName = matchInAngleBrackets.group(1).trim();</span>
+<span class="fc" id="L557">        final Matcher matchInAngleBrackets =</span>
+<span class="fc" id="L558">                TYPE_NAME_IN_JAVADOC_TAG.matcher(tag.getFirstArg());</span>
+<span class="fc bfc" id="L559" title="All 2 branches covered.">        if (matchInAngleBrackets.find()) {</span>
+<span class="fc" id="L560">            typeParamName = matchInAngleBrackets.group(1).trim();</span>
         }
         else {
-<span class="fc" id="L526">            typeParamName = TYPE_NAME_IN_JAVADOC_TAG_SPLITTER.split(tag.getFirstArg())[0];</span>
+<span class="fc" id="L563">            typeParamName = TYPE_NAME_IN_JAVADOC_TAG_SPLITTER.split(tag.getFirstArg())[0];</span>
         }
-<span class="fc" id="L528">        return typeParamName;</span>
+<span class="fc" id="L565">        return typeParamName;</span>
     }
 
+    /**
+     * Collects the record components in a record definition.
+     *
+     * @param node the possible record definition ast.
+     * @return the list of record components in this record definition.
+     */
+    private static List&lt;String&gt; getRecordComponentNames(DetailAST node) {
+<span class="fc" id="L575">        final DetailAST components = node.findFirstToken(TokenTypes.RECORD_COMPONENTS);</span>
+<span class="fc" id="L576">        final List&lt;String&gt; componentList = new ArrayList&lt;&gt;();</span>
+
+<span class="fc bfc" id="L578" title="All 2 branches covered.">        if (components != null) {</span>
+<span class="fc" id="L579">            TokenUtil.forEachChild(components,</span>
+                TokenTypes.RECORD_COMPONENT_DEF, component -&gt; {
+<span class="fc" id="L581">                    final DetailAST ident = component.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L582">                    componentList.add(ident.getText());</span>
+<span class="fc" id="L583">                });</span>
+        }
+
+<span class="fc" id="L586">        return componentList;</span>
+    }
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.5.201910111838</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
