@@ -21,11 +21,15 @@ package com.puppycrawl.tools.checkstyle.checks.indentation;
 
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
  * Handler for operator new.
  */
 public class NewHandler extends AbstractExpressionHandler {
+
+    /** The AST which is handled by this handler. */
+    private final DetailAST mainAst;
 
     /**
      * Construct an instance of this handler with the given indentation check,
@@ -38,37 +42,85 @@ public class NewHandler extends AbstractExpressionHandler {
     public NewHandler(IndentationCheck indentCheck,
                       DetailAST ast,
                       AbstractExpressionHandler parent) {
-<span class="fc" id="L41">        super(indentCheck, &quot;operator new&quot;, ast, parent);</span>
-<span class="fc" id="L42">    }</span>
+<span class="fc" id="L45">        super(indentCheck, &quot;operator new&quot;, ast, parent);</span>
+<span class="fc" id="L46">        mainAst = ast;</span>
+<span class="fc" id="L47">    }</span>
 
     @Override
     public void checkIndentation() {
-<span class="fc" id="L46">        final DetailAST type = getMainAst().getFirstChild();</span>
-<span class="fc bfc" id="L47" title="All 2 branches covered.">        if (type != null) {</span>
-<span class="fc" id="L48">            checkExpressionSubtree(type, getIndent(), false, false);</span>
+        // if new is on the line start and it is not the part of assignment.
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (isOnStartOfLine(mainAst)</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">                &amp;&amp; !isNewKeywordFollowedByAssign()) {</span>
+<span class="fc" id="L54">            final int columnNo = expandedTabsColumnNo(mainAst);</span>
+<span class="fc" id="L55">            final IndentLevel level = getIndentImpl();</span>
+
+<span class="fc bfc" id="L57" title="All 2 branches covered.">            if (columnNo &lt; level.getFirstIndentLevel()) {</span>
+<span class="fc" id="L58">                logError(mainAst, &quot;&quot;, columnNo, level);</span>
+            }
         }
 
-<span class="fc" id="L51">        final DetailAST lparen = getMainAst().findFirstToken(TokenTypes.LPAREN);</span>
-<span class="fc" id="L52">        checkLeftParen(lparen);</span>
-<span class="fc" id="L53">    }</span>
+<span class="fc" id="L62">        final DetailAST firstChild = mainAst.getFirstChild();</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        if (firstChild != null) {</span>
+<span class="fc" id="L64">            checkExpressionSubtree(firstChild, getIndent(), false, false);</span>
+        }
+
+<span class="fc" id="L67">        final DetailAST lparen = mainAst.findFirstToken(TokenTypes.LPAREN);</span>
+<span class="fc" id="L68">        checkLeftParen(lparen);</span>
+<span class="fc" id="L69">    }</span>
+
+    @Override
+    public IndentLevel getSuggestedChildIndent(AbstractExpressionHandler child) {
+        final int offset;
+<span class="fc bfc" id="L74" title="All 2 branches covered.">        if (TokenUtil.isOfType(child.getMainAst(), TokenTypes.OBJBLOCK)) {</span>
+<span class="fc" id="L75">            offset = getBasicOffset();</span>
+        }
+        else {
+<span class="fc" id="L78">            offset = getLineWrappingIndent();</span>
+        }
+<span class="fc" id="L80">        return new IndentLevel(getIndent(), offset);</span>
+    }
 
     @Override
     protected IndentLevel getIndentImpl() {
-        final IndentLevel result;
+        IndentLevel result;
         // if our expression isn't first on the line, just use the start
         // of the line
-<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (getLineStart(getMainAst()) == getMainAst().getColumnNo()) {</span>
-<span class="fc" id="L61">            result = super.getIndentImpl();</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">        if (getLineStart(mainAst) == mainAst.getColumnNo()) {</span>
+<span class="fc" id="L89">            result = super.getIndentImpl();</span>
+
+<span class="fc bfc" id="L91" title="All 2 branches covered.">            if (isNewKeywordFollowedByAssign()) {</span>
+<span class="fc" id="L92">                result = new IndentLevel(result, getLineWrappingIndent());</span>
+            }
         }
         else {
-<span class="fc" id="L64">            result = new IndentLevel(getLineStart(getMainAst()));</span>
+<span class="fc" id="L96">            result = new IndentLevel(getLineStart(mainAst));</span>
         }
-<span class="fc" id="L66">        return result;</span>
+
+<span class="fc" id="L99">        return result;</span>
+    }
+
+    /**
+     * Checks if the 'new' keyword is followed by an assignment.
+     *
+     * @return true if new keyword is followed by assignment.
+     */
+    private boolean isNewKeywordFollowedByAssign() {
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        return mainAst.getParent().getParent().getType() == TokenTypes.ASSIGN;</span>
+    }
+
+    /**
+     * A shortcut for {@code IndentationCheck} property.
+     *
+     * @return value of lineWrappingIndentation property
+     *         of {@code IndentationCheck}
+     */
+    private int getLineWrappingIndent() {
+<span class="fc" id="L118">        return getIndentCheck().getLineWrappingIndentation();</span>
     }
 
     @Override
     protected boolean shouldIncreaseIndent() {
-<span class="fc" id="L71">        return false;</span>
+<span class="fc" id="L123">        return false;</span>
     }
 
 }

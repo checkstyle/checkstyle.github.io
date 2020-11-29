@@ -71,25 +71,96 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
- * To configure the check for printing author name:
+ * Example of default Check configuration that do nothing.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;WriteTag&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;**
+ * * Some class
+ * *&amp;#47;
+ * public class Test {
+ *   &amp;#47;** some doc *&amp;#47;
+ *   void foo() {}
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure Check to demand some special tag (for example {@code &amp;#64;since})
+ * to be present on classes javadoc.
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;WriteTag&quot;&amp;gt;
- *   &amp;lt;property name=&quot;tag&quot; value=&quot;@author&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;tagFormat&quot; value=&quot;\S&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;tag&quot; value=&quot;@since&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * To configure the check to print warnings if an &quot;@incomplete&quot; tag is found,
- * and not print anything if it is not found:
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;**
+ * * Some class
+ * *&amp;#47;
+ * public class Test { // violation as required tag is missed
+ *   &amp;#47;** some doc *&amp;#47;
+ *   void foo() {} // OK, as methods are not checked by default
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure Check to demand some special tag (for example {@code &amp;#64;since})
+ * to be present on method javadocs also in addition to default tokens.
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;WriteTag&quot;&amp;gt;
- *   &amp;lt;property name=&quot;tag&quot; value=&quot;@incomplete&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;tagFormat&quot; value=&quot;\S&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;severity&quot; value=&quot;ignore&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;tagSeverity&quot; value=&quot;warning&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;tag&quot; value=&quot;@since&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;tokens&quot;
+ *          value=&quot;INTERFACE_DEF, CLASS_DEF, ENUM_DEF, ANNOTATION_DEF, RECORD_DEF, METHOD_DEF&quot; /&amp;gt;
  * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;**
+ * * Some class
+ * *&amp;#47;
+ * public class Test { // violation as required tag is missed
+ *   &amp;#47;** some doc *&amp;#47;
+ *   void foo() {} // violation as required tag is missed
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure Check to demand {@code &amp;#64;since} tag
+ * to be present with digital value on method javadocs also in addition to default tokens.
+ * Attention: usage of non &quot;ignore&quot; in tagSeverity will print violation with such severity
+ * on each presence of such tag.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;WriteTag&quot;&amp;gt;
+ *   &amp;lt;property name=&quot;tag&quot; value=&quot;@since&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;tokens&quot;
+ *          value=&quot;INTERFACE_DEF, CLASS_DEF, ENUM_DEF, ANNOTATION_DEF, RECORD_DEF, METHOD_DEF&quot; /&amp;gt;
+ *   &amp;lt;property name=&quot;tagFormat&quot; value=&quot;[1-9\.]&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;tagSeverity&quot; value=&quot;ignore&quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;#47;**
+ * * Some class
+ * * &amp;#64;since 1.2
+ * *&amp;#47;
+ * public class Test {
+ *   &amp;#47;** some doc
+ *   * &amp;#64;since violation
+ *   *&amp;#47;
+ *   void foo() {}
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
@@ -112,7 +183,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 4.2
  */
 @StatelessCheck
-<span class="fc" id="L115">public class WriteTagCheck</span>
+<span class="fc" id="L186">public class WriteTagCheck</span>
     extends AbstractCheck {
 
     /**
@@ -141,7 +212,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     /** Specify the name of tag. */
     private String tag;
     /** Specify the severity level when tag is found and printed. */
-<span class="fc" id="L144">    private SeverityLevel tagSeverity = SeverityLevel.INFO;</span>
+<span class="fc" id="L215">    private SeverityLevel tagSeverity = SeverityLevel.INFO;</span>
 
     /**
      * Setter to specify the name of tag.
@@ -149,9 +220,9 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param tag tag to check
      */
     public void setTag(String tag) {
-<span class="fc" id="L152">        this.tag = tag;</span>
-<span class="fc" id="L153">        tagRegExp = CommonUtil.createPattern(tag + &quot;\\s*(.*$)&quot;);</span>
-<span class="fc" id="L154">    }</span>
+<span class="fc" id="L223">        this.tag = tag;</span>
+<span class="fc" id="L224">        tagRegExp = CommonUtil.createPattern(tag + &quot;\\s*(.*$)&quot;);</span>
+<span class="fc" id="L225">    }</span>
 
     /**
      * Setter to specify the regexp to match tag content.
@@ -159,8 +230,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param pattern a {@code String} value
      */
     public void setTagFormat(Pattern pattern) {
-<span class="fc" id="L162">        tagFormat = pattern;</span>
-<span class="fc" id="L163">    }</span>
+<span class="fc" id="L233">        tagFormat = pattern;</span>
+<span class="fc" id="L234">    }</span>
 
     /**
      * Setter to specify the severity level when tag is found and printed.
@@ -169,12 +240,12 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @see SeverityLevel
      */
     public final void setTagSeverity(SeverityLevel severity) {
-<span class="fc" id="L172">        tagSeverity = severity;</span>
-<span class="fc" id="L173">    }</span>
+<span class="fc" id="L243">        tagSeverity = severity;</span>
+<span class="fc" id="L244">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L177">        return new int[] {</span>
+<span class="fc" id="L248">        return new int[] {</span>
             TokenTypes.INTERFACE_DEF,
             TokenTypes.CLASS_DEF,
             TokenTypes.ENUM_DEF,
@@ -185,7 +256,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L188">        return new int[] {</span>
+<span class="fc" id="L259">        return new int[] {</span>
             TokenTypes.INTERFACE_DEF,
             TokenTypes.CLASS_DEF,
             TokenTypes.ENUM_DEF,
@@ -201,22 +272,22 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L204">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L275">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L209">        final FileContents contents = getFileContents();</span>
-<span class="fc" id="L210">        final int lineNo = ast.getLineNo();</span>
-<span class="fc" id="L211">        final TextBlock cmt =</span>
-<span class="fc" id="L212">            contents.getJavadocBefore(lineNo);</span>
-<span class="fc bfc" id="L213" title="All 2 branches covered.">        if (cmt == null) {</span>
-<span class="fc" id="L214">            log(lineNo, MSG_MISSING_TAG, tag);</span>
+<span class="fc" id="L280">        final FileContents contents = getFileContents();</span>
+<span class="fc" id="L281">        final int lineNo = ast.getLineNo();</span>
+<span class="fc" id="L282">        final TextBlock cmt =</span>
+<span class="fc" id="L283">            contents.getJavadocBefore(lineNo);</span>
+<span class="fc bfc" id="L284" title="All 2 branches covered.">        if (cmt == null) {</span>
+<span class="fc" id="L285">            log(lineNo, MSG_MISSING_TAG, tag);</span>
         }
         else {
-<span class="fc" id="L217">            checkTag(lineNo, cmt.getText());</span>
+<span class="fc" id="L288">            checkTag(lineNo, cmt.getText());</span>
         }
-<span class="fc" id="L219">    }</span>
+<span class="fc" id="L290">    }</span>
 
     /**
      * Verifies that a type definition has a required tag.
@@ -225,28 +296,28 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param comment the Javadoc comment for the type definition.
      */
     private void checkTag(int lineNo, String... comment) {
-<span class="fc bfc" id="L228" title="All 2 branches covered.">        if (tagRegExp != null) {</span>
-<span class="fc" id="L229">            boolean hasTag = false;</span>
-<span class="fc bfc" id="L230" title="All 2 branches covered.">            for (int i = 0; i &lt; comment.length; i++) {</span>
-<span class="fc" id="L231">                final String commentValue = comment[i];</span>
-<span class="fc" id="L232">                final Matcher matcher = tagRegExp.matcher(commentValue);</span>
-<span class="fc bfc" id="L233" title="All 2 branches covered.">                if (matcher.find()) {</span>
-<span class="fc" id="L234">                    hasTag = true;</span>
-<span class="fc" id="L235">                    final int contentStart = matcher.start(1);</span>
-<span class="fc" id="L236">                    final String content = commentValue.substring(contentStart);</span>
-<span class="fc bfc" id="L237" title="All 4 branches covered.">                    if (tagFormat == null || tagFormat.matcher(content).find()) {</span>
-<span class="fc" id="L238">                        logTag(lineNo + i - comment.length, tag, content);</span>
+<span class="fc bfc" id="L299" title="All 2 branches covered.">        if (tagRegExp != null) {</span>
+<span class="fc" id="L300">            boolean hasTag = false;</span>
+<span class="fc bfc" id="L301" title="All 2 branches covered.">            for (int i = 0; i &lt; comment.length; i++) {</span>
+<span class="fc" id="L302">                final String commentValue = comment[i];</span>
+<span class="fc" id="L303">                final Matcher matcher = tagRegExp.matcher(commentValue);</span>
+<span class="fc bfc" id="L304" title="All 2 branches covered.">                if (matcher.find()) {</span>
+<span class="fc" id="L305">                    hasTag = true;</span>
+<span class="fc" id="L306">                    final int contentStart = matcher.start(1);</span>
+<span class="fc" id="L307">                    final String content = commentValue.substring(contentStart);</span>
+<span class="fc bfc" id="L308" title="All 4 branches covered.">                    if (tagFormat == null || tagFormat.matcher(content).find()) {</span>
+<span class="fc" id="L309">                        logTag(lineNo + i - comment.length, tag, content);</span>
                     }
                     else {
-<span class="fc" id="L241">                        log(lineNo + i - comment.length, MSG_TAG_FORMAT, tag, tagFormat.pattern());</span>
+<span class="fc" id="L312">                        log(lineNo + i - comment.length, MSG_TAG_FORMAT, tag, tagFormat.pattern());</span>
                     }
                 }
             }
-<span class="fc bfc" id="L245" title="All 2 branches covered.">            if (!hasTag) {</span>
-<span class="fc" id="L246">                log(lineNo, MSG_MISSING_TAG, tag);</span>
+<span class="fc bfc" id="L316" title="All 2 branches covered.">            if (!hasTag) {</span>
+<span class="fc" id="L317">                log(lineNo, MSG_MISSING_TAG, tag);</span>
             }
         }
-<span class="fc" id="L249">    }</span>
+<span class="fc" id="L320">    }</span>
 
     /**
      * Log a message.
@@ -258,13 +329,13 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @see java.text.MessageFormat
      */
     private void logTag(int line, String tagName, String tagValue) {
-<span class="fc" id="L261">        final String originalSeverity = getSeverity();</span>
-<span class="fc" id="L262">        setSeverity(tagSeverity.getName());</span>
+<span class="fc" id="L332">        final String originalSeverity = getSeverity();</span>
+<span class="fc" id="L333">        setSeverity(tagSeverity.getName());</span>
 
-<span class="fc" id="L264">        log(line, MSG_WRITE_TAG, tagName, tagValue);</span>
+<span class="fc" id="L335">        log(line, MSG_WRITE_TAG, tagName, tagValue);</span>
 
-<span class="fc" id="L266">        setSeverity(originalSeverity);</span>
-<span class="fc" id="L267">    }</span>
+<span class="fc" id="L337">        setSeverity(originalSeverity);</span>
+<span class="fc" id="L338">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
