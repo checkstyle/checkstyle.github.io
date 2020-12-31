@@ -19,6 +19,7 @@
 
 package com.puppycrawl.tools.checkstyle.checks;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ import com.puppycrawl.tools.checkstyle.StatelessCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TextBlock;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
 /**
@@ -129,13 +131,19 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 3.4
  */
 @StatelessCheck
-<span class="fc" id="L132">public class TrailingCommentCheck extends AbstractCheck {</span>
+<span class="fc" id="L134">public class TrailingCommentCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
      * file.
      */
     public static final String MSG_KEY = &quot;trailing.comments&quot;;
+
+    /**
+     * A Map contains illegal lines, the key is lineNo, the value is
+     * ColumnNo.
+     */
+<span class="fc" id="L146">    private final Map&lt;Integer, Integer&gt; illegalLines = new HashMap&lt;&gt;();</span>
 
     /**
      * Define pattern for text allowed in trailing comments.
@@ -145,7 +153,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     private Pattern legalComment;
 
     /** Specify pattern for strings allowed before the comment. */
-<span class="fc" id="L148">    private Pattern format = Pattern.compile(&quot;^[\\s});]*$&quot;);</span>
+<span class="fc" id="L156">    private Pattern format = Pattern.compile(&quot;^[\\s});]*$&quot;);</span>
 
     /**
      * Setter to define pattern for text allowed in trailing comments.
@@ -155,8 +163,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param legalComment pattern to set.
      */
     public void setLegalComment(final Pattern legalComment) {
-<span class="fc" id="L158">        this.legalComment = legalComment;</span>
-<span class="fc" id="L159">    }</span>
+<span class="fc" id="L166">        this.legalComment = legalComment;</span>
+<span class="fc" id="L167">    }</span>
 
     /**
      * Setter to specify pattern for strings allowed before the comment.
@@ -164,65 +172,77 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param pattern a pattern
      */
     public final void setFormat(Pattern pattern) {
-<span class="fc" id="L167">        format = pattern;</span>
-<span class="fc" id="L168">    }</span>
+<span class="fc" id="L175">        format = pattern;</span>
+<span class="fc" id="L176">    }</span>
+
+    @Override
+    public boolean isCommentNodesRequired() {
+<span class="fc" id="L180">        return true;</span>
+    }
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L172">        return getRequiredTokens();</span>
+<span class="fc" id="L185">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L177">        return getRequiredTokens();</span>
+<span class="fc" id="L190">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L182">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L195">        return new int[] {</span>
+            TokenTypes.SINGLE_LINE_COMMENT,
+            TokenTypes.BLOCK_COMMENT_BEGIN,
+        };
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L187">        throw new IllegalStateException(&quot;visitToken() shouldn't be called.&quot;);</span>
-    }
+<span class="fc" id="L203">        final int lineNo = ast.getLineNo();</span>
+<span class="fc bfc" id="L204" title="All 2 branches covered.">        if (illegalLines.get(lineNo) != null</span>
+<span class="fc bfc" id="L205" title="All 2 branches covered.">                &amp;&amp; illegalLines.get(lineNo).equals(ast.getColumnNo())) {</span>
+<span class="fc" id="L206">            log(ast, MSG_KEY);</span>
+        }
+<span class="fc" id="L208">    }</span>
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L192">        final Map&lt;Integer, TextBlock&gt; cppComments = getFileContents()</span>
-<span class="fc" id="L193">                .getSingleLineComments();</span>
-<span class="fc" id="L194">        final Map&lt;Integer, List&lt;TextBlock&gt;&gt; cComments = getFileContents()</span>
-<span class="fc" id="L195">                .getBlockComments();</span>
-<span class="fc" id="L196">        final Set&lt;Integer&gt; lines = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L197">        lines.addAll(cppComments.keySet());</span>
-<span class="fc" id="L198">        lines.addAll(cComments.keySet());</span>
+<span class="fc" id="L212">        final Map&lt;Integer, TextBlock&gt; cppComments = getFileContents()</span>
+<span class="fc" id="L213">                .getSingleLineComments();</span>
+<span class="fc" id="L214">        final Map&lt;Integer, List&lt;TextBlock&gt;&gt; cComments = getFileContents()</span>
+<span class="fc" id="L215">                .getBlockComments();</span>
+<span class="fc" id="L216">        final Set&lt;Integer&gt; lines = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L217">        lines.addAll(cppComments.keySet());</span>
+<span class="fc" id="L218">        lines.addAll(cComments.keySet());</span>
 
-<span class="fc bfc" id="L200" title="All 2 branches covered.">        for (Integer lineNo : lines) {</span>
-<span class="fc" id="L201">            final String line = getLines()[lineNo - 1];</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">        for (Integer lineNo : lines) {</span>
+<span class="fc" id="L221">            final String line = getLines()[lineNo - 1];</span>
             final String lineBefore;
             final TextBlock comment;
-<span class="fc bfc" id="L204" title="All 2 branches covered.">            if (cppComments.containsKey(lineNo)) {</span>
-<span class="fc" id="L205">                comment = cppComments.get(lineNo);</span>
-<span class="fc" id="L206">                lineBefore = line.substring(0, comment.getStartColNo());</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">            if (cppComments.containsKey(lineNo)) {</span>
+<span class="fc" id="L225">                comment = cppComments.get(lineNo);</span>
+<span class="fc" id="L226">                lineBefore = line.substring(0, comment.getStartColNo());</span>
             }
             else {
-<span class="fc" id="L209">                final List&lt;TextBlock&gt; commentList = cComments.get(lineNo);</span>
-<span class="fc" id="L210">                comment = commentList.get(commentList.size() - 1);</span>
-<span class="fc" id="L211">                lineBefore = line.substring(0, comment.getStartColNo());</span>
+<span class="fc" id="L229">                final List&lt;TextBlock&gt; commentList = cComments.get(lineNo);</span>
+<span class="fc" id="L230">                comment = commentList.get(commentList.size() - 1);</span>
+<span class="fc" id="L231">                lineBefore = line.substring(0, comment.getStartColNo());</span>
 
                 // do not check comment which doesn't end line
-<span class="fc bfc" id="L214" title="All 2 branches covered.">                if (comment.getText().length == 1</span>
-<span class="fc bfc" id="L215" title="All 2 branches covered.">                        &amp;&amp; !CommonUtil.isBlank(line</span>
-<span class="fc" id="L216">                            .substring(comment.getEndColNo() + 1))) {</span>
-<span class="fc" id="L217">                    continue;</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">                if (comment.getText().length == 1</span>
+<span class="fc bfc" id="L235" title="All 2 branches covered.">                        &amp;&amp; !CommonUtil.isBlank(line</span>
+<span class="fc" id="L236">                            .substring(comment.getEndColNo() + 1))) {</span>
+<span class="fc" id="L237">                    continue;</span>
                 }
             }
-<span class="fc bfc" id="L220" title="All 2 branches covered.">            if (!format.matcher(lineBefore).find()</span>
-<span class="fc bfc" id="L221" title="All 2 branches covered.">                &amp;&amp; !isLegalComment(comment)) {</span>
-<span class="fc" id="L222">                log(lineNo, MSG_KEY);</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">            if (!format.matcher(lineBefore).find()</span>
+<span class="fc bfc" id="L241" title="All 2 branches covered.">                &amp;&amp; !isLegalComment(comment)) {</span>
+<span class="fc" id="L242">                illegalLines.put(lineNo, comment.getStartColNo());</span>
             }
-<span class="fc" id="L224">        }</span>
-<span class="fc" id="L225">    }</span>
+<span class="fc" id="L244">        }</span>
+<span class="fc" id="L245">    }</span>
 
     /**
      * Checks if given comment is legal (single-line and matches to the
@@ -235,21 +255,21 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
         final boolean legal;
 
         // multi-line comment can not be legal
-<span class="fc bfc" id="L238" title="All 4 branches covered.">        if (legalComment == null || comment.getStartLineNo() != comment.getEndLineNo()) {</span>
-<span class="fc" id="L239">            legal = false;</span>
+<span class="fc bfc" id="L258" title="All 4 branches covered.">        if (legalComment == null || comment.getStartLineNo() != comment.getEndLineNo()) {</span>
+<span class="fc" id="L259">            legal = false;</span>
         }
         else {
-<span class="fc" id="L242">            String commentText = comment.getText()[0];</span>
+<span class="fc" id="L262">            String commentText = comment.getText()[0];</span>
             // remove chars which start comment
-<span class="fc" id="L244">            commentText = commentText.substring(2);</span>
+<span class="fc" id="L264">            commentText = commentText.substring(2);</span>
             // if this is a C-style comment we need to remove its end
-<span class="fc bfc" id="L246" title="All 2 branches covered.">            if (commentText.endsWith(&quot;*/&quot;)) {</span>
-<span class="fc" id="L247">                commentText = commentText.substring(0, commentText.length() - 2);</span>
+<span class="fc bfc" id="L266" title="All 2 branches covered.">            if (commentText.endsWith(&quot;*/&quot;)) {</span>
+<span class="fc" id="L267">                commentText = commentText.substring(0, commentText.length() - 2);</span>
             }
-<span class="fc" id="L249">            commentText = commentText.trim();</span>
-<span class="fc" id="L250">            legal = legalComment.matcher(commentText).find();</span>
+<span class="fc" id="L269">            commentText = commentText.trim();</span>
+<span class="fc" id="L270">            legal = legalComment.matcher(commentText).find();</span>
         }
-<span class="fc" id="L252">        return legal;</span>
+<span class="fc" id="L272">        return legal;</span>
     }
 
 }

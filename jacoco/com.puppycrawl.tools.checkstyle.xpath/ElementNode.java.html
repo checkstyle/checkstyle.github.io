@@ -20,6 +20,7 @@
 package com.puppycrawl.tools.checkstyle.xpath;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
@@ -43,7 +44,10 @@ public class ElementNode extends AbstractNode {
     private static final String TEXT_ATTRIBUTE_NAME = &quot;text&quot;;
 
     /** Constant for optimization. */
-<span class="fc" id="L46">    private static final AbstractNode[] EMPTY_ABSTRACT_NODE_ARRAY = new AbstractNode[0];</span>
+<span class="fc" id="L47">    private static final AbstractNode[] EMPTY_ABSTRACT_NODE_ARRAY = new AbstractNode[0];</span>
+
+    /** Holder value for lazy creation of attribute node. */
+<span class="fc" id="L50">    private static final AttributeNode ATTRIBUTE_NODE_UNINITIALIZED = new AttributeNode(null, null);</span>
 
     /** The root node. */
     private final AbstractNode root;
@@ -54,14 +58,14 @@ public class ElementNode extends AbstractNode {
     /** The ast node. */
     private final DetailAST detailAst;
 
-    /** Represents text of the DetailAST. */
-    private final String text;
+    /** Depth of the node. */
+    private final int depth;
 
     /** Represents index among siblings. */
     private final int indexAmongSiblings;
 
     /** The text attribute node. */
-    private AttributeNode attributeNode;
+<span class="fc" id="L68">    private AttributeNode attributeNode = ATTRIBUTE_NODE_UNINITIALIZED;</span>
 
     /**
      * Creates a new {@code ElementNode} instance.
@@ -69,18 +73,18 @@ public class ElementNode extends AbstractNode {
      * @param root {@code Node} root of the tree
      * @param parent {@code Node} parent of the current node
      * @param detailAst reference to {@code DetailAST}
+     * @param depth the current node depth in the hierarchy
+     * @param indexAmongSiblings the current node index among the parent children nodes
      */
-    public ElementNode(AbstractNode root, AbstractNode parent, DetailAST detailAst) {
-<span class="fc" id="L74">        super(root.getTreeInfo());</span>
-<span class="fc" id="L75">        this.parent = parent;</span>
-<span class="fc" id="L76">        this.root = root;</span>
-<span class="fc" id="L77">        this.detailAst = detailAst;</span>
-<span class="fc" id="L78">        text = TokenUtil.getTokenName(detailAst.getType());</span>
-<span class="fc" id="L79">        indexAmongSiblings = parent.getChildren().size();</span>
-<span class="fc" id="L80">        setDepth(parent.getDepth() + 1);</span>
-<span class="fc" id="L81">        createTextAttribute();</span>
-<span class="fc" id="L82">        createChildren();</span>
-<span class="fc" id="L83">    }</span>
+    public ElementNode(AbstractNode root, AbstractNode parent, DetailAST detailAst,
+            int depth, int indexAmongSiblings) {
+<span class="fc" id="L81">        super(root.getTreeInfo());</span>
+<span class="fc" id="L82">        this.parent = parent;</span>
+<span class="fc" id="L83">        this.root = root;</span>
+<span class="fc" id="L84">        this.detailAst = detailAst;</span>
+<span class="fc" id="L85">        this.depth = depth;</span>
+<span class="fc" id="L86">        this.indexAmongSiblings = indexAmongSiblings;</span>
+<span class="fc" id="L87">    }</span>
 
     /**
      * Compares current object with specified for order.
@@ -90,46 +94,68 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public int compareOrder(NodeInfo other) {
-<span class="fc" id="L93">        int result = 0;</span>
-<span class="fc bfc" id="L94" title="All 2 branches covered.">        if (other instanceof AbstractNode) {</span>
-<span class="fc" id="L95">            result = getDepth() - ((AbstractNode) other).getDepth();</span>
-<span class="fc bfc" id="L96" title="All 2 branches covered.">            if (result == 0) {</span>
-<span class="fc" id="L97">                final ElementNode[] children = getCommonAncestorChildren(other);</span>
-<span class="fc" id="L98">                result = children[0].indexAmongSiblings - children[1].indexAmongSiblings;</span>
+<span class="fc" id="L97">        int result = 0;</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if (other instanceof AbstractNode) {</span>
+<span class="fc" id="L99">            result = Integer.compare(depth, ((AbstractNode) other).getDepth());</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">            if (result == 0) {</span>
+<span class="fc" id="L101">                result = compareCommonAncestorChildrenOrder(this, other);</span>
             }
         }
-<span class="fc" id="L101">        return result;</span>
+<span class="fc" id="L104">        return result;</span>
     }
 
     /**
-     * Finds the ancestors of the children whose parent is their common ancestor.
+     * Walks up the hierarchy until a common ancestor is found.
+     * Then compares topmost sibling nodes.
      *
-     * @param other another {@code NodeInfo} object
-     * @return {@code ElementNode} immediate children(also ancestors of the given children) of the
-     *         common ancestor
+     * @param first {@code NodeInfo} to compare
+     * @param second {@code NodeInfo} to compare
+     * @return the value {@code 0} if {@code first == second};
+     *         a value less than {@code 0} if {@code first} should be first;
+     *         a value greater than {@code 0} if {@code second} should be first.
      */
-    private ElementNode[] getCommonAncestorChildren(NodeInfo other) {
-<span class="fc" id="L112">        NodeInfo child1 = this;</span>
-<span class="fc" id="L113">        NodeInfo child2 = other;</span>
-<span class="fc bfc" id="L114" title="All 2 branches covered.">        while (!child1.getParent().equals(child2.getParent())) {</span>
-<span class="fc" id="L115">            child1 = child1.getParent();</span>
-<span class="fc" id="L116">            child2 = child2.getParent();</span>
+    private static int compareCommonAncestorChildrenOrder(NodeInfo first, NodeInfo second) {
+<span class="fc" id="L118">        NodeInfo child1 = first;</span>
+<span class="fc" id="L119">        NodeInfo child2 = second;</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        while (!child1.getParent().equals(child2.getParent())) {</span>
+<span class="fc" id="L121">            child1 = child1.getParent();</span>
+<span class="fc" id="L122">            child2 = child2.getParent();</span>
         }
-<span class="fc" id="L118">        return new ElementNode[] {(ElementNode) child1, (ElementNode) child2};</span>
+<span class="fc" id="L124">        final int index1 = ((ElementNode) child1).indexAmongSiblings;</span>
+<span class="fc" id="L125">        final int index2 = ((ElementNode) child2).indexAmongSiblings;</span>
+<span class="fc" id="L126">        return Integer.compare(index1, index2);</span>
+    }
+
+    /**
+     * Getter method for node depth.
+     *
+     * @return depth
+     */
+    @Override
+    public int getDepth() {
+<span class="fc" id="L136">        return depth;</span>
     }
 
     /**
      * Iterates children of the current node and
      * recursively creates new Xpath-nodes.
+     *
+     * @return children list
      */
-    private void createChildren() {
-<span class="fc" id="L126">        DetailAST currentChild = detailAst.getFirstChild();</span>
-<span class="fc bfc" id="L127" title="All 2 branches covered.">        while (currentChild != null) {</span>
-<span class="fc" id="L128">            final AbstractNode child = new ElementNode(root, this, currentChild);</span>
-<span class="fc" id="L129">            addChild(child);</span>
-<span class="fc" id="L130">            currentChild = currentChild.getNextSibling();</span>
-<span class="fc" id="L131">        }</span>
-<span class="fc" id="L132">    }</span>
+    @Override
+    protected List&lt;AbstractNode&gt; createChildren() {
+<span class="fc" id="L147">        return XpathUtil.createChildren(root, this, detailAst.getFirstChild());</span>
+    }
+
+    /**
+     * Determine whether the node has any children.
+     *
+     * @return {@code true} is the node has any children.
+     */
+    @Override
+    public boolean hasChildNodes() {
+<span class="fc" id="L157">        return detailAst.hasChildren();</span>
+    }
 
     /**
      * Returns attribute value. Throws {@code UnsupportedOperationException} in case,
@@ -142,18 +168,15 @@ public class ElementNode extends AbstractNode {
     @Override
     public String getAttributeValue(String namespace, String localPart) {
         final String result;
-<span class="fc bfc" id="L145" title="All 2 branches covered.">        if (TEXT_ATTRIBUTE_NAME.equals(localPart)) {</span>
-<span class="fc bfc" id="L146" title="All 2 branches covered.">            if (attributeNode == null) {</span>
-<span class="fc" id="L147">                result = null;</span>
-            }
-            else {
-<span class="fc" id="L150">                result = attributeNode.getStringValue();</span>
-            }
+<span class="fc bfc" id="L171" title="All 2 branches covered.">        if (TEXT_ATTRIBUTE_NAME.equals(localPart)) {</span>
+<span class="fc" id="L172">            result = Optional.ofNullable(getAttributeNode())</span>
+<span class="fc" id="L173">                .map(AttributeNode::getStringValue)</span>
+<span class="fc" id="L174">                .orElse(null);</span>
         }
         else {
-<span class="fc" id="L154">            result = null;</span>
+<span class="fc" id="L177">            result = null;</span>
         }
-<span class="fc" id="L156">        return result;</span>
+<span class="fc" id="L179">        return result;</span>
     }
 
     /**
@@ -163,7 +186,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public String getLocalPart() {
-<span class="fc" id="L166">        return text;</span>
+<span class="fc" id="L189">        return TokenUtil.getTokenName(detailAst.getType());</span>
     }
 
     /**
@@ -173,7 +196,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public int getNodeKind() {
-<span class="fc" id="L176">        return Type.ELEMENT;</span>
+<span class="fc" id="L199">        return Type.ELEMENT;</span>
     }
 
     /**
@@ -183,7 +206,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public NodeInfo getParent() {
-<span class="fc" id="L186">        return parent;</span>
+<span class="fc" id="L209">        return parent;</span>
     }
 
     /**
@@ -193,7 +216,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public NodeInfo getRoot() {
-<span class="fc" id="L196">        return root;</span>
+<span class="fc" id="L219">        return root;</span>
     }
 
     /**
@@ -212,59 +235,59 @@ public class ElementNode extends AbstractNode {
     @Override
     public AxisIterator iterateAxis(int axisNumber) {
         final AxisIterator result;
-<span class="fc bfc" id="L215" title="All 13 branches covered.">        switch (axisNumber) {</span>
+<span class="fc bfc" id="L238" title="All 13 branches covered.">        switch (axisNumber) {</span>
             case AxisInfo.ANCESTOR:
-<span class="fc" id="L217">                result = new Navigator.AncestorEnumeration(this, false);</span>
-<span class="fc" id="L218">                break;</span>
-            case AxisInfo.ANCESTOR_OR_SELF:
-<span class="fc" id="L220">                result = new Navigator.AncestorEnumeration(this, true);</span>
-<span class="fc" id="L221">                break;</span>
-            case AxisInfo.ATTRIBUTE:
-<span class="fc" id="L223">                result = SingleNodeIterator.makeIterator(attributeNode);</span>
-<span class="fc" id="L224">                break;</span>
-            case AxisInfo.CHILD:
-<span class="fc bfc" id="L226" title="All 2 branches covered.">                if (hasChildNodes()) {</span>
-<span class="fc" id="L227">                    result = new ArrayIterator.OfNodes(</span>
-<span class="fc" id="L228">                            getChildren().toArray(EMPTY_ABSTRACT_NODE_ARRAY));</span>
-                }
-                else {
-<span class="fc" id="L231">                    result = EmptyIterator.ofNodes();</span>
-                }
-<span class="fc" id="L233">                break;</span>
-            case AxisInfo.DESCENDANT:
-<span class="fc bfc" id="L235" title="All 2 branches covered.">                if (hasChildNodes()) {</span>
-<span class="fc" id="L236">                    result = new Navigator.DescendantEnumeration(this, false, true);</span>
-                }
-                else {
-<span class="fc" id="L239">                    result = EmptyIterator.ofNodes();</span>
-                }
+<span class="fc" id="L240">                result = new Navigator.AncestorEnumeration(this, false);</span>
 <span class="fc" id="L241">                break;</span>
-            case AxisInfo.DESCENDANT_OR_SELF:
-<span class="fc" id="L243">                result = new Navigator.DescendantEnumeration(this, true, true);</span>
+            case AxisInfo.ANCESTOR_OR_SELF:
+<span class="fc" id="L243">                result = new Navigator.AncestorEnumeration(this, true);</span>
 <span class="fc" id="L244">                break;</span>
-            case AxisInfo.PARENT:
-<span class="fc" id="L246">                result = SingleNodeIterator.makeIterator(parent);</span>
+            case AxisInfo.ATTRIBUTE:
+<span class="fc" id="L246">                result = SingleNodeIterator.makeIterator(getAttributeNode());</span>
 <span class="fc" id="L247">                break;</span>
-            case AxisInfo.SELF:
-<span class="fc" id="L249">                result = SingleNodeIterator.makeIterator(this);</span>
-<span class="fc" id="L250">                break;</span>
-            case AxisInfo.FOLLOWING_SIBLING:
-<span class="fc" id="L252">                result = getFollowingSiblingsIterator();</span>
-<span class="fc" id="L253">                break;</span>
-            case AxisInfo.PRECEDING_SIBLING:
-<span class="fc" id="L255">                result = getPrecedingSiblingsIterator();</span>
+            case AxisInfo.CHILD:
+<span class="fc bfc" id="L249" title="All 2 branches covered.">                if (hasChildNodes()) {</span>
+<span class="fc" id="L250">                    result = new ArrayIterator.OfNodes(</span>
+<span class="fc" id="L251">                            getChildren().toArray(EMPTY_ABSTRACT_NODE_ARRAY));</span>
+                }
+                else {
+<span class="fc" id="L254">                    result = EmptyIterator.ofNodes();</span>
+                }
 <span class="fc" id="L256">                break;</span>
+            case AxisInfo.DESCENDANT:
+<span class="fc bfc" id="L258" title="All 2 branches covered.">                if (hasChildNodes()) {</span>
+<span class="fc" id="L259">                    result = new Navigator.DescendantEnumeration(this, false, true);</span>
+                }
+                else {
+<span class="fc" id="L262">                    result = EmptyIterator.ofNodes();</span>
+                }
+<span class="fc" id="L264">                break;</span>
+            case AxisInfo.DESCENDANT_OR_SELF:
+<span class="fc" id="L266">                result = new Navigator.DescendantEnumeration(this, true, true);</span>
+<span class="fc" id="L267">                break;</span>
+            case AxisInfo.PARENT:
+<span class="fc" id="L269">                result = SingleNodeIterator.makeIterator(parent);</span>
+<span class="fc" id="L270">                break;</span>
+            case AxisInfo.SELF:
+<span class="fc" id="L272">                result = SingleNodeIterator.makeIterator(this);</span>
+<span class="fc" id="L273">                break;</span>
+            case AxisInfo.FOLLOWING_SIBLING:
+<span class="fc" id="L275">                result = getFollowingSiblingsIterator();</span>
+<span class="fc" id="L276">                break;</span>
+            case AxisInfo.PRECEDING_SIBLING:
+<span class="fc" id="L278">                result = getPrecedingSiblingsIterator();</span>
+<span class="fc" id="L279">                break;</span>
             case AxisInfo.FOLLOWING:
-<span class="fc" id="L258">                result = new FollowingEnumeration(this);</span>
-<span class="fc" id="L259">                break;</span>
+<span class="fc" id="L281">                result = new FollowingEnumeration(this);</span>
+<span class="fc" id="L282">                break;</span>
             case AxisInfo.PRECEDING:
-<span class="fc" id="L261">                result = new Navigator.PrecedingEnumeration(this, true);</span>
-<span class="fc" id="L262">                break;</span>
+<span class="fc" id="L284">                result = new Navigator.PrecedingEnumeration(this, true);</span>
+<span class="fc" id="L285">                break;</span>
             default:
-<span class="fc" id="L264">                throw throwUnsupportedOperationException();</span>
+<span class="fc" id="L287">                throw throwUnsupportedOperationException();</span>
         }
 
-<span class="fc" id="L267">        return result;</span>
+<span class="fc" id="L290">        return result;</span>
     }
 
     /**
@@ -274,7 +297,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public int getLineNumber() {
-<span class="fc" id="L277">        return detailAst.getLineNo();</span>
+<span class="fc" id="L300">        return detailAst.getLineNo();</span>
     }
 
     /**
@@ -284,7 +307,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public int getColumnNumber() {
-<span class="fc" id="L287">        return detailAst.getColumnNo();</span>
+<span class="fc" id="L310">        return detailAst.getColumnNo();</span>
     }
 
     /**
@@ -294,7 +317,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public int getTokenType() {
-<span class="fc" id="L297">        return detailAst.getType();</span>
+<span class="fc" id="L320">        return detailAst.getType();</span>
     }
 
     /**
@@ -304,7 +327,7 @@ public class ElementNode extends AbstractNode {
      */
     @Override
     public DetailAST getUnderlyingNode() {
-<span class="fc" id="L307">        return detailAst;</span>
+<span class="fc" id="L330">        return detailAst;</span>
     }
 
     /**
@@ -320,14 +343,14 @@ public class ElementNode extends AbstractNode {
      */
     private AxisIterator getPrecedingSiblingsIterator() {
         final AxisIterator result;
-<span class="fc bfc" id="L323" title="All 2 branches covered.">        if (indexAmongSiblings == 0) {</span>
-<span class="fc" id="L324">            result = EmptyIterator.ofNodes();</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">        if (indexAmongSiblings == 0) {</span>
+<span class="fc" id="L347">            result = EmptyIterator.ofNodes();</span>
         }
         else {
-<span class="fc" id="L327">            result = new ArrayIterator.OfNodes(</span>
-<span class="fc" id="L328">                    getPrecedingSiblings().toArray(EMPTY_ABSTRACT_NODE_ARRAY));</span>
+<span class="fc" id="L350">            result = new ArrayIterator.OfNodes(</span>
+<span class="fc" id="L351">                    getPrecedingSiblings().toArray(EMPTY_ABSTRACT_NODE_ARRAY));</span>
         }
-<span class="fc" id="L330">        return result;</span>
+<span class="fc" id="L353">        return result;</span>
     }
 
     /**
@@ -343,14 +366,14 @@ public class ElementNode extends AbstractNode {
      */
     private AxisIterator getFollowingSiblingsIterator() {
         final AxisIterator result;
-<span class="fc bfc" id="L346" title="All 2 branches covered.">        if (indexAmongSiblings == parent.getChildren().size() - 1) {</span>
-<span class="fc" id="L347">            result = EmptyIterator.ofNodes();</span>
+<span class="fc bfc" id="L369" title="All 2 branches covered.">        if (indexAmongSiblings == parent.getChildren().size() - 1) {</span>
+<span class="fc" id="L370">            result = EmptyIterator.ofNodes();</span>
         }
         else {
-<span class="fc" id="L350">            result = new ArrayIterator.OfNodes(</span>
-<span class="fc" id="L351">                    getFollowingSiblings().toArray(EMPTY_ABSTRACT_NODE_ARRAY));</span>
+<span class="fc" id="L373">            result = new ArrayIterator.OfNodes(</span>
+<span class="fc" id="L374">                    getFollowingSiblings().toArray(EMPTY_ABSTRACT_NODE_ARRAY));</span>
         }
-<span class="fc" id="L353">        return result;</span>
+<span class="fc" id="L376">        return result;</span>
     }
 
     /**
@@ -359,8 +382,8 @@ public class ElementNode extends AbstractNode {
      * @return siblings
      */
     private List&lt;AbstractNode&gt; getFollowingSiblings() {
-<span class="fc" id="L362">        final List&lt;AbstractNode&gt; siblings = parent.getChildren();</span>
-<span class="fc" id="L363">        return siblings.subList(indexAmongSiblings + 1, siblings.size());</span>
+<span class="fc" id="L385">        final List&lt;AbstractNode&gt; siblings = parent.getChildren();</span>
+<span class="fc" id="L386">        return siblings.subList(indexAmongSiblings + 1, siblings.size());</span>
     }
 
     /**
@@ -369,23 +392,29 @@ public class ElementNode extends AbstractNode {
      * @return siblings
      */
     private List&lt;AbstractNode&gt; getPrecedingSiblings() {
-<span class="fc" id="L372">        final List&lt;AbstractNode&gt; siblings = parent.getChildren();</span>
-<span class="fc" id="L373">        return siblings.subList(0, indexAmongSiblings);</span>
+<span class="fc" id="L395">        final List&lt;AbstractNode&gt; siblings = parent.getChildren();</span>
+<span class="fc" id="L396">        return siblings.subList(0, indexAmongSiblings);</span>
     }
 
     /**
      * Checks if token type supports {@code @text} attribute,
      * extracts its value, creates {@code AttributeNode} object and returns it.
      * Value can be accessed using {@code @text} attribute.
+     *
+     * @return attribute node if possible, otherwise the {@code null} value
      */
-    private void createTextAttribute() {
-<span class="fc" id="L382">        AttributeNode attribute = null;</span>
-<span class="fc bfc" id="L383" title="All 2 branches covered.">        if (XpathUtil.supportsTextAttribute(detailAst)) {</span>
-<span class="fc" id="L384">            attribute = new AttributeNode(TEXT_ATTRIBUTE_NAME,</span>
-<span class="fc" id="L385">                    XpathUtil.getTextAttributeValue(detailAst));</span>
+    private AttributeNode getAttributeNode() {
+<span class="fc bfc" id="L407" title="All 2 branches covered.">        if (attributeNode == ATTRIBUTE_NODE_UNINITIALIZED) {</span>
+<span class="fc bfc" id="L408" title="All 2 branches covered.">            if (XpathUtil.supportsTextAttribute(detailAst)) {</span>
+<span class="fc" id="L409">                attributeNode = new AttributeNode(TEXT_ATTRIBUTE_NAME,</span>
+<span class="fc" id="L410">                        XpathUtil.getTextAttributeValue(detailAst));</span>
+            }
+            else {
+<span class="fc" id="L413">                attributeNode = null;</span>
+            }
         }
-<span class="fc" id="L387">        attributeNode = attribute;</span>
-<span class="fc" id="L388">    }</span>
+<span class="fc" id="L416">        return attributeNode;</span>
+    }
 
     /**
      * Returns UnsupportedOperationException exception.
@@ -393,7 +422,7 @@ public class ElementNode extends AbstractNode {
      * @return UnsupportedOperationException exception
      */
     private static UnsupportedOperationException throwUnsupportedOperationException() {
-<span class="fc" id="L396">        return new UnsupportedOperationException(&quot;Operation is not supported&quot;);</span>
+<span class="fc" id="L425">        return new UnsupportedOperationException(&quot;Operation is not supported&quot;);</span>
     }
 
     /**
@@ -410,9 +439,9 @@ public class ElementNode extends AbstractNode {
          *
          * @param start the initial context node.
          */
-<span class="fc" id="L413">        /* package */ FollowingEnumeration(NodeInfo start) {</span>
-<span class="fc" id="L414">            siblingEnum = start.iterateAxis(AxisInfo.FOLLOWING_SIBLING);</span>
-<span class="fc" id="L415">        }</span>
+<span class="fc" id="L442">        /* package */ FollowingEnumeration(NodeInfo start) {</span>
+<span class="fc" id="L443">            siblingEnum = start.iterateAxis(AxisInfo.FOLLOWING_SIBLING);</span>
+<span class="fc" id="L444">        }</span>
 
         /**
          * Get the next item in the sequence.
@@ -421,23 +450,23 @@ public class ElementNode extends AbstractNode {
          */
         @Override
         public NodeInfo next() {
-<span class="fc" id="L424">            NodeInfo result = null;</span>
-<span class="fc bfc" id="L425" title="All 2 branches covered.">            if (descendEnum != null) {</span>
-<span class="fc" id="L426">                result = descendEnum.next();</span>
+<span class="fc" id="L453">            NodeInfo result = null;</span>
+<span class="fc bfc" id="L454" title="All 2 branches covered.">            if (descendEnum != null) {</span>
+<span class="fc" id="L455">                result = descendEnum.next();</span>
             }
 
-<span class="fc bfc" id="L429" title="All 2 branches covered.">            if (result == null) {</span>
-<span class="fc" id="L430">                descendEnum = null;</span>
-<span class="fc" id="L431">                result = siblingEnum.next();</span>
-<span class="fc bfc" id="L432" title="All 2 branches covered.">                if (result == null) {</span>
-<span class="fc" id="L433">                    siblingEnum = null;</span>
+<span class="fc bfc" id="L458" title="All 2 branches covered.">            if (result == null) {</span>
+<span class="fc" id="L459">                descendEnum = null;</span>
+<span class="fc" id="L460">                result = siblingEnum.next();</span>
+<span class="fc bfc" id="L461" title="All 2 branches covered.">                if (result == null) {</span>
+<span class="fc" id="L462">                    siblingEnum = null;</span>
                 }
                 else {
-<span class="fc" id="L436">                    descendEnum = new Navigator.DescendantEnumeration(result, true, false);</span>
-<span class="fc" id="L437">                    result = next();</span>
+<span class="fc" id="L465">                    descendEnum = new Navigator.DescendantEnumeration(result, true, false);</span>
+<span class="fc" id="L466">                    result = next();</span>
                 }
             }
-<span class="fc" id="L440">            return result;</span>
+<span class="fc" id="L469">            return result;</span>
         }
     }
 

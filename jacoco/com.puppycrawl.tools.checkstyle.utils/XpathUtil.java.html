@@ -21,10 +21,12 @@ package com.puppycrawl.tools.checkstyle.utils;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.puppycrawl.tools.checkstyle.AstTreeStringPrinter;
 import com.puppycrawl.tools.checkstyle.JavaParser;
@@ -32,6 +34,7 @@ import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.xpath.AbstractNode;
+import com.puppycrawl.tools.checkstyle.xpath.ElementNode;
 import com.puppycrawl.tools.checkstyle.xpath.RootNode;
 import net.sf.saxon.Configuration;
 import net.sf.saxon.om.Item;
@@ -98,15 +101,39 @@ public final class XpathUtil {
      * Only these tokens support text attribute because they make our xpath queries more accurate.
      * These token types are listed below.
      * */
-<span class="fc" id="L101">    private static final List&lt;Integer&gt; TOKEN_TYPES_WITH_TEXT_ATTRIBUTE = Arrays.asList(</span>
-<span class="fc" id="L102">            TokenTypes.IDENT, TokenTypes.STRING_LITERAL, TokenTypes.CHAR_LITERAL,</span>
-<span class="fc" id="L103">            TokenTypes.NUM_LONG, TokenTypes.NUM_INT, TokenTypes.NUM_DOUBLE, TokenTypes.NUM_FLOAT);</span>
+<span class="fc" id="L104">    private static final Set&lt;Integer&gt; TOKEN_TYPES_WITH_TEXT_ATTRIBUTE =</span>
+<span class="fc" id="L105">        Stream.of(</span>
+<span class="fc" id="L106">            TokenTypes.IDENT, TokenTypes.STRING_LITERAL, TokenTypes.CHAR_LITERAL,</span>
+<span class="fc" id="L107">            TokenTypes.NUM_LONG, TokenTypes.NUM_INT, TokenTypes.NUM_DOUBLE, TokenTypes.NUM_FLOAT)</span>
+<span class="fc" id="L108">        .collect(Collectors.toSet());</span>
 
     /** Delimiter to separate xpath results. */
-<span class="fc" id="L106">    private static final String DELIMITER = &quot;---------&quot; + System.lineSeparator();</span>
+<span class="fc" id="L111">    private static final String DELIMITER = &quot;---------&quot; + System.lineSeparator();</span>
 
     /** Stop instances being created. **/
     private XpathUtil() {
+    }
+
+    /**
+     * Iterates siblings of the given node and creates new Xpath-nodes.
+     *
+     * @param root the root node
+     * @param parent the parent node
+     * @param firstChild the first DetailAST
+     * @return children list
+     */
+    public static List&lt;AbstractNode&gt; createChildren(AbstractNode root, AbstractNode parent,
+                                                    DetailAST firstChild) {
+<span class="fc" id="L127">        DetailAST currentChild = firstChild;</span>
+<span class="fc" id="L128">        final int depth = parent.getDepth() + 1;</span>
+<span class="fc" id="L129">        final List&lt;AbstractNode&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        while (currentChild != null) {</span>
+<span class="fc" id="L131">            final int index = result.size();</span>
+<span class="fc" id="L132">            final ElementNode child = new ElementNode(root, parent, currentChild, depth, index);</span>
+<span class="fc" id="L133">            result.add(child);</span>
+<span class="fc" id="L134">            currentChild = currentChild.getNextSibling();</span>
+<span class="fc" id="L135">        }</span>
+<span class="fc" id="L136">        return result;</span>
     }
 
     /**
@@ -116,7 +143,7 @@ public final class XpathUtil {
      * @return true if element supports {@code @text} attribute, false otherwise
      */
     public static boolean supportsTextAttribute(DetailAST ast) {
-<span class="fc" id="L119">        return TOKEN_TYPES_WITH_TEXT_ATTRIBUTE.contains(ast.getType());</span>
+<span class="fc" id="L146">        return TOKEN_TYPES_WITH_TEXT_ATTRIBUTE.contains(ast.getType());</span>
     }
 
     /**
@@ -126,11 +153,11 @@ public final class XpathUtil {
      * @return text attribute of the ast element
      */
     public static String getTextAttributeValue(DetailAST ast) {
-<span class="fc" id="L129">        String text = ast.getText();</span>
-<span class="fc bfc" id="L130" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.STRING_LITERAL) {</span>
-<span class="fc" id="L131">            text = text.substring(1, text.length() - 1);</span>
+<span class="fc" id="L156">        String text = ast.getText();</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.STRING_LITERAL) {</span>
+<span class="fc" id="L158">            text = text.substring(1, text.length() - 1);</span>
         }
-<span class="fc" id="L133">        return text;</span>
+<span class="fc" id="L160">        return text;</span>
     }
 
     /**
@@ -144,23 +171,23 @@ public final class XpathUtil {
      */
     public static String printXpathBranch(String xpath, File file) throws CheckstyleException,
             IOException {
-<span class="fc" id="L147">        final XPathEvaluator xpathEvaluator = new XPathEvaluator(Configuration.newConfiguration());</span>
+<span class="fc" id="L174">        final XPathEvaluator xpathEvaluator = new XPathEvaluator(Configuration.newConfiguration());</span>
         try {
-<span class="fc" id="L149">            final RootNode rootNode = new RootNode(JavaParser.parseFile(file,</span>
+<span class="fc" id="L176">            final RootNode rootNode = new RootNode(JavaParser.parseFile(file,</span>
                 JavaParser.Options.WITH_COMMENTS));
-<span class="fc" id="L151">            final XPathExpression xpathExpression = xpathEvaluator.createExpression(xpath);</span>
-<span class="fc" id="L152">            final XPathDynamicContext xpathDynamicContext =</span>
-<span class="fc" id="L153">                xpathExpression.createDynamicContext(rootNode);</span>
-<span class="fc" id="L154">            final List&lt;Item&gt; matchingItems = xpathExpression.evaluate(xpathDynamicContext);</span>
-<span class="fc" id="L155">            return matchingItems.stream()</span>
-<span class="fc" id="L156">                .map(item -&gt; ((AbstractNode) item).getUnderlyingNode())</span>
-<span class="fc" id="L157">                .map(AstTreeStringPrinter::printBranch)</span>
-<span class="fc" id="L158">                .collect(Collectors.joining(DELIMITER));</span>
+<span class="fc" id="L178">            final XPathExpression xpathExpression = xpathEvaluator.createExpression(xpath);</span>
+<span class="fc" id="L179">            final XPathDynamicContext xpathDynamicContext =</span>
+<span class="fc" id="L180">                xpathExpression.createDynamicContext(rootNode);</span>
+<span class="fc" id="L181">            final List&lt;Item&gt; matchingItems = xpathExpression.evaluate(xpathDynamicContext);</span>
+<span class="fc" id="L182">            return matchingItems.stream()</span>
+<span class="fc" id="L183">                .map(item -&gt; ((AbstractNode) item).getUnderlyingNode())</span>
+<span class="fc" id="L184">                .map(AstTreeStringPrinter::printBranch)</span>
+<span class="fc" id="L185">                .collect(Collectors.joining(DELIMITER));</span>
         }
-<span class="fc" id="L160">        catch (XPathException ex) {</span>
-<span class="fc" id="L161">            final String errMsg = String.format(Locale.ROOT,</span>
-<span class="fc" id="L162">                &quot;Error during evaluation for xpath: %s, file: %s&quot;, xpath, file.getCanonicalPath());</span>
-<span class="fc" id="L163">            throw new CheckstyleException(errMsg, ex);</span>
+<span class="fc" id="L187">        catch (XPathException ex) {</span>
+<span class="fc" id="L188">            final String errMsg = String.format(Locale.ROOT,</span>
+<span class="fc" id="L189">                &quot;Error during evaluation for xpath: %s, file: %s&quot;, xpath, file.getCanonicalPath());</span>
+<span class="fc" id="L190">            throw new CheckstyleException(errMsg, ex);</span>
         }
     }
 

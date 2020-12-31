@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MatchXpathCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">MatchXpathCheck.java</span></div><h1>MatchXpathCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2020 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
+import com.puppycrawl.tools.checkstyle.xpath.AbstractNode;
+import com.puppycrawl.tools.checkstyle.xpath.RootNode;
+import net.sf.saxon.Configuration;
+import net.sf.saxon.om.Item;
+import net.sf.saxon.sxpath.XPathDynamicContext;
+import net.sf.saxon.sxpath.XPathEvaluator;
+import net.sf.saxon.sxpath.XPathExpression;
+import net.sf.saxon.trans.XPathException;
+
+/**
+ * &lt;p&gt;
+ * Evaluates Xpath query and report violation on all matching AST nodes. This check allows
+ * user to implement custom checks using Xpath. If Xpath query is not specified explicitly,
+ * then the check does nothing.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * It is recommended to define custom message for violation to explain what is not allowed and what
+ * to use instead, default message might be too abstract. To customize a message you need to
+ * add {@code message} element with &lt;b&gt;matchxpath.match&lt;/b&gt; as {@code key} attribute and
+ * desired message as {@code value} attribute.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Please read more about Xpath syntax at
+ * &lt;a href=&quot;https://www.saxonica.com/html/documentation/expressions/&quot;&gt;Xpath Syntax&lt;/a&gt;.
+ * Information regarding Xpath functions can be found at
+ * &lt;a href=&quot;https://www.saxonica.com/html/documentation/functions/fn/&quot;&gt;XSLT/XPath Reference&lt;/a&gt;.
+ * Note, that &lt;b&gt;@text&lt;/b&gt; attribute can used only with token types that are listed in
+ * &lt;a href=&quot;https://github.com/checkstyle/checkstyle/search?q=%22TOKEN_TYPES_WITH_TEXT_ATTRIBUTE+%3D+Arrays.asList%22&quot;&gt;
+ *     XpathUtil&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * Property {@code query} - Specify Xpath query.
+ * Type is {@code java.lang.String}.
+ * Default value is {@code &quot;&quot;}.
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ * &lt;p&gt;
+ * Checkstyle provides &lt;a href=&quot;https://checkstyle.org/cmdline.html&quot;&gt;command line tool&lt;/a&gt;
+ * and &lt;a href=&quot;https://checkstyle.org/writingchecks.html#The_Checkstyle_SDK_Gui&quot;&gt;GUI
+ * application&lt;/a&gt; with options to show AST and to ease usage of Xpath queries.
+ * &lt;/p&gt;
+ * &lt;p&gt;&lt;b&gt;-T&lt;/b&gt; option prints AST tree of the checked file.&lt;/p&gt;
+ * &lt;pre&gt;
+ * $ java -jar checkstyle-X.XX-all.jar -T Main.java
+ * CLASS_DEF -&amp;gt; CLASS_DEF [1:0]
+ * |--MODIFIERS -&amp;gt; MODIFIERS [1:0]
+ * |   `--LITERAL_PUBLIC -&amp;gt; public [1:0]
+ * |--LITERAL_CLASS -&amp;gt; class [1:7]
+ * |--IDENT -&amp;gt; Main [1:13]
+ * `--OBJBLOCK -&amp;gt; OBJBLOCK [1:18]
+ * |--LCURLY -&amp;gt; { [1:18]
+ * |--METHOD_DEF -&amp;gt; METHOD_DEF [2:4]
+ * |   |--MODIFIERS -&amp;gt; MODIFIERS [2:4]
+ * |   |   `--LITERAL_PUBLIC -&amp;gt; public [2:4]
+ * |   |--TYPE -&amp;gt; TYPE [2:11]
+ * |   |   `--IDENT -&amp;gt; String [2:11]
+ * |   |--IDENT -&amp;gt; sayHello [2:18]
+ * |   |--LPAREN -&amp;gt; ( [2:26]
+ * |   |--PARAMETERS -&amp;gt; PARAMETERS [2:27]
+ * |   |   `--PARAMETER_DEF -&amp;gt; PARAMETER_DEF [2:27]
+ * |   |       |--MODIFIERS -&amp;gt; MODIFIERS [2:27]
+ * |   |       |--TYPE -&amp;gt; TYPE [2:27]
+ * |   |       |   `--IDENT -&amp;gt; String [2:27]
+ * |   |       `--IDENT -&amp;gt; name [2:34]
+ * |   |--RPAREN -&amp;gt; ) [2:38]
+ * |   `--SLIST -&amp;gt; { [2:40]
+ * |       |--LITERAL_RETURN -&amp;gt; return [3:8]
+ * |       |   |--EXPR -&amp;gt; EXPR [3:25]
+ * |       |   |   `--PLUS -&amp;gt; + [3:25]
+ * |       |   |       |--STRING_LITERAL -&amp;gt; &quot;Hello, &quot; [3:15]
+ * |       |   |       `--IDENT -&amp;gt; name [3:27]
+ * |       |   `--SEMI -&amp;gt; ; [3:31]
+ * |       `--RCURLY -&amp;gt; } [4:4]
+ * `--RCURLY -&amp;gt; } [5:0]
+ * &lt;/pre&gt;
+ * &lt;p&gt;&lt;b&gt;-b&lt;/b&gt; option shows AST nodes that match given Xpath query. This command can be used to
+ * validate accuracy of Xpath query against given file.&lt;/p&gt;
+ * &lt;pre&gt;
+ * $ java -jar checkstyle-X.XX-all.jar Main.java -b &quot;//METHOD_DEF[./IDENT[@text='sayHello']]&quot;
+ * CLASS_DEF -&amp;gt; CLASS_DEF [1:0]
+ * `--OBJBLOCK -&amp;gt; OBJBLOCK [1:18]
+ * |--METHOD_DEF -&amp;gt; METHOD_DEF [2:4]
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * The following example demonstrates validation of methods order, so that public methods should
+ * come before the private ones:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MatchXpath&quot;&amp;gt;
+ *  &amp;lt;property name=&quot;query&quot; value=&quot;//METHOD_DEF[.//LITERAL_PRIVATE and
+ *  following-sibling::METHOD_DEF[.//LITERAL_PUBLIC]]&quot;/&amp;gt;
+ *  &amp;lt;message key=&amp;quot;matchxpath.match&amp;quot;
+ *  value=&amp;quot;Private methods must appear after public methods&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *  public void method1() { }
+ *  private void method2() { } // violation
+ *  public void method3() { }
+ *  private void method4() { } // violation
+ *  public void method5() { }
+ *  private void method6() { } // ok
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To violate if there are any parametrized constructors
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MatchXpath&quot;&amp;gt;
+ *  &amp;lt;property name=&quot;query&quot; value=&quot;//CTOR_DEF[count(./PARAMETERS/*) &amp;gt; 0]&quot;/&amp;gt;
+ *  &amp;lt;message key=&amp;quot;matchxpath.match&amp;quot;
+ *  value=&amp;quot;Parameterized constructors are not allowed, there should be only default
+ *  ctor&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *  public Test(Object c) { } // violation
+ *  public Test(int a, HashMap&amp;lt;String, Integer&amp;gt; b) { } // violation
+ *  public Test() { } // ok
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To violate if method name is 'test' or 'foo'
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&quot;MatchXpath&quot;&amp;gt;
+ *  &amp;lt;property name=&quot;query&quot; value=&quot;//METHOD_DEF[./IDENT[@text='test' or @text='foo']]&quot;/&amp;gt;
+ *  &amp;lt;message key=&amp;quot;matchxpath.match&amp;quot;
+ *  value=&amp;quot;Method name should not be 'test' or 'foo'&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *  public void test() {} // violation
+ *  public void getName() {} // ok
+ *  public void foo() {} // violation
+ *  public void sayHello() {} // ok
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To violate if new instance creation was done without &lt;b&gt;var&lt;/b&gt; type
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;MatchXpath&amp;quot;&amp;gt;
+ *  &amp;lt;property name=&amp;quot;query&amp;quot; value=&amp;quot;//VARIABLE_DEF[./ASSIGN/EXPR/LITERAL_NEW
+ *  and not(./TYPE/IDENT[@text='var'])]&amp;quot;/&amp;gt;
+ *  &amp;lt;message key=&amp;quot;matchxpath.match&amp;quot;
+ *  value=&amp;quot;New instances should be created via 'var' keyword to avoid duplication of type
+ *  reference in statement&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *   public void foo() {
+ *     SomeObject a = new SomeObject(); // violation
+ *     var b = new SomeObject(); // OK
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Violation Message Keys:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code matchxpath.match}
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * @since 8.39
+ */
+@StatelessCheck
+<span class="fc" id="L218">public class MatchXpathCheck extends AbstractCheck {</span>
+
+    /**
+     * A key is pointing to the warning message text provided by user.
+     */
+    public static final String MSG_KEY = &quot;matchxpath.match&quot;;
+
+    /** Specify Xpath query. */
+<span class="fc" id="L226">    private String query = &quot;&quot;;</span>
+
+    /** Xpath expression. */
+    private XPathExpression xpathExpression;
+
+    /**
+     * Setter to specify Xpath query.
+     *
+     * @param query Xpath query.
+     */
+    public void setQuery(String query) {
+<span class="fc" id="L237">        this.query = query;</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">        if (!query.isEmpty()) {</span>
+            try {
+<span class="fc" id="L240">                final XPathEvaluator xpathEvaluator =</span>
+<span class="fc" id="L241">                        new XPathEvaluator(Configuration.newConfiguration());</span>
+<span class="fc" id="L242">                xpathExpression = xpathEvaluator.createExpression(query);</span>
+            }
+<span class="fc" id="L244">            catch (XPathException ex) {</span>
+<span class="fc" id="L245">                throw new IllegalStateException(&quot;Creating Xpath expression failed: &quot; + query, ex);</span>
+<span class="fc" id="L246">            }</span>
+        }
+<span class="fc" id="L248">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L252">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L257">        return getRequiredTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L262">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+    }
+
+    @Override
+    public void beginTree(DetailAST rootAST) {
+<span class="fc bfc" id="L267" title="All 2 branches covered.">        if (xpathExpression != null) {</span>
+<span class="fc" id="L268">            final List&lt;DetailAST&gt; matchingNodes = findMatchingNodesByXpathQuery(rootAST);</span>
+<span class="fc" id="L269">            matchingNodes.forEach(node -&gt; log(node, MSG_KEY));</span>
+        }
+<span class="fc" id="L271">    }</span>
+
+    private List&lt;DetailAST&gt; findMatchingNodesByXpathQuery(DetailAST rootAST) {
+        try {
+<span class="fc" id="L275">            final RootNode rootNode = new RootNode(rootAST);</span>
+<span class="fc" id="L276">            final XPathDynamicContext xpathDynamicContext =</span>
+<span class="fc" id="L277">                    xpathExpression.createDynamicContext(rootNode);</span>
+<span class="fc" id="L278">            final List&lt;Item&gt; matchingItems = xpathExpression.evaluate(xpathDynamicContext);</span>
+<span class="fc" id="L279">            return matchingItems.stream()</span>
+<span class="fc" id="L280">                    .map(item -&gt; ((AbstractNode) item).getUnderlyingNode())</span>
+<span class="fc" id="L281">                    .collect(Collectors.toList());</span>
+        }
+<span class="fc" id="L283">        catch (XPathException ex) {</span>
+<span class="fc" id="L284">            throw new IllegalStateException(&quot;Evaluation of Xpath query failed: &quot; + query, ex);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
