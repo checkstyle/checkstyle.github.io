@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DesignForExtensionCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.design</a> &gt; <span class="el_source">DesignForExtensionCheck.java</span></div><h1>DesignForExtensionCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
 // checkstyle: Checks Java source code for adherence to a set of rules.
-// Copyright (C) 2001-2020 the original author or authors.
+// Copyright (C) 2001-2021 the original author or authors.
 //
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
@@ -159,6 +161,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * Type is {@code java.lang.String[]}.
  * Default value is {@code After, AfterClass, Before, BeforeClass, Test}.
  * &lt;/li&gt;
+ * &lt;li&gt;
+ * Property {@code requiredJavadocPhrase} - Specify the comment text pattern which qualifies a
+ * method as designed for extension. Supports multi-line regex.
+ * Type is {@code java.util.regex.Pattern}.
+ * Default value is {@code &quot;.*&quot;}.
+ * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
  * To configure the check:
@@ -176,7 +184,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;pre&gt;
- * public class A extends B {
+ * public class A {
  *   &amp;#64;Override
  *   public int foo() {
  *     return 2;
@@ -208,6 +216,58 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
+ * To configure the check to allow methods which contain a specified comment text
+ * pattern in their javadoc to be designed for extension.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;DesignForExtension&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;requiredJavadocPhrase&amp;quot;
+ *     value=&amp;quot;This implementation&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * public class A {
+ *   /&amp;#42;&amp;#42;
+ *   &amp;#42; This implementation ...
+ *   &amp;#42;/
+ *   public int foo() {return 2;} // ok, required javadoc phrase in comment
+ *
+ *   /&amp;#42;&amp;#42;
+ *   &amp;#42; Do not extend ...
+ *   &amp;#42;/
+ *   public int foo2() {return 8;} // violation, required javadoc phrase not in comment
+ *
+ *   public int foo3() {return 3;} // violation, required javadoc phrase not in comment
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to allow methods which contain a specified comment text
+ * pattern in their javadoc which can span multiple lines
+ * to be designed for extension.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;DesignForExtension&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;requiredJavadocPhrase&amp;quot;
+ *     value=&amp;quot;This[\s\S]*implementation&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;pre&gt;
+ * public class A {
+ *   /&amp;#42;&amp;#42;
+ *   &amp;#42; This
+ *   &amp;#42; implementation ...
+ *   &amp;#42;/
+ *   public int foo() {return 2;} // ok, required javadoc phrase in comment
+ *
+ *   /&amp;#42;&amp;#42;
+ *   &amp;#42; Do not extend ...
+ *   &amp;#42;/
+ *   public int foo2() {return 8;} // violation, required javadoc phrase not in comment
+ *
+ *   public int foo3() {return 3;} // violation, required javadoc phrase not in comment
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
  * &lt;/p&gt;
  * &lt;p&gt;
@@ -222,7 +282,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * @since 3.1
  */
 @StatelessCheck
-<span class="fc" id="L225">public class DesignForExtensionCheck extends AbstractCheck {</span>
+<span class="fc" id="L285">public class DesignForExtensionCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -233,8 +293,14 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
     /**
      * Specify annotations which allow the check to skip the method from validation.
      */
-<span class="fc" id="L236">    private Set&lt;String&gt; ignoredAnnotations = Arrays.stream(new String[] {&quot;Test&quot;, &quot;Before&quot;, &quot;After&quot;,</span>
-<span class="fc" id="L237">        &quot;BeforeClass&quot;, &quot;AfterClass&quot;, }).collect(Collectors.toSet());</span>
+<span class="fc" id="L296">    private Set&lt;String&gt; ignoredAnnotations = Arrays.stream(new String[] {&quot;Test&quot;, &quot;Before&quot;, &quot;After&quot;,</span>
+<span class="fc" id="L297">        &quot;BeforeClass&quot;, &quot;AfterClass&quot;, }).collect(Collectors.toSet());</span>
+
+    /**
+     * Specify the comment text pattern which qualifies a method as designed for extension.
+     * Supports multi-line regex.
+     */
+<span class="fc" id="L303">    private Pattern requiredJavadocPhrase = Pattern.compile(&quot;.*&quot;);</span>
 
     /**
      * Setter to specify annotations which allow the check to skip the method from validation.
@@ -242,17 +308,27 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ignoredAnnotations method annotations.
      */
     public void setIgnoredAnnotations(String... ignoredAnnotations) {
-<span class="fc" id="L245">        this.ignoredAnnotations = Arrays.stream(ignoredAnnotations).collect(Collectors.toSet());</span>
-<span class="fc" id="L246">    }</span>
+<span class="fc" id="L311">        this.ignoredAnnotations = Arrays.stream(ignoredAnnotations).collect(Collectors.toSet());</span>
+<span class="fc" id="L312">    }</span>
+
+    /**
+     * Setter to specify the comment text pattern which qualifies a
+     * method as designed for extension. Supports multi-line regex.
+     *
+     * @param requiredJavadocPhrase method annotations.
+     */
+    public void setRequiredJavadocPhrase(Pattern requiredJavadocPhrase) {
+<span class="fc" id="L321">        this.requiredJavadocPhrase = requiredJavadocPhrase;</span>
+<span class="fc" id="L322">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L250">        return getRequiredTokens();</span>
+<span class="fc" id="L326">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L255">        return getRequiredTokens();</span>
+<span class="fc" id="L331">        return getRequiredTokens();</span>
     }
 
     @Override
@@ -260,30 +336,30 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
         // The check does not subscribe to CLASS_DEF token as now it is stateless. If the check
         // subscribes to CLASS_DEF token it will become stateful, since we need to have additional
         // stack to hold CLASS_DEF tokens.
-<span class="fc" id="L263">        return new int[] {TokenTypes.METHOD_DEF};</span>
+<span class="fc" id="L339">        return new int[] {TokenTypes.METHOD_DEF};</span>
     }
 
     @Override
     public boolean isCommentNodesRequired() {
-<span class="fc" id="L268">        return true;</span>
+<span class="fc" id="L344">        return true;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L273" title="All 2 branches covered.">        if (!hasJavadocComment(ast)</span>
-<span class="fc bfc" id="L274" title="All 2 branches covered.">                &amp;&amp; canBeOverridden(ast)</span>
-<span class="fc bfc" id="L275" title="All 2 branches covered.">                &amp;&amp; (isNativeMethod(ast)</span>
-<span class="fc bfc" id="L276" title="All 2 branches covered.">                    || !hasEmptyImplementation(ast))</span>
-<span class="fc bfc" id="L277" title="All 2 branches covered.">                &amp;&amp; !hasIgnoredAnnotation(ast, ignoredAnnotations)</span>
-<span class="fc bfc" id="L278" title="All 2 branches covered.">                &amp;&amp; !ScopeUtil.isInRecordBlock(ast)) {</span>
-<span class="fc" id="L279">            final DetailAST classDef = getNearestClassOrEnumDefinition(ast);</span>
-<span class="fc bfc" id="L280" title="All 2 branches covered.">            if (canBeSubclassed(classDef)) {</span>
-<span class="fc" id="L281">                final String className = classDef.findFirstToken(TokenTypes.IDENT).getText();</span>
-<span class="fc" id="L282">                final String methodName = ast.findFirstToken(TokenTypes.IDENT).getText();</span>
-<span class="fc" id="L283">                log(ast, MSG_KEY, className, methodName);</span>
+<span class="fc bfc" id="L349" title="All 2 branches covered.">        if (!hasJavadocComment(ast)</span>
+<span class="fc bfc" id="L350" title="All 2 branches covered.">                &amp;&amp; canBeOverridden(ast)</span>
+<span class="fc bfc" id="L351" title="All 2 branches covered.">                &amp;&amp; (isNativeMethod(ast)</span>
+<span class="fc bfc" id="L352" title="All 2 branches covered.">                    || !hasEmptyImplementation(ast))</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">                &amp;&amp; !hasIgnoredAnnotation(ast, ignoredAnnotations)</span>
+<span class="fc bfc" id="L354" title="All 2 branches covered.">                &amp;&amp; !ScopeUtil.isInRecordBlock(ast)) {</span>
+<span class="fc" id="L355">            final DetailAST classDef = getNearestClassOrEnumDefinition(ast);</span>
+<span class="fc bfc" id="L356" title="All 2 branches covered.">            if (canBeSubclassed(classDef)) {</span>
+<span class="fc" id="L357">                final String className = classDef.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L358">                final String methodName = ast.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L359">                log(ast, MSG_KEY, className, methodName);</span>
             }
         }
-<span class="fc" id="L286">    }</span>
+<span class="fc" id="L362">    }</span>
 
     /**
      * Checks whether a method has a javadoc comment.
@@ -291,9 +367,9 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param methodDef method definition token.
      * @return true if a method has a javadoc comment.
      */
-    private static boolean hasJavadocComment(DetailAST methodDef) {
-<span class="fc bfc" id="L295" title="All 2 branches covered.">        return hasJavadocCommentOnToken(methodDef, TokenTypes.MODIFIERS)</span>
-<span class="fc bfc" id="L296" title="All 2 branches covered.">                || hasJavadocCommentOnToken(methodDef, TokenTypes.TYPE);</span>
+    private boolean hasJavadocComment(DetailAST methodDef) {
+<span class="fc bfc" id="L371" title="All 2 branches covered.">        return hasJavadocCommentOnToken(methodDef, TokenTypes.MODIFIERS)</span>
+<span class="fc bfc" id="L372" title="All 2 branches covered.">                || hasJavadocCommentOnToken(methodDef, TokenTypes.TYPE);</span>
     }
 
     /**
@@ -303,9 +379,9 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param tokenType token type.
      * @return true if a token has a javadoc comment.
      */
-    private static boolean hasJavadocCommentOnToken(DetailAST methodDef, int tokenType) {
-<span class="fc" id="L307">        final DetailAST token = methodDef.findFirstToken(tokenType);</span>
-<span class="fc" id="L308">        return branchContainsJavadocComment(token);</span>
+    private boolean hasJavadocCommentOnToken(DetailAST methodDef, int tokenType) {
+<span class="fc" id="L383">        final DetailAST token = methodDef.findFirstToken(tokenType);</span>
+<span class="fc" id="L384">        return branchContainsJavadocComment(token);</span>
     }
 
     /**
@@ -314,29 +390,46 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param token tree token.
      * @return true if a javadoc comment exists under the token.
      */
-    private static boolean branchContainsJavadocComment(DetailAST token) {
-<span class="fc" id="L318">        boolean result = false;</span>
-<span class="fc" id="L319">        DetailAST curNode = token;</span>
-<span class="fc bfc" id="L320" title="All 2 branches covered.">        while (curNode != null) {</span>
-<span class="fc bfc" id="L321" title="All 2 branches covered.">            if (curNode.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
-<span class="fc bfc" id="L322" title="All 2 branches covered.">                    &amp;&amp; JavadocUtil.isJavadocComment(curNode)) {</span>
-<span class="fc" id="L323">                result = true;</span>
-<span class="fc" id="L324">                break;</span>
+    private boolean branchContainsJavadocComment(DetailAST token) {
+<span class="fc" id="L394">        boolean result = false;</span>
+<span class="fc" id="L395">        DetailAST curNode = token;</span>
+<span class="fc bfc" id="L396" title="All 2 branches covered.">        while (curNode != null) {</span>
+<span class="fc bfc" id="L397" title="All 2 branches covered.">            if (curNode.getType() == TokenTypes.BLOCK_COMMENT_BEGIN</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">                    &amp;&amp; JavadocUtil.isJavadocComment(curNode)) {</span>
+<span class="fc" id="L399">                result = hasValidJavadocComment(curNode);</span>
+<span class="fc" id="L400">                break;</span>
             }
 
-<span class="fc" id="L327">            DetailAST toVisit = curNode.getFirstChild();</span>
-<span class="fc bfc" id="L328" title="All 2 branches covered.">            while (toVisit == null) {</span>
-<span class="fc bfc" id="L329" title="All 2 branches covered.">                if (curNode == token) {</span>
-<span class="fc" id="L330">                    break;</span>
+<span class="fc" id="L403">            DetailAST toVisit = curNode.getFirstChild();</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">            while (toVisit == null) {</span>
+<span class="fc bfc" id="L405" title="All 2 branches covered.">                if (curNode == token) {</span>
+<span class="fc" id="L406">                    break;</span>
                 }
 
-<span class="fc" id="L333">                toVisit = curNode.getNextSibling();</span>
-<span class="fc" id="L334">                curNode = curNode.getParent();</span>
+<span class="fc" id="L409">                toVisit = curNode.getNextSibling();</span>
+<span class="fc" id="L410">                curNode = curNode.getParent();</span>
             }
-<span class="fc" id="L336">            curNode = toVisit;</span>
-<span class="fc" id="L337">        }</span>
+<span class="fc" id="L412">            curNode = toVisit;</span>
+<span class="fc" id="L413">        }</span>
 
-<span class="fc" id="L339">        return result;</span>
+<span class="fc" id="L415">        return result;</span>
+    }
+
+    /**
+     * Checks whether a javadoc contains the specified comment pattern that denotes
+     * a method as designed for extension.
+     *
+     * @param detailAST the ast we are checking for possible extension
+     * @return true if the javadoc of this ast contains the required comment pattern
+     */
+    private boolean hasValidJavadocComment(DetailAST detailAST) {
+<span class="fc" id="L426">        final String javadocString =</span>
+<span class="fc" id="L427">            JavadocUtil.getBlockCommentContent(detailAST);</span>
+
+<span class="fc" id="L429">        final Matcher requiredJavadocPhraseMatcher =</span>
+<span class="fc" id="L430">            requiredJavadocPhrase.matcher(javadocString);</span>
+
+<span class="fc" id="L432">        return requiredJavadocPhraseMatcher.find();</span>
     }
 
     /**
@@ -346,8 +439,8 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if a methods is native.
      */
     private static boolean isNativeMethod(DetailAST ast) {
-<span class="fc" id="L349">        final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L350" title="All 2 branches covered.">        return mods.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;</span>
+<span class="fc" id="L442">        final DetailAST mods = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L443" title="All 2 branches covered.">        return mods.findFirstToken(TokenTypes.LITERAL_NATIVE) != null;</span>
     }
 
     /**
@@ -358,19 +451,19 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if a method has only comments in the body.
      */
     private static boolean hasEmptyImplementation(DetailAST ast) {
-<span class="fc" id="L361">        boolean hasEmptyBody = true;</span>
-<span class="fc" id="L362">        final DetailAST methodImplOpenBrace = ast.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc" id="L363">        final DetailAST methodImplCloseBrace = methodImplOpenBrace.getLastChild();</span>
-<span class="fc" id="L364">        final Predicate&lt;DetailAST&gt; predicate = currentNode -&gt; {</span>
-<span class="fc bfc" id="L365" title="All 2 branches covered.">            return currentNode != methodImplCloseBrace</span>
-<span class="fc bfc" id="L366" title="All 2 branches covered.">                &amp;&amp; !TokenUtil.isCommentType(currentNode.getType());</span>
+<span class="fc" id="L454">        boolean hasEmptyBody = true;</span>
+<span class="fc" id="L455">        final DetailAST methodImplOpenBrace = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc" id="L456">        final DetailAST methodImplCloseBrace = methodImplOpenBrace.getLastChild();</span>
+<span class="fc" id="L457">        final Predicate&lt;DetailAST&gt; predicate = currentNode -&gt; {</span>
+<span class="fc bfc" id="L458" title="All 2 branches covered.">            return currentNode != methodImplCloseBrace</span>
+<span class="fc bfc" id="L459" title="All 2 branches covered.">                &amp;&amp; !TokenUtil.isCommentType(currentNode.getType());</span>
         };
-<span class="fc" id="L368">        final Optional&lt;DetailAST&gt; methodBody =</span>
-<span class="fc" id="L369">            TokenUtil.findFirstTokenByPredicate(methodImplOpenBrace, predicate);</span>
-<span class="fc bfc" id="L370" title="All 2 branches covered.">        if (methodBody.isPresent()) {</span>
-<span class="fc" id="L371">            hasEmptyBody = false;</span>
+<span class="fc" id="L461">        final Optional&lt;DetailAST&gt; methodBody =</span>
+<span class="fc" id="L462">            TokenUtil.findFirstTokenByPredicate(methodImplOpenBrace, predicate);</span>
+<span class="fc bfc" id="L463" title="All 2 branches covered.">        if (methodBody.isPresent()) {</span>
+<span class="fc" id="L464">            hasEmptyBody = false;</span>
         }
-<span class="fc" id="L373">        return hasEmptyBody;</span>
+<span class="fc" id="L466">        return hasEmptyBody;</span>
     }
 
     /**
@@ -382,13 +475,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if a method can be overridden in a subclass.
      */
     private static boolean canBeOverridden(DetailAST methodDef) {
-<span class="fc" id="L385">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L386" title="All 2 branches covered.">        return ScopeUtil.getSurroundingScope(methodDef).isIn(Scope.PROTECTED)</span>
-<span class="fc bfc" id="L387" title="All 2 branches covered.">            &amp;&amp; !ScopeUtil.isInInterfaceOrAnnotationBlock(methodDef)</span>
-<span class="fc bfc" id="L388" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</span>
-<span class="fc bfc" id="L389" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.ABSTRACT) == null</span>
-<span class="fc bfc" id="L390" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null</span>
-<span class="fc bfc" id="L391" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null;</span>
+<span class="fc" id="L478">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L479" title="All 2 branches covered.">        return ScopeUtil.getSurroundingScope(methodDef).isIn(Scope.PROTECTED)</span>
+<span class="fc bfc" id="L480" title="All 2 branches covered.">            &amp;&amp; !ScopeUtil.isInInterfaceOrAnnotationBlock(methodDef)</span>
+<span class="fc bfc" id="L481" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</span>
+<span class="fc bfc" id="L482" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.ABSTRACT) == null</span>
+<span class="fc bfc" id="L483" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null</span>
+<span class="fc bfc" id="L484" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) == null;</span>
     }
 
     /**
@@ -399,13 +492,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if a method has any of ignored annotations.
      */
     private static boolean hasIgnoredAnnotation(DetailAST methodDef, Set&lt;String&gt; annotations) {
-<span class="fc" id="L402">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L403">        final Optional&lt;DetailAST&gt; annotation = TokenUtil.findFirstTokenByPredicate(modifiers,</span>
+<span class="fc" id="L495">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L496">        final Optional&lt;DetailAST&gt; annotation = TokenUtil.findFirstTokenByPredicate(modifiers,</span>
             currentToken -&gt; {
-<span class="fc bfc" id="L405" title="All 2 branches covered.">                return currentToken.getType() == TokenTypes.ANNOTATION</span>
-<span class="fc bfc" id="L406" title="All 2 branches covered.">                    &amp;&amp; annotations.contains(getAnnotationName(currentToken));</span>
+<span class="fc bfc" id="L498" title="All 2 branches covered.">                return currentToken.getType() == TokenTypes.ANNOTATION</span>
+<span class="fc bfc" id="L499" title="All 2 branches covered.">                    &amp;&amp; annotations.contains(getAnnotationName(currentToken));</span>
             });
-<span class="fc" id="L408">        return annotation.isPresent();</span>
+<span class="fc" id="L501">        return annotation.isPresent();</span>
     }
 
     /**
@@ -415,15 +508,15 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return the name of the annotation.
      */
     private static String getAnnotationName(DetailAST annotation) {
-<span class="fc" id="L418">        final DetailAST dotAst = annotation.findFirstToken(TokenTypes.DOT);</span>
+<span class="fc" id="L511">        final DetailAST dotAst = annotation.findFirstToken(TokenTypes.DOT);</span>
         final String name;
-<span class="fc bfc" id="L420" title="All 2 branches covered.">        if (dotAst == null) {</span>
-<span class="fc" id="L421">            name = annotation.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc bfc" id="L513" title="All 2 branches covered.">        if (dotAst == null) {</span>
+<span class="fc" id="L514">            name = annotation.findFirstToken(TokenTypes.IDENT).getText();</span>
         }
         else {
-<span class="fc" id="L424">            name = dotAst.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L517">            name = dotAst.findFirstToken(TokenTypes.IDENT).getText();</span>
         }
-<span class="fc" id="L426">        return name;</span>
+<span class="fc" id="L519">        return name;</span>
     }
 
     /**
@@ -434,12 +527,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return the CLASS_DEF or ENUM_DEF token.
      */
     private static DetailAST getNearestClassOrEnumDefinition(DetailAST ast) {
-<span class="fc" id="L437">        DetailAST searchAST = ast;</span>
-<span class="fc bfc" id="L438" title="All 2 branches covered.">        while (searchAST.getType() != TokenTypes.CLASS_DEF</span>
-<span class="fc bfc" id="L439" title="All 2 branches covered.">               &amp;&amp; searchAST.getType() != TokenTypes.ENUM_DEF) {</span>
-<span class="fc" id="L440">            searchAST = searchAST.getParent();</span>
+<span class="fc" id="L530">        DetailAST searchAST = ast;</span>
+<span class="fc bfc" id="L531" title="All 2 branches covered.">        while (searchAST.getType() != TokenTypes.CLASS_DEF</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">               &amp;&amp; searchAST.getType() != TokenTypes.ENUM_DEF) {</span>
+<span class="fc" id="L533">            searchAST = searchAST.getParent();</span>
         }
-<span class="fc" id="L442">        return searchAST;</span>
+<span class="fc" id="L535">        return searchAST;</span>
     }
 
     /**
@@ -449,10 +542,10 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if the containing class can be subclassed.
      */
     private static boolean canBeSubclassed(DetailAST classDef) {
-<span class="fc" id="L452">        final DetailAST modifiers = classDef.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L453" title="All 2 branches covered.">        return classDef.getType() != TokenTypes.ENUM_DEF</span>
-<span class="fc bfc" id="L454" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null</span>
-<span class="fc bfc" id="L455" title="All 2 branches covered.">            &amp;&amp; hasDefaultOrExplicitNonPrivateCtor(classDef);</span>
+<span class="fc" id="L545">        final DetailAST modifiers = classDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L546" title="All 2 branches covered.">        return classDef.getType() != TokenTypes.ENUM_DEF</span>
+<span class="fc bfc" id="L547" title="All 2 branches covered.">            &amp;&amp; modifiers.findFirstToken(TokenTypes.FINAL) == null</span>
+<span class="fc bfc" id="L548" title="All 2 branches covered.">            &amp;&amp; hasDefaultOrExplicitNonPrivateCtor(classDef);</span>
     }
 
     /**
@@ -463,28 +556,28 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static boolean hasDefaultOrExplicitNonPrivateCtor(DetailAST classDef) {
         // check if subclassing is prevented by having only private ctors
-<span class="fc" id="L466">        final DetailAST objBlock = classDef.findFirstToken(TokenTypes.OBJBLOCK);</span>
+<span class="fc" id="L559">        final DetailAST objBlock = classDef.findFirstToken(TokenTypes.OBJBLOCK);</span>
 
-<span class="fc" id="L468">        boolean hasDefaultConstructor = true;</span>
-<span class="fc" id="L469">        boolean hasExplicitNonPrivateCtor = false;</span>
+<span class="fc" id="L561">        boolean hasDefaultConstructor = true;</span>
+<span class="fc" id="L562">        boolean hasExplicitNonPrivateCtor = false;</span>
 
-<span class="fc" id="L471">        DetailAST candidate = objBlock.getFirstChild();</span>
+<span class="fc" id="L564">        DetailAST candidate = objBlock.getFirstChild();</span>
 
-<span class="fc bfc" id="L473" title="All 2 branches covered.">        while (candidate != null) {</span>
-<span class="fc bfc" id="L474" title="All 2 branches covered.">            if (candidate.getType() == TokenTypes.CTOR_DEF) {</span>
-<span class="fc" id="L475">                hasDefaultConstructor = false;</span>
+<span class="fc bfc" id="L566" title="All 2 branches covered.">        while (candidate != null) {</span>
+<span class="fc bfc" id="L567" title="All 2 branches covered.">            if (candidate.getType() == TokenTypes.CTOR_DEF) {</span>
+<span class="fc" id="L568">                hasDefaultConstructor = false;</span>
 
-<span class="fc" id="L477">                final DetailAST ctorMods =</span>
-<span class="fc" id="L478">                        candidate.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L479" title="All 2 branches covered.">                if (ctorMods.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {</span>
-<span class="fc" id="L480">                    hasExplicitNonPrivateCtor = true;</span>
-<span class="fc" id="L481">                    break;</span>
+<span class="fc" id="L570">                final DetailAST ctorMods =</span>
+<span class="fc" id="L571">                        candidate.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L572" title="All 2 branches covered.">                if (ctorMods.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {</span>
+<span class="fc" id="L573">                    hasExplicitNonPrivateCtor = true;</span>
+<span class="fc" id="L574">                    break;</span>
                 }
             }
-<span class="fc" id="L484">            candidate = candidate.getNextSibling();</span>
+<span class="fc" id="L577">            candidate = candidate.getNextSibling();</span>
         }
 
-<span class="fc bfc" id="L487" title="All 4 branches covered.">        return hasDefaultConstructor || hasExplicitNonPrivateCtor;</span>
+<span class="fc bfc" id="L580" title="All 4 branches covered.">        return hasDefaultConstructor || hasExplicitNonPrivateCtor;</span>
     }
 
 }
