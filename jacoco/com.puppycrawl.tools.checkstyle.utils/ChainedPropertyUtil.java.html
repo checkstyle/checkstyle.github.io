@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ChainedPropertyUtil.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.utils</a> &gt; <span class="el_source">ChainedPropertyUtil.java</span></div><h1>ChainedPropertyUtil.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2021 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.utils;
+
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
+
+/**
+ * Resolves chained properties from a user-defined property file.
+ */
+public final class ChainedPropertyUtil {
+
+    /**
+     * Used to report undefined property in exception message.
+     */
+    public static final String UNDEFINED_PROPERTY_MESSAGE = &quot;Undefined property: &quot;;
+
+    /**
+     * Property variable expression pattern, matches property variables such as {@code ${basedir}}.
+     */
+<span class="fc" id="L45">    private static final Pattern PROPERTY_VARIABLE_PATTERN = Pattern.compile(&quot;\\$\\{([^\\s}]+)}&quot;);</span>
+
+    /**
+     * Prevent instantiation.
+     */
+    private ChainedPropertyUtil() {
+    }
+
+    /**
+     * Accepts user defined properties and returns new properties
+     * with all chained properties resolved.
+     *
+     * @param properties the underlying properties to use
+     *                   for property resolution.
+     * @return resolved properties
+     * @throws CheckstyleException when chained property is not defined
+     */
+    public static Properties getResolvedProperties(Properties properties)
+            throws CheckstyleException {
+<span class="fc" id="L64">        final Set&lt;String&gt; unresolvedPropertyNames =</span>
+<span class="fc" id="L65">            new HashSet&lt;&gt;(properties.stringPropertyNames());</span>
+<span class="fc" id="L66">        Iterator&lt;String&gt; unresolvedPropertyIterator = unresolvedPropertyNames.iterator();</span>
+<span class="fc" id="L67">        final Map&lt;Object, Object&gt; comparisonProperties = new Properties();</span>
+
+<span class="fc bfc" id="L69" title="All 2 branches covered.">        while (unresolvedPropertyIterator.hasNext()) {</span>
+<span class="fc" id="L70">            final String propertyName = unresolvedPropertyIterator.next();</span>
+<span class="fc" id="L71">            String propertyValue = properties.getProperty(propertyName);</span>
+<span class="fc" id="L72">            final Matcher matcher = PROPERTY_VARIABLE_PATTERN.matcher(propertyValue);</span>
+
+<span class="fc bfc" id="L74" title="All 2 branches covered.">            while (matcher.find()) {</span>
+<span class="fc" id="L75">                final String propertyVariableExpression = matcher.group();</span>
+<span class="fc" id="L76">                final String unresolvedPropertyName =</span>
+<span class="fc" id="L77">                    getPropertyNameFromExpression(propertyVariableExpression);</span>
+
+<span class="fc" id="L79">                final String resolvedPropertyValue =</span>
+<span class="fc" id="L80">                    properties.getProperty(unresolvedPropertyName);</span>
+
+<span class="fc bfc" id="L82" title="All 2 branches covered.">                if (resolvedPropertyValue != null) {</span>
+<span class="fc" id="L83">                    propertyValue = propertyValue.replace(propertyVariableExpression,</span>
+                        resolvedPropertyValue);
+<span class="fc" id="L85">                    properties.setProperty(propertyName, propertyValue);</span>
+                }
+<span class="fc" id="L87">            }</span>
+
+<span class="fc bfc" id="L89" title="All 2 branches covered.">            if (allChainedPropertiesAreResolved(propertyValue)) {</span>
+<span class="fc" id="L90">                unresolvedPropertyIterator.remove();</span>
+            }
+
+<span class="fc bfc" id="L93" title="All 2 branches covered.">            if (!unresolvedPropertyIterator.hasNext()) {</span>
+
+<span class="fc bfc" id="L95" title="All 2 branches covered.">                if (comparisonProperties.equals(properties)) {</span>
+                    // At this point, we will have not resolved any properties in two iterations,
+                    // so unresolvable properties exist.
+<span class="fc" id="L98">                    throw new CheckstyleException(UNDEFINED_PROPERTY_MESSAGE</span>
+                        + unresolvedPropertyNames);
+                }
+<span class="fc" id="L101">                comparisonProperties.putAll(properties);</span>
+<span class="fc" id="L102">                unresolvedPropertyIterator = unresolvedPropertyNames.iterator();</span>
+            }
+
+<span class="fc" id="L105">        }</span>
+<span class="fc" id="L106">        return properties;</span>
+    }
+
+    /**
+     * Gets an unresolved property name from a property variable expression
+     * by stripping the preceding '${' and trailing '}'.
+     *
+     * @param variableExpression the full property variable expression
+     * @return property name
+     */
+    private static String getPropertyNameFromExpression(String variableExpression) {
+<span class="fc" id="L117">        final int propertyStartIndex = variableExpression.lastIndexOf('{') + 1;</span>
+<span class="fc" id="L118">        final int propertyEndIndex = variableExpression.lastIndexOf('}');</span>
+<span class="fc" id="L119">        return variableExpression.substring(propertyStartIndex, propertyEndIndex);</span>
+    }
+
+    /**
+     * Checks if all chained properties have been resolved. Essentially,
+     * this means that there exist no matches for PROPERTY_VARIABLE_PATTERN in the
+     * property value string.
+     *
+     * @param propertyValue the property value to check
+     * @return true if all chained properties are resolved
+     */
+    private static boolean allChainedPropertiesAreResolved(String propertyValue) {
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        return !PROPERTY_VARIABLE_PATTERN.matcher(propertyValue).find();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>

@@ -70,12 +70,118 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
- * To configure the check to find instantiations of {@code java.lang.Boolean}:
+ * To configure the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;IllegalInstantiation&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyTest {
+ *   public class Boolean {
+ *     boolean a;
+ *
+ *     public Boolean (boolean a) { this.a = a; }
+ *   }
+ *
+ *   public void myTest (boolean a, int b) {
+ *     Boolean c = new Boolean(a); // OK
+ *     java.lang.Boolean d = new java.lang.Boolean(a); // OK
+ *
+ *     Integer e = new Integer(b); // OK
+ *     Integer f = Integer.valueOf(b); // OK
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to find instantiations of {@code java.lang.Boolean}
+ * and {@code java.lang.Integer}. NOTE: Even if property {@code tokens}
+ * is completely removed from the following configuration, Checkstyle will produce
+ * the same results for violation. This is because if property {@code tokens} is not
+ * defined in the configuration, Checkstyle will supply it with list of default tokens
+ * {@code CLASS_DEF, LITERAL_NEW, PACKAGE_DEF, IMPORT} for this check. The property is
+ * defined in this example only to provide clarity:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&amp;quot;IllegalInstantiation&amp;quot;&amp;gt;
- *   &amp;lt;property name=&amp;quot;classes&amp;quot; value=&amp;quot;java.lang.Boolean&amp;quot;/&amp;gt;
+ *   &amp;lt;property name=&amp;quot;classes&amp;quot; value=&amp;quot;java.lang.Boolean,
+ *     java.lang.Integer&amp;quot;/&amp;gt;
+ *   &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;CLASS_DEF, LITERAL_NEW,
+ *     PACKAGE_DEF, IMPORT&amp;quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyTest {
+ *   public class Boolean {
+ *     boolean a;
+ *
+ *     public Boolean (boolean a) { this.a = a; }
+ *   }
+ *
+ *   public void myTest (boolean a, int b) {
+ *     Boolean c = new Boolean(a); // OK
+ *     java.lang.Boolean d = new java.lang.Boolean(a); // violation, instantiation of
+ *                                                     // java.lang.Boolean should be avoided
+ *
+ *     Integer e = new Integer(b); // violation, instantiation of
+ *                                 // java.lang.Integer should be avoided
+ *     Integer f = Integer.valueOf(b); // OK
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check to allow violations for local classes vs classes
+ * defined in the check, for example {@code java.lang.Boolean}, property
+ * {@code tokens} must be defined to not mention {@code CLASS_DEF}, so its
+ * value should be {@code LITERAL_NEW, PACKAGE_DEF, IMPORT}:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;IllegalInstantiation&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;classes&amp;quot; value=&amp;quot;java.lang.Boolean,
+ *     java.lang.Integer&amp;quot;/&amp;gt;
+ *   &amp;lt;property name=&amp;quot;tokens&amp;quot; value=&amp;quot;LITERAL_NEW, PACKAGE_DEF,
+ *     IMPORT&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyTest {
+ *   public class Boolean {
+ *     boolean a;
+ *
+ *     public Boolean (boolean a) { this.a = a; }
+ *   }
+ *
+ *   public void myTest (boolean a, int b) {
+ *     Boolean c = new Boolean(a); // violation, instantiation of
+ *                                 // java.lang.Boolean should be avoided
+ *     java.lang.Boolean d = new java.lang.Boolean(a); // violation, instantiation of
+ *                                                     // java.lang.Boolean should be avoided
+ *
+ *     Integer e = new Integer(b); // violation, instantiation of
+ *                                 // java.lang.Integer should be avoided
+ *     Integer f = Integer.valueOf(b); // OK
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Finally, there is a limitation that it is currently not possible to specify array classes:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;IllegalInstantiation&amp;quot;&amp;gt;
+ *   &amp;lt;property name=&amp;quot;classes&amp;quot; value=&amp;quot;java.lang.Boolean[],
+ *      Boolean[], java.lang.Integer[], Integer[]&amp;quot;/&amp;gt;
+ * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;Example:&lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyTest {
+ *   public void myTest () {
+ *     Boolean[] newBoolArray = new Boolean[]{true,true,false}; // OK
+ *     Integer[] newIntArray = new Integer[]{1,2,3}; // OK
+ *   }
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
@@ -92,7 +198,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 3.0
  */
 @FileStatefulCheck
-<span class="fc" id="L95">public class IllegalInstantiationCheck</span>
+<span class="fc" id="L201">public class IllegalInstantiationCheck</span>
     extends AbstractCheck {
 
     /**
@@ -105,28 +211,28 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     private static final String JAVA_LANG = &quot;java.lang.&quot;;
 
     /** The imports for the file. */
-<span class="fc" id="L108">    private final Set&lt;FullIdent&gt; imports = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L214">    private final Set&lt;FullIdent&gt; imports = new HashSet&lt;&gt;();</span>
 
     /** The class names defined in the file. */
-<span class="fc" id="L111">    private final Set&lt;String&gt; classNames = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L217">    private final Set&lt;String&gt; classNames = new HashSet&lt;&gt;();</span>
 
     /** The instantiations in the file. */
-<span class="fc" id="L114">    private final Set&lt;DetailAST&gt; instantiations = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L220">    private final Set&lt;DetailAST&gt; instantiations = new HashSet&lt;&gt;();</span>
 
     /** Specify fully qualified class names that should not be instantiated. */
-<span class="fc" id="L117">    private Set&lt;String&gt; classes = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L223">    private Set&lt;String&gt; classes = new HashSet&lt;&gt;();</span>
 
     /** Name of the package. */
     private String pkgName;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L124">        return getAcceptableTokens();</span>
+<span class="fc" id="L230">        return getAcceptableTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L129">        return new int[] {</span>
+<span class="fc" id="L235">        return new int[] {</span>
             TokenTypes.IMPORT,
             TokenTypes.LITERAL_NEW,
             TokenTypes.PACKAGE_DEF,
@@ -136,7 +242,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L139">        return new int[] {</span>
+<span class="fc" id="L245">        return new int[] {</span>
             TokenTypes.IMPORT,
             TokenTypes.LITERAL_NEW,
             TokenTypes.PACKAGE_DEF,
@@ -145,36 +251,36 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L148">        pkgName = null;</span>
-<span class="fc" id="L149">        imports.clear();</span>
-<span class="fc" id="L150">        instantiations.clear();</span>
-<span class="fc" id="L151">        classNames.clear();</span>
-<span class="fc" id="L152">    }</span>
+<span class="fc" id="L254">        pkgName = null;</span>
+<span class="fc" id="L255">        imports.clear();</span>
+<span class="fc" id="L256">        instantiations.clear();</span>
+<span class="fc" id="L257">        classNames.clear();</span>
+<span class="fc" id="L258">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L156" title="All 5 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L262" title="All 5 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.LITERAL_NEW:
-<span class="fc" id="L158">                processLiteralNew(ast);</span>
-<span class="fc" id="L159">                break;</span>
+<span class="fc" id="L264">                processLiteralNew(ast);</span>
+<span class="fc" id="L265">                break;</span>
             case TokenTypes.PACKAGE_DEF:
-<span class="fc" id="L161">                processPackageDef(ast);</span>
-<span class="fc" id="L162">                break;</span>
+<span class="fc" id="L267">                processPackageDef(ast);</span>
+<span class="fc" id="L268">                break;</span>
             case TokenTypes.IMPORT:
-<span class="fc" id="L164">                processImport(ast);</span>
-<span class="fc" id="L165">                break;</span>
+<span class="fc" id="L270">                processImport(ast);</span>
+<span class="fc" id="L271">                break;</span>
             case TokenTypes.CLASS_DEF:
-<span class="fc" id="L167">                processClassDef(ast);</span>
-<span class="fc" id="L168">                break;</span>
+<span class="fc" id="L273">                processClassDef(ast);</span>
+<span class="fc" id="L274">                break;</span>
             default:
-<span class="fc" id="L170">                throw new IllegalArgumentException(&quot;Unknown type &quot; + ast);</span>
+<span class="fc" id="L276">                throw new IllegalArgumentException(&quot;Unknown type &quot; + ast);</span>
         }
-<span class="fc" id="L172">    }</span>
+<span class="fc" id="L278">    }</span>
 
     @Override
     public void finishTree(DetailAST rootAST) {
-<span class="fc" id="L176">        instantiations.forEach(this::postProcessLiteralNew);</span>
-<span class="fc" id="L177">    }</span>
+<span class="fc" id="L282">        instantiations.forEach(this::postProcessLiteralNew);</span>
+<span class="fc" id="L283">    }</span>
 
     /**
      * Collects classes defined in the source file. Required
@@ -183,10 +289,10 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param ast the class def token.
      */
     private void processClassDef(DetailAST ast) {
-<span class="fc" id="L186">        final DetailAST identToken = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L187">        final String className = identToken.getText();</span>
-<span class="fc" id="L188">        classNames.add(className);</span>
-<span class="fc" id="L189">    }</span>
+<span class="fc" id="L292">        final DetailAST identToken = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L293">        final String className = identToken.getText();</span>
+<span class="fc" id="L294">        classNames.add(className);</span>
+<span class="fc" id="L295">    }</span>
 
     /**
      * Perform processing for an import token.
@@ -194,11 +300,11 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param ast the import token
      */
     private void processImport(DetailAST ast) {
-<span class="fc" id="L197">        final FullIdent name = FullIdent.createFullIdentBelow(ast);</span>
+<span class="fc" id="L303">        final FullIdent name = FullIdent.createFullIdentBelow(ast);</span>
         // Note: different from UnusedImportsCheck.processImport(),
         // '.*' imports are also added here
-<span class="fc" id="L200">        imports.add(name);</span>
-<span class="fc" id="L201">    }</span>
+<span class="fc" id="L306">        imports.add(name);</span>
+<span class="fc" id="L307">    }</span>
 
     /**
      * Perform processing for an package token.
@@ -206,12 +312,12 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param ast the package token
      */
     private void processPackageDef(DetailAST ast) {
-<span class="fc" id="L209">        final DetailAST packageNameAST = ast.getLastChild()</span>
-<span class="fc" id="L210">                .getPreviousSibling();</span>
-<span class="fc" id="L211">        final FullIdent packageIdent =</span>
-<span class="fc" id="L212">                FullIdent.createFullIdent(packageNameAST);</span>
-<span class="fc" id="L213">        pkgName = packageIdent.getText();</span>
-<span class="fc" id="L214">    }</span>
+<span class="fc" id="L315">        final DetailAST packageNameAST = ast.getLastChild()</span>
+<span class="fc" id="L316">                .getPreviousSibling();</span>
+<span class="fc" id="L317">        final FullIdent packageIdent =</span>
+<span class="fc" id="L318">                FullIdent.createFullIdent(packageNameAST);</span>
+<span class="fc" id="L319">        pkgName = packageIdent.getText();</span>
+<span class="fc" id="L320">    }</span>
 
     /**
      * Collects a &quot;new&quot; token.
@@ -219,10 +325,10 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param ast the &quot;new&quot; token
      */
     private void processLiteralNew(DetailAST ast) {
-<span class="fc bfc" id="L222" title="All 2 branches covered.">        if (ast.getParent().getType() != TokenTypes.METHOD_REF) {</span>
-<span class="fc" id="L223">            instantiations.add(ast);</span>
+<span class="fc bfc" id="L328" title="All 2 branches covered.">        if (ast.getParent().getType() != TokenTypes.METHOD_REF) {</span>
+<span class="fc" id="L329">            instantiations.add(ast);</span>
         }
-<span class="fc" id="L225">    }</span>
+<span class="fc" id="L331">    }</span>
 
     /**
      * Processes one of the collected &quot;new&quot; tokens when walking tree
@@ -231,18 +337,18 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param newTokenAst the &quot;new&quot; token.
      */
     private void postProcessLiteralNew(DetailAST newTokenAst) {
-<span class="fc" id="L234">        final DetailAST typeNameAst = newTokenAst.getFirstChild();</span>
-<span class="fc" id="L235">        final DetailAST nameSibling = typeNameAst.getNextSibling();</span>
-<span class="fc bfc" id="L236" title="All 2 branches covered.">        if (nameSibling.getType() != TokenTypes.ARRAY_DECLARATOR) {</span>
+<span class="fc" id="L340">        final DetailAST typeNameAst = newTokenAst.getFirstChild();</span>
+<span class="fc" id="L341">        final DetailAST nameSibling = typeNameAst.getNextSibling();</span>
+<span class="fc bfc" id="L342" title="All 2 branches covered.">        if (nameSibling.getType() != TokenTypes.ARRAY_DECLARATOR) {</span>
             // ast != &quot;new Boolean[]&quot;
-<span class="fc" id="L238">            final FullIdent typeIdent = FullIdent.createFullIdent(typeNameAst);</span>
-<span class="fc" id="L239">            final String typeName = typeIdent.getText();</span>
-<span class="fc" id="L240">            final String fqClassName = getIllegalInstantiation(typeName);</span>
-<span class="fc bfc" id="L241" title="All 2 branches covered.">            if (fqClassName != null) {</span>
-<span class="fc" id="L242">                log(newTokenAst, MSG_KEY, fqClassName);</span>
+<span class="fc" id="L344">            final FullIdent typeIdent = FullIdent.createFullIdent(typeNameAst);</span>
+<span class="fc" id="L345">            final String typeName = typeIdent.getText();</span>
+<span class="fc" id="L346">            final String fqClassName = getIllegalInstantiation(typeName);</span>
+<span class="fc bfc" id="L347" title="All 2 branches covered.">            if (fqClassName != null) {</span>
+<span class="fc" id="L348">                log(newTokenAst, MSG_KEY, fqClassName);</span>
             }
         }
-<span class="fc" id="L245">    }</span>
+<span class="fc" id="L351">    }</span>
 
     /**
      * Checks illegal instantiations.
@@ -252,36 +358,36 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      *     or null if instantiation of className is OK
      */
     private String getIllegalInstantiation(String className) {
-<span class="fc" id="L255">        String fullClassName = null;</span>
+<span class="fc" id="L361">        String fullClassName = null;</span>
 
-<span class="fc bfc" id="L257" title="All 2 branches covered.">        if (classes.contains(className)) {</span>
-<span class="fc" id="L258">            fullClassName = className;</span>
+<span class="fc bfc" id="L363" title="All 2 branches covered.">        if (classes.contains(className)) {</span>
+<span class="fc" id="L364">            fullClassName = className;</span>
         }
         else {
             final int pkgNameLen;
 
-<span class="fc bfc" id="L263" title="All 2 branches covered.">            if (pkgName == null) {</span>
-<span class="fc" id="L264">                pkgNameLen = 0;</span>
+<span class="fc bfc" id="L369" title="All 2 branches covered.">            if (pkgName == null) {</span>
+<span class="fc" id="L370">                pkgNameLen = 0;</span>
             }
             else {
-<span class="fc" id="L267">                pkgNameLen = pkgName.length();</span>
+<span class="fc" id="L373">                pkgNameLen = pkgName.length();</span>
             }
 
-<span class="fc bfc" id="L270" title="All 2 branches covered.">            for (String illegal : classes) {</span>
-<span class="fc bfc" id="L271" title="All 2 branches covered.">                if (isSamePackage(className, pkgNameLen, illegal)</span>
-<span class="fc bfc" id="L272" title="All 2 branches covered.">                        || isStandardClass(className, illegal)) {</span>
-<span class="fc" id="L273">                    fullClassName = illegal;</span>
+<span class="fc bfc" id="L376" title="All 2 branches covered.">            for (String illegal : classes) {</span>
+<span class="fc bfc" id="L377" title="All 2 branches covered.">                if (isSamePackage(className, pkgNameLen, illegal)</span>
+<span class="fc bfc" id="L378" title="All 2 branches covered.">                        || isStandardClass(className, illegal)) {</span>
+<span class="fc" id="L379">                    fullClassName = illegal;</span>
                 }
                 else {
-<span class="fc" id="L276">                    fullClassName = checkImportStatements(className);</span>
+<span class="fc" id="L382">                    fullClassName = checkImportStatements(className);</span>
                 }
 
-<span class="fc bfc" id="L279" title="All 2 branches covered.">                if (fullClassName != null) {</span>
-<span class="fc" id="L280">                    break;</span>
+<span class="fc bfc" id="L385" title="All 2 branches covered.">                if (fullClassName != null) {</span>
+<span class="fc" id="L386">                    break;</span>
                 }
-<span class="fc" id="L282">            }</span>
+<span class="fc" id="L388">            }</span>
         }
-<span class="fc" id="L284">        return fullClassName;</span>
+<span class="fc" id="L390">        return fullClassName;</span>
     }
 
     /**
@@ -291,21 +397,21 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return value of illegal instantiated type
      */
     private String checkImportStatements(String className) {
-<span class="fc" id="L294">        String illegalType = null;</span>
+<span class="fc" id="L400">        String illegalType = null;</span>
         // import statements
-<span class="fc bfc" id="L296" title="All 2 branches covered.">        for (FullIdent importLineText : imports) {</span>
-<span class="fc" id="L297">            String importArg = importLineText.getText();</span>
-<span class="fc bfc" id="L298" title="All 2 branches covered.">            if (importArg.endsWith(&quot;.*&quot;)) {</span>
-<span class="fc" id="L299">                importArg = importArg.substring(0, importArg.length() - 1)</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">        for (FullIdent importLineText : imports) {</span>
+<span class="fc" id="L403">            String importArg = importLineText.getText();</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">            if (importArg.endsWith(&quot;.*&quot;)) {</span>
+<span class="fc" id="L405">                importArg = importArg.substring(0, importArg.length() - 1)</span>
                         + className;
             }
-<span class="fc bfc" id="L302" title="All 2 branches covered.">            if (CommonUtil.baseClassName(importArg).equals(className)</span>
-<span class="fc bfc" id="L303" title="All 2 branches covered.">                    &amp;&amp; classes.contains(importArg)) {</span>
-<span class="fc" id="L304">                illegalType = importArg;</span>
-<span class="fc" id="L305">                break;</span>
+<span class="fc bfc" id="L408" title="All 2 branches covered.">            if (CommonUtil.baseClassName(importArg).equals(className)</span>
+<span class="fc bfc" id="L409" title="All 2 branches covered.">                    &amp;&amp; classes.contains(importArg)) {</span>
+<span class="fc" id="L410">                illegalType = importArg;</span>
+<span class="fc" id="L411">                break;</span>
             }
-<span class="fc" id="L307">        }</span>
-<span class="fc" id="L308">        return illegalType;</span>
+<span class="fc" id="L413">        }</span>
+<span class="fc" id="L414">        return illegalType;</span>
     }
 
     /**
@@ -324,11 +430,11 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
         // the test is the &quot;no garbage&quot; version of
         // illegal.equals(pkgName + &quot;.&quot; + className)
-<span class="fc bfc" id="L327" title="All 2 branches covered.">        return pkgName != null</span>
-<span class="fc bfc" id="L328" title="All 2 branches covered.">                &amp;&amp; className.length() == illegal.length() - pkgNameLen - 1</span>
-<span class="fc bfc" id="L329" title="All 2 branches covered.">                &amp;&amp; illegal.charAt(pkgNameLen) == '.'</span>
-<span class="fc bfc" id="L330" title="All 2 branches covered.">                &amp;&amp; illegal.endsWith(className)</span>
-<span class="fc bfc" id="L331" title="All 2 branches covered.">                &amp;&amp; illegal.startsWith(pkgName);</span>
+<span class="fc bfc" id="L433" title="All 2 branches covered.">        return pkgName != null</span>
+<span class="fc bfc" id="L434" title="All 2 branches covered.">                &amp;&amp; className.length() == illegal.length() - pkgNameLen - 1</span>
+<span class="fc bfc" id="L435" title="All 2 branches covered.">                &amp;&amp; illegal.charAt(pkgNameLen) == '.'</span>
+<span class="fc bfc" id="L436" title="All 2 branches covered.">                &amp;&amp; illegal.endsWith(className)</span>
+<span class="fc bfc" id="L437" title="All 2 branches covered.">                &amp;&amp; illegal.startsWith(pkgName);</span>
     }
 
     /**
@@ -339,24 +445,24 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return true if type is standard
      */
     private boolean isStandardClass(String className, String illegal) {
-<span class="fc" id="L342">        boolean isStandardClass = false;</span>
+<span class="fc" id="L448">        boolean isStandardClass = false;</span>
         // class from java.lang
-<span class="fc bfc" id="L344" title="All 2 branches covered.">        if (illegal.length() - JAVA_LANG.length() == className.length()</span>
-<span class="fc bfc" id="L345" title="All 2 branches covered.">            &amp;&amp; illegal.endsWith(className)</span>
-<span class="fc bfc" id="L346" title="All 2 branches covered.">            &amp;&amp; illegal.startsWith(JAVA_LANG)) {</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">        if (illegal.length() - JAVA_LANG.length() == className.length()</span>
+<span class="fc bfc" id="L451" title="All 2 branches covered.">            &amp;&amp; illegal.endsWith(className)</span>
+<span class="fc bfc" id="L452" title="All 2 branches covered.">            &amp;&amp; illegal.startsWith(JAVA_LANG)) {</span>
             // java.lang needs no import, but a class without import might
             // also come from the same file or be in the same package.
             // E.g. if a class defines an inner class &quot;Boolean&quot;,
             // the expression &quot;new Boolean()&quot; refers to that class,
             // not to java.lang.Boolean
 
-<span class="fc" id="L353">            final boolean isSameFile = classNames.contains(className);</span>
+<span class="fc" id="L459">            final boolean isSameFile = classNames.contains(className);</span>
 
-<span class="fc bfc" id="L355" title="All 2 branches covered.">            if (!isSameFile) {</span>
-<span class="fc" id="L356">                isStandardClass = true;</span>
+<span class="fc bfc" id="L461" title="All 2 branches covered.">            if (!isSameFile) {</span>
+<span class="fc" id="L462">                isStandardClass = true;</span>
             }
         }
-<span class="fc" id="L359">        return isStandardClass;</span>
+<span class="fc" id="L465">        return isStandardClass;</span>
     }
 
     /**
@@ -365,8 +471,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param names a comma separate list of class names
      */
     public void setClasses(String... names) {
-<span class="fc" id="L368">        classes = Arrays.stream(names).collect(Collectors.toSet());</span>
-<span class="fc" id="L369">    }</span>
+<span class="fc" id="L474">        classes = Arrays.stream(names).collect(Collectors.toSet());</span>
+<span class="fc" id="L475">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
