@@ -40,7 +40,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &lt;/p&gt;
  * &lt;pre&gt;
  * for (int i = 0; i &amp;lt; 1; i++) {
- *   i++; //violation
+ *   i++; // violation
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
@@ -57,6 +57,15 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  *   i++;
  * }
  * &lt;/pre&gt;
+ * &lt;p&gt;
+ * NOTE:The check works with only primitive type variables.
+ * The check will not work for arrays used as control variable.An example is
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * for (int a[]={0};a[0] &amp;lt; 10;a[0]++) {
+ *  a[0]++;   // it will skip this violation
+ * }
+ * &lt;/pre&gt;
  * &lt;ul&gt;
  * &lt;li&gt;
  * Property {@code skipEnhancedForLoopVariable} - Control whether to check
@@ -71,6 +80,18 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;ModifiedControlVariable&quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * for(int i=0;i &amp;lt; 8;i++) {
+ *   i++; // violation, control variable modified
+ * }
+ * String args1[]={&quot;Coding&quot;, &quot;block&quot;};
+ * for (String arg: args1) {
+ *   arg = arg.trim(); // violation, control variable modified
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * By default, This Check validates
@@ -92,8 +113,12 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &lt;p&gt;Example:&lt;/p&gt;
  *
  * &lt;pre&gt;
- * for (String line: lines) {
- *   line = line.trim();   // it will skip this violation
+ * for(int i=0;i &amp;lt; 8;i++) {
+ *   i++; // violation, control variable modified
+ * }
+ * String args1[]={&quot;Coding&quot;, &quot;block&quot;};
+ * for (String arg: args1) {
+ *   arg = arg.trim(); // ok
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
@@ -111,7 +136,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * @since 3.5
  */
 @FileStatefulCheck
-<span class="fc" id="L114">public final class ModifiedControlVariableCheck extends AbstractCheck {</span>
+<span class="fc" id="L139">public final class ModifiedControlVariableCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -125,17 +150,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
     private static final String ILLEGAL_TYPE_OF_TOKEN = &quot;Illegal type of token: &quot;;
 
     /** Operations which can change control variable in update part of the loop. */
-<span class="fc" id="L128">    private static final Set&lt;Integer&gt; MUTATION_OPERATIONS =</span>
-<span class="fc" id="L129">        Arrays.stream(new Integer[] {</span>
-<span class="fc" id="L130">            TokenTypes.POST_INC,</span>
-<span class="fc" id="L131">            TokenTypes.POST_DEC,</span>
-<span class="fc" id="L132">            TokenTypes.DEC,</span>
-<span class="fc" id="L133">            TokenTypes.INC,</span>
-<span class="fc" id="L134">            TokenTypes.ASSIGN,</span>
-<span class="fc" id="L135">        }).collect(Collectors.toSet());</span>
+<span class="fc" id="L153">    private static final Set&lt;Integer&gt; MUTATION_OPERATIONS =</span>
+<span class="fc" id="L154">        Arrays.stream(new Integer[] {</span>
+<span class="fc" id="L155">            TokenTypes.POST_INC,</span>
+<span class="fc" id="L156">            TokenTypes.POST_DEC,</span>
+<span class="fc" id="L157">            TokenTypes.DEC,</span>
+<span class="fc" id="L158">            TokenTypes.INC,</span>
+<span class="fc" id="L159">            TokenTypes.ASSIGN,</span>
+<span class="fc" id="L160">        }).collect(Collectors.toSet());</span>
 
     /** Stack of block parameters. */
-<span class="fc" id="L138">    private final Deque&lt;Deque&lt;String&gt;&gt; variableStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L163">    private final Deque&lt;Deque&lt;String&gt;&gt; variableStack = new ArrayDeque&lt;&gt;();</span>
 
     /**
      * Control whether to check
@@ -152,17 +177,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param skipEnhancedForLoopVariable whether to skip enhanced for-loop variable
      */
     public void setSkipEnhancedForLoopVariable(boolean skipEnhancedForLoopVariable) {
-<span class="fc" id="L155">        this.skipEnhancedForLoopVariable = skipEnhancedForLoopVariable;</span>
-<span class="fc" id="L156">    }</span>
+<span class="fc" id="L180">        this.skipEnhancedForLoopVariable = skipEnhancedForLoopVariable;</span>
+<span class="fc" id="L181">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L160">        return getRequiredTokens();</span>
+<span class="fc" id="L185">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L165">        return new int[] {</span>
+<span class="fc" id="L190">        return new int[] {</span>
             TokenTypes.OBJBLOCK,
             TokenTypes.LITERAL_FOR,
             TokenTypes.FOR_ITERATOR,
@@ -188,26 +213,26 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L191">        return getRequiredTokens();</span>
+<span class="fc" id="L216">        return getRequiredTokens();</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
         // clear data
-<span class="fc" id="L197">        variableStack.clear();</span>
-<span class="fc" id="L198">    }</span>
+<span class="fc" id="L222">        variableStack.clear();</span>
+<span class="fc" id="L223">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L202" title="All 4 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L227" title="All 4 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.OBJBLOCK:
-<span class="fc" id="L204">                enterBlock();</span>
-<span class="fc" id="L205">                break;</span>
+<span class="fc" id="L229">                enterBlock();</span>
+<span class="fc" id="L230">                break;</span>
             case TokenTypes.LITERAL_FOR:
             case TokenTypes.FOR_ITERATOR:
             case TokenTypes.FOR_EACH_CLAUSE:
                 // we need that Tokens only at leaveToken()
-<span class="fc" id="L210">                break;</span>
+<span class="fc" id="L235">                break;</span>
             case TokenTypes.ASSIGN:
             case TokenTypes.PLUS_ASSIGN:
             case TokenTypes.MINUS_ASSIGN:
@@ -224,31 +249,31 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
             case TokenTypes.POST_INC:
             case TokenTypes.DEC:
             case TokenTypes.POST_DEC:
-<span class="fc" id="L227">                checkIdent(ast);</span>
-<span class="fc" id="L228">                break;</span>
+<span class="fc" id="L252">                checkIdent(ast);</span>
+<span class="fc" id="L253">                break;</span>
             default:
-<span class="fc" id="L230">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
+<span class="fc" id="L255">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
         }
-<span class="fc" id="L232">    }</span>
+<span class="fc" id="L257">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L236" title="All 6 branches covered.">        switch (ast.getType()) {</span>
+<span class="fc bfc" id="L261" title="All 6 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.FOR_ITERATOR:
-<span class="fc" id="L238">                leaveForIter(ast.getParent());</span>
-<span class="fc" id="L239">                break;</span>
+<span class="fc" id="L263">                leaveForIter(ast.getParent());</span>
+<span class="fc" id="L264">                break;</span>
             case TokenTypes.FOR_EACH_CLAUSE:
-<span class="fc bfc" id="L241" title="All 2 branches covered.">                if (!skipEnhancedForLoopVariable) {</span>
-<span class="fc" id="L242">                    final DetailAST paramDef = ast.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
-<span class="fc" id="L243">                    leaveForEach(paramDef);</span>
-<span class="fc" id="L244">                }</span>
+<span class="fc bfc" id="L266" title="All 2 branches covered.">                if (!skipEnhancedForLoopVariable) {</span>
+<span class="fc" id="L267">                    final DetailAST paramDef = ast.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
+<span class="fc" id="L268">                    leaveForEach(paramDef);</span>
+<span class="fc" id="L269">                }</span>
                 break;
             case TokenTypes.LITERAL_FOR:
-<span class="fc" id="L247">                leaveForDef(ast);</span>
-<span class="fc" id="L248">                break;</span>
+<span class="fc" id="L272">                leaveForDef(ast);</span>
+<span class="fc" id="L273">                break;</span>
             case TokenTypes.OBJBLOCK:
-<span class="fc" id="L250">                exitBlock();</span>
-<span class="fc" id="L251">                break;</span>
+<span class="fc" id="L275">                exitBlock();</span>
+<span class="fc" id="L276">                break;</span>
             case TokenTypes.ASSIGN:
             case TokenTypes.PLUS_ASSIGN:
             case TokenTypes.MINUS_ASSIGN:
@@ -266,25 +291,25 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
             case TokenTypes.DEC:
             case TokenTypes.POST_DEC:
                 // we need that Tokens only at visitToken()
-<span class="fc" id="L269">                break;</span>
+<span class="fc" id="L294">                break;</span>
             default:
-<span class="fc" id="L271">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
+<span class="fc" id="L296">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
         }
-<span class="fc" id="L273">    }</span>
+<span class="fc" id="L298">    }</span>
 
     /**
      * Enters an inner class, which requires a new variable set.
      */
     private void enterBlock() {
-<span class="fc" id="L279">        variableStack.push(new ArrayDeque&lt;&gt;());</span>
-<span class="fc" id="L280">    }</span>
+<span class="fc" id="L304">        variableStack.push(new ArrayDeque&lt;&gt;());</span>
+<span class="fc" id="L305">    }</span>
 
     /**
      * Leave an inner class, so restore variable set.
      */
     private void exitBlock() {
-<span class="fc" id="L286">        variableStack.pop();</span>
-<span class="fc" id="L287">    }</span>
+<span class="fc" id="L311">        variableStack.pop();</span>
+<span class="fc" id="L312">    }</span>
 
     /**
      * Get current variable stack.
@@ -292,7 +317,7 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return current variable stack
      */
     private Deque&lt;String&gt; getCurrentVariables() {
-<span class="fc" id="L295">        return variableStack.peek();</span>
+<span class="fc" id="L320">        return variableStack.peek();</span>
     }
 
     /**
@@ -301,14 +326,14 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param ast ident to check.
      */
     private void checkIdent(DetailAST ast) {
-<span class="fc" id="L304">        final Deque&lt;String&gt; currentVariables = getCurrentVariables();</span>
-<span class="fc" id="L305">        final DetailAST identAST = ast.getFirstChild();</span>
+<span class="fc" id="L329">        final Deque&lt;String&gt; currentVariables = getCurrentVariables();</span>
+<span class="fc" id="L330">        final DetailAST identAST = ast.getFirstChild();</span>
 
-<span class="fc bfc" id="L307" title="All 4 branches covered.">        if (identAST != null &amp;&amp; identAST.getType() == TokenTypes.IDENT</span>
-<span class="fc bfc" id="L308" title="All 2 branches covered.">            &amp;&amp; currentVariables.contains(identAST.getText())) {</span>
-<span class="fc" id="L309">            log(ast, MSG_KEY, identAST.getText());</span>
+<span class="fc bfc" id="L332" title="All 4 branches covered.">        if (identAST != null &amp;&amp; identAST.getType() == TokenTypes.IDENT</span>
+<span class="fc bfc" id="L333" title="All 2 branches covered.">            &amp;&amp; currentVariables.contains(identAST.getText())) {</span>
+<span class="fc" id="L334">            log(ast, MSG_KEY, identAST.getText());</span>
         }
-<span class="fc" id="L311">    }</span>
+<span class="fc" id="L336">    }</span>
 
     /**
      * Push current variables to the stack.
@@ -316,11 +341,11 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param ast a for definition.
      */
     private void leaveForIter(DetailAST ast) {
-<span class="fc" id="L319">        final Set&lt;String&gt; variablesToPutInScope = getVariablesManagedByForLoop(ast);</span>
-<span class="fc bfc" id="L320" title="All 2 branches covered.">        for (String variableName : variablesToPutInScope) {</span>
-<span class="fc" id="L321">            getCurrentVariables().push(variableName);</span>
-<span class="fc" id="L322">        }</span>
-<span class="fc" id="L323">    }</span>
+<span class="fc" id="L344">        final Set&lt;String&gt; variablesToPutInScope = getVariablesManagedByForLoop(ast);</span>
+<span class="fc bfc" id="L345" title="All 2 branches covered.">        for (String variableName : variablesToPutInScope) {</span>
+<span class="fc" id="L346">            getCurrentVariables().push(variableName);</span>
+<span class="fc" id="L347">        }</span>
+<span class="fc" id="L348">    }</span>
 
     /**
      * Determines which variable are specific to for loop and should not be
@@ -330,10 +355,10 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return Set of Variable Name which are managed by for
      */
     private static Set&lt;String&gt; getVariablesManagedByForLoop(DetailAST ast) {
-<span class="fc" id="L333">        final Set&lt;String&gt; initializedVariables = getForInitVariables(ast);</span>
-<span class="fc" id="L334">        final Set&lt;String&gt; iteratingVariables = getForIteratorVariables(ast);</span>
-<span class="fc" id="L335">        return initializedVariables.stream().filter(iteratingVariables::contains)</span>
-<span class="fc" id="L336">            .collect(Collectors.toSet());</span>
+<span class="fc" id="L358">        final Set&lt;String&gt; initializedVariables = getForInitVariables(ast);</span>
+<span class="fc" id="L359">        final Set&lt;String&gt; iteratingVariables = getForIteratorVariables(ast);</span>
+<span class="fc" id="L360">        return initializedVariables.stream().filter(iteratingVariables::contains)</span>
+<span class="fc" id="L361">            .collect(Collectors.toSet());</span>
     }
 
     /**
@@ -342,9 +367,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param paramDef a for-each clause variable
      */
     private void leaveForEach(DetailAST paramDef) {
-<span class="fc" id="L345">        final DetailAST paramName = paramDef.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L346">        getCurrentVariables().push(paramName.getText());</span>
-<span class="fc" id="L347">    }</span>
+<span class="fc" id="L370">        final DetailAST paramName = paramDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L371">        getCurrentVariables().push(paramName.getText());</span>
+<span class="fc" id="L372">    }</span>
 
     /**
      * Pops the variables from the stack.
@@ -352,18 +377,18 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param ast a for definition.
      */
     private void leaveForDef(DetailAST ast) {
-<span class="fc" id="L355">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
-<span class="fc bfc" id="L356" title="All 2 branches covered.">        if (forInitAST == null) {</span>
-<span class="fc bfc" id="L357" title="All 2 branches covered.">            if (!skipEnhancedForLoopVariable) {</span>
+<span class="fc" id="L380">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
+<span class="fc bfc" id="L381" title="All 2 branches covered.">        if (forInitAST == null) {</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">            if (!skipEnhancedForLoopVariable) {</span>
                 // this is for-each loop, just pop variables
-<span class="fc" id="L359">                getCurrentVariables().pop();</span>
+<span class="fc" id="L384">                getCurrentVariables().pop();</span>
             }
         }
         else {
-<span class="fc" id="L363">            final Set&lt;String&gt; variablesManagedByForLoop = getVariablesManagedByForLoop(ast);</span>
-<span class="fc" id="L364">            popCurrentVariables(variablesManagedByForLoop.size());</span>
+<span class="fc" id="L388">            final Set&lt;String&gt; variablesManagedByForLoop = getVariablesManagedByForLoop(ast);</span>
+<span class="fc" id="L389">            popCurrentVariables(variablesManagedByForLoop.size());</span>
         }
-<span class="fc" id="L366">    }</span>
+<span class="fc" id="L391">    }</span>
 
     /**
      * Pops given number of variables from currentVariables.
@@ -371,10 +396,10 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @param count Count of variables to be popped from currentVariables
      */
     private void popCurrentVariables(int count) {
-<span class="fc bfc" id="L374" title="All 2 branches covered.">        for (int i = 0; i &lt; count; i++) {</span>
-<span class="fc" id="L375">            getCurrentVariables().pop();</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">        for (int i = 0; i &lt; count; i++) {</span>
+<span class="fc" id="L400">            getCurrentVariables().pop();</span>
         }
-<span class="fc" id="L377">    }</span>
+<span class="fc" id="L402">    }</span>
 
     /**
      * Get all variables initialized In init part of for loop.
@@ -383,20 +408,20 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return set of variables initialized in for loop
      */
     private static Set&lt;String&gt; getForInitVariables(DetailAST ast) {
-<span class="fc" id="L386">        final Set&lt;String&gt; initializedVariables = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L387">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
+<span class="fc" id="L411">        final Set&lt;String&gt; initializedVariables = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L412">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
 
-<span class="fc" id="L389">        for (DetailAST parameterDefAST = forInitAST.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
-<span class="fc bfc" id="L390" title="All 2 branches covered.">             parameterDefAST != null;</span>
-<span class="fc" id="L391">             parameterDefAST = parameterDefAST.getNextSibling()) {</span>
-<span class="fc bfc" id="L392" title="All 2 branches covered.">            if (parameterDefAST.getType() == TokenTypes.VARIABLE_DEF) {</span>
-<span class="fc" id="L393">                final DetailAST param =</span>
-<span class="fc" id="L394">                        parameterDefAST.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L414">        for (DetailAST parameterDefAST = forInitAST.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
+<span class="fc bfc" id="L415" title="All 2 branches covered.">             parameterDefAST != null;</span>
+<span class="fc" id="L416">             parameterDefAST = parameterDefAST.getNextSibling()) {</span>
+<span class="fc bfc" id="L417" title="All 2 branches covered.">            if (parameterDefAST.getType() == TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L418">                final DetailAST param =</span>
+<span class="fc" id="L419">                        parameterDefAST.findFirstToken(TokenTypes.IDENT);</span>
 
-<span class="fc" id="L396">                initializedVariables.add(param.getText());</span>
+<span class="fc" id="L421">                initializedVariables.add(param.getText());</span>
             }
         }
-<span class="fc" id="L399">        return initializedVariables;</span>
+<span class="fc" id="L424">        return initializedVariables;</span>
     }
 
     /**
@@ -406,19 +431,19 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return names of variables change in iterating part of for
      */
     private static Set&lt;String&gt; getForIteratorVariables(DetailAST ast) {
-<span class="fc" id="L409">        final Set&lt;String&gt; iteratorVariables = new HashSet&lt;&gt;();</span>
-<span class="fc" id="L410">        final DetailAST forIteratorAST = ast.findFirstToken(TokenTypes.FOR_ITERATOR);</span>
-<span class="fc" id="L411">        final DetailAST forUpdateListAST = forIteratorAST.findFirstToken(TokenTypes.ELIST);</span>
+<span class="fc" id="L434">        final Set&lt;String&gt; iteratorVariables = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L435">        final DetailAST forIteratorAST = ast.findFirstToken(TokenTypes.FOR_ITERATOR);</span>
+<span class="fc" id="L436">        final DetailAST forUpdateListAST = forIteratorAST.findFirstToken(TokenTypes.ELIST);</span>
 
-<span class="fc" id="L413">        findChildrenOfExpressionType(forUpdateListAST).stream()</span>
-<span class="fc" id="L414">            .filter(iteratingExpressionAST -&gt; {</span>
-<span class="fc" id="L415">                return MUTATION_OPERATIONS.contains(iteratingExpressionAST.getType());</span>
-<span class="fc" id="L416">            }).forEach(iteratingExpressionAST -&gt; {</span>
-<span class="fc" id="L417">                final DetailAST oneVariableOperatorChild = iteratingExpressionAST.getFirstChild();</span>
-<span class="fc" id="L418">                iteratorVariables.add(oneVariableOperatorChild.getText());</span>
-<span class="fc" id="L419">            });</span>
+<span class="fc" id="L438">        findChildrenOfExpressionType(forUpdateListAST).stream()</span>
+<span class="fc" id="L439">            .filter(iteratingExpressionAST -&gt; {</span>
+<span class="fc" id="L440">                return MUTATION_OPERATIONS.contains(iteratingExpressionAST.getType());</span>
+<span class="fc" id="L441">            }).forEach(iteratingExpressionAST -&gt; {</span>
+<span class="fc" id="L442">                final DetailAST oneVariableOperatorChild = iteratingExpressionAST.getFirstChild();</span>
+<span class="fc" id="L443">                iteratorVariables.add(oneVariableOperatorChild.getText());</span>
+<span class="fc" id="L444">            });</span>
 
-<span class="fc" id="L421">        return iteratorVariables;</span>
+<span class="fc" id="L446">        return iteratorVariables;</span>
     }
 
     /**
@@ -428,17 +453,17 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
      * @return all child of given ast
      */
     private static List&lt;DetailAST&gt; findChildrenOfExpressionType(DetailAST ast) {
-<span class="fc" id="L431">        final List&lt;DetailAST&gt; foundExpressions = new LinkedList&lt;&gt;();</span>
-<span class="fc bfc" id="L432" title="All 2 branches covered.">        if (ast != null) {</span>
-<span class="fc" id="L433">            for (DetailAST iteratingExpressionAST = ast.findFirstToken(TokenTypes.EXPR);</span>
-<span class="fc bfc" id="L434" title="All 2 branches covered.">                 iteratingExpressionAST != null;</span>
-<span class="fc" id="L435">                 iteratingExpressionAST = iteratingExpressionAST.getNextSibling()) {</span>
-<span class="fc bfc" id="L436" title="All 2 branches covered.">                if (iteratingExpressionAST.getType() == TokenTypes.EXPR) {</span>
-<span class="fc" id="L437">                    foundExpressions.add(iteratingExpressionAST.getFirstChild());</span>
+<span class="fc" id="L456">        final List&lt;DetailAST&gt; foundExpressions = new LinkedList&lt;&gt;();</span>
+<span class="fc bfc" id="L457" title="All 2 branches covered.">        if (ast != null) {</span>
+<span class="fc" id="L458">            for (DetailAST iteratingExpressionAST = ast.findFirstToken(TokenTypes.EXPR);</span>
+<span class="fc bfc" id="L459" title="All 2 branches covered.">                 iteratingExpressionAST != null;</span>
+<span class="fc" id="L460">                 iteratingExpressionAST = iteratingExpressionAST.getNextSibling()) {</span>
+<span class="fc bfc" id="L461" title="All 2 branches covered.">                if (iteratingExpressionAST.getType() == TokenTypes.EXPR) {</span>
+<span class="fc" id="L462">                    foundExpressions.add(iteratingExpressionAST.getFirstChild());</span>
                 }
             }
         }
-<span class="fc" id="L441">        return foundExpressions;</span>
+<span class="fc" id="L466">        return foundExpressions;</span>
     }
 
 }
