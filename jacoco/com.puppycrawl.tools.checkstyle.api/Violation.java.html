@@ -1,0 +1,542 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Violation.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.api</a> &gt; <span class="el_source">Violation.java</span></div><h1>Violation.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2021 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.api;
+
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.Serializable;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
+import java.text.MessageFormat;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.MissingResourceException;
+import java.util.Objects;
+import java.util.PropertyResourceBundle;
+import java.util.ResourceBundle;
+import java.util.ResourceBundle.Control;
+
+/**
+ * Represents a violation that can be localised. The translations come from
+ * message.properties files. The underlying implementation uses
+ * java.text.MessageFormat.
+ *
+ * @noinspection SerializableHasSerializationMethods, ClassWithTooManyConstructors
+ */
+public final class Violation
+    implements Comparable&lt;Violation&gt;, Serializable {
+
+    private static final long serialVersionUID = 5675176836184862150L;
+
+    /**
+     * A cache that maps bundle names to ResourceBundles.
+     * Avoids repetitive calls to ResourceBundle.getBundle().
+     */
+<span class="fc" id="L57">    private static final Map&lt;String, ResourceBundle&gt; BUNDLE_CACHE =</span>
+<span class="fc" id="L58">        Collections.synchronizedMap(new HashMap&lt;&gt;());</span>
+
+    /** The default severity level if one is not specified. */
+<span class="fc" id="L61">    private static final SeverityLevel DEFAULT_SEVERITY = SeverityLevel.ERROR;</span>
+
+    /** The locale to localise violations to. **/
+<span class="fc" id="L64">    private static Locale sLocale = Locale.getDefault();</span>
+
+    /** The line number. **/
+    private final int lineNo;
+    /** The column number. **/
+    private final int columnNo;
+    /** The column char index. **/
+    private final int columnCharIndex;
+    /** The token type constant. See {@link TokenTypes}. **/
+    private final int tokenType;
+
+    /** The severity level. **/
+    private final SeverityLevel severityLevel;
+
+    /** The id of the module generating the violation. */
+    private final String moduleId;
+
+    /** Key for the violation format. **/
+    private final String key;
+
+    /**
+     * Arguments for MessageFormat.
+     *
+     * @noinspection NonSerializableFieldInSerializableClass
+     */
+    private final Object[] args;
+
+    /** Name of the resource bundle to get violations from. **/
+    private final String bundle;
+
+    /** Class of the source for this Violation. */
+    private final Class&lt;?&gt; sourceClass;
+
+    /** A custom violation overriding the default violation from the bundle. */
+    private final String customMessage;
+
+    /**
+     * Creates a new {@code Violation} instance.
+     *
+     * @param lineNo line number associated with the violation
+     * @param columnNo column number associated with the violation
+     * @param columnCharIndex column char index associated with the violation
+     * @param tokenType token type of the event associated with violation. See {@link TokenTypes}
+     * @param bundle resource bundle name
+     * @param key the key to locate the translation
+     * @param args arguments for the translation
+     * @param severityLevel severity level for the violation
+     * @param moduleId the id of the module the violation is associated with
+     * @param sourceClass the Class that is the source of the violation
+     * @param customMessage optional custom violation overriding the default
+     * @noinspection ConstructorWithTooManyParameters
+     */
+    // -@cs[ParameterNumber] Class is immutable, we need that amount of arguments.
+    public Violation(int lineNo,
+                            int columnNo,
+                            int columnCharIndex,
+                            int tokenType,
+                            String bundle,
+                            String key,
+                            Object[] args,
+                            SeverityLevel severityLevel,
+                            String moduleId,
+                            Class&lt;?&gt; sourceClass,
+<span class="fc" id="L127">                            String customMessage) {</span>
+<span class="fc" id="L128">        this.lineNo = lineNo;</span>
+<span class="fc" id="L129">        this.columnNo = columnNo;</span>
+<span class="fc" id="L130">        this.columnCharIndex = columnCharIndex;</span>
+<span class="fc" id="L131">        this.tokenType = tokenType;</span>
+<span class="fc" id="L132">        this.key = key;</span>
+
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        if (args == null) {</span>
+<span class="fc" id="L135">            this.args = null;</span>
+        }
+        else {
+<span class="fc" id="L138">            this.args = Arrays.copyOf(args, args.length);</span>
+        }
+<span class="fc" id="L140">        this.bundle = bundle;</span>
+<span class="fc" id="L141">        this.severityLevel = severityLevel;</span>
+<span class="fc" id="L142">        this.moduleId = moduleId;</span>
+<span class="fc" id="L143">        this.sourceClass = sourceClass;</span>
+<span class="fc" id="L144">        this.customMessage = customMessage;</span>
+<span class="fc" id="L145">    }</span>
+
+    /**
+     * Creates a new {@code Violation} instance.
+     *
+     * @param lineNo line number associated with the violation
+     * @param columnNo column number associated with the violation
+     * @param tokenType token type of the event associated with violation. See {@link TokenTypes}
+     * @param bundle resource bundle name
+     * @param key the key to locate the translation
+     * @param args arguments for the translation
+     * @param severityLevel severity level for the violation
+     * @param moduleId the id of the module the violation is associated with
+     * @param sourceClass the Class that is the source of the violation
+     * @param customMessage optional custom violation overriding the default
+     * @noinspection ConstructorWithTooManyParameters
+     */
+    // -@cs[ParameterNumber] Class is immutable, we need that amount of arguments.
+    public Violation(int lineNo,
+                            int columnNo,
+                            int tokenType,
+                            String bundle,
+                            String key,
+                            Object[] args,
+                            SeverityLevel severityLevel,
+                            String moduleId,
+                            Class&lt;?&gt; sourceClass,
+                            String customMessage) {
+<span class="fc" id="L173">        this(lineNo, columnNo, columnNo, tokenType, bundle, key, args, severityLevel, moduleId,</span>
+                sourceClass, customMessage);
+<span class="fc" id="L175">    }</span>
+
+    /**
+     * Creates a new {@code Violation} instance.
+     *
+     * @param lineNo line number associated with the violation
+     * @param columnNo column number associated with the violation
+     * @param bundle resource bundle name
+     * @param key the key to locate the translation
+     * @param args arguments for the translation
+     * @param severityLevel severity level for the violation
+     * @param moduleId the id of the module the violation is associated with
+     * @param sourceClass the Class that is the source of the violation
+     * @param customMessage optional custom violation overriding the default
+     * @noinspection ConstructorWithTooManyParameters
+     */
+    // -@cs[ParameterNumber] Class is immutable, we need that amount of arguments.
+    public Violation(int lineNo,
+                            int columnNo,
+                            String bundle,
+                            String key,
+                            Object[] args,
+                            SeverityLevel severityLevel,
+                            String moduleId,
+                            Class&lt;?&gt; sourceClass,
+                            String customMessage) {
+<span class="fc" id="L201">        this(lineNo, columnNo, 0, bundle, key, args, severityLevel, moduleId, sourceClass,</span>
+                customMessage);
+<span class="fc" id="L203">    }</span>
+
+    /**
+     * Creates a new {@code Violation} instance.
+     *
+     * @param lineNo line number associated with the violation
+     * @param columnNo column number associated with the violation
+     * @param bundle resource bundle name
+     * @param key the key to locate the translation
+     * @param args arguments for the translation
+     * @param moduleId the id of the module the violation is associated with
+     * @param sourceClass the Class that is the source of the violation
+     * @param customMessage optional custom violation overriding the default
+     * @noinspection ConstructorWithTooManyParameters
+     */
+    // -@cs[ParameterNumber] Class is immutable, we need that amount of arguments.
+    public Violation(int lineNo,
+                            int columnNo,
+                            String bundle,
+                            String key,
+                            Object[] args,
+                            String moduleId,
+                            Class&lt;?&gt; sourceClass,
+                            String customMessage) {
+<span class="fc" id="L227">        this(lineNo,</span>
+                columnNo,
+             bundle,
+             key,
+             args,
+             DEFAULT_SEVERITY,
+             moduleId,
+             sourceClass,
+             customMessage);
+<span class="fc" id="L236">    }</span>
+
+    /**
+     * Creates a new {@code Violation} instance.
+     *
+     * @param lineNo line number associated with the violation
+     * @param bundle resource bundle name
+     * @param key the key to locate the translation
+     * @param args arguments for the translation
+     * @param severityLevel severity level for the violation
+     * @param moduleId the id of the module the violation is associated with
+     * @param sourceClass the source class for the violation
+     * @param customMessage optional custom violation overriding the default
+     * @noinspection ConstructorWithTooManyParameters
+     */
+    // -@cs[ParameterNumber] Class is immutable, we need that amount of arguments.
+    public Violation(int lineNo,
+                            String bundle,
+                            String key,
+                            Object[] args,
+                            SeverityLevel severityLevel,
+                            String moduleId,
+                            Class&lt;?&gt; sourceClass,
+                            String customMessage) {
+<span class="fc" id="L260">        this(lineNo, 0, bundle, key, args, severityLevel, moduleId,</span>
+                sourceClass, customMessage);
+<span class="fc" id="L262">    }</span>
+
+    /**
+     * Creates a new {@code Violation} instance. The column number
+     * defaults to 0.
+     *
+     * @param lineNo line number associated with the violation
+     * @param bundle name of a resource bundle that contains audit event violations
+     * @param key the key to locate the translation
+     * @param args arguments for the translation
+     * @param moduleId the id of the module the violation is associated with
+     * @param sourceClass the name of the source for the violation
+     * @param customMessage optional custom violation overriding the default
+     */
+    public Violation(
+        int lineNo,
+        String bundle,
+        String key,
+        Object[] args,
+        String moduleId,
+        Class&lt;?&gt; sourceClass,
+        String customMessage) {
+<span class="fc" id="L284">        this(lineNo, 0, bundle, key, args, DEFAULT_SEVERITY, moduleId,</span>
+                sourceClass, customMessage);
+<span class="fc" id="L286">    }</span>
+
+    /**
+     * Gets the line number.
+     *
+     * @return the line number
+     */
+    public int getLineNo() {
+<span class="fc" id="L294">        return lineNo;</span>
+    }
+
+    /**
+     * Gets the column number.
+     *
+     * @return the column number
+     */
+    public int getColumnNo() {
+<span class="fc" id="L303">        return columnNo;</span>
+    }
+
+    /**
+     * Gets the column char index.
+     *
+     * @return the column char index
+     */
+    public int getColumnCharIndex() {
+<span class="fc" id="L312">        return columnCharIndex;</span>
+    }
+
+    /**
+     * Gets the token type.
+     *
+     * @return the token type
+     */
+    public int getTokenType() {
+<span class="fc" id="L321">        return tokenType;</span>
+    }
+
+    /**
+     * Gets the severity level.
+     *
+     * @return the severity level
+     */
+    public SeverityLevel getSeverityLevel() {
+<span class="fc" id="L330">        return severityLevel;</span>
+    }
+
+    /**
+     * Returns id of module.
+     *
+     * @return the module identifier.
+     */
+    public String getModuleId() {
+<span class="fc" id="L339">        return moduleId;</span>
+    }
+
+    /**
+     * Returns the violation key to locate the translation, can also be used
+     * in IDE plugins to map audit event violations to corrective actions.
+     *
+     * @return the violation key
+     */
+    public String getKey() {
+<span class="fc" id="L349">        return key;</span>
+    }
+
+    /**
+     * Gets the name of the source for this Violation.
+     *
+     * @return the name of the source for this Violation
+     */
+    public String getSourceName() {
+<span class="fc" id="L358">        return sourceClass.getName();</span>
+    }
+
+    /**
+     * Sets a locale to use for localization.
+     *
+     * @param locale the locale to use for localization
+     */
+    public static void setLocale(Locale locale) {
+<span class="fc" id="L367">        clearCache();</span>
+<span class="fc bfc" id="L368" title="All 2 branches covered.">        if (Locale.ENGLISH.getLanguage().equals(locale.getLanguage())) {</span>
+<span class="fc" id="L369">            sLocale = Locale.ROOT;</span>
+        }
+        else {
+<span class="fc" id="L372">            sLocale = locale;</span>
+        }
+<span class="fc" id="L374">    }</span>
+
+    /** Clears the cache. */
+    public static void clearCache() {
+<span class="fc" id="L378">        BUNDLE_CACHE.clear();</span>
+<span class="fc" id="L379">    }</span>
+
+    /**
+     * Indicates whether some other object is &quot;equal to&quot; this one.
+     * Suppression on enumeration is needed so code stays consistent.
+     *
+     * @noinspection EqualsCalledOnEnumConstant
+     */
+    // -@cs[CyclomaticComplexity] equals - a lot of fields to check.
+    @Override
+    public boolean equals(Object object) {
+<span class="fc bfc" id="L390" title="All 2 branches covered.">        if (this == object) {</span>
+<span class="fc" id="L391">            return true;</span>
+        }
+<span class="fc bfc" id="L393" title="All 4 branches covered.">        if (object == null || getClass() != object.getClass()) {</span>
+<span class="fc" id="L394">            return false;</span>
+        }
+<span class="fc" id="L396">        final Violation violation = (Violation) object;</span>
+<span class="fc bfc" id="L397" title="All 2 branches covered.">        return Objects.equals(lineNo, violation.lineNo)</span>
+<span class="fc bfc" id="L398" title="All 2 branches covered.">                &amp;&amp; Objects.equals(columnNo, violation.columnNo)</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">                &amp;&amp; Objects.equals(columnCharIndex, violation.columnCharIndex)</span>
+<span class="fc bfc" id="L400" title="All 2 branches covered.">                &amp;&amp; Objects.equals(tokenType, violation.tokenType)</span>
+<span class="fc bfc" id="L401" title="All 2 branches covered.">                &amp;&amp; Objects.equals(severityLevel, violation.severityLevel)</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">                &amp;&amp; Objects.equals(moduleId, violation.moduleId)</span>
+<span class="fc bfc" id="L403" title="All 2 branches covered.">                &amp;&amp; Objects.equals(key, violation.key)</span>
+<span class="fc bfc" id="L404" title="All 2 branches covered.">                &amp;&amp; Objects.equals(bundle, violation.bundle)</span>
+<span class="fc bfc" id="L405" title="All 2 branches covered.">                &amp;&amp; Objects.equals(sourceClass, violation.sourceClass)</span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">                &amp;&amp; Objects.equals(customMessage, violation.customMessage)</span>
+<span class="fc bfc" id="L407" title="All 2 branches covered.">                &amp;&amp; Arrays.equals(args, violation.args);</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="fc" id="L412">        return Objects.hash(lineNo, columnNo, columnCharIndex, tokenType, severityLevel, moduleId,</span>
+<span class="fc" id="L413">                key, bundle, sourceClass, customMessage, Arrays.hashCode(args));</span>
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Interface Comparable methods
+    ////////////////////////////////////////////////////////////////////////////
+
+    @Override
+    public int compareTo(Violation other) {
+        final int result;
+
+<span class="fc bfc" id="L424" title="All 2 branches covered.">        if (lineNo == other.lineNo) {</span>
+<span class="fc bfc" id="L425" title="All 2 branches covered.">            if (columnNo == other.columnNo) {</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">                if (Objects.equals(moduleId, other.moduleId)) {</span>
+<span class="fc" id="L427">                    result = getViolation().compareTo(other.getViolation());</span>
+                }
+<span class="fc bfc" id="L429" title="All 2 branches covered.">                else if (moduleId == null) {</span>
+<span class="fc" id="L430">                    result = -1;</span>
+                }
+<span class="fc bfc" id="L432" title="All 2 branches covered.">                else if (other.moduleId == null) {</span>
+<span class="fc" id="L433">                    result = 1;</span>
+                }
+                else {
+<span class="fc" id="L436">                    result = moduleId.compareTo(other.moduleId);</span>
+                }
+            }
+            else {
+<span class="fc" id="L440">                result = Integer.compare(columnNo, other.columnNo);</span>
+            }
+        }
+        else {
+<span class="fc" id="L444">            result = Integer.compare(lineNo, other.lineNo);</span>
+        }
+<span class="fc" id="L446">        return result;</span>
+    }
+
+    /**
+     * Gets the translated violation.
+     *
+     * @return the translated violation
+     */
+    public String getViolation() {
+<span class="fc" id="L455">        String violation = getCustomViolation();</span>
+
+<span class="fc bfc" id="L457" title="All 2 branches covered.">        if (violation == null) {</span>
+            try {
+                // Important to use the default class loader, and not the one in
+                // the GlobalProperties object. This is because the class loader in
+                // the GlobalProperties is specified by the user for resolving
+                // custom classes.
+<span class="fc" id="L463">                final ResourceBundle resourceBundle = getBundle(bundle);</span>
+<span class="fc" id="L464">                final String pattern = resourceBundle.getString(key);</span>
+<span class="fc" id="L465">                final MessageFormat formatter = new MessageFormat(pattern, Locale.ROOT);</span>
+<span class="fc" id="L466">                violation = formatter.format(args);</span>
+            }
+<span class="fc" id="L468">            catch (final MissingResourceException ignored) {</span>
+                // If the Check author didn't provide i18n resource bundles
+                // and logs audit event violations directly, this will return
+                // the author's original violation
+<span class="fc" id="L472">                final MessageFormat formatter = new MessageFormat(key, Locale.ROOT);</span>
+<span class="fc" id="L473">                violation = formatter.format(args);</span>
+<span class="fc" id="L474">            }</span>
+        }
+<span class="fc" id="L476">        return violation;</span>
+    }
+
+    /**
+     * Returns the formatted custom violation if one is configured.
+     *
+     * @return the formatted custom violation or {@code null}
+     *          if there is no custom violation
+     */
+    private String getCustomViolation() {
+<span class="fc" id="L486">        String violation = null;</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">        if (customMessage != null) {</span>
+<span class="fc" id="L488">            final MessageFormat formatter = new MessageFormat(customMessage, Locale.ROOT);</span>
+<span class="fc" id="L489">            violation = formatter.format(args);</span>
+        }
+<span class="fc" id="L491">        return violation;</span>
+    }
+
+    /**
+     * Find a ResourceBundle for a given bundle name. Uses the classloader
+     * of the class emitting this violation, to be sure to get the correct
+     * bundle.
+     *
+     * @param bundleName the bundle name
+     * @return a ResourceBundle
+     */
+    private ResourceBundle getBundle(String bundleName) {
+<span class="fc" id="L503">        return BUNDLE_CACHE.computeIfAbsent(bundleName, name -&gt; {</span>
+<span class="fc" id="L504">            return ResourceBundle.getBundle(</span>
+<span class="fc" id="L505">                name, sLocale, sourceClass.getClassLoader(), new Utf8Control());</span>
+        });
+    }
+
+    /**
+     * &lt;p&gt;
+     * Custom ResourceBundle.Control implementation which allows explicitly read
+     * the properties files as UTF-8.
+     * &lt;/p&gt;
+     */
+<span class="fc" id="L515">    public static class Utf8Control extends Control {</span>
+
+        @Override
+        public ResourceBundle newBundle(String baseName, Locale locale, String format,
+                 ClassLoader loader, boolean reload) throws IOException {
+            // The below is a copy of the default implementation.
+<span class="fc" id="L521">            final String bundleName = toBundleName(baseName, locale);</span>
+<span class="fc" id="L522">            final String resourceName = toResourceName(bundleName, &quot;properties&quot;);</span>
+<span class="fc" id="L523">            final URL url = loader.getResource(resourceName);</span>
+<span class="fc" id="L524">            ResourceBundle resourceBundle = null;</span>
+<span class="fc bfc" id="L525" title="All 2 branches covered.">            if (url != null) {</span>
+<span class="fc" id="L526">                final URLConnection connection = url.openConnection();</span>
+<span class="fc bfc" id="L527" title="All 2 branches covered.">                if (connection != null) {</span>
+<span class="fc bfc" id="L528" title="All 2 branches covered.">                    connection.setUseCaches(!reload);</span>
+<span class="fc" id="L529">                    try (Reader streamReader = new InputStreamReader(connection.getInputStream(),</span>
+<span class="fc" id="L530">                            StandardCharsets.UTF_8.name())) {</span>
+                        // Only this line is changed to make it read property files as UTF-8.
+<span class="fc" id="L532">                        resourceBundle = new PropertyResourceBundle(streamReader);</span>
+                    }
+                }
+            }
+<span class="fc" id="L536">            return resourceBundle;</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>

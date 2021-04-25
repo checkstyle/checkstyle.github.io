@@ -438,6 +438,28 @@ public final class CheckUtil {
     }
 
     /**
+     * Returns the access modifier of the method/constructor at the specified AST. If
+     * the method is in an interface or annotation block, the access modifier is assumed
+     * to be public.
+     *
+     * @param ast the token of the method/constructor.
+     * @return the access modifier of the method/constructor.
+     */
+    public static AccessModifierOption getAccessModifierFromModifiersToken(DetailAST ast) {
+        final AccessModifierOption accessModifier;
+
+<span class="fc bfc" id="L451" title="All 2 branches covered.">        if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
+<span class="fc" id="L452">            accessModifier = AccessModifierOption.PUBLIC;</span>
+        }
+        else {
+<span class="fc" id="L455">            final DetailAST modsToken = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L456">            accessModifier = getAccessModifierFromModifiersTokenDirectly(modsToken);</span>
+        }
+
+<span class="fc" id="L459">        return accessModifier;</span>
+    }
+
+    /**
      * Returns {@link AccessModifierOption} based on the information about access modifier
      * taken from the given token of type {@link TokenTypes#MODIFIERS}.
      *
@@ -445,28 +467,56 @@ public final class CheckUtil {
      * @return {@link AccessModifierOption}.
      * @throws IllegalArgumentException when expected non-null modifiersToken with type 'MODIFIERS'
      */
-    public static AccessModifierOption
-        getAccessModifierFromModifiersToken(DetailAST modifiersToken) {
-<span class="fc bfc" id="L450" title="All 4 branches covered.">        if (modifiersToken == null || modifiersToken.getType() != TokenTypes.MODIFIERS) {</span>
-<span class="fc" id="L451">            throw new IllegalArgumentException(&quot;expected non-null AST-token with type 'MODIFIERS'&quot;);</span>
+    private static AccessModifierOption getAccessModifierFromModifiersTokenDirectly(
+            DetailAST modifiersToken) {
+<span class="fc bfc" id="L472" title="All 2 branches covered.">        if (modifiersToken == null) {</span>
+<span class="fc" id="L473">            throw new IllegalArgumentException(&quot;expected non-null AST-token with type 'MODIFIERS'&quot;);</span>
         }
 
         // default access modifier
-<span class="fc" id="L455">        AccessModifierOption accessModifier = AccessModifierOption.PACKAGE;</span>
-<span class="fc bfc" id="L456" title="All 2 branches covered.">        for (DetailAST token = modifiersToken.getFirstChild(); token != null;</span>
-<span class="fc" id="L457">             token = token.getNextSibling()) {</span>
-<span class="fc" id="L458">            final int tokenType = token.getType();</span>
-<span class="fc bfc" id="L459" title="All 2 branches covered.">            if (tokenType == TokenTypes.LITERAL_PUBLIC) {</span>
-<span class="fc" id="L460">                accessModifier = AccessModifierOption.PUBLIC;</span>
+<span class="fc" id="L477">        AccessModifierOption accessModifier = AccessModifierOption.PACKAGE;</span>
+<span class="fc bfc" id="L478" title="All 2 branches covered.">        for (DetailAST token = modifiersToken.getFirstChild(); token != null;</span>
+<span class="fc" id="L479">             token = token.getNextSibling()) {</span>
+<span class="fc" id="L480">            final int tokenType = token.getType();</span>
+<span class="fc bfc" id="L481" title="All 2 branches covered.">            if (tokenType == TokenTypes.LITERAL_PUBLIC) {</span>
+<span class="fc" id="L482">                accessModifier = AccessModifierOption.PUBLIC;</span>
             }
-<span class="fc bfc" id="L462" title="All 2 branches covered.">            else if (tokenType == TokenTypes.LITERAL_PROTECTED) {</span>
-<span class="fc" id="L463">                accessModifier = AccessModifierOption.PROTECTED;</span>
+<span class="fc bfc" id="L484" title="All 2 branches covered.">            else if (tokenType == TokenTypes.LITERAL_PROTECTED) {</span>
+<span class="fc" id="L485">                accessModifier = AccessModifierOption.PROTECTED;</span>
             }
-<span class="fc bfc" id="L465" title="All 2 branches covered.">            else if (tokenType == TokenTypes.LITERAL_PRIVATE) {</span>
-<span class="fc" id="L466">                accessModifier = AccessModifierOption.PRIVATE;</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">            else if (tokenType == TokenTypes.LITERAL_PRIVATE) {</span>
+<span class="fc" id="L488">                accessModifier = AccessModifierOption.PRIVATE;</span>
             }
         }
-<span class="fc" id="L469">        return accessModifier;</span>
+<span class="fc" id="L491">        return accessModifier;</span>
+    }
+
+    /**
+     * Returns the access modifier of the surrounding &quot;block&quot;.
+     *
+     * @param node the node to return the access modifier for
+     * @return the access modifier of the surrounding block
+     */
+    public static AccessModifierOption getSurroundingAccessModifier(DetailAST node) {
+<span class="fc" id="L501">        AccessModifierOption returnValue = null;</span>
+<span class="fc" id="L502">        for (DetailAST token = node.getParent();</span>
+<span class="fc bfc" id="L503" title="All 4 branches covered.">             token != null &amp;&amp; returnValue == null;</span>
+<span class="fc" id="L504">             token = token.getParent()) {</span>
+<span class="fc" id="L505">            final int type = token.getType();</span>
+<span class="fc bfc" id="L506" title="All 8 branches covered.">            if (type == TokenTypes.CLASS_DEF</span>
+                || type == TokenTypes.INTERFACE_DEF
+                || type == TokenTypes.ANNOTATION_DEF
+                || type == TokenTypes.ENUM_DEF) {
+<span class="fc" id="L510">                final DetailAST mods =</span>
+<span class="fc" id="L511">                    token.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L512">                returnValue = getAccessModifierFromModifiersTokenDirectly(mods);</span>
+<span class="fc" id="L513">            }</span>
+<span class="fc bfc" id="L514" title="All 2 branches covered.">            else if (type == TokenTypes.LITERAL_NEW) {</span>
+<span class="fc" id="L515">                break;</span>
+            }
+        }
+
+<span class="fc" id="L519">        return returnValue;</span>
     }
 
     /**
@@ -476,17 +526,17 @@ public final class CheckUtil {
      * @return set of class names and short class names.
      */
     public static Set&lt;String&gt; parseClassNames(String... classNames) {
-<span class="fc" id="L479">        final Set&lt;String&gt; illegalClassNames = new HashSet&lt;&gt;();</span>
-<span class="fc bfc" id="L480" title="All 2 branches covered.">        for (final String name : classNames) {</span>
-<span class="fc" id="L481">            illegalClassNames.add(name);</span>
-<span class="fc" id="L482">            final int lastDot = name.lastIndexOf('.');</span>
-<span class="fc bfc" id="L483" title="All 4 branches covered.">            if (lastDot != -1 &amp;&amp; lastDot &lt; name.length() - 1) {</span>
-<span class="fc" id="L484">                final String shortName = name</span>
-<span class="fc" id="L485">                        .substring(name.lastIndexOf('.') + 1);</span>
-<span class="fc" id="L486">                illegalClassNames.add(shortName);</span>
+<span class="fc" id="L529">        final Set&lt;String&gt; illegalClassNames = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L530" title="All 2 branches covered.">        for (final String name : classNames) {</span>
+<span class="fc" id="L531">            illegalClassNames.add(name);</span>
+<span class="fc" id="L532">            final int lastDot = name.lastIndexOf('.');</span>
+<span class="fc bfc" id="L533" title="All 4 branches covered.">            if (lastDot != -1 &amp;&amp; lastDot &lt; name.length() - 1) {</span>
+<span class="fc" id="L534">                final String shortName = name</span>
+<span class="fc" id="L535">                        .substring(name.lastIndexOf('.') + 1);</span>
+<span class="fc" id="L536">                illegalClassNames.add(shortName);</span>
             }
         }
-<span class="fc" id="L489">        return illegalClassNames;</span>
+<span class="fc" id="L539">        return illegalClassNames;</span>
     }
 
     /**
@@ -499,16 +549,16 @@ public final class CheckUtil {
      * @return string consistent with javac representation.
      */
     public static String stripIndentAndInitialNewLineFromTextBlock(String textBlockContent) {
-<span class="fc" id="L502">        final String contentWithInitialNewLineRemoved =</span>
-<span class="fc" id="L503">            ALL_NEW_LINES.matcher(textBlockContent).replaceFirst(&quot;&quot;);</span>
-<span class="fc" id="L504">        final List&lt;String&gt; lines =</span>
-<span class="fc" id="L505">            Arrays.asList(ALL_NEW_LINES.split(contentWithInitialNewLineRemoved));</span>
-<span class="fc" id="L506">        final int indent = getSmallestIndent(lines);</span>
-<span class="fc" id="L507">        final String suffix = &quot;&quot;;</span>
+<span class="fc" id="L552">        final String contentWithInitialNewLineRemoved =</span>
+<span class="fc" id="L553">            ALL_NEW_LINES.matcher(textBlockContent).replaceFirst(&quot;&quot;);</span>
+<span class="fc" id="L554">        final List&lt;String&gt; lines =</span>
+<span class="fc" id="L555">            Arrays.asList(ALL_NEW_LINES.split(contentWithInitialNewLineRemoved));</span>
+<span class="fc" id="L556">        final int indent = getSmallestIndent(lines);</span>
+<span class="fc" id="L557">        final String suffix = &quot;&quot;;</span>
 
-<span class="fc" id="L509">        return lines.stream()</span>
-<span class="fc" id="L510">                .map(line -&gt; stripIndentAndTrailingWhitespaceFromLine(line, indent))</span>
-<span class="fc" id="L511">                .collect(Collectors.joining(System.lineSeparator(), suffix, suffix));</span>
+<span class="fc" id="L559">        return lines.stream()</span>
+<span class="fc" id="L560">                .map(line -&gt; stripIndentAndTrailingWhitespaceFromLine(line, indent))</span>
+<span class="fc" id="L561">                .collect(Collectors.joining(System.lineSeparator(), suffix, suffix));</span>
     }
 
     /**
@@ -520,12 +570,12 @@ public final class CheckUtil {
      * @return modified string with removed indent and trailing whitespace, or empty string.
      */
     private static String stripIndentAndTrailingWhitespaceFromLine(String line, int indent) {
-<span class="fc" id="L523">        final int lastNonWhitespace = lastIndexOfNonWhitespace(line);</span>
-<span class="fc" id="L524">        String returnString = &quot;&quot;;</span>
-<span class="fc bfc" id="L525" title="All 2 branches covered.">        if (lastNonWhitespace &gt; 0) {</span>
-<span class="fc" id="L526">            returnString = line.substring(indent, lastNonWhitespace);</span>
+<span class="fc" id="L573">        final int lastNonWhitespace = lastIndexOfNonWhitespace(line);</span>
+<span class="fc" id="L574">        String returnString = &quot;&quot;;</span>
+<span class="fc bfc" id="L575" title="All 2 branches covered.">        if (lastNonWhitespace &gt; 0) {</span>
+<span class="fc" id="L576">            returnString = line.substring(indent, lastNonWhitespace);</span>
         }
-<span class="fc" id="L528">        return returnString;</span>
+<span class="fc" id="L578">        return returnString;</span>
     }
 
     /**
@@ -536,10 +586,10 @@ public final class CheckUtil {
      * @return number of spaces representing the smallest indent in this text block.
      */
     private static int getSmallestIndent(List&lt;String&gt; lines) {
-<span class="fc" id="L539">        return lines.stream()</span>
-<span class="fc" id="L540">            .mapToInt(CommonUtil::indexOfNonWhitespace)</span>
-<span class="fc" id="L541">            .min()</span>
-<span class="fc" id="L542">            .orElse(0);</span>
+<span class="fc" id="L589">        return lines.stream()</span>
+<span class="fc" id="L590">            .mapToInt(CommonUtil::indexOfNonWhitespace)</span>
+<span class="fc" id="L591">            .min()</span>
+<span class="fc" id="L592">            .orElse(0);</span>
     }
 
     /**
@@ -550,12 +600,12 @@ public final class CheckUtil {
      */
     private static int lastIndexOfNonWhitespace(String line) {
         int length;
-<span class="fc bfc" id="L553" title="All 2 branches covered.">        for (length = line.length(); length &gt; 0; length--) {</span>
-<span class="fc bfc" id="L554" title="All 2 branches covered.">            if (!Character.isWhitespace(line.charAt(length - 1))) {</span>
-<span class="fc" id="L555">                break;</span>
+<span class="fc bfc" id="L603" title="All 2 branches covered.">        for (length = line.length(); length &gt; 0; length--) {</span>
+<span class="fc bfc" id="L604" title="All 2 branches covered.">            if (!Character.isWhitespace(line.charAt(length - 1))) {</span>
+<span class="fc" id="L605">                break;</span>
             }
         }
-<span class="fc" id="L558">        return length;</span>
+<span class="fc" id="L608">        return length;</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
