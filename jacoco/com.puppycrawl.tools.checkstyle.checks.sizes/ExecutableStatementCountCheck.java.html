@@ -26,6 +26,7 @@ import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
  * &lt;p&gt;
@@ -51,7 +52,9 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#STATIC_INIT&quot;&gt;
  * STATIC_INIT&lt;/a&gt;,
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#COMPACT_CTOR_DEF&quot;&gt;
- * COMPACT_CTOR_DEF&lt;/a&gt;.
+ * COMPACT_CTOR_DEF&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAMBDA&quot;&gt;
+ * LAMBDA&lt;/a&gt;.
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
@@ -97,7 +100,7 @@ public final class ExecutableStatementCountCheck
     private static final int DEFAULT_MAX = 30;
 
     /** Stack of method contexts. */
-<span class="fc" id="L100">    private final Deque&lt;Context&gt; contextStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L103">    private final Deque&lt;Context&gt; contextStack = new ArrayDeque&lt;&gt;();</span>
 
     /** Specify the maximum threshold allowed. */
     private int max;
@@ -106,36 +109,38 @@ public final class ExecutableStatementCountCheck
     private Context context;
 
     /** Constructs a {@code ExecutableStatementCountCheck}. */
-<span class="fc" id="L109">    public ExecutableStatementCountCheck() {</span>
-<span class="fc" id="L110">        max = DEFAULT_MAX;</span>
-<span class="fc" id="L111">    }</span>
+<span class="fc" id="L112">    public ExecutableStatementCountCheck() {</span>
+<span class="fc" id="L113">        max = DEFAULT_MAX;</span>
+<span class="fc" id="L114">    }</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L115">        return new int[] {</span>
+<span class="fc" id="L118">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.INSTANCE_INIT,
             TokenTypes.STATIC_INIT,
             TokenTypes.SLIST,
             TokenTypes.COMPACT_CTOR_DEF,
+            TokenTypes.LAMBDA,
         };
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L127">        return new int[] {TokenTypes.SLIST};</span>
+<span class="fc" id="L131">        return new int[] {TokenTypes.SLIST};</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L132">        return new int[] {</span>
+<span class="fc" id="L136">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.INSTANCE_INIT,
             TokenTypes.STATIC_INIT,
             TokenTypes.SLIST,
             TokenTypes.COMPACT_CTOR_DEF,
+            TokenTypes.LAMBDA,
         };
     }
 
@@ -145,73 +150,60 @@ public final class ExecutableStatementCountCheck
      * @param max the maximum threshold.
      */
     public void setMax(int max) {
-<span class="fc" id="L148">        this.max = max;</span>
-<span class="fc" id="L149">    }</span>
+<span class="fc" id="L153">        this.max = max;</span>
+<span class="fc" id="L154">    }</span>
 
     @Override
     public void beginTree(DetailAST rootAST) {
-<span class="fc" id="L153">        context = new Context(null);</span>
-<span class="fc" id="L154">        contextStack.clear();</span>
-<span class="fc" id="L155">    }</span>
+<span class="fc" id="L158">        context = new Context(null);</span>
+<span class="fc" id="L159">        contextStack.clear();</span>
+<span class="fc" id="L160">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L159" title="All 3 branches covered.">        switch (ast.getType()) {</span>
-            case TokenTypes.CTOR_DEF:
-            case TokenTypes.METHOD_DEF:
-            case TokenTypes.INSTANCE_INIT:
-            case TokenTypes.STATIC_INIT:
-            case TokenTypes.COMPACT_CTOR_DEF:
-<span class="fc" id="L165">                visitMemberDef(ast);</span>
-<span class="fc" id="L166">                break;</span>
-            case TokenTypes.SLIST:
-<span class="fc" id="L168">                visitSlist(ast);</span>
-<span class="fc" id="L169">                break;</span>
-            default:
-<span class="fc" id="L171">                throw new IllegalStateException(ast.toString());</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (isContainerNode(ast)) {</span>
+<span class="fc" id="L165">            visitContainerNode(ast);</span>
+        }
+<span class="fc bfc" id="L167" title="All 2 branches covered.">        else if (TokenUtil.isOfType(ast, TokenTypes.SLIST)) {</span>
+<span class="fc" id="L168">            visitSlist(ast);</span>
+        }
+        else {
+<span class="fc" id="L171">            throw new IllegalStateException(ast.toString());</span>
         }
 <span class="fc" id="L173">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L177" title="All 3 branches covered.">        switch (ast.getType()) {</span>
-            case TokenTypes.CTOR_DEF:
-            case TokenTypes.METHOD_DEF:
-            case TokenTypes.INSTANCE_INIT:
-            case TokenTypes.STATIC_INIT:
-            case TokenTypes.COMPACT_CTOR_DEF:
-<span class="fc" id="L183">                leaveMemberDef(ast);</span>
-<span class="fc" id="L184">                break;</span>
-            case TokenTypes.SLIST:
-                // Do nothing
-<span class="fc" id="L187">                break;</span>
-            default:
-<span class="fc" id="L189">                throw new IllegalStateException(ast.toString());</span>
+<span class="fc bfc" id="L177" title="All 2 branches covered.">        if (isContainerNode(ast)) {</span>
+<span class="fc" id="L178">            leaveContainerNode(ast);</span>
         }
-<span class="fc" id="L191">    }</span>
+<span class="fc bfc" id="L180" title="All 2 branches covered.">        else if (!TokenUtil.isOfType(ast, TokenTypes.SLIST)) {</span>
+<span class="fc" id="L181">            throw new IllegalStateException(ast.toString());</span>
+        }
+<span class="fc" id="L183">    }</span>
 
     /**
-     * Process the start of the member definition.
+     * Process the start of the container node.
      *
-     * @param ast the token representing the member definition.
+     * @param ast the token representing the container node.
      */
-    private void visitMemberDef(DetailAST ast) {
-<span class="fc" id="L199">        contextStack.push(context);</span>
-<span class="fc" id="L200">        context = new Context(ast);</span>
-<span class="fc" id="L201">    }</span>
+    private void visitContainerNode(DetailAST ast) {
+<span class="fc" id="L191">        contextStack.push(context);</span>
+<span class="fc" id="L192">        context = new Context(ast);</span>
+<span class="fc" id="L193">    }</span>
 
     /**
-     * Process the end of a member definition.
+     * Process the end of a container node.
      *
-     * @param ast the token representing the member definition.
+     * @param ast the token representing the container node.
      */
-    private void leaveMemberDef(DetailAST ast) {
-<span class="fc" id="L209">        final int count = context.getCount();</span>
-<span class="fc bfc" id="L210" title="All 2 branches covered.">        if (count &gt; max) {</span>
-<span class="fc" id="L211">            log(ast, MSG_KEY, count, max);</span>
+    private void leaveContainerNode(DetailAST ast) {
+<span class="fc" id="L201">        final int count = context.getCount();</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">        if (count &gt; max) {</span>
+<span class="fc" id="L203">            log(ast, MSG_KEY, count, max);</span>
         }
-<span class="fc" id="L213">        context = contextStack.pop();</span>
-<span class="fc" id="L214">    }</span>
+<span class="fc" id="L205">        context = contextStack.pop();</span>
+<span class="fc" id="L206">    }</span>
 
     /**
      * Process the end of a statement list.
@@ -219,33 +211,27 @@ public final class ExecutableStatementCountCheck
      * @param ast the token representing the statement list.
      */
     private void visitSlist(DetailAST ast) {
-<span class="fc bfc" id="L222" title="All 2 branches covered.">        if (context.getAST() != null) {</span>
-            // find member AST for the statement list
-<span class="fc" id="L224">            final DetailAST contextAST = context.getAST();</span>
-<span class="fc" id="L225">            DetailAST parent = ast.getParent();</span>
-<span class="fc" id="L226">            int type = parent.getType();</span>
-<span class="fc bfc" id="L227" title="All 2 branches covered.">            while (type != TokenTypes.METHOD_DEF</span>
-<span class="fc bfc" id="L228" title="All 2 branches covered.">                &amp;&amp; !isConstructorOrInit(type)) {</span>
-<span class="fc" id="L229">                parent = parent.getParent();</span>
-<span class="fc" id="L230">                type = parent.getType();</span>
-            }
-<span class="fc bfc" id="L232" title="All 2 branches covered.">            if (parent == contextAST) {</span>
-<span class="fc" id="L233">                context.addCount(ast.getChildCount() / 2);</span>
-            }
+<span class="fc" id="L214">        final DetailAST contextAST = context.getAST();</span>
+<span class="fc" id="L215">        DetailAST parent = ast.getParent();</span>
+<span class="fc bfc" id="L216" title="All 4 branches covered.">        while (parent != null &amp;&amp; !isContainerNode(parent)) {</span>
+<span class="fc" id="L217">            parent = parent.getParent();</span>
         }
-<span class="fc" id="L236">    }</span>
+<span class="fc bfc" id="L219" title="All 2 branches covered.">        if (parent == contextAST) {</span>
+<span class="fc" id="L220">            context.addCount(ast.getChildCount() / 2);</span>
+        }
+<span class="fc" id="L222">    }</span>
 
     /**
-     * Check if token type is a ctor (compact or canonical) or instance/ static initializer.
+     * Check if the node is of type ctor (compact or canonical),
+     * instance/ static initializer, method definition or lambda.
      *
-     * @param tokenType type of token we are checking
-     * @return true if token type is constructor or initializer
+     * @param node AST node we are checking
+     * @return true if node is of the given types
      */
-    private static boolean isConstructorOrInit(int tokenType) {
-<span class="fc bfc" id="L245" title="All 8 branches covered.">        return tokenType == TokenTypes.CTOR_DEF</span>
-                || tokenType == TokenTypes.INSTANCE_INIT
-                || tokenType == TokenTypes.STATIC_INIT
-                || tokenType == TokenTypes.COMPACT_CTOR_DEF;
+    private static boolean isContainerNode(DetailAST node) {
+<span class="fc" id="L232">        return TokenUtil.isOfType(node, TokenTypes.METHOD_DEF,</span>
+                TokenTypes.LAMBDA, TokenTypes.CTOR_DEF, TokenTypes.INSTANCE_INIT,
+                TokenTypes.STATIC_INIT, TokenTypes.COMPACT_CTOR_DEF);
     }
 
     /**
@@ -264,10 +250,10 @@ public final class ExecutableStatementCountCheck
          *
          * @param ast member AST node.
          */
-<span class="fc" id="L267">        /* package */ Context(DetailAST ast) {</span>
-<span class="fc" id="L268">            this.ast = ast;</span>
-<span class="fc" id="L269">            count = 0;</span>
-<span class="fc" id="L270">        }</span>
+<span class="fc" id="L253">        /* package */ Context(DetailAST ast) {</span>
+<span class="fc" id="L254">            this.ast = ast;</span>
+<span class="fc" id="L255">            count = 0;</span>
+<span class="fc" id="L256">        }</span>
 
         /**
          * Increase count.
@@ -275,8 +261,8 @@ public final class ExecutableStatementCountCheck
          * @param addition the count increment.
          */
         public void addCount(int addition) {
-<span class="fc" id="L278">            count += addition;</span>
-<span class="fc" id="L279">        }</span>
+<span class="fc" id="L264">            count += addition;</span>
+<span class="fc" id="L265">        }</span>
 
         /**
          * Gets the member AST node.
@@ -284,7 +270,7 @@ public final class ExecutableStatementCountCheck
          * @return the member AST node.
          */
         public DetailAST getAST() {
-<span class="fc" id="L287">            return ast;</span>
+<span class="fc" id="L273">            return ast;</span>
         }
 
         /**
@@ -293,10 +279,10 @@ public final class ExecutableStatementCountCheck
          * @return the count.
          */
         public int getCount() {
-<span class="fc" id="L296">            return count;</span>
+<span class="fc" id="L282">            return count;</span>
         }
 
     }
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>

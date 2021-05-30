@@ -23,9 +23,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.DetailNode;
 import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
@@ -87,6 +89,31 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
+ * Example of non permitted empty javadoc for Inline Summary Javadoc.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test extends Exception {
+ *   &amp;#47;**
+ *    * {&amp;#64;summary  }
+ *    *&amp;#47;
+ *   public String InvalidFunctionOne(){ // violation
+ *     return &quot;&quot;;
+ *   }
+ *
+ *   &amp;#47;**
+ *    * {&amp;#64;summary &amp;lt;p&amp;gt; &amp;lt;p/&amp;gt;}
+ *    *&amp;#47;
+ *   public String InvalidFunctionTwo(){ // violation
+ *     return &quot;&quot;;
+ *   }
+ *
+ *   &amp;#47;**
+ *    * {&amp;#64;summary &amp;lt;p&amp;gt;This is summary for validFunctionThree.&amp;lt;p/&amp;gt;}
+ *    *&amp;#47;
+ *   public void validFunctionThree(){} // ok
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
  * To ensure that summary do not contain phrase like &quot;This method returns&quot;,
  * use following config:
  * &lt;/p&gt;
@@ -109,15 +136,49 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  * &lt;/p&gt;
  * &lt;pre&gt;
  * public class TestClass {
- *   &amp;#47;**
+ *  &amp;#47;**
  *   * This is invalid java doc.
  *   *&amp;#47;
  *   void invalidJavaDocMethod() {
  *   }
- *   &amp;#47;**
+ *  &amp;#47;**
  *   * This is valid java doc。
  *   *&amp;#47;
  *   void validJavaDocMethod() {
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example of period property for inline summary javadoc.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class TestClass {
+ *  &amp;#47;**
+ *   * {&amp;#64;summary This is invalid java doc.}
+ *   *&amp;#47;
+ *   public void invalidJavaDocMethod() { // violation
+ *   }
+ *  &amp;#47;**
+ *   * {&amp;#64;summary This is valid java doc。}
+ *   *&amp;#47;
+ *   public void validJavaDocMethod() { // ok
+ *   }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example of inline summary javadoc with HTML tags.
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class Test {
+ *  &amp;#47;**
+ *   * {&amp;#64;summary First sentence is normally the summary.
+ *   * Use of html tags:
+ *   * &amp;lt;ul&amp;gt;
+ *   * &amp;lt;li&amp;gt;Item one.&amp;lt;/li&amp;gt;
+ *   * &amp;lt;li&amp;gt;Item two.&amp;lt;/li&amp;gt;
+ *   * &amp;lt;/ul&amp;gt;}
+ *   *&amp;#47;
+ *   public void validInlineJavadoc() { // ok
  *   }
  * }
  * &lt;/pre&gt;
@@ -146,12 +207,15 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
  * &lt;li&gt;
  * {@code summary.javaDoc.missing}
  * &lt;/li&gt;
+ * &lt;li&gt;
+ * {@code summary.javaDoc.missing.period}
+ * &lt;/li&gt;
  * &lt;/ul&gt;
  *
  * @since 6.0
  */
 @StatelessCheck
-<span class="fc" id="L154">public class SummaryJavadocCheck extends AbstractJavadocCheck {</span>
+<span class="fc" id="L218">public class SummaryJavadocCheck extends AbstractJavadocCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -164,31 +228,57 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * file.
      */
     public static final String MSG_SUMMARY_JAVADOC = &quot;summary.javaDoc&quot;;
+
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
      * file.
      */
     public static final String MSG_SUMMARY_JAVADOC_MISSING = &quot;summary.javaDoc.missing&quot;;
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot; file.
+     */
+    public static final String MSG_SUMMARY_MISSING_PERIOD = &quot;summary.javaDoc.missing.period&quot;;
+
     /**
      * This regexp is used to convert multiline javadoc to single line without stars.
      */
-<span class="fc" id="L175">    private static final Pattern JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN =</span>
-<span class="fc" id="L176">            Pattern.compile(&quot;\n[ ]+(\\*)|^[ ]+(\\*)&quot;);</span>
+<span class="fc" id="L246">    private static final Pattern JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN =</span>
+<span class="fc" id="L247">            Pattern.compile(&quot;\n[ ]+(\\*)|^[ ]+(\\*)&quot;);</span>
 
+    /**
+     * This regexp is used to remove html tags, whitespace, and asterisks from a string.
+     */
+<span class="fc" id="L252">    private static final Pattern HTML_ELEMENTS =</span>
+<span class="fc" id="L253">            Pattern.compile(&quot;&lt;[^&gt;]*&gt;&quot;);</span>
+
+    /**
+     * This regexp is used to extract the content of a summary javadoc tag.
+     */
+<span class="fc" id="L258">    private static final Pattern SUMMARY_PATTERN = Pattern.compile(&quot;\\{@summary ([\\S\\s]+)}&quot;);</span>
     /** Period literal. */
     private static final String PERIOD = &quot;.&quot;;
 
+    /** Summary tag text. */
+    private static final String SUMMARY_TEXT = &quot;@summary&quot;;
+
     /** Set of allowed Tokens tags in summary java doc. */
-<span class="fc" id="L182">    private static final Set&lt;Integer&gt; ALLOWED_TYPES = Collections.unmodifiableSet(</span>
-<span class="fc" id="L183">            new HashSet&lt;&gt;(Arrays.asList(JavadocTokenTypes.TEXT,</span>
-<span class="fc" id="L184">                    JavadocTokenTypes.WS))</span>
+<span class="fc" id="L266">    private static final Set&lt;Integer&gt; ALLOWED_TYPES = Collections.unmodifiableSet(</span>
+<span class="fc" id="L267">            new HashSet&lt;&gt;(Arrays.asList(</span>
+<span class="fc" id="L268">                    JavadocTokenTypes.WS,</span>
+<span class="fc" id="L269">                    JavadocTokenTypes.DESCRIPTION,</span>
+<span class="fc" id="L270">                    JavadocTokenTypes.TEXT))</span>
     );
 
-    /** Specify the regexp for forbidden summary fragments. */
-<span class="fc" id="L188">    private Pattern forbiddenSummaryFragments = CommonUtil.createPattern(&quot;^$&quot;);</span>
+    /**
+     * Specify the regexp for forbidden summary fragments.
+     */
+<span class="fc" id="L276">    private Pattern forbiddenSummaryFragments = CommonUtil.createPattern(&quot;^$&quot;);</span>
 
-    /** Specify the period symbol at the end of first javadoc sentence. */
-<span class="fc" id="L191">    private String period = PERIOD;</span>
+    /**
+     * Specify the period symbol at the end of first javadoc sentence.
+     */
+<span class="fc" id="L281">    private String period = PERIOD;</span>
 
     /**
      * Setter to specify the regexp for forbidden summary fragments.
@@ -196,8 +286,8 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param pattern a pattern.
      */
     public void setForbiddenSummaryFragments(Pattern pattern) {
-<span class="fc" id="L199">        forbiddenSummaryFragments = pattern;</span>
-<span class="fc" id="L200">    }</span>
+<span class="fc" id="L289">        forbiddenSummaryFragments = pattern;</span>
+<span class="fc" id="L290">    }</span>
 
     /**
      * Setter to specify the period symbol at the end of first javadoc sentence.
@@ -205,112 +295,301 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @param period period's value.
      */
     public void setPeriod(String period) {
-<span class="fc" id="L208">        this.period = period;</span>
-<span class="fc" id="L209">    }</span>
+<span class="fc" id="L298">        this.period = period;</span>
+<span class="fc" id="L299">    }</span>
 
     @Override
     public int[] getDefaultJavadocTokens() {
-<span class="fc" id="L213">        return new int[] {</span>
+<span class="fc" id="L303">        return new int[] {</span>
             JavadocTokenTypes.JAVADOC,
         };
     }
 
     @Override
     public int[] getRequiredJavadocTokens() {
-<span class="fc" id="L220">        return getAcceptableJavadocTokens();</span>
+<span class="fc" id="L310">        return getAcceptableJavadocTokens();</span>
     }
 
     @Override
     public void visitJavadocToken(DetailNode ast) {
-<span class="fc bfc" id="L225" title="All 2 branches covered.">        if (!startsWithInheritDoc(ast)) {</span>
-<span class="fc" id="L226">            final String summaryDoc = getSummarySentence(ast);</span>
-<span class="fc bfc" id="L227" title="All 2 branches covered.">            if (summaryDoc.isEmpty()) {</span>
-<span class="fc" id="L228">                log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">        if (containsSummaryTag(ast)) {</span>
+<span class="fc" id="L316">            validateSummaryTag(ast);</span>
+        }
+<span class="fc bfc" id="L318" title="All 2 branches covered.">        else if (!startsWithInheritDoc(ast)) {</span>
+<span class="fc" id="L319">            final String summaryDoc = getSummarySentence(ast);</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">            if (summaryDoc.isEmpty()) {</span>
+<span class="fc" id="L321">                log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</span>
             }
-<span class="fc bfc" id="L230" title="All 2 branches covered.">            else if (!period.isEmpty()) {</span>
-<span class="fc" id="L231">                final String firstSentence = getFirstSentence(ast);</span>
-<span class="fc" id="L232">                final int endOfSentence = firstSentence.lastIndexOf(period);</span>
-<span class="fc bfc" id="L233" title="All 2 branches covered.">                if (!summaryDoc.contains(period)) {</span>
-<span class="fc" id="L234">                    log(ast.getLineNumber(), MSG_SUMMARY_FIRST_SENTENCE);</span>
+<span class="fc bfc" id="L323" title="All 2 branches covered.">            else if (!period.isEmpty()) {</span>
+<span class="fc" id="L324">                final String firstSentence = getFirstSentence(ast);</span>
+<span class="fc" id="L325">                final int endOfSentence = firstSentence.lastIndexOf(period);</span>
+<span class="fc bfc" id="L326" title="All 2 branches covered.">                if (!summaryDoc.contains(period)) {</span>
+<span class="fc" id="L327">                    log(ast.getLineNumber(), MSG_SUMMARY_FIRST_SENTENCE);</span>
                 }
-<span class="fc bfc" id="L236" title="All 2 branches covered.">                if (endOfSentence != -1</span>
-<span class="fc bfc" id="L237" title="All 2 branches covered.">                        &amp;&amp; containsForbiddenFragment(firstSentence.substring(0, endOfSentence))) {</span>
-<span class="fc" id="L238">                    log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC);</span>
+<span class="fc bfc" id="L329" title="All 2 branches covered.">                if (endOfSentence != -1</span>
+<span class="fc bfc" id="L330" title="All 2 branches covered.">                        &amp;&amp; containsForbiddenFragment(firstSentence.substring(0, endOfSentence))) {</span>
+<span class="fc" id="L331">                    log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC);</span>
                 }
             }
         }
-<span class="fc" id="L242">    }</span>
+<span class="fc" id="L335">    }</span>
+
+    /**
+     * Checks if summary tag present.
+     *
+     * @param javadoc javadoc root node.
+     * @return {@code true} if first sentence contains @summary tag.
+     */
+    private static boolean containsSummaryTag(DetailNode javadoc) {
+<span class="fc" id="L344">        final DetailNode node = getFirstInlineTag(javadoc);</span>
+<span class="fc bfc" id="L345" title="All 4 branches covered.">        return node != null &amp;&amp; isSummaryTag(node);</span>
+    }
+
+    /**
+     * Finds and returns the first inline tag node from a javadoc root node.
+     *
+     * @param javadoc javadoc root node.
+     * @return first inline tag node or null if no node is found.
+     */
+    private static DetailNode getFirstInlineTag(DetailNode javadoc) {
+<span class="fc" id="L355">        DetailNode node = null;</span>
+<span class="fc" id="L356">        final DetailNode[] children = javadoc.getChildren();</span>
+<span class="fc bfc" id="L357" title="All 2 branches covered.">        for (DetailNode child: children) {</span>
+            // If present as a children of javadoc
+<span class="fc bfc" id="L359" title="All 2 branches covered.">            if (child.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</span>
+<span class="fc" id="L360">                node = child;</span>
+            }
+            // If nested inside html tag
+<span class="fc bfc" id="L363" title="All 2 branches covered.">            else if (child.getType() == JavadocTokenTypes.HTML_ELEMENT) {</span>
+<span class="fc" id="L364">                node = getInlineTagNodeWithinHtmlElement(child);</span>
+            }
+
+<span class="fc bfc" id="L367" title="All 2 branches covered.">            if (node != null) {</span>
+<span class="fc" id="L368">                break;</span>
+            }
+        }
+<span class="fc" id="L371">        return node;</span>
+    }
+
+    /**
+     * Returns an inline javadoc tag node that is within a html tag.
+     *
+     * @param ast html tag node.
+     * @return inline summary javadoc tag node or null if no node is found.
+     */
+    private static DetailNode getInlineTagNodeWithinHtmlElement(DetailNode ast) {
+<span class="fc" id="L381">        DetailNode node = ast;</span>
+<span class="fc" id="L382">        DetailNode result = null;</span>
+        // node can never be null as this method is called when there is a HTML_ELEMENT
+<span class="fc bfc" id="L384" title="All 2 branches covered.">        if (node.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</span>
+<span class="fc" id="L385">            result = node;</span>
+        }
+<span class="fc bfc" id="L387" title="All 2 branches covered.">        else if (node.getType() == JavadocTokenTypes.HTML_TAG) {</span>
+            // HTML_TAG always has more than 2 children.
+<span class="fc" id="L389">            node = node.getChildren()[1];</span>
+<span class="fc" id="L390">            result = getInlineTagNodeWithinHtmlElement(node);</span>
+        }
+<span class="fc bfc" id="L392" title="All 2 branches covered.">        else if (node.getType() == JavadocTokenTypes.HTML_ELEMENT</span>
+                // Condition for SINGLETON html element which cannot contain summary node
+<span class="fc bfc" id="L394" title="All 2 branches covered.">                &amp;&amp; node.getChildren()[0].getChildren().length &gt; 1) {</span>
+            // Html elements have one tested tag before actual content inside it
+<span class="fc" id="L396">            node = node.getChildren()[0].getChildren()[1];</span>
+<span class="fc" id="L397">            result = getInlineTagNodeWithinHtmlElement(node);</span>
+        }
+<span class="fc" id="L399">        return result;</span>
+    }
+
+    /**
+     * Checks if the first tag inside ast is summary tag.
+     *
+     * @param javadoc root node.
+     * @return {@code true} if first tag is summary tag.
+     */
+    private static boolean isSummaryTag(DetailNode javadoc) {
+<span class="fc" id="L409">        final DetailNode[] child = javadoc.getChildren();</span>
+
+        // Checking size of ast is not required, since ast contains
+        // children of Inline Tag, as at least 2 children will be present which are
+        // RCURLY and LCURLY.
+<span class="fc bfc" id="L414" title="All 2 branches covered.">        return child[1].getType() == JavadocTokenTypes.CUSTOM_NAME</span>
+<span class="fc bfc" id="L415" title="All 2 branches covered.">                &amp;&amp; SUMMARY_TEXT.equals(child[1].getText());</span>
+    }
+
+    /**
+     * Checks the inline summary (if present) for {@code period} at end and forbidden fragments.
+     *
+     * @param ast javadoc root node.
+     */
+    private void validateSummaryTag(DetailNode ast) {
+<span class="fc" id="L424">        final String inlineSummary = getInlineSummary();</span>
+<span class="fc" id="L425">        final String summaryVisible = getVisibleContent(inlineSummary);</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">        if (summaryVisible.isEmpty()) {</span>
+<span class="fc" id="L427">            log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</span>
+        }
+<span class="fc bfc" id="L429" title="All 2 branches covered.">        else if (!period.isEmpty()) {</span>
+<span class="fc bfc" id="L430" title="All 2 branches covered.">            if (isPeriodAtEnd(summaryVisible, period)) {</span>
+<span class="fc" id="L431">                log(ast.getLineNumber(), MSG_SUMMARY_MISSING_PERIOD);</span>
+            }
+<span class="fc bfc" id="L433" title="All 2 branches covered.">            else if (containsForbiddenFragment(inlineSummary)) {</span>
+<span class="fc" id="L434">                log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC);</span>
+            }
+        }
+<span class="fc" id="L437">    }</span>
+
+    /**
+     * Gets entire content of summary tag.
+     *
+     * @return summary sentence of javadoc root node.
+     */
+    private String getInlineSummary() {
+<span class="fc" id="L445">        final DetailAST blockCommentAst = getBlockCommentAst();</span>
+<span class="fc" id="L446">        final String javadocText = blockCommentAst.getFirstChild().getText();</span>
+<span class="fc" id="L447">        final Matcher matcher = SUMMARY_PATTERN.matcher(javadocText);</span>
+<span class="fc" id="L448">        String comment = &quot;&quot;;</span>
+<span class="fc bfc" id="L449" title="All 2 branches covered.">        if (matcher.find()) {</span>
+<span class="fc" id="L450">            comment = matcher.group(1);</span>
+        }
+<span class="fc" id="L452">        comment = JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN.matcher(comment)</span>
+<span class="fc" id="L453">                .replaceAll(&quot;&quot;);</span>
+<span class="fc" id="L454">        return comment;</span>
+    }
+
+    /**
+     * Gets the string that is visible to user in javadoc.
+     *
+     * @param summary entire content of summary javadoc.
+     * @return string that is visible to user in javadoc.
+     */
+    private static String getVisibleContent(String summary) {
+<span class="fc" id="L464">        final String visibleSummary = HTML_ELEMENTS.matcher(summary).replaceAll(&quot;&quot;);</span>
+<span class="fc" id="L465">        return visibleSummary.trim();</span>
+    }
+
+    /**
+     * Checks if the string ends with period.
+     *
+     * @param sentence string to check for period at end.
+     * @param period string to check within sentence.
+     * @return {@code true} if sentence ends with period.
+     */
+    private static boolean isPeriodAtEnd(String sentence, String period) {
+<span class="fc" id="L476">        final String summarySentence = sentence.trim();</span>
+<span class="fc bfc" id="L477" title="All 2 branches covered.">        return summarySentence.lastIndexOf(period) != summarySentence.length() - 1;</span>
+    }
+
+    /**
+     * Tests if first sentence contains forbidden summary fragment.
+     *
+     * @param firstSentence string with first sentence.
+     * @return {@code true} if first sentence contains forbidden summary fragment.
+     */
+    private boolean containsForbiddenFragment(String firstSentence) {
+<span class="fc" id="L487">        final String javadocText = JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN</span>
+<span class="fc" id="L488">                .matcher(firstSentence).replaceAll(&quot; &quot;).trim();</span>
+<span class="fc" id="L489">        return forbiddenSummaryFragments.matcher(trimExcessWhitespaces(javadocText)).find();</span>
+    }
+
+    /**
+     * Trims the given {@code text} of duplicate whitespaces.
+     *
+     * @param text the text to transform.
+     * @return the finalized form of the text.
+     */
+    private static String trimExcessWhitespaces(String text) {
+<span class="fc" id="L499">        final StringBuilder result = new StringBuilder(256);</span>
+<span class="fc" id="L500">        boolean previousWhitespace = true;</span>
+
+<span class="fc bfc" id="L502" title="All 2 branches covered.">        for (char letter : text.toCharArray()) {</span>
+            final char print;
+<span class="fc bfc" id="L504" title="All 2 branches covered.">            if (Character.isWhitespace(letter)) {</span>
+<span class="fc bfc" id="L505" title="All 2 branches covered.">                if (previousWhitespace) {</span>
+<span class="fc" id="L506">                    continue;</span>
+                }
+
+<span class="fc" id="L509">                previousWhitespace = true;</span>
+<span class="fc" id="L510">                print = ' ';</span>
+            }
+            else {
+<span class="fc" id="L513">                previousWhitespace = false;</span>
+<span class="fc" id="L514">                print = letter;</span>
+            }
+
+<span class="fc" id="L517">            result.append(print);</span>
+        }
+
+<span class="fc" id="L520">        return result.toString();</span>
+    }
 
     /**
      * Checks if the node starts with an {&amp;#64;inheritDoc}.
      *
-     * @param root The root node to examine.
+     * @param root the root node to examine.
      * @return {@code true} if the javadoc starts with an {&amp;#64;inheritDoc}.
      */
     private static boolean startsWithInheritDoc(DetailNode root) {
-<span class="fc" id="L251">        boolean found = false;</span>
-<span class="fc" id="L252">        final DetailNode[] children = root.getChildren();</span>
+<span class="fc" id="L530">        boolean found = false;</span>
+<span class="fc" id="L531">        final DetailNode[] children = root.getChildren();</span>
 
-<span class="fc bfc" id="L254" title="All 2 branches covered.">        for (int i = 0; !found; i++) {</span>
-<span class="fc" id="L255">            final DetailNode child = children[i];</span>
-<span class="fc bfc" id="L256" title="All 2 branches covered.">            if (child.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG</span>
-<span class="fc bfc" id="L257" title="All 2 branches covered.">                    &amp;&amp; child.getChildren()[1].getType() == JavadocTokenTypes.INHERIT_DOC_LITERAL) {</span>
-<span class="fc" id="L258">                found = true;</span>
+<span class="fc bfc" id="L533" title="All 2 branches covered.">        for (int i = 0; !found; i++) {</span>
+<span class="fc" id="L534">            final DetailNode child = children[i];</span>
+<span class="fc bfc" id="L535" title="All 2 branches covered.">            if (child.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG</span>
+<span class="fc bfc" id="L536" title="All 2 branches covered.">                    &amp;&amp; child.getChildren()[1].getType() == JavadocTokenTypes.INHERIT_DOC_LITERAL) {</span>
+<span class="fc" id="L537">                found = true;</span>
             }
-<span class="fc bfc" id="L260" title="All 2 branches covered.">            else if (child.getType() != JavadocTokenTypes.LEADING_ASTERISK</span>
-<span class="fc bfc" id="L261" title="All 2 branches covered.">                    &amp;&amp; !CommonUtil.isBlank(child.getText())) {</span>
-<span class="fc" id="L262">                break;</span>
+<span class="fc bfc" id="L539" title="All 2 branches covered.">            else if (child.getType() != JavadocTokenTypes.LEADING_ASTERISK</span>
+<span class="fc bfc" id="L540" title="All 2 branches covered.">                    &amp;&amp; !CommonUtil.isBlank(child.getText())) {</span>
+<span class="fc" id="L541">                break;</span>
             }
         }
 
-<span class="fc" id="L266">        return found;</span>
+<span class="fc" id="L545">        return found;</span>
     }
 
     /**
-     * Checks if period is at the end of sentence.
+     * Finds and returns summary sentence.
      *
-     * @param ast Javadoc root node.
-     * @return violation string
+     * @param ast javadoc root node.
+     * @return violation string.
      */
     private static String getSummarySentence(DetailNode ast) {
-<span class="fc" id="L276">        boolean flag = true;</span>
-<span class="fc" id="L277">        final StringBuilder result = new StringBuilder(256);</span>
-<span class="fc bfc" id="L278" title="All 2 branches covered.">        for (DetailNode child : ast.getChildren()) {</span>
-<span class="fc bfc" id="L279" title="All 2 branches covered.">            if (ALLOWED_TYPES.contains(child.getType())) {</span>
-<span class="fc" id="L280">                result.append(child.getText());</span>
+<span class="fc" id="L555">        boolean flag = true;</span>
+<span class="fc" id="L556">        final StringBuilder result = new StringBuilder(256);</span>
+<span class="fc bfc" id="L557" title="All 2 branches covered.">        for (DetailNode child : ast.getChildren()) {</span>
+<span class="fc bfc" id="L558" title="All 2 branches covered.">            if (ALLOWED_TYPES.contains(child.getType())) {</span>
+<span class="fc" id="L559">                result.append(child.getText());</span>
             }
-<span class="fc bfc" id="L282" title="All 2 branches covered.">            else if (child.getType() == JavadocTokenTypes.HTML_ELEMENT</span>
-<span class="fc bfc" id="L283" title="All 2 branches covered.">                    &amp;&amp; CommonUtil.isBlank(result.toString().trim())) {</span>
-<span class="fc" id="L284">                result.append(getStringInsideTag(result.toString(),</span>
-<span class="fc" id="L285">                        child.getChildren()[0].getChildren()[0]));</span>
+<span class="fc bfc" id="L561" title="All 2 branches covered.">            else if (child.getType() == JavadocTokenTypes.HTML_ELEMENT</span>
+<span class="fc bfc" id="L562" title="All 2 branches covered.">                    &amp;&amp; CommonUtil.isBlank(result.toString().trim())) {</span>
+<span class="fc" id="L563">                result.append(getStringInsideTag(result.toString(),</span>
+<span class="fc" id="L564">                        child.getChildren()[0].getChildren()[0]));</span>
             }
-<span class="fc bfc" id="L287" title="All 2 branches covered.">            else if (child.getType() == JavadocTokenTypes.JAVADOC_TAG) {</span>
-<span class="fc" id="L288">                flag = false;</span>
+<span class="fc bfc" id="L566" title="All 2 branches covered.">            else if (child.getType() == JavadocTokenTypes.JAVADOC_TAG) {</span>
+<span class="fc" id="L567">                flag = false;</span>
             }
-<span class="fc bfc" id="L290" title="All 2 branches covered.">            if (!flag) {</span>
-<span class="fc" id="L291">                break;</span>
+<span class="fc bfc" id="L569" title="All 2 branches covered.">            if (!flag) {</span>
+<span class="fc" id="L570">                break;</span>
             }
         }
-<span class="fc" id="L294">        return result.toString().trim();</span>
+<span class="fc" id="L573">        return result.toString().trim();</span>
     }
 
     /**
-     * Concatenates string within text of html tags.
+     * Get concatenated string within text of html tags.
      *
      * @param result javadoc string
      * @param detailNode javadoc tag node
      * @return java doc tag content appended in result
      */
     private static String getStringInsideTag(String result, DetailNode detailNode) {
-<span class="fc" id="L305">        final StringBuilder contents = new StringBuilder(result);</span>
-<span class="fc" id="L306">        DetailNode tempNode = detailNode;</span>
-<span class="fc bfc" id="L307" title="All 2 branches covered.">        while (tempNode != null) {</span>
-<span class="fc bfc" id="L308" title="All 2 branches covered.">            if (tempNode.getType() == JavadocTokenTypes.TEXT) {</span>
-<span class="fc" id="L309">                contents.append(tempNode.getText());</span>
+<span class="fc" id="L584">        final StringBuilder contents = new StringBuilder(result);</span>
+<span class="fc" id="L585">        DetailNode tempNode = detailNode;</span>
+<span class="fc bfc" id="L586" title="All 2 branches covered.">        while (tempNode != null) {</span>
+<span class="fc bfc" id="L587" title="All 2 branches covered.">            if (tempNode.getType() == JavadocTokenTypes.TEXT) {</span>
+<span class="fc" id="L588">                contents.append(tempNode.getText());</span>
             }
-<span class="fc" id="L311">            tempNode = JavadocUtil.getNextSibling(tempNode);</span>
+<span class="fc" id="L590">            tempNode = JavadocUtil.getNextSibling(tempNode);</span>
         }
-<span class="fc" id="L313">        return contents.toString();</span>
+<span class="fc" id="L592">        return contents.toString();</span>
     }
 
     /**
@@ -320,69 +599,26 @@ import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;
      * @return first sentence.
      */
     private static String getFirstSentence(DetailNode ast) {
-<span class="fc" id="L323">        final StringBuilder result = new StringBuilder(256);</span>
-<span class="fc" id="L324">        final String periodSuffix = PERIOD + ' ';</span>
-<span class="fc bfc" id="L325" title="All 2 branches covered.">        for (DetailNode child : ast.getChildren()) {</span>
+<span class="fc" id="L602">        final StringBuilder result = new StringBuilder(256);</span>
+<span class="fc" id="L603">        final String periodSuffix = PERIOD + ' ';</span>
+<span class="fc bfc" id="L604" title="All 2 branches covered.">        for (DetailNode child : ast.getChildren()) {</span>
             final String text;
-<span class="fc bfc" id="L327" title="All 2 branches covered.">            if (child.getChildren().length == 0) {</span>
-<span class="fc" id="L328">                text = child.getText();</span>
+<span class="fc bfc" id="L606" title="All 2 branches covered.">            if (child.getChildren().length == 0) {</span>
+<span class="fc" id="L607">                text = child.getText();</span>
             }
             else {
-<span class="fc" id="L331">                text = getFirstSentence(child);</span>
+<span class="fc" id="L610">                text = getFirstSentence(child);</span>
             }
 
-<span class="fc bfc" id="L334" title="All 2 branches covered.">            if (text.contains(periodSuffix)) {</span>
-<span class="fc" id="L335">                result.append(text, 0, text.indexOf(periodSuffix) + 1);</span>
-<span class="fc" id="L336">                break;</span>
+<span class="fc bfc" id="L613" title="All 2 branches covered.">            if (text.contains(periodSuffix)) {</span>
+<span class="fc" id="L614">                result.append(text, 0, text.indexOf(periodSuffix) + 1);</span>
+<span class="fc" id="L615">                break;</span>
             }
 
-<span class="fc" id="L339">            result.append(text);</span>
+<span class="fc" id="L618">            result.append(text);</span>
         }
-<span class="fc" id="L341">        return result.toString();</span>
-    }
-
-    /**
-     * Tests if first sentence contains forbidden summary fragment.
-     *
-     * @param firstSentence String with first sentence.
-     * @return true, if first sentence contains forbidden summary fragment.
-     */
-    private boolean containsForbiddenFragment(String firstSentence) {
-<span class="fc" id="L351">        final String javadocText = JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN</span>
-<span class="fc" id="L352">                .matcher(firstSentence).replaceAll(&quot; &quot;).trim();</span>
-<span class="fc" id="L353">        return forbiddenSummaryFragments.matcher(trimExcessWhitespaces(javadocText)).find();</span>
-    }
-
-    /**
-     * Trims the given {@code text} of duplicate whitespaces.
-     *
-     * @param text The text to transform.
-     * @return The finalized form of the text.
-     */
-    private static String trimExcessWhitespaces(String text) {
-<span class="fc" id="L363">        final StringBuilder result = new StringBuilder(100);</span>
-<span class="fc" id="L364">        boolean previousWhitespace = true;</span>
-
-<span class="fc bfc" id="L366" title="All 2 branches covered.">        for (char letter : text.toCharArray()) {</span>
-            final char print;
-<span class="fc bfc" id="L368" title="All 2 branches covered.">            if (Character.isWhitespace(letter)) {</span>
-<span class="fc bfc" id="L369" title="All 2 branches covered.">                if (previousWhitespace) {</span>
-<span class="fc" id="L370">                    continue;</span>
-                }
-
-<span class="fc" id="L373">                previousWhitespace = true;</span>
-<span class="fc" id="L374">                print = ' ';</span>
-            }
-            else {
-<span class="fc" id="L377">                previousWhitespace = false;</span>
-<span class="fc" id="L378">                print = letter;</span>
-            }
-
-<span class="fc" id="L381">            result.append(print);</span>
-        }
-
-<span class="fc" id="L384">        return result.toString();</span>
+<span class="fc" id="L620">        return result.toString();</span>
     }
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>

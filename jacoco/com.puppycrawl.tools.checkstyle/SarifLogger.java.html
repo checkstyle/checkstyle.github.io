@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SarifLogger.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle</a> &gt; <span class="el_source">SarifLogger.java</span></div><h1>SarifLogger.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2021 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
+import com.puppycrawl.tools.checkstyle.api.AuditEvent;
+import com.puppycrawl.tools.checkstyle.api.AuditListener;
+import com.puppycrawl.tools.checkstyle.api.AutomaticBean;
+import com.puppycrawl.tools.checkstyle.api.SeverityLevel;
+
+/**
+ * Simple SARIF logger.
+ * SARIF stands for the static analysis results interchange format.
+ * Reference: https://sarifweb.azurewebsites.net/
+ */
+public class SarifLogger extends AutomaticBean implements AuditListener {
+
+    /** The length of unicode placeholder. */
+    private static final int UNICODE_LENGTH = 4;
+
+    /** Unicode escaping upper limit. */
+    private static final int UNICODE_ESCAPE_UPPER_LIMIT = 0x1F;
+
+    /** Input stream buffer size. */
+    private static final int BUFFER_SIZE = 1024;
+
+    /** The placeholder for message. */
+    private static final String MESSAGE_PLACEHOLDER = &quot;${message}&quot;;
+
+    /** The placeholder for severity level. */
+    private static final String SEVERITY_LEVEL_PLACEHOLDER = &quot;${severityLevel}&quot;;
+
+    /** The placeholder for uri. */
+    private static final String URI_PLACEHOLDER = &quot;${uri}&quot;;
+
+    /** The placeholder for line. */
+    private static final String LINE_PLACEHOLDER = &quot;${line}&quot;;
+
+    /** The placeholder for column. */
+    private static final String COLUMN_PLACEHOLDER = &quot;${column}&quot;;
+
+    /** The placeholder for rule id. */
+    private static final String RULE_ID_PLACEHOLDER = &quot;${ruleId}&quot;;
+
+    /** The placeholder for version. */
+    private static final String VERSION_PLACEHOLDER = &quot;${version}&quot;;
+
+    /** The placeholder for results. */
+    private static final String RESULTS_PLACEHOLDER = &quot;${results}&quot;;
+
+    /** Helper writer that allows easy encoding and printing. */
+    private final PrintWriter writer;
+
+    /** Close output stream in auditFinished. */
+    private final boolean closeStream;
+
+    /** The results. */
+<span class="fc" id="L86">    private final List&lt;String&gt; results = new ArrayList&lt;&gt;();</span>
+
+    /** Content for the entire report. */
+    private final String report;
+
+    /** Content for result representing an error with source line and column. */
+    private final String resultLineColumn;
+
+    /** Content for result representing an error with source line only. */
+    private final String resultLineOnly;
+
+    /** Content for result representing an error with filename only and without source location. */
+    private final String resultFileOnly;
+
+    /** Content for result representing an error without filename or location. */
+    private final String resultErrorOnly;
+
+    /**
+     * Creates a new {@code SarifLogger} instance.
+     *
+     * @param outputStream where to log audit events
+     * @param outputStreamOptions if {@code CLOSE} that should be closed in auditFinished()
+     * @throws IllegalArgumentException if outputStreamOptions is null
+     * @throws IOException if there is reading errors.
+     */
+    public SarifLogger(
+        OutputStream outputStream,
+<span class="fc" id="L113">        OutputStreamOptions outputStreamOptions) throws IOException {</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">        if (outputStreamOptions == null) {</span>
+<span class="fc" id="L115">            throw new IllegalArgumentException(&quot;Parameter outputStreamOptions can not be null&quot;);</span>
+        }
+<span class="fc" id="L117">        writer = new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        closeStream = outputStreamOptions == OutputStreamOptions.CLOSE;</span>
+<span class="fc" id="L119">        report = readResource(&quot;/com/puppycrawl/tools/checkstyle/sarif/SarifReport.template&quot;);</span>
+<span class="fc" id="L120">        resultLineColumn =</span>
+<span class="fc" id="L121">            readResource(&quot;/com/puppycrawl/tools/checkstyle/sarif/ResultLineColumn.template&quot;);</span>
+<span class="fc" id="L122">        resultLineOnly =</span>
+<span class="fc" id="L123">            readResource(&quot;/com/puppycrawl/tools/checkstyle/sarif/ResultLineOnly.template&quot;);</span>
+<span class="fc" id="L124">        resultFileOnly =</span>
+<span class="fc" id="L125">            readResource(&quot;/com/puppycrawl/tools/checkstyle/sarif/ResultFileOnly.template&quot;);</span>
+<span class="fc" id="L126">        resultErrorOnly =</span>
+<span class="fc" id="L127">            readResource(&quot;/com/puppycrawl/tools/checkstyle/sarif/ResultErrorOnly.template&quot;);</span>
+<span class="fc" id="L128">    }</span>
+
+    @Override
+    protected void finishLocalSetup() {
+        // No code by default
+<span class="fc" id="L133">    }</span>
+
+    @Override
+    public void auditStarted(AuditEvent event) {
+        // No code by default
+<span class="fc" id="L138">    }</span>
+
+    /**
+     * {@inheritDoc}
+     * Following idea suppressions are false positives
+     *
+     * @noinspection DynamicRegexReplaceableByCompiledPattern
+     */
+    @Override
+    public void auditFinished(AuditEvent event) {
+<span class="fc" id="L148">        final String version = SarifLogger.class.getPackage().getImplementationVersion();</span>
+<span class="fc" id="L149">        final String rendered = report</span>
+<span class="fc" id="L150">            .replace(VERSION_PLACEHOLDER, String.valueOf(version))</span>
+<span class="fc" id="L151">            .replace(RESULTS_PLACEHOLDER, String.join(&quot;,\n&quot;, results));</span>
+<span class="fc" id="L152">        writer.print(rendered);</span>
+<span class="fc bfc" id="L153" title="All 2 branches covered.">        if (closeStream) {</span>
+<span class="fc" id="L154">            writer.close();</span>
+        }
+        else {
+<span class="fc" id="L157">            writer.flush();</span>
+        }
+<span class="fc" id="L159">    }</span>
+
+    /**
+     * {@inheritDoc}
+     * Following idea suppressions are false positives
+     *
+     * @noinspection DynamicRegexReplaceableByCompiledPattern
+     */
+    @Override
+    public void addError(AuditEvent event) {
+<span class="fc bfc" id="L169" title="All 2 branches covered.">        if (event.getColumn() &gt; 0) {</span>
+<span class="fc" id="L170">            results.add(resultLineColumn</span>
+<span class="fc" id="L171">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
+<span class="fc" id="L172">                .replace(URI_PLACEHOLDER, event.getFileName())</span>
+<span class="fc" id="L173">                .replace(COLUMN_PLACEHOLDER, Integer.toString(event.getColumn()))</span>
+<span class="fc" id="L174">                .replace(LINE_PLACEHOLDER, Integer.toString(event.getLine()))</span>
+<span class="fc" id="L175">                .replace(MESSAGE_PLACEHOLDER, escape(event.getMessage()))</span>
+<span class="fc" id="L176">                .replace(RULE_ID_PLACEHOLDER, event.getViolation().getKey())</span>
+            );
+        }
+        else {
+<span class="fc" id="L180">            results.add(resultLineOnly</span>
+<span class="fc" id="L181">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
+<span class="fc" id="L182">                .replace(URI_PLACEHOLDER, event.getFileName())</span>
+<span class="fc" id="L183">                .replace(LINE_PLACEHOLDER, Integer.toString(event.getLine()))</span>
+<span class="fc" id="L184">                .replace(MESSAGE_PLACEHOLDER, escape(event.getMessage()))</span>
+<span class="fc" id="L185">                .replace(RULE_ID_PLACEHOLDER, event.getViolation().getKey())</span>
+            );
+        }
+<span class="fc" id="L188">    }</span>
+
+    /**
+     * {@inheritDoc}
+     * Following idea suppressions are false positives
+     *
+     * @noinspection DynamicRegexReplaceableByCompiledPattern
+     */
+    @Override
+    public void addException(AuditEvent event, Throwable throwable) {
+<span class="fc" id="L198">        final StringWriter stringWriter = new StringWriter();</span>
+<span class="fc" id="L199">        final PrintWriter printer = new PrintWriter(stringWriter);</span>
+<span class="fc" id="L200">        throwable.printStackTrace(printer);</span>
+<span class="fc bfc" id="L201" title="All 2 branches covered.">        if (event.getFileName() == null) {</span>
+<span class="fc" id="L202">            results.add(resultErrorOnly</span>
+<span class="fc" id="L203">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
+<span class="fc" id="L204">                .replace(MESSAGE_PLACEHOLDER, escape(stringWriter.toString()))</span>
+            );
+        }
+        else {
+<span class="fc" id="L208">            results.add(resultFileOnly</span>
+<span class="fc" id="L209">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
+<span class="fc" id="L210">                .replace(URI_PLACEHOLDER, event.getFileName())</span>
+<span class="fc" id="L211">                .replace(MESSAGE_PLACEHOLDER, escape(stringWriter.toString()))</span>
+            );
+        }
+<span class="fc" id="L214">    }</span>
+
+    @Override
+    public void fileStarted(AuditEvent event) {
+        // No need to implement this method in this class
+<span class="fc" id="L219">    }</span>
+
+    @Override
+    public void fileFinished(AuditEvent event) {
+        // No need to implement this method in this class
+<span class="fc" id="L224">    }</span>
+
+    /**
+     * Render the severity level into SARIF severity level.
+     *
+     * @param severityLevel the Severity level.
+     * @return the rendered severity level in string.
+     */
+    private static String renderSeverityLevel(SeverityLevel severityLevel) {
+        final String renderedSeverityLevel;
+<span class="fc bfc" id="L234" title="All 4 branches covered.">        switch (severityLevel) {</span>
+            case IGNORE:
+<span class="fc" id="L236">                renderedSeverityLevel = &quot;none&quot;;</span>
+<span class="fc" id="L237">                break;</span>
+            case INFO:
+<span class="fc" id="L239">                renderedSeverityLevel = &quot;note&quot;;</span>
+<span class="fc" id="L240">                break;</span>
+            case WARNING:
+<span class="fc" id="L242">                renderedSeverityLevel = &quot;warning&quot;;</span>
+<span class="fc" id="L243">                break;</span>
+            case ERROR:
+            default:
+<span class="fc" id="L246">                renderedSeverityLevel = &quot;error&quot;;</span>
+                break;
+        }
+<span class="fc" id="L249">        return renderedSeverityLevel;</span>
+    }
+
+    /**
+     * Escape \b, \f, \n, \r, \t, \&quot;, \\ and U+0000 through U+001F.
+     * Reference: https://www.ietf.org/rfc/rfc4627.txt - 2.5. Strings
+     *
+     * @param value the value to escape.
+     * @return the escaped value if necessary.
+     */
+    public static String escape(String value) {
+<span class="fc" id="L260">        final StringBuilder sb = new StringBuilder(value.length());</span>
+<span class="fc bfc" id="L261" title="All 2 branches covered.">        for (int i = 0; i &lt; value.length(); i++) {</span>
+<span class="fc" id="L262">            final char chr = value.charAt(i);</span>
+<span class="fc bfc" id="L263" title="All 9 branches covered.">            switch (chr) {</span>
+                case '&quot;':
+<span class="fc" id="L265">                    sb.append(&quot;\\\&quot;&quot;);</span>
+<span class="fc" id="L266">                    break;</span>
+                case '\\':
+<span class="fc" id="L268">                    sb.append(&quot;\\\\&quot;);</span>
+<span class="fc" id="L269">                    break;</span>
+                case '\b':
+<span class="fc" id="L271">                    sb.append(&quot;\\b&quot;);</span>
+<span class="fc" id="L272">                    break;</span>
+                case '\f':
+<span class="fc" id="L274">                    sb.append(&quot;\\f&quot;);</span>
+<span class="fc" id="L275">                    break;</span>
+                case '\n':
+<span class="fc" id="L277">                    sb.append(&quot;\\n&quot;);</span>
+<span class="fc" id="L278">                    break;</span>
+                case '\r':
+<span class="fc" id="L280">                    sb.append(&quot;\\r&quot;);</span>
+<span class="fc" id="L281">                    break;</span>
+                case '\t':
+<span class="fc" id="L283">                    sb.append(&quot;\\t&quot;);</span>
+<span class="fc" id="L284">                    break;</span>
+                case '/':
+<span class="fc" id="L286">                    sb.append(&quot;\\/&quot;);</span>
+<span class="fc" id="L287">                    break;</span>
+                default:
+<span class="fc bfc" id="L289" title="All 2 branches covered.">                    if (chr &lt;= UNICODE_ESCAPE_UPPER_LIMIT) {</span>
+<span class="fc" id="L290">                        sb.append(escapeUnicode1F(chr));</span>
+                    }
+                    else {
+<span class="fc" id="L293">                        sb.append(chr);</span>
+                    }
+                    break;
+            }
+        }
+<span class="fc" id="L298">        return sb.toString();</span>
+    }
+
+    /**
+     * Escape the character between 0x00 to 0x1F in JSON.
+     *
+     * @param chr the character to be escaped.
+     * @return the escaped string.
+     */
+    private static String escapeUnicode1F(char chr) {
+<span class="fc" id="L308">        final StringBuilder stringBuilder = new StringBuilder(UNICODE_LENGTH + 1);</span>
+<span class="fc" id="L309">        stringBuilder.append(&quot;\\u&quot;);</span>
+<span class="fc" id="L310">        final String hexString = Integer.toHexString(chr);</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">        for (int i = 0; i &lt; UNICODE_LENGTH - hexString.length(); i++) {</span>
+<span class="fc" id="L312">            stringBuilder.append('0');</span>
+        }
+<span class="fc" id="L314">        stringBuilder.append(hexString.toUpperCase(Locale.US));</span>
+<span class="fc" id="L315">        return stringBuilder.toString();</span>
+    }
+
+    /**
+     * Read string from given resource.
+     *
+     * @param name name of the desired resource
+     * @return the string content from the give resource
+     * @throws IOException if there is reading errors
+     */
+    public static String readResource(String name) throws IOException {
+<span class="fc" id="L326">        try (InputStream inputStream = SarifLogger.class.getResourceAsStream(name);</span>
+<span class="fc" id="L327">             ByteArrayOutputStream result = new ByteArrayOutputStream()) {</span>
+<span class="fc bfc" id="L328" title="All 2 branches covered.">            if (inputStream == null) {</span>
+<span class="fc" id="L329">                throw new IOException(&quot;Cannot find the resource &quot; + name);</span>
+            }
+<span class="fc" id="L331">            final byte[] buffer = new byte[BUFFER_SIZE];</span>
+<span class="fc" id="L332">            int length = inputStream.read(buffer);</span>
+<span class="fc bfc" id="L333" title="All 2 branches covered.">            while (length != -1) {</span>
+<span class="fc" id="L334">                result.write(buffer, 0, length);</span>
+<span class="fc" id="L335">                length = inputStream.read(buffer);</span>
+            }
+<span class="fc" id="L337">            return result.toString(StandardCharsets.UTF_8.name());</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>
