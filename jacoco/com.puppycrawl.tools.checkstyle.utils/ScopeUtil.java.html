@@ -19,6 +19,8 @@
 
 package com.puppycrawl.tools.checkstyle.utils;
 
+import java.util.Optional;
+
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.Scope;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
@@ -34,28 +36,87 @@ public final class ScopeUtil {
     }
 
     /**
-     * Returns the Scope specified by the modifier set.
+     * Returns the {@code Scope} explicitly specified by the modifier set.
+     * Returns {@code null} if there are no modifiers.
+     *
+     * @param aMods root node of a modifier set
+     * @return a {@code Scope} value or {@code null}
+     */
+    public static Scope getDeclaredScopeFromMods(DetailAST aMods) {
+<span class="fc" id="L46">        Scope result = null;</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        for (DetailAST token = aMods.getFirstChild(); token != null;</span>
+<span class="fc" id="L48">                token = token.getNextSibling()) {</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">            if (&quot;public&quot;.equals(token.getText())) {</span>
+<span class="fc" id="L50">                result = Scope.PUBLIC;</span>
+            }
+<span class="fc bfc" id="L52" title="All 2 branches covered.">            else if (&quot;protected&quot;.equals(token.getText())) {</span>
+<span class="fc" id="L53">                result = Scope.PROTECTED;</span>
+            }
+<span class="fc bfc" id="L55" title="All 2 branches covered.">            else if (&quot;private&quot;.equals(token.getText())) {</span>
+<span class="fc" id="L56">                result = Scope.PRIVATE;</span>
+            }
+        }
+<span class="fc" id="L59">        return result;</span>
+    }
+
+    /**
+     * Returns the {@code Scope} for a given {@code DetailAST}.
+     *
+     * @param ast the DetailAST to examine
+     * @return a {@code Scope} value
+     */
+    public static Scope getScope(DetailAST ast) {
+<span class="fc" id="L69">        return Optional.ofNullable(ast.findFirstToken(TokenTypes.MODIFIERS))</span>
+<span class="fc" id="L70">                .map(ScopeUtil::getDeclaredScopeFromMods)</span>
+<span class="fc" id="L71">                .orElseGet(() -&gt; getDefaultScope(ast));</span>
+    }
+
+    /**
+     * Returns the {@code Scope} specified by the modifier set. If no modifiers are present,
+     * the default scope is used.
      *
      * @param aMods root node of a modifier set
      * @return a {@code Scope} value
+     * @see #getDefaultScope(DetailAST)
      */
     public static Scope getScopeFromMods(DetailAST aMods) {
-        // default scope
-<span class="fc" id="L44">        Scope returnValue = Scope.PACKAGE;</span>
-<span class="fc" id="L45">        for (DetailAST token = aMods.getFirstChild(); token != null</span>
-<span class="fc bfc" id="L46" title="All 4 branches covered.">                &amp;&amp; returnValue == Scope.PACKAGE;</span>
-<span class="fc" id="L47">                token = token.getNextSibling()) {</span>
-<span class="fc bfc" id="L48" title="All 2 branches covered.">            if (&quot;public&quot;.equals(token.getText())) {</span>
-<span class="fc" id="L49">                returnValue = Scope.PUBLIC;</span>
+<span class="fc" id="L83">        return Optional.ofNullable(getDeclaredScopeFromMods(aMods))</span>
+<span class="fc" id="L84">                .orElseGet(() -&gt; getDefaultScope(aMods.getParent()));</span>
+    }
+
+    /**
+     * Returns the default {@code Scope} for a {@code DetailAST}.
+     * &lt;p&gt;The following rules are taken into account:&lt;/p&gt;
+     * &lt;ul&gt;
+     *     &lt;li&gt;enum constants are public&lt;/li&gt;
+     *     &lt;li&gt;enum constructors are private&lt;/li&gt;
+     *     &lt;li&gt;interface members are public&lt;/li&gt;
+     *     &lt;li&gt;everything else is package private&lt;/li&gt;
+     * &lt;/ul&gt;
+     *
+     * @param ast DetailAST to process
+     * @return a {@code Scope} value
+     */
+    private static Scope getDefaultScope(DetailAST ast) {
+        final Scope result;
+<span class="fc bfc" id="L102" title="All 2 branches covered.">        if (isInEnumBlock(ast)) {</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">            if (ast.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
+<span class="fc" id="L104">                result = Scope.PUBLIC;</span>
             }
-<span class="fc bfc" id="L51" title="All 2 branches covered.">            else if (&quot;protected&quot;.equals(token.getText())) {</span>
-<span class="fc" id="L52">                returnValue = Scope.PROTECTED;</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">            else if (ast.getType() == TokenTypes.CTOR_DEF) {</span>
+<span class="fc" id="L107">                result = Scope.PRIVATE;</span>
             }
-<span class="fc bfc" id="L54" title="All 2 branches covered.">            else if (&quot;private&quot;.equals(token.getText())) {</span>
-<span class="fc" id="L55">                returnValue = Scope.PRIVATE;</span>
+            else {
+<span class="fc" id="L110">                result = Scope.PACKAGE;</span>
             }
         }
-<span class="fc" id="L58">        return returnValue;</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        else if (isInInterfaceOrAnnotationBlock(ast)) {</span>
+<span class="fc" id="L114">            result = Scope.PUBLIC;</span>
+        }
+        else {
+<span class="fc" id="L117">            result = Scope.PACKAGE;</span>
+        }
+<span class="fc" id="L119">        return result;</span>
     }
 
     /**
@@ -65,27 +126,25 @@ public final class ScopeUtil {
      * @return the Scope of the surrounding block
      */
     public static Scope getSurroundingScope(DetailAST node) {
-<span class="fc" id="L68">        Scope returnValue = null;</span>
-<span class="fc" id="L69">        for (DetailAST token = node.getParent();</span>
-<span class="fc bfc" id="L70" title="All 2 branches covered.">             token != null;</span>
-<span class="fc" id="L71">             token = token.getParent()) {</span>
-<span class="fc" id="L72">            final int type = token.getType();</span>
-<span class="fc bfc" id="L73" title="All 2 branches covered.">            if (TokenUtil.isTypeDeclaration(type)) {</span>
-<span class="fc" id="L74">                final DetailAST mods =</span>
-<span class="fc" id="L75">                    token.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L76">                final Scope modScope = getScopeFromMods(mods);</span>
-<span class="fc bfc" id="L77" title="All 4 branches covered.">                if (returnValue == null || returnValue.isIn(modScope)) {</span>
-<span class="fc" id="L78">                    returnValue = modScope;</span>
+<span class="fc" id="L129">        Scope returnValue = null;</span>
+<span class="fc" id="L130">        for (DetailAST token = node.getParent();</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">             token != null;</span>
+<span class="fc" id="L132">             token = token.getParent()) {</span>
+<span class="fc" id="L133">            final int type = token.getType();</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">            if (TokenUtil.isTypeDeclaration(type)) {</span>
+<span class="fc" id="L135">                final Scope tokenScope = getScope(token);</span>
+<span class="fc bfc" id="L136" title="All 4 branches covered.">                if (returnValue == null || returnValue.isIn(tokenScope)) {</span>
+<span class="fc" id="L137">                    returnValue = tokenScope;</span>
                 }
-<span class="fc" id="L80">            }</span>
-<span class="fc bfc" id="L81" title="All 2 branches covered.">            else if (type == TokenTypes.LITERAL_NEW) {</span>
-<span class="fc" id="L82">                returnValue = Scope.ANONINNER;</span>
+<span class="fc" id="L139">            }</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">            else if (type == TokenTypes.LITERAL_NEW) {</span>
+<span class="fc" id="L141">                returnValue = Scope.ANONINNER;</span>
                 // because Scope.ANONINNER is not in any other Scope
-<span class="fc" id="L84">                break;</span>
+<span class="fc" id="L143">                break;</span>
             }
         }
 
-<span class="fc" id="L88">        return returnValue;</span>
+<span class="fc" id="L147">        return returnValue;</span>
     }
 
     /**
@@ -95,7 +154,7 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInClassBlock(DetailAST node) {
-<span class="fc" id="L98">        return isInBlockOf(node, TokenTypes.CLASS_DEF);</span>
+<span class="fc" id="L157">        return isInBlockOf(node, TokenTypes.CLASS_DEF);</span>
     }
 
     /**
@@ -105,7 +164,7 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInRecordBlock(DetailAST node) {
-<span class="fc" id="L108">        return isInBlockOf(node, TokenTypes.RECORD_DEF);</span>
+<span class="fc" id="L167">        return isInBlockOf(node, TokenTypes.RECORD_DEF);</span>
     }
 
     /**
@@ -115,7 +174,7 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInInterfaceBlock(DetailAST node) {
-<span class="fc" id="L118">        return isInBlockOf(node, TokenTypes.INTERFACE_DEF);</span>
+<span class="fc" id="L177">        return isInBlockOf(node, TokenTypes.INTERFACE_DEF);</span>
     }
 
     /**
@@ -125,7 +184,7 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInAnnotationBlock(DetailAST node) {
-<span class="fc" id="L128">        return isInBlockOf(node, TokenTypes.ANNOTATION_DEF);</span>
+<span class="fc" id="L187">        return isInBlockOf(node, TokenTypes.ANNOTATION_DEF);</span>
     }
 
     /**
@@ -136,22 +195,22 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     private static boolean isInBlockOf(DetailAST node, int tokenType) {
-<span class="fc" id="L139">        boolean returnValue = false;</span>
+<span class="fc" id="L198">        boolean returnValue = false;</span>
 
         // Loop up looking for a containing interface block
-<span class="fc" id="L142">        for (DetailAST token = node.getParent();</span>
-<span class="fc bfc" id="L143" title="All 4 branches covered.">             token != null &amp;&amp; !returnValue;</span>
-<span class="fc" id="L144">             token = token.getParent()) {</span>
-<span class="fc bfc" id="L145" title="All 2 branches covered.">            if (token.getType() == tokenType) {</span>
-<span class="fc" id="L146">                returnValue = true;</span>
+<span class="fc" id="L201">        for (DetailAST token = node.getParent();</span>
+<span class="fc bfc" id="L202" title="All 4 branches covered.">             token != null &amp;&amp; !returnValue;</span>
+<span class="fc" id="L203">             token = token.getParent()) {</span>
+<span class="fc bfc" id="L204" title="All 2 branches covered.">            if (token.getType() == tokenType) {</span>
+<span class="fc" id="L205">                returnValue = true;</span>
             }
-<span class="fc bfc" id="L148" title="All 2 branches covered.">            else if (token.getType() == TokenTypes.LITERAL_NEW</span>
-<span class="fc bfc" id="L149" title="All 2 branches covered.">                    || TokenUtil.isTypeDeclaration(token.getType())) {</span>
-<span class="fc" id="L150">                break;</span>
+<span class="fc bfc" id="L207" title="All 2 branches covered.">            else if (token.getType() == TokenTypes.LITERAL_NEW</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">                    || TokenUtil.isTypeDeclaration(token.getType())) {</span>
+<span class="fc" id="L209">                break;</span>
             }
         }
 
-<span class="fc" id="L154">        return returnValue;</span>
+<span class="fc" id="L213">        return returnValue;</span>
     }
 
     /**
@@ -163,7 +222,7 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInInterfaceOrAnnotationBlock(DetailAST node) {
-<span class="fc bfc" id="L166" title="All 4 branches covered.">        return isInInterfaceBlock(node) || isInAnnotationBlock(node);</span>
+<span class="fc bfc" id="L225" title="All 4 branches covered.">        return isInInterfaceBlock(node) || isInAnnotationBlock(node);</span>
     }
 
     /**
@@ -173,23 +232,23 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInEnumBlock(DetailAST node) {
-<span class="fc" id="L176">        boolean returnValue = false;</span>
+<span class="fc" id="L235">        boolean returnValue = false;</span>
 
         // Loop up looking for a containing interface block
-<span class="fc" id="L179">        for (DetailAST token = node.getParent();</span>
-<span class="fc bfc" id="L180" title="All 4 branches covered.">             token != null &amp;&amp; !returnValue;</span>
-<span class="fc" id="L181">             token = token.getParent()) {</span>
-<span class="fc bfc" id="L182" title="All 2 branches covered.">            if (token.getType() == TokenTypes.ENUM_DEF) {</span>
-<span class="fc" id="L183">                returnValue = true;</span>
+<span class="fc" id="L238">        for (DetailAST token = node.getParent();</span>
+<span class="fc bfc" id="L239" title="All 4 branches covered.">             token != null &amp;&amp; !returnValue;</span>
+<span class="fc" id="L240">             token = token.getParent()) {</span>
+<span class="fc bfc" id="L241" title="All 2 branches covered.">            if (token.getType() == TokenTypes.ENUM_DEF) {</span>
+<span class="fc" id="L242">                returnValue = true;</span>
             }
-<span class="fc bfc" id="L185" title="All 2 branches covered.">            else if (TokenUtil.isOfType(token, TokenTypes.INTERFACE_DEF,</span>
+<span class="fc bfc" id="L244" title="All 2 branches covered.">            else if (TokenUtil.isOfType(token, TokenTypes.INTERFACE_DEF,</span>
                 TokenTypes.ANNOTATION_DEF, TokenTypes.CLASS_DEF,
                 TokenTypes.LITERAL_NEW)) {
-<span class="fc" id="L188">                break;</span>
+<span class="fc" id="L247">                break;</span>
             }
         }
 
-<span class="fc" id="L192">        return returnValue;</span>
+<span class="fc" id="L251">        return returnValue;</span>
     }
 
     /**
@@ -200,8 +259,8 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isInCodeBlock(DetailAST node) {
-<span class="fc" id="L203">        boolean returnValue = false;</span>
-<span class="fc" id="L204">        final int[] tokenTypes = {</span>
+<span class="fc" id="L262">        boolean returnValue = false;</span>
+<span class="fc" id="L263">        final int[] tokenTypes = {</span>
             TokenTypes.METHOD_DEF,
             TokenTypes.CTOR_DEF,
             TokenTypes.INSTANCE_INIT,
@@ -211,16 +270,16 @@ public final class ScopeUtil {
         };
 
         // Loop up looking for a containing code block
-<span class="fc" id="L214">        for (DetailAST token = node.getParent();</span>
-<span class="fc bfc" id="L215" title="All 2 branches covered.">             token != null;</span>
-<span class="fc" id="L216">             token = token.getParent()) {</span>
-<span class="fc bfc" id="L217" title="All 2 branches covered.">            if (TokenUtil.isOfType(token, tokenTypes)) {</span>
-<span class="fc" id="L218">                returnValue = true;</span>
-<span class="fc" id="L219">                break;</span>
+<span class="fc" id="L273">        for (DetailAST token = node.getParent();</span>
+<span class="fc bfc" id="L274" title="All 2 branches covered.">             token != null;</span>
+<span class="fc" id="L275">             token = token.getParent()) {</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">            if (TokenUtil.isOfType(token, tokenTypes)) {</span>
+<span class="fc" id="L277">                returnValue = true;</span>
+<span class="fc" id="L278">                break;</span>
             }
         }
 
-<span class="fc" id="L223">        return returnValue;</span>
+<span class="fc" id="L282">        return returnValue;</span>
     }
 
     /**
@@ -230,17 +289,17 @@ public final class ScopeUtil {
      * @return a {@code boolean} value
      */
     public static boolean isOuterMostType(DetailAST node) {
-<span class="fc" id="L233">        boolean returnValue = true;</span>
-<span class="fc" id="L234">        for (DetailAST parent = node.getParent();</span>
-<span class="fc bfc" id="L235" title="All 2 branches covered.">             parent != null;</span>
-<span class="fc" id="L236">             parent = parent.getParent()) {</span>
-<span class="fc bfc" id="L237" title="All 2 branches covered.">            if (TokenUtil.isTypeDeclaration(parent.getType())) {</span>
-<span class="fc" id="L238">                returnValue = false;</span>
-<span class="fc" id="L239">                break;</span>
+<span class="fc" id="L292">        boolean returnValue = true;</span>
+<span class="fc" id="L293">        for (DetailAST parent = node.getParent();</span>
+<span class="fc bfc" id="L294" title="All 2 branches covered.">             parent != null;</span>
+<span class="fc" id="L295">             parent = parent.getParent()) {</span>
+<span class="fc bfc" id="L296" title="All 2 branches covered.">            if (TokenUtil.isTypeDeclaration(parent.getType())) {</span>
+<span class="fc" id="L297">                returnValue = false;</span>
+<span class="fc" id="L298">                break;</span>
             }
         }
 
-<span class="fc" id="L243">        return returnValue;</span>
+<span class="fc" id="L302">        return returnValue;</span>
     }
 
     /**
@@ -252,23 +311,23 @@ public final class ScopeUtil {
      * @return whether aAST is a local variable definition.
      */
     public static boolean isLocalVariableDef(DetailAST node) {
-<span class="fc" id="L255">        boolean localVariableDef = false;</span>
+<span class="fc" id="L314">        boolean localVariableDef = false;</span>
         // variable declaration?
-<span class="fc bfc" id="L257" title="All 2 branches covered.">        if (node.getType() == TokenTypes.VARIABLE_DEF) {</span>
-<span class="fc" id="L258">            final DetailAST parent = node.getParent();</span>
-<span class="fc" id="L259">            localVariableDef = TokenUtil.isOfType(parent, TokenTypes.SLIST,</span>
+<span class="fc bfc" id="L316" title="All 2 branches covered.">        if (node.getType() == TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L317">            final DetailAST parent = node.getParent();</span>
+<span class="fc" id="L318">            localVariableDef = TokenUtil.isOfType(parent, TokenTypes.SLIST,</span>
                                 TokenTypes.FOR_INIT, TokenTypes.FOR_EACH_CLAUSE);
         }
         // catch parameter?
-<span class="fc bfc" id="L263" title="All 2 branches covered.">        if (node.getType() == TokenTypes.PARAMETER_DEF) {</span>
-<span class="fc" id="L264">            final DetailAST parent = node.getParent();</span>
-<span class="fc bfc" id="L265" title="All 2 branches covered.">            localVariableDef = parent.getType() == TokenTypes.LITERAL_CATCH;</span>
+<span class="fc bfc" id="L322" title="All 2 branches covered.">        if (node.getType() == TokenTypes.PARAMETER_DEF) {</span>
+<span class="fc" id="L323">            final DetailAST parent = node.getParent();</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">            localVariableDef = parent.getType() == TokenTypes.LITERAL_CATCH;</span>
         }
 
-<span class="fc bfc" id="L268" title="All 2 branches covered.">        if (node.getType() == TokenTypes.RESOURCE) {</span>
-<span class="fc bfc" id="L269" title="All 2 branches covered.">            localVariableDef = node.getChildCount() &gt; 1;</span>
+<span class="fc bfc" id="L327" title="All 2 branches covered.">        if (node.getType() == TokenTypes.RESOURCE) {</span>
+<span class="fc bfc" id="L328" title="All 2 branches covered.">            localVariableDef = node.getChildCount() &gt; 1;</span>
         }
-<span class="fc" id="L271">        return localVariableDef;</span>
+<span class="fc" id="L330">        return localVariableDef;</span>
     }
 
     /**
@@ -280,8 +339,8 @@ public final class ScopeUtil {
      * @return whether a node is a class field definition.
      */
     public static boolean isClassFieldDef(DetailAST node) {
-<span class="fc bfc" id="L283" title="All 2 branches covered.">        return node.getType() == TokenTypes.VARIABLE_DEF</span>
-<span class="fc bfc" id="L284" title="All 2 branches covered.">                &amp;&amp; !isLocalVariableDef(node);</span>
+<span class="fc bfc" id="L342" title="All 2 branches covered.">        return node.getType() == TokenTypes.VARIABLE_DEF</span>
+<span class="fc bfc" id="L343" title="All 2 branches covered.">                &amp;&amp; !isLocalVariableDef(node);</span>
     }
 
     /**
@@ -292,8 +351,8 @@ public final class ScopeUtil {
      * @return true if the ast node is in the scope.
      */
     public static boolean isInScope(DetailAST ast, Scope scope) {
-<span class="fc" id="L295">        final Scope surroundingScopeOfAstToken = getSurroundingScope(ast);</span>
-<span class="fc bfc" id="L296" title="All 2 branches covered.">        return surroundingScopeOfAstToken == scope;</span>
+<span class="fc" id="L354">        final Scope surroundingScopeOfAstToken = getSurroundingScope(ast);</span>
+<span class="fc bfc" id="L355" title="All 2 branches covered.">        return surroundingScopeOfAstToken == scope;</span>
     }
 
 }
