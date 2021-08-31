@@ -59,7 +59,7 @@ public final class JavadocUtil {
     /** Maps from a token name to value. */
     private static final Map&lt;String, Integer&gt; TOKEN_NAME_TO_VALUE;
     /** Maps from a token value to name. */
-    private static final String[] TOKEN_VALUE_TO_NAME;
+    private static final Map&lt;Integer, String&gt; TOKEN_VALUE_TO_NAME;
 
     /** Exception message for unknown JavaDoc token id. */
     private static final String UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE = &quot;Unknown javadoc&quot;
@@ -77,7 +77,7 @@ public final class JavadocUtil {
     // initialise the constants
     static {
 <span class="fc" id="L79">        TOKEN_NAME_TO_VALUE = TokenUtil.nameToValueMapFromPublicIntFields(JavadocTokenTypes.class);</span>
-<span class="fc" id="L80">        TOKEN_VALUE_TO_NAME = TokenUtil.valueToNameArrayFromNameToValueMap(TOKEN_NAME_TO_VALUE);</span>
+<span class="fc" id="L80">        TOKEN_VALUE_TO_NAME = TokenUtil.invertMap(TOKEN_NAME_TO_VALUE);</span>
 <span class="fc" id="L81">    }</span>
 
     /** Prevent instantiation. */
@@ -315,20 +315,11 @@ public final class JavadocUtil {
      * @throws IllegalArgumentException if an unknown token ID was specified.
      */
     public static String getTokenName(int id) {
-        final String name;
-<span class="fc bfc" id="L319" title="All 2 branches covered.">        if (id == JavadocTokenTypes.EOF) {</span>
-<span class="fc" id="L320">            name = &quot;EOF&quot;;</span>
+<span class="fc" id="L318">        final String name = TOKEN_VALUE_TO_NAME.get(id);</span>
+<span class="fc bfc" id="L319" title="All 2 branches covered.">        if (name == null) {</span>
+<span class="fc" id="L320">            throw new IllegalArgumentException(UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE + id);</span>
         }
-<span class="fc bfc" id="L322" title="All 2 branches covered.">        else if (id &gt; TOKEN_VALUE_TO_NAME.length - 1) {</span>
-<span class="fc" id="L323">            throw new IllegalArgumentException(UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE + id);</span>
-        }
-        else {
-<span class="fc" id="L326">            name = TOKEN_VALUE_TO_NAME[id];</span>
-<span class="fc bfc" id="L327" title="All 2 branches covered.">            if (name == null) {</span>
-<span class="fc" id="L328">                throw new IllegalArgumentException(UNKNOWN_JAVADOC_TOKEN_ID_EXCEPTION_MESSAGE + id);</span>
-            }
-        }
-<span class="fc" id="L331">        return name;</span>
+<span class="fc" id="L322">        return name;</span>
     }
 
     /**
@@ -340,11 +331,11 @@ public final class JavadocUtil {
      * @throws IllegalArgumentException if an unknown token name was specified.
      */
     public static int getTokenId(String name) {
-<span class="fc" id="L343">        final Integer id = TOKEN_NAME_TO_VALUE.get(name);</span>
-<span class="fc bfc" id="L344" title="All 2 branches covered.">        if (id == null) {</span>
-<span class="fc" id="L345">            throw new IllegalArgumentException(&quot;Unknown javadoc token name. Given name &quot; + name);</span>
+<span class="fc" id="L334">        final Integer id = TOKEN_NAME_TO_VALUE.get(name);</span>
+<span class="fc bfc" id="L335" title="All 2 branches covered.">        if (id == null) {</span>
+<span class="fc" id="L336">            throw new IllegalArgumentException(&quot;Unknown javadoc token name. Given name &quot; + name);</span>
         }
-<span class="fc" id="L347">        return id;</span>
+<span class="fc" id="L338">        return id;</span>
     }
 
     /**
@@ -355,14 +346,14 @@ public final class JavadocUtil {
      */
     public static String getTagName(DetailNode javadocTagSection) {
         final String javadocTagName;
-<span class="fc bfc" id="L358" title="All 2 branches covered.">        if (javadocTagSection.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</span>
-<span class="fc" id="L359">            javadocTagName = getNextSibling(</span>
-<span class="fc" id="L360">                    getFirstChild(javadocTagSection)).getText();</span>
+<span class="fc bfc" id="L349" title="All 2 branches covered.">        if (javadocTagSection.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</span>
+<span class="fc" id="L350">            javadocTagName = getNextSibling(</span>
+<span class="fc" id="L351">                    getFirstChild(javadocTagSection)).getText();</span>
         }
         else {
-<span class="fc" id="L363">            javadocTagName = getFirstChild(javadocTagSection).getText();</span>
+<span class="fc" id="L354">            javadocTagName = getFirstChild(javadocTagSection).getText();</span>
         }
-<span class="fc" id="L365">        return javadocTagName;</span>
+<span class="fc" id="L356">        return javadocTagName;</span>
     }
 
     /**
@@ -372,9 +363,9 @@ public final class JavadocUtil {
      * @return the processed String with all control chars escaped.
      */
     public static String escapeAllControlChars(String text) {
-<span class="fc" id="L375">        final String textWithoutNewlines = NEWLINE.matcher(text).replaceAll(&quot;\\\\n&quot;);</span>
-<span class="fc" id="L376">        final String textWithoutReturns = RETURN.matcher(textWithoutNewlines).replaceAll(&quot;\\\\r&quot;);</span>
-<span class="fc" id="L377">        return TAB.matcher(textWithoutReturns).replaceAll(&quot;\\\\t&quot;);</span>
+<span class="fc" id="L366">        final String textWithoutNewlines = NEWLINE.matcher(text).replaceAll(&quot;\\\\n&quot;);</span>
+<span class="fc" id="L367">        final String textWithoutReturns = RETURN.matcher(textWithoutNewlines).replaceAll(&quot;\\\\r&quot;);</span>
+<span class="fc" id="L368">        return TAB.matcher(textWithoutReturns).replaceAll(&quot;\\\\t&quot;);</span>
     }
 
     /**
@@ -394,27 +385,27 @@ public final class JavadocUtil {
      */
     public static boolean isCorrectJavadocPosition(DetailAST blockComment) {
         // We must be sure that after this one there are no other documentation comments.
-<span class="fc" id="L397">        DetailAST sibling = blockComment.getNextSibling();</span>
-<span class="fc bfc" id="L398" title="All 2 branches covered.">        while (sibling != null) {</span>
-<span class="fc bfc" id="L399" title="All 2 branches covered.">            if (sibling.getType() == TokenTypes.BLOCK_COMMENT_BEGIN) {</span>
-<span class="fc bfc" id="L400" title="All 2 branches covered.">                if (isJavadocComment(getBlockCommentContent(sibling))) {</span>
+<span class="fc" id="L388">        DetailAST sibling = blockComment.getNextSibling();</span>
+<span class="fc bfc" id="L389" title="All 2 branches covered.">        while (sibling != null) {</span>
+<span class="fc bfc" id="L390" title="All 2 branches covered.">            if (sibling.getType() == TokenTypes.BLOCK_COMMENT_BEGIN) {</span>
+<span class="fc bfc" id="L391" title="All 2 branches covered.">                if (isJavadocComment(getBlockCommentContent(sibling))) {</span>
                     // Found another javadoc comment, so this one should be ignored.
-<span class="fc" id="L402">                    break;</span>
+<span class="fc" id="L393">                    break;</span>
                 }
-<span class="fc" id="L404">                sibling = sibling.getNextSibling();</span>
+<span class="fc" id="L395">                sibling = sibling.getNextSibling();</span>
             }
-<span class="fc bfc" id="L406" title="All 2 branches covered.">            else if (sibling.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</span>
-<span class="fc" id="L407">                sibling = sibling.getNextSibling();</span>
+<span class="fc bfc" id="L397" title="All 2 branches covered.">            else if (sibling.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</span>
+<span class="fc" id="L398">                sibling = sibling.getNextSibling();</span>
             }
             else {
                 // Annotation, declaration or modifier is here. Do not check further.
-<span class="fc" id="L411">                sibling = null;</span>
+<span class="fc" id="L402">                sibling = null;</span>
             }
         }
-<span class="fc bfc" id="L414" title="All 2 branches covered.">        return sibling == null</span>
-<span class="fc bfc" id="L415" title="All 2 branches covered.">            &amp;&amp; (BlockCommentPosition.isOnType(blockComment)</span>
-<span class="fc bfc" id="L416" title="All 2 branches covered.">                || BlockCommentPosition.isOnMember(blockComment)</span>
-<span class="fc bfc" id="L417" title="All 2 branches covered.">                || BlockCommentPosition.isOnPackage(blockComment));</span>
+<span class="fc bfc" id="L405" title="All 2 branches covered.">        return sibling == null</span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">            &amp;&amp; (BlockCommentPosition.isOnType(blockComment)</span>
+<span class="fc bfc" id="L407" title="All 2 branches covered.">                || BlockCommentPosition.isOnMember(blockComment)</span>
+<span class="fc bfc" id="L408" title="All 2 branches covered.">                || BlockCommentPosition.isOnPackage(blockComment));</span>
     }
 
 }
