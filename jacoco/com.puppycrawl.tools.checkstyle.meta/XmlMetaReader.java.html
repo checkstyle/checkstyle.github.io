@@ -33,8 +33,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.reflections.Reflections;
-import org.reflections.ReflectionsException;
-import org.reflections.scanners.ResourcesScanner;
+import org.reflections.scanners.Scanners;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -73,63 +72,42 @@ public final class XmlMetaReader {
      */
     public static List&lt;ModuleDetails&gt; readAllModulesIncludingThirdPartyIfAny(
             String... thirdPartyPackages) {
-<span class="fc" id="L76">        final Set&lt;String&gt; standardModuleFileNames =</span>
-                new Reflections(&quot;com.puppycrawl.tools.checkstyle.meta&quot;,
-<span class="fc" id="L78">                        new ResourcesScanner()).getResources(Pattern.compile(&quot;.*\\.xml&quot;));</span>
-<span class="fc" id="L79">        final Set&lt;String&gt; allMetadataSources = new HashSet&lt;&gt;(standardModuleFileNames);</span>
-<span class="fc bfc" id="L80" title="All 2 branches covered.">        for (String packageName : thirdPartyPackages) {</span>
-            try {
-<span class="fc" id="L82">                final Set&lt;String&gt; thirdPartyModuleFileNames =</span>
-                        new Reflections(packageName, new ResourcesScanner())
-<span class="fc" id="L84">                                .getResources(Pattern.compile(&quot;.*checkstylemeta-.*\\.xml&quot;));</span>
-<span class="fc" id="L85">                allMetadataSources.addAll(thirdPartyModuleFileNames);</span>
-            }
-<span class="fc" id="L87">            catch (ReflectionsException ex) {</span>
-<span class="pc bpc" id="L88" title="1 of 2 branches missed.">                if (propagateResourceScannerException(ex)) {</span>
-<span class="nc" id="L89">                    throw ex;</span>
-                }
-<span class="fc" id="L91">            }</span>
+<span class="fc" id="L75">        final Set&lt;String&gt; standardModuleFileNames = new Reflections(</span>
+                &quot;com.puppycrawl.tools.checkstyle.meta&quot;, Scanners.Resources)
+<span class="fc" id="L77">                .getResources(Pattern.compile(&quot;.*\\.xml&quot;));</span>
+<span class="fc" id="L78">        final Set&lt;String&gt; allMetadataSources = new HashSet&lt;&gt;(standardModuleFileNames);</span>
+<span class="fc bfc" id="L79" title="All 2 branches covered.">        for (String packageName : thirdPartyPackages) {</span>
+<span class="fc" id="L80">            final Set&lt;String&gt; thirdPartyModuleFileNames =</span>
+                    new Reflections(packageName, Scanners.Resources)
+<span class="fc" id="L82">                            .getResources(Pattern.compile(&quot;.*checkstylemeta-.*\\.xml&quot;));</span>
+<span class="fc" id="L83">            allMetadataSources.addAll(thirdPartyModuleFileNames);</span>
         }
 
-<span class="fc" id="L94">        final List&lt;ModuleDetails&gt; result = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L95" title="All 2 branches covered.">        for (String fileName : allMetadataSources) {</span>
+<span class="fc" id="L86">        final List&lt;ModuleDetails&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        for (String fileName : allMetadataSources) {</span>
             final ModuleType moduleType;
-<span class="fc bfc" id="L97" title="All 2 branches covered.">            if (fileName.endsWith(&quot;FileFilter.xml&quot;)) {</span>
-<span class="fc" id="L98">                moduleType = ModuleType.FILEFILTER;</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">            if (fileName.endsWith(&quot;FileFilter.xml&quot;)) {</span>
+<span class="fc" id="L90">                moduleType = ModuleType.FILEFILTER;</span>
             }
-<span class="fc bfc" id="L100" title="All 2 branches covered.">            else if (fileName.endsWith(&quot;Filter.xml&quot;)) {</span>
-<span class="fc" id="L101">                moduleType = ModuleType.FILTER;</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">            else if (fileName.endsWith(&quot;Filter.xml&quot;)) {</span>
+<span class="fc" id="L93">                moduleType = ModuleType.FILTER;</span>
             }
             else {
-<span class="fc" id="L104">                moduleType = ModuleType.CHECK;</span>
+<span class="fc" id="L96">                moduleType = ModuleType.CHECK;</span>
             }
             final ModuleDetails moduleDetails;
             try {
-<span class="fc" id="L108">                moduleDetails = read(XmlMetaReader.class.getResourceAsStream(&quot;/&quot; + fileName),</span>
+<span class="fc" id="L100">                moduleDetails = read(XmlMetaReader.class.getResourceAsStream(&quot;/&quot; + fileName),</span>
                         moduleType);
             }
-<span class="nc" id="L111">            catch (ParserConfigurationException | IOException | SAXException ex) {</span>
-<span class="nc" id="L112">                throw new IllegalStateException(&quot;Problem to read all modules including third &quot;</span>
+<span class="nc" id="L103">            catch (ParserConfigurationException | IOException | SAXException ex) {</span>
+<span class="nc" id="L104">                throw new IllegalStateException(&quot;Problem to read all modules including third &quot;</span>
                         + &quot;party if any. Problem detected at file: &quot; + fileName, ex);
-<span class="fc" id="L114">            }</span>
-<span class="fc" id="L115">            result.add(moduleDetails);</span>
-<span class="fc" id="L116">        }</span>
+<span class="fc" id="L106">            }</span>
+<span class="fc" id="L107">            result.add(moduleDetails);</span>
+<span class="fc" id="L108">        }</span>
 
-<span class="fc" id="L118">        return result;</span>
-    }
-
-    /**
-     * Checks if exception should be suppressed that matches the following
-     * because the reflections library throws this exception wrongly on valid
-     * packages with no resources to be found. Packages may be only checks with
-     * no resources or checks with resources. This issue is until
-     * https://github.com/ronmamo/reflections/issues/273.
-     *
-     * @param exception The exception to examine.
-     * @return {@code true} if the exception should be propagated.
-     */
-    private static boolean propagateResourceScannerException(ReflectionsException exception) {
-<span class="pc bpc" id="L132" title="1 of 2 branches missed.">        return !&quot;Scanner ResourcesScanner was not configured&quot;.equals(exception.getMessage());</span>
+<span class="fc" id="L110">        return result;</span>
     }
 
     /**
@@ -144,21 +122,21 @@ public final class XmlMetaReader {
      */
     public static ModuleDetails read(InputStream moduleMetadataStream, ModuleType moduleType)
             throws ParserConfigurationException, IOException, SAXException {
-<span class="fc" id="L147">        ModuleDetails result = null;</span>
-<span class="fc bfc" id="L148" title="All 2 branches covered.">        if (moduleType != null) {</span>
-<span class="fc" id="L149">            final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();</span>
-<span class="fc" id="L150">            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, &quot;&quot;);</span>
-<span class="fc" id="L151">            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, &quot;&quot;);</span>
-<span class="fc" id="L152">            final DocumentBuilder builder = factory.newDocumentBuilder();</span>
-<span class="fc" id="L153">            final Document document = builder.parse(moduleMetadataStream);</span>
-<span class="fc" id="L154">            final Element root = document.getDocumentElement();</span>
-<span class="fc" id="L155">            final Element element = getDirectChildsByTag(root, &quot;module&quot;).get(0);</span>
-<span class="fc" id="L156">            final ModuleDetails moduleDetails = new ModuleDetails();</span>
-<span class="fc" id="L157">            final Element module = getDirectChildsByTag(element, moduleType.getLabel()).get(0);</span>
-<span class="fc" id="L158">            moduleDetails.setModuleType(moduleType);</span>
-<span class="fc" id="L159">            result = createModule(module, moduleDetails);</span>
+<span class="fc" id="L125">        ModuleDetails result = null;</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        if (moduleType != null) {</span>
+<span class="fc" id="L127">            final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();</span>
+<span class="fc" id="L128">            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, &quot;&quot;);</span>
+<span class="fc" id="L129">            factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, &quot;&quot;);</span>
+<span class="fc" id="L130">            final DocumentBuilder builder = factory.newDocumentBuilder();</span>
+<span class="fc" id="L131">            final Document document = builder.parse(moduleMetadataStream);</span>
+<span class="fc" id="L132">            final Element root = document.getDocumentElement();</span>
+<span class="fc" id="L133">            final Element element = getDirectChildsByTag(root, &quot;module&quot;).get(0);</span>
+<span class="fc" id="L134">            final ModuleDetails moduleDetails = new ModuleDetails();</span>
+<span class="fc" id="L135">            final Element module = getDirectChildsByTag(element, moduleType.getLabel()).get(0);</span>
+<span class="fc" id="L136">            moduleDetails.setModuleType(moduleType);</span>
+<span class="fc" id="L137">            result = createModule(module, moduleDetails);</span>
         }
-<span class="fc" id="L161">        return result;</span>
+<span class="fc" id="L139">        return result;</span>
     }
 
     /**
@@ -169,24 +147,24 @@ public final class XmlMetaReader {
      * @return module detail object containing all metadata
      */
     private static ModuleDetails createModule(Element mod, ModuleDetails moduleDetails) {
-<span class="fc" id="L172">        moduleDetails.setName(getAttributeValue(mod, XML_TAG_NAME));</span>
-<span class="fc" id="L173">        moduleDetails.setFullQualifiedName(getAttributeValue(mod, &quot;fully-qualified-name&quot;));</span>
-<span class="fc" id="L174">        moduleDetails.setParent(getAttributeValue(mod, &quot;parent&quot;));</span>
-<span class="fc" id="L175">        moduleDetails.setDescription(getDirectChildsByTag(mod, XML_TAG_DESCRIPTION).get(0)</span>
-<span class="fc" id="L176">                .getFirstChild().getNodeValue());</span>
-<span class="fc" id="L177">        final List&lt;Element&gt; properties = getDirectChildsByTag(mod, &quot;properties&quot;);</span>
-<span class="fc bfc" id="L178" title="All 2 branches covered.">        if (!properties.isEmpty()) {</span>
-<span class="fc" id="L179">            final List&lt;ModulePropertyDetails&gt; modulePropertyDetailsList =</span>
-<span class="fc" id="L180">                    createProperties(properties.get(0));</span>
-<span class="fc" id="L181">            moduleDetails.addToProperties(modulePropertyDetailsList);</span>
+<span class="fc" id="L150">        moduleDetails.setName(getAttributeValue(mod, XML_TAG_NAME));</span>
+<span class="fc" id="L151">        moduleDetails.setFullQualifiedName(getAttributeValue(mod, &quot;fully-qualified-name&quot;));</span>
+<span class="fc" id="L152">        moduleDetails.setParent(getAttributeValue(mod, &quot;parent&quot;));</span>
+<span class="fc" id="L153">        moduleDetails.setDescription(getDirectChildsByTag(mod, XML_TAG_DESCRIPTION).get(0)</span>
+<span class="fc" id="L154">                .getFirstChild().getNodeValue());</span>
+<span class="fc" id="L155">        final List&lt;Element&gt; properties = getDirectChildsByTag(mod, &quot;properties&quot;);</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        if (!properties.isEmpty()) {</span>
+<span class="fc" id="L157">            final List&lt;ModulePropertyDetails&gt; modulePropertyDetailsList =</span>
+<span class="fc" id="L158">                    createProperties(properties.get(0));</span>
+<span class="fc" id="L159">            moduleDetails.addToProperties(modulePropertyDetailsList);</span>
         }
-<span class="fc" id="L183">        final List&lt;String&gt; messageKeys =</span>
-<span class="fc" id="L184">                getListContentByAttribute(mod,</span>
+<span class="fc" id="L161">        final List&lt;String&gt; messageKeys =</span>
+<span class="fc" id="L162">                getListContentByAttribute(mod,</span>
                         &quot;message-keys&quot;, &quot;message-key&quot;, &quot;key&quot;);
-<span class="fc bfc" id="L186" title="All 2 branches covered.">        if (messageKeys != null) {</span>
-<span class="fc" id="L187">            moduleDetails.addToViolationMessages(messageKeys);</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (messageKeys != null) {</span>
+<span class="fc" id="L165">            moduleDetails.addToViolationMessages(messageKeys);</span>
         }
-<span class="fc" id="L189">        return moduleDetails;</span>
+<span class="fc" id="L167">        return moduleDetails;</span>
     }
 
     /**
@@ -196,26 +174,26 @@ public final class XmlMetaReader {
      * @return list of property details object created
      */
     private static List&lt;ModulePropertyDetails&gt; createProperties(Element properties) {
-<span class="fc" id="L199">        final List&lt;ModulePropertyDetails&gt; result = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L200">        final NodeList propertyList = properties.getElementsByTagName(&quot;property&quot;);</span>
-<span class="fc bfc" id="L201" title="All 2 branches covered.">        for (int i = 0; i &lt; propertyList.getLength(); i++) {</span>
-<span class="fc" id="L202">            final ModulePropertyDetails propertyDetails = new ModulePropertyDetails();</span>
-<span class="fc" id="L203">            final Element prop = (Element) propertyList.item(i);</span>
-<span class="fc" id="L204">            propertyDetails.setName(getAttributeValue(prop, XML_TAG_NAME));</span>
-<span class="fc" id="L205">            propertyDetails.setType(getAttributeValue(prop, &quot;type&quot;));</span>
-<span class="fc" id="L206">            final String defaultValueTag = &quot;default-value&quot;;</span>
-<span class="fc bfc" id="L207" title="All 2 branches covered.">            if (prop.hasAttribute(defaultValueTag)) {</span>
-<span class="fc" id="L208">                propertyDetails.setDefaultValue(getAttributeValue(prop, defaultValueTag));</span>
+<span class="fc" id="L177">        final List&lt;ModulePropertyDetails&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L178">        final NodeList propertyList = properties.getElementsByTagName(&quot;property&quot;);</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">        for (int i = 0; i &lt; propertyList.getLength(); i++) {</span>
+<span class="fc" id="L180">            final ModulePropertyDetails propertyDetails = new ModulePropertyDetails();</span>
+<span class="fc" id="L181">            final Element prop = (Element) propertyList.item(i);</span>
+<span class="fc" id="L182">            propertyDetails.setName(getAttributeValue(prop, XML_TAG_NAME));</span>
+<span class="fc" id="L183">            propertyDetails.setType(getAttributeValue(prop, &quot;type&quot;));</span>
+<span class="fc" id="L184">            final String defaultValueTag = &quot;default-value&quot;;</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">            if (prop.hasAttribute(defaultValueTag)) {</span>
+<span class="fc" id="L186">                propertyDetails.setDefaultValue(getAttributeValue(prop, defaultValueTag));</span>
             }
-<span class="fc" id="L210">            final String validationTypeTag = &quot;validation-type&quot;;</span>
-<span class="fc bfc" id="L211" title="All 2 branches covered.">            if (prop.hasAttribute(validationTypeTag)) {</span>
-<span class="fc" id="L212">                propertyDetails.setValidationType(getAttributeValue(prop, validationTypeTag));</span>
+<span class="fc" id="L188">            final String validationTypeTag = &quot;validation-type&quot;;</span>
+<span class="fc bfc" id="L189" title="All 2 branches covered.">            if (prop.hasAttribute(validationTypeTag)) {</span>
+<span class="fc" id="L190">                propertyDetails.setValidationType(getAttributeValue(prop, validationTypeTag));</span>
             }
-<span class="fc" id="L214">            propertyDetails.setDescription(getDirectChildsByTag(prop, XML_TAG_DESCRIPTION)</span>
-<span class="fc" id="L215">                    .get(0).getFirstChild().getNodeValue());</span>
-<span class="fc" id="L216">            result.add(propertyDetails);</span>
+<span class="fc" id="L192">            propertyDetails.setDescription(getDirectChildsByTag(prop, XML_TAG_DESCRIPTION)</span>
+<span class="fc" id="L193">                    .get(0).getFirstChild().getNodeValue());</span>
+<span class="fc" id="L194">            result.add(propertyDetails);</span>
         }
-<span class="fc" id="L218">        return result;</span>
+<span class="fc" id="L196">        return result;</span>
     }
 
     /**
@@ -229,17 +207,17 @@ public final class XmlMetaReader {
      */
     private static List&lt;String&gt; getListContentByAttribute(Element element, String listParent,
                                                          String listOption, String attribute) {
-<span class="fc" id="L232">        final List&lt;Element&gt; children = getDirectChildsByTag(element, listParent);</span>
-<span class="fc" id="L233">        List&lt;String&gt; result = null;</span>
-<span class="fc bfc" id="L234" title="All 2 branches covered.">        if (!children.isEmpty()) {</span>
-<span class="fc" id="L235">            final NodeList nodeList = children.get(0).getElementsByTagName(listOption);</span>
-<span class="fc" id="L236">            final List&lt;String&gt; listContent = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L237" title="All 2 branches covered.">            for (int j = 0; j &lt; nodeList.getLength(); j++) {</span>
-<span class="fc" id="L238">                listContent.add(getAttributeValue((Element) nodeList.item(j), attribute));</span>
+<span class="fc" id="L210">        final List&lt;Element&gt; children = getDirectChildsByTag(element, listParent);</span>
+<span class="fc" id="L211">        List&lt;String&gt; result = null;</span>
+<span class="fc bfc" id="L212" title="All 2 branches covered.">        if (!children.isEmpty()) {</span>
+<span class="fc" id="L213">            final NodeList nodeList = children.get(0).getElementsByTagName(listOption);</span>
+<span class="fc" id="L214">            final List&lt;String&gt; listContent = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">            for (int j = 0; j &lt; nodeList.getLength(); j++) {</span>
+<span class="fc" id="L216">                listContent.add(getAttributeValue((Element) nodeList.item(j), attribute));</span>
             }
-<span class="fc" id="L240">            result = listContent;</span>
+<span class="fc" id="L218">            result = listContent;</span>
         }
-<span class="fc" id="L242">        return result;</span>
+<span class="fc" id="L220">        return result;</span>
     }
 
     /**
@@ -250,14 +228,14 @@ public final class XmlMetaReader {
      * @return list of elements retrieved
      */
     private static List&lt;Element&gt; getDirectChildsByTag(Element element, String sTagName) {
-<span class="fc" id="L253">        final NodeList children = element.getElementsByTagName(sTagName);</span>
-<span class="fc" id="L254">        final List&lt;Element&gt; res = new ArrayList&lt;&gt;();</span>
-<span class="fc bfc" id="L255" title="All 2 branches covered.">        for (int i = 0; i &lt; children.getLength(); i++) {</span>
-<span class="fc bfc" id="L256" title="All 2 branches covered.">            if (children.item(i).getParentNode().equals(element)) {</span>
-<span class="fc" id="L257">                res.add((Element) children.item(i));</span>
+<span class="fc" id="L231">        final NodeList children = element.getElementsByTagName(sTagName);</span>
+<span class="fc" id="L232">        final List&lt;Element&gt; res = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        for (int i = 0; i &lt; children.getLength(); i++) {</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">            if (children.item(i).getParentNode().equals(element)) {</span>
+<span class="fc" id="L235">                res.add((Element) children.item(i));</span>
             }
         }
-<span class="fc" id="L260">        return res;</span>
+<span class="fc" id="L238">        return res;</span>
     }
 
     /**
@@ -268,7 +246,7 @@ public final class XmlMetaReader {
      * @return attribute value
      */
     private static String getAttributeValue(Element element, String attribute) {
-<span class="fc" id="L271">        return element.getAttributes().getNamedItem(attribute).getNodeValue();</span>
+<span class="fc" id="L249">        return element.getAttributes().getNamedItem(attribute).getNodeValue();</span>
     }
 
 }

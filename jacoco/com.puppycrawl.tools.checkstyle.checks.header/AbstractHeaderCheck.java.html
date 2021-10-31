@@ -25,10 +25,10 @@ import java.io.InputStreamReader;
 import java.io.LineNumberReader;
 import java.io.Reader;
 import java.io.StringReader;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -57,7 +57,8 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     private URI headerFile;
 
     /** Specify the character encoding to use when reading the headerFile. */
-<span class="fc" id="L60">    private String charset = System.getProperty(&quot;file.encoding&quot;, StandardCharsets.UTF_8.name());</span>
+<span class="fc" id="L60">    private Charset charset = createCharset(System.getProperty(&quot;file.encoding&quot;,</span>
+<span class="fc" id="L61">        StandardCharsets.UTF_8.name()));</span>
 
     /**
      * Hook method for post processing header lines.
@@ -71,23 +72,18 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @return the header lines to check against.
      */
     protected List&lt;String&gt; getHeaderLines() {
-<span class="fc" id="L74">        final List&lt;String&gt; copy = new ArrayList&lt;&gt;(readerLines);</span>
-<span class="fc" id="L75">        return Collections.unmodifiableList(copy);</span>
+<span class="fc" id="L75">        final List&lt;String&gt; copy = new ArrayList&lt;&gt;(readerLines);</span>
+<span class="fc" id="L76">        return Collections.unmodifiableList(copy);</span>
     }
 
     /**
-     * Setter to specify the character encoding to use when reading the headerFile.
+     * Setter to specify the charset to use when reading the headerFile.
      *
-     * @param charset the charset to use for loading the header from a file
-     * @throws UnsupportedEncodingException if charset is unsupported
+     * @param charset the charset name to use for loading the header from a file
      */
-    public void setCharset(String charset) throws UnsupportedEncodingException {
-<span class="fc bfc" id="L85" title="All 2 branches covered.">        if (!Charset.isSupported(charset)) {</span>
-<span class="fc" id="L86">            final String message = &quot;unsupported charset: '&quot; + charset + &quot;'&quot;;</span>
-<span class="fc" id="L87">            throw new UnsupportedEncodingException(message);</span>
-        }
-<span class="fc" id="L89">        this.charset = charset;</span>
-<span class="fc" id="L90">    }</span>
+    public void setCharset(String charset) {
+<span class="fc" id="L85">        this.charset = createCharset(charset);</span>
+<span class="fc" id="L86">    }</span>
 
     /**
      * Setter to specify the name of the file containing the required header..
@@ -96,14 +92,14 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @throws CheckstyleException if fileName is empty.
      */
     public void setHeaderFile(URI uri) throws CheckstyleException {
-<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (uri == null) {</span>
-<span class="fc" id="L100">            throw new CheckstyleException(</span>
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (uri == null) {</span>
+<span class="fc" id="L96">            throw new CheckstyleException(</span>
                 &quot;property 'headerFile' is missing or invalid in module &quot;
-<span class="fc" id="L102">                    + getConfiguration().getName());</span>
+<span class="fc" id="L98">                    + getConfiguration().getName());</span>
         }
 
-<span class="fc" id="L105">        headerFile = uri;</span>
-<span class="fc" id="L106">    }</span>
+<span class="fc" id="L101">        headerFile = uri;</span>
+<span class="fc" id="L102">    }</span>
 
     /**
      * Load the header from a file.
@@ -111,16 +107,16 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @throws CheckstyleException if the file cannot be loaded
      */
     private void loadHeaderFile() throws CheckstyleException {
-<span class="fc" id="L114">        checkHeaderNotInitialized();</span>
-<span class="fc" id="L115">        try (Reader headerReader = new InputStreamReader(new BufferedInputStream(</span>
-<span class="fc" id="L116">                    headerFile.toURL().openStream()), charset)) {</span>
-<span class="fc" id="L117">            loadHeader(headerReader);</span>
+<span class="fc" id="L110">        checkHeaderNotInitialized();</span>
+<span class="fc" id="L111">        try (Reader headerReader = new InputStreamReader(new BufferedInputStream(</span>
+<span class="fc" id="L112">                    headerFile.toURL().openStream()), charset)) {</span>
+<span class="fc" id="L113">            loadHeader(headerReader);</span>
         }
-<span class="fc" id="L119">        catch (final IOException ex) {</span>
-<span class="fc" id="L120">            throw new CheckstyleException(</span>
+<span class="fc" id="L115">        catch (final IOException ex) {</span>
+<span class="fc" id="L116">            throw new CheckstyleException(</span>
                     &quot;unable to load header file &quot; + headerFile, ex);
-<span class="fc" id="L122">        }</span>
-<span class="fc" id="L123">    }</span>
+<span class="fc" id="L118">        }</span>
+<span class="fc" id="L119">    }</span>
 
     /**
      * Called before initializing the header.
@@ -128,12 +124,27 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @throws IllegalArgumentException if header has already been set
      */
     private void checkHeaderNotInitialized() {
-<span class="fc bfc" id="L131" title="All 2 branches covered.">        if (!readerLines.isEmpty()) {</span>
-<span class="fc" id="L132">            throw new IllegalArgumentException(</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">        if (!readerLines.isEmpty()) {</span>
+<span class="fc" id="L128">            throw new IllegalArgumentException(</span>
                     &quot;header has already been set - &quot;
                     + &quot;set either header or headerFile, not both&quot;);
         }
-<span class="fc" id="L136">    }</span>
+<span class="fc" id="L132">    }</span>
+
+    /**
+     * Creates charset by name.
+     *
+     * @param name charset name
+     * @return created charset
+     * @throws UnsupportedCharsetException if charset is unsupported
+     */
+    private static Charset createCharset(String name) {
+<span class="fc bfc" id="L142" title="All 2 branches covered.">        if (!Charset.isSupported(name)) {</span>
+<span class="fc" id="L143">            final String message = &quot;unsupported charset: '&quot; + name + &quot;'&quot;;</span>
+<span class="fc" id="L144">            throw new UnsupportedCharsetException(message);</span>
+        }
+<span class="fc" id="L146">        return Charset.forName(name);</span>
+    }
 
     /**
      * Set the header to check against. Individual lines in the header
@@ -143,20 +154,20 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @throws IllegalArgumentException if the header cannot be interpreted
      */
     public void setHeader(String header) {
-<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (!CommonUtil.isBlank(header)) {</span>
-<span class="fc" id="L147">            checkHeaderNotInitialized();</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        if (!CommonUtil.isBlank(header)) {</span>
+<span class="fc" id="L158">            checkHeaderNotInitialized();</span>
 
-<span class="fc" id="L149">            final String headerExpandedNewLines = ESCAPED_LINE_FEED_PATTERN</span>
-<span class="fc" id="L150">                    .matcher(header).replaceAll(&quot;\n&quot;);</span>
+<span class="fc" id="L160">            final String headerExpandedNewLines = ESCAPED_LINE_FEED_PATTERN</span>
+<span class="fc" id="L161">                    .matcher(header).replaceAll(&quot;\n&quot;);</span>
 
-<span class="fc" id="L152">            try (Reader headerReader = new StringReader(headerExpandedNewLines)) {</span>
-<span class="fc" id="L153">                loadHeader(headerReader);</span>
+<span class="fc" id="L163">            try (Reader headerReader = new StringReader(headerExpandedNewLines)) {</span>
+<span class="fc" id="L164">                loadHeader(headerReader);</span>
             }
-<span class="fc" id="L155">            catch (final IOException ex) {</span>
-<span class="fc" id="L156">                throw new IllegalArgumentException(&quot;unable to load header&quot;, ex);</span>
-<span class="fc" id="L157">            }</span>
+<span class="fc" id="L166">            catch (final IOException ex) {</span>
+<span class="fc" id="L167">                throw new IllegalArgumentException(&quot;unable to load header&quot;, ex);</span>
+<span class="fc" id="L168">            }</span>
         }
-<span class="fc" id="L159">    }</span>
+<span class="fc" id="L170">    }</span>
 
     /**
      * Load header to check against from a Reader into readerLines.
@@ -165,37 +176,37 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @throws IOException if
      */
     private void loadHeader(final Reader headerReader) throws IOException {
-<span class="fc" id="L168">        try (LineNumberReader lnr = new LineNumberReader(headerReader)) {</span>
+<span class="fc" id="L179">        try (LineNumberReader lnr = new LineNumberReader(headerReader)) {</span>
             String line;
             do {
-<span class="fc" id="L171">                line = lnr.readLine();</span>
-<span class="fc bfc" id="L172" title="All 2 branches covered.">                if (line != null) {</span>
-<span class="fc" id="L173">                    readerLines.add(line);</span>
+<span class="fc" id="L182">                line = lnr.readLine();</span>
+<span class="fc bfc" id="L183" title="All 2 branches covered.">                if (line != null) {</span>
+<span class="fc" id="L184">                    readerLines.add(line);</span>
                 }
-<span class="fc bfc" id="L175" title="All 2 branches covered.">            } while (line != null);</span>
-<span class="fc" id="L176">            postProcessHeaderLines();</span>
+<span class="fc bfc" id="L186" title="All 2 branches covered.">            } while (line != null);</span>
+<span class="fc" id="L187">            postProcessHeaderLines();</span>
         }
-<span class="fc" id="L178">    }</span>
+<span class="fc" id="L189">    }</span>
 
     @Override
     protected final void finishLocalSetup() throws CheckstyleException {
-<span class="fc bfc" id="L182" title="All 2 branches covered.">        if (headerFile != null) {</span>
-<span class="fc" id="L183">            loadHeaderFile();</span>
+<span class="fc bfc" id="L193" title="All 2 branches covered.">        if (headerFile != null) {</span>
+<span class="fc" id="L194">            loadHeaderFile();</span>
         }
-<span class="fc" id="L185">    }</span>
+<span class="fc" id="L196">    }</span>
 
     @Override
     public Set&lt;String&gt; getExternalResourceLocations() {
         final Set&lt;String&gt; result;
 
-<span class="fc bfc" id="L191" title="All 2 branches covered.">        if (headerFile == null) {</span>
-<span class="fc" id="L192">            result = Collections.emptySet();</span>
+<span class="fc bfc" id="L202" title="All 2 branches covered.">        if (headerFile == null) {</span>
+<span class="fc" id="L203">            result = Collections.emptySet();</span>
         }
         else {
-<span class="fc" id="L195">            result = Collections.singleton(headerFile.toString());</span>
+<span class="fc" id="L206">            result = Collections.singleton(headerFile.toString());</span>
         }
 
-<span class="fc" id="L198">        return result;</span>
+<span class="fc" id="L209">        return result;</span>
     }
 
 }
