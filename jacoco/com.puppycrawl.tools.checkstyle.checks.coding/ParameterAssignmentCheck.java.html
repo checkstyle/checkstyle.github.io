@@ -30,6 +30,7 @@ import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
 /**
  * &lt;p&gt;
@@ -70,6 +71,17 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  *     local -= 2;  // OK
  *     return local;
  *   }
+ *
+ *   IntPredicate obj = a -&amp;gt; ++a == 12; // violation
+ *   IntBinaryOperator obj2 = (int a, int b) -&amp;gt; {
+ *       a++;     // violation
+ *       b += 12; // violation
+ *       return a + b;
+ *   };
+ *   IntPredicate obj3 = a -&amp;gt; {
+ *       int b = a; // ok
+ *       return ++b == 12;
+ *   };
  * }
  * &lt;/pre&gt;
  * &lt;p&gt;
@@ -87,7 +99,7 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
  * @since 3.2
  */
 @FileStatefulCheck
-<span class="fc" id="L90">public final class ParameterAssignmentCheck extends AbstractCheck {</span>
+<span class="fc" id="L102">public final class ParameterAssignmentCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -96,18 +108,18 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
     public static final String MSG_KEY = &quot;parameter.assignment&quot;;
 
     /** Stack of methods' parameters. */
-<span class="fc" id="L99">    private final Deque&lt;Set&lt;String&gt;&gt; parameterNamesStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L111">    private final Deque&lt;Set&lt;String&gt;&gt; parameterNamesStack = new ArrayDeque&lt;&gt;();</span>
     /** Current set of parameters. */
     private Set&lt;String&gt; parameterNames;
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L105">        return getRequiredTokens();</span>
+<span class="fc" id="L117">        return getRequiredTokens();</span>
     }
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L110">        return new int[] {</span>
+<span class="fc" id="L122">        return new int[] {</span>
             TokenTypes.CTOR_DEF,
             TokenTypes.METHOD_DEF,
             TokenTypes.ASSIGN,
@@ -126,115 +138,62 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
             TokenTypes.POST_INC,
             TokenTypes.DEC,
             TokenTypes.POST_DEC,
+            TokenTypes.LAMBDA,
         };
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L134">        return getRequiredTokens();</span>
+<span class="fc" id="L147">        return getRequiredTokens();</span>
     }
 
     @Override
     public void beginTree(DetailAST rootAST) {
         // clear data
-<span class="fc" id="L140">        parameterNamesStack.clear();</span>
-<span class="fc" id="L141">        parameterNames = Collections.emptySet();</span>
-<span class="fc" id="L142">    }</span>
+<span class="fc" id="L153">        parameterNamesStack.clear();</span>
+<span class="fc" id="L154">        parameterNames = Collections.emptySet();</span>
+<span class="fc" id="L155">    }</span>
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L146" title="All 4 branches covered.">        switch (ast.getType()) {</span>
-            case TokenTypes.CTOR_DEF:
-            case TokenTypes.METHOD_DEF:
-<span class="fc" id="L149">                visitMethodDef(ast);</span>
-<span class="fc" id="L150">                break;</span>
-            case TokenTypes.ASSIGN:
-            case TokenTypes.PLUS_ASSIGN:
-            case TokenTypes.MINUS_ASSIGN:
-            case TokenTypes.STAR_ASSIGN:
-            case TokenTypes.DIV_ASSIGN:
-            case TokenTypes.MOD_ASSIGN:
-            case TokenTypes.SR_ASSIGN:
-            case TokenTypes.BSR_ASSIGN:
-            case TokenTypes.SL_ASSIGN:
-            case TokenTypes.BAND_ASSIGN:
-            case TokenTypes.BXOR_ASSIGN:
-            case TokenTypes.BOR_ASSIGN:
-<span class="fc" id="L163">                visitAssign(ast);</span>
-<span class="fc" id="L164">                break;</span>
-            case TokenTypes.INC:
-            case TokenTypes.POST_INC:
-            case TokenTypes.DEC:
-            case TokenTypes.POST_DEC:
-<span class="fc" id="L169">                visitIncDec(ast);</span>
-<span class="fc" id="L170">                break;</span>
-            default:
-<span class="fc" id="L172">                throw new IllegalStateException(ast.toString());</span>
+<span class="fc" id="L159">        final int type = ast.getType();</span>
+<span class="fc bfc" id="L160" title="All 2 branches covered.">        if (TokenUtil.isOfType(type, TokenTypes.CTOR_DEF, TokenTypes.METHOD_DEF)) {</span>
+<span class="fc" id="L161">            visitMethodDef(ast);</span>
         }
-<span class="fc" id="L174">    }</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        else if (type == TokenTypes.LAMBDA) {</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">            if (ast.getParent().getType() != TokenTypes.SWITCH_RULE) {</span>
+<span class="fc" id="L165">                visitLambda(ast);</span>
+            }
+        }
+        else {
+<span class="fc" id="L169">            checkNestedIdent(ast);</span>
+        }
+<span class="fc" id="L171">    }</span>
 
     @Override
     public void leaveToken(DetailAST ast) {
-<span class="fc bfc" id="L178" title="All 3 branches covered.">        switch (ast.getType()) {</span>
-            case TokenTypes.CTOR_DEF:
-            case TokenTypes.METHOD_DEF:
-<span class="fc" id="L181">                leaveMethodDef();</span>
-<span class="fc" id="L182">                break;</span>
-            case TokenTypes.ASSIGN:
-            case TokenTypes.PLUS_ASSIGN:
-            case TokenTypes.MINUS_ASSIGN:
-            case TokenTypes.STAR_ASSIGN:
-            case TokenTypes.DIV_ASSIGN:
-            case TokenTypes.MOD_ASSIGN:
-            case TokenTypes.SR_ASSIGN:
-            case TokenTypes.BSR_ASSIGN:
-            case TokenTypes.SL_ASSIGN:
-            case TokenTypes.BAND_ASSIGN:
-            case TokenTypes.BXOR_ASSIGN:
-            case TokenTypes.BOR_ASSIGN:
-            case TokenTypes.INC:
-            case TokenTypes.POST_INC:
-            case TokenTypes.DEC:
-            case TokenTypes.POST_DEC:
-                // Do nothing
-<span class="fc" id="L200">                break;</span>
-            default:
-<span class="fc" id="L202">                throw new IllegalStateException(ast.toString());</span>
+<span class="fc" id="L175">        final int type = ast.getType();</span>
+<span class="fc bfc" id="L176" title="All 4 branches covered.">        if (TokenUtil.isOfType(type, TokenTypes.CTOR_DEF, TokenTypes.METHOD_DEF)</span>
+                || type == TokenTypes.LAMBDA
+<span class="fc bfc" id="L178" title="All 2 branches covered.">                &amp;&amp; ast.getParent().getType() != TokenTypes.SWITCH_RULE) {</span>
+<span class="fc" id="L179">            parameterNames = parameterNamesStack.pop();</span>
         }
-<span class="fc" id="L204">    }</span>
+<span class="fc" id="L181">    }</span>
 
     /**
-     * Checks if this is assignments of parameter.
+     * Check if nested ident is parameter.
      *
-     * @param ast assignment to check.
+     * @param ast parent of node of ident
      */
-    private void visitAssign(DetailAST ast) {
-<span class="fc" id="L212">        checkIdent(ast);</span>
-<span class="fc" id="L213">    }</span>
+    private void checkNestedIdent(DetailAST ast) {
+<span class="fc" id="L189">        final DetailAST identAST = ast.getFirstChild();</span>
 
-    /**
-     * Checks if this is increment/decrement of parameter.
-     *
-     * @param ast dec/inc to check.
-     */
-    private void visitIncDec(DetailAST ast) {
-<span class="fc" id="L221">        checkIdent(ast);</span>
-<span class="fc" id="L222">    }</span>
-
-    /**
-     * Check if ident is parameter.
-     *
-     * @param ast ident to check.
-     */
-    private void checkIdent(DetailAST ast) {
-<span class="fc" id="L230">        final DetailAST identAST = ast.getFirstChild();</span>
-
-<span class="fc bfc" id="L232" title="All 2 branches covered.">        if (identAST != null</span>
-<span class="fc bfc" id="L233" title="All 2 branches covered.">            &amp;&amp; identAST.getType() == TokenTypes.IDENT</span>
-<span class="fc bfc" id="L234" title="All 2 branches covered.">            &amp;&amp; parameterNames.contains(identAST.getText())) {</span>
-<span class="fc" id="L235">            log(ast, MSG_KEY, identAST.getText());</span>
+<span class="fc bfc" id="L191" title="All 2 branches covered.">        if (identAST != null</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">            &amp;&amp; identAST.getType() == TokenTypes.IDENT</span>
+<span class="fc bfc" id="L193" title="All 2 branches covered.">            &amp;&amp; parameterNames.contains(identAST.getText())) {</span>
+<span class="fc" id="L194">            log(ast, MSG_KEY, identAST.getText());</span>
         }
-<span class="fc" id="L237">    }</span>
+<span class="fc" id="L196">    }</span>
 
     /**
      * Creates new set of parameters and store old one in stack.
@@ -242,16 +201,27 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast a method to process.
      */
     private void visitMethodDef(DetailAST ast) {
-<span class="fc" id="L245">        parameterNamesStack.push(parameterNames);</span>
-<span class="fc" id="L246">        parameterNames = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L204">        parameterNamesStack.push(parameterNames);</span>
+<span class="fc" id="L205">        parameterNames = new HashSet&lt;&gt;();</span>
 
-<span class="fc" id="L248">        visitMethodParameters(ast.findFirstToken(TokenTypes.PARAMETERS));</span>
-<span class="fc" id="L249">    }</span>
+<span class="fc" id="L207">        visitMethodParameters(ast.findFirstToken(TokenTypes.PARAMETERS));</span>
+<span class="fc" id="L208">    }</span>
 
-    /** Restores old set of parameters. */
-    private void leaveMethodDef() {
-<span class="fc" id="L253">        parameterNames = parameterNamesStack.pop();</span>
-<span class="fc" id="L254">    }</span>
+    /**
+     * Creates new set of parameters and store old one in stack.
+     *
+     * @param lambdaAst node of type {@link TokenTypes#LAMBDA}.
+     */
+    private void visitLambda(DetailAST lambdaAst) {
+<span class="fc" id="L216">        parameterNamesStack.push(parameterNames);</span>
+<span class="fc" id="L217">        parameterNames = new HashSet&lt;&gt;();</span>
+
+<span class="fc" id="L219">        DetailAST parameterAst = lambdaAst.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc bfc" id="L220" title="All 2 branches covered.">        if (parameterAst == null) {</span>
+<span class="fc" id="L221">            parameterAst = lambdaAst.getFirstChild();</span>
+        }
+<span class="fc" id="L223">        visitLambdaParameters(parameterAst);</span>
+<span class="fc" id="L224">    }</span>
 
     /**
      * Creates new parameter set for given method.
@@ -259,19 +229,42 @@ import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
      * @param ast a method for process.
      */
     private void visitMethodParameters(DetailAST ast) {
-<span class="fc" id="L262">        DetailAST parameterDefAST =</span>
-<span class="fc" id="L263">            ast.findFirstToken(TokenTypes.PARAMETER_DEF);</span>
+<span class="fc" id="L232">        visitParameters(ast);</span>
+<span class="fc" id="L233">    }</span>
 
-<span class="fc bfc" id="L265" title="All 2 branches covered.">        while (parameterDefAST != null) {</span>
-<span class="fc bfc" id="L266" title="All 2 branches covered.">            if (parameterDefAST.getType() == TokenTypes.PARAMETER_DEF</span>
-<span class="fc bfc" id="L267" title="All 2 branches covered.">                    &amp;&amp; !CheckUtil.isReceiverParameter(parameterDefAST)) {</span>
-<span class="fc" id="L268">                final DetailAST param =</span>
-<span class="fc" id="L269">                    parameterDefAST.findFirstToken(TokenTypes.IDENT);</span>
-<span class="fc" id="L270">                parameterNames.add(param.getText());</span>
-            }
-<span class="fc" id="L272">            parameterDefAST = parameterDefAST.getNextSibling();</span>
+    /**
+     * Creates new parameter set for given lambda expression.
+     *
+     * @param ast a lambda expression parameter to process
+     */
+    private void visitLambdaParameters(DetailAST ast) {
+<span class="fc bfc" id="L241" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.IDENT) {</span>
+<span class="fc" id="L242">            parameterNames.add(ast.getText());</span>
         }
-<span class="fc" id="L274">    }</span>
+        else {
+<span class="fc" id="L245">            visitParameters(ast);</span>
+        }
+<span class="fc" id="L247">    }</span>
+
+    /**
+     * Visits parameter list and adds parameter names to the set.
+     *
+     * @param parametersAst ast node of type {@link TokenTypes#PARAMETERS}.
+     */
+    private void visitParameters(DetailAST parametersAst) {
+<span class="fc" id="L255">        DetailAST parameterDefAST =</span>
+<span class="fc" id="L256">            parametersAst.findFirstToken(TokenTypes.PARAMETER_DEF);</span>
+
+<span class="fc bfc" id="L258" title="All 2 branches covered.">        while (parameterDefAST != null) {</span>
+<span class="fc bfc" id="L259" title="All 2 branches covered.">            if (parameterDefAST.getType() == TokenTypes.PARAMETER_DEF</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">                    &amp;&amp; !CheckUtil.isReceiverParameter(parameterDefAST)) {</span>
+<span class="fc" id="L261">                final DetailAST param =</span>
+<span class="fc" id="L262">                    parameterDefAST.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L263">                parameterNames.add(param.getText());</span>
+            }
+<span class="fc" id="L265">            parameterDefAST = parameterDefAST.getNextSibling();</span>
+        }
+<span class="fc" id="L267">    }</span>
 
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>
