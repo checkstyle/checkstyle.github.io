@@ -1,0 +1,1132 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UnusedLocalVariableCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.checks.coding</a> &gt; <span class="el_source">UnusedLocalVariableCheck.java</span></div><h1>UnusedLocalVariableCheck.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2022 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.checks.coding;
+
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
+import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.api.FullIdent;
+import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.checks.naming.AccessModifierOption;
+import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
+import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
+
+/**
+ * &lt;p&gt;
+ * Checks that a local variable is declared and/or assigned, but not used.
+ * Doesn't support
+ * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se17/html/jls-14.html#jls-14.30&quot;&gt;
+ * pattern variables yet&lt;/a&gt;.
+ * Doesn't check
+ * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se17/html/jls-4.html#jls-4.12.3&quot;&gt;
+ * array components&lt;/a&gt; as array
+ * components are classified as different kind of variables by
+ * &lt;a href=&quot;https://docs.oracle.com/javase/specs/jls/se17/html/index.html&quot;&gt;JLS&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * To configure the check:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * &amp;lt;module name=&amp;quot;UnusedLocalVariable&amp;quot;/&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * class Test {
+ *
+ *     int a;
+ *
+ *     {
+ *         int k = 12; // violation, assigned and updated but never used
+ *         k++;
+ *     }
+ *
+ *     Test(int a) {   // ok as 'a' is a constructor parameter not a local variable
+ *         this.a = 12;
+ *     }
+ *
+ *     void method(int b) {
+ *         int a = 10;             // violation
+ *         int[] arr = {1, 2, 3};  // violation
+ *         int[] anotherArr = {1}; // ok
+ *         anotherArr[0] = 4;
+ *     }
+ *
+ *     String convertValue(String newValue) {
+ *         String s = newValue.toLowerCase(); // violation
+ *         return newValue.toLowerCase();
+ *     }
+ *
+ *     void read() throws IOException {
+ *         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+ *         String s; // violation
+ *         while ((s = reader.readLine()) != null) {
+ *         }
+ *         try (BufferedReader reader1 // ok as 'reader1' is a resource and resources are closed
+ *                                     // at the end of the statement
+ *             = new BufferedReader(new FileReader(&quot;abc.txt&quot;))) {
+ *         }
+ *         try {
+ *         } catch (Exception e) {     // ok as e is an exception parameter
+ *         }
+ *     }
+ *
+ *     void loops() {
+ *         int j = 12;
+ *         for (int i = 0; j &amp;lt; 11; i++) { // violation, unused local variable 'i'.
+ *         }
+ *         for (int p = 0; j &amp;lt; 11; p++)   // ok
+ *             p /= 2;
+ *     }
+ *
+ *     void lambdas() {
+ *         Predicate&amp;lt;String&amp;gt; obj = (String str) -&amp;gt; { // ok as 'str' is a lambda parameter
+ *             return true;
+ *         };
+ *         obj.test(&quot;test&quot;);
+ *     }
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * Violation Message Keys:
+ * &lt;/p&gt;
+ * &lt;ul&gt;
+ * &lt;li&gt;
+ * {@code unused.local.var}
+ * &lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * @since 9.3
+ */
+@FileStatefulCheck
+public class UnusedLocalVariableCheck extends AbstractCheck {
+
+    /**
+     * A key is pointing to the warning message text in &quot;messages.properties&quot;
+     * file.
+     */
+    public static final String MSG_UNUSED_LOCAL_VARIABLE = &quot;unused.local.var&quot;;
+
+    /**
+     * An array of increment and decrement tokens.
+     */
+<span class="fc" id="L146">    private static final int[] INCREMENT_AND_DECREMENT_TOKENS = {</span>
+        TokenTypes.POST_INC,
+        TokenTypes.POST_DEC,
+        TokenTypes.INC,
+        TokenTypes.DEC,
+    };
+
+    /**
+     * An array of scope tokens.
+     */
+<span class="fc" id="L156">    private static final int[] SCOPES = {</span>
+        TokenTypes.SLIST,
+        TokenTypes.LITERAL_FOR,
+        TokenTypes.OBJBLOCK,
+    };
+
+    /**
+     * An array of unacceptable children of ast of type {@link TokenTypes#DOT}.
+     */
+<span class="fc" id="L165">    private static final int[] UNACCEPTABLE_CHILD_OF_DOT = {</span>
+        TokenTypes.DOT,
+        TokenTypes.METHOD_CALL,
+        TokenTypes.LITERAL_NEW,
+        TokenTypes.LITERAL_SUPER,
+        TokenTypes.LITERAL_CLASS,
+        TokenTypes.LITERAL_THIS,
+    };
+
+    /**
+     * An array of unacceptable parent of ast of type {@link TokenTypes#IDENT}.
+     */
+<span class="fc" id="L177">    private static final int[] UNACCEPTABLE_PARENT_OF_IDENT = {</span>
+        TokenTypes.VARIABLE_DEF,
+        TokenTypes.DOT,
+        TokenTypes.LITERAL_NEW,
+        TokenTypes.PATTERN_VARIABLE_DEF,
+        TokenTypes.METHOD_CALL,
+        TokenTypes.TYPE,
+    };
+
+    /**
+     * An array of blocks in which local anon inner classes can exist.
+     */
+<span class="fc" id="L189">    private static final int[] CONTAINERS_FOR_ANON_INNERS = {</span>
+        TokenTypes.METHOD_DEF,
+        TokenTypes.CTOR_DEF,
+        TokenTypes.STATIC_INIT,
+        TokenTypes.INSTANCE_INIT,
+        TokenTypes.COMPACT_CTOR_DEF,
+    };
+
+    /** Package separator. */
+    private static final String PACKAGE_SEPARATOR = &quot;.&quot;;
+
+    /**
+     * Keeps tracks of the variables declared in file.
+     */
+    private final Deque&lt;VariableDesc&gt; variables;
+
+    /**
+     * Keeps track of all the type declarations present in the file.
+     * Pops the type out of the stack while leaving the type
+     * in visitor pattern.
+     */
+    private final Deque&lt;TypeDeclDesc&gt; typeDeclarations;
+
+    /**
+     * Maps type declaration ast to their respective TypeDeclDesc objects.
+     */
+    private final Map&lt;DetailAST, TypeDeclDesc&gt; typeDeclAstToTypeDeclDesc;
+
+    /**
+     * Maps local anonymous inner class to the TypeDeclDesc object
+     * containing it.
+     */
+    private final Map&lt;DetailAST, TypeDeclDesc&gt; anonInnerAstToTypeDeclDesc;
+
+    /**
+     * Set of tokens of type {@link UnusedLocalVariableCheck#CONTAINERS_FOR_ANON_INNERS}
+     * and {@link TokenTypes#LAMBDA} in some cases.
+     */
+    private final Set&lt;DetailAST&gt; anonInnerClassHolders;
+
+    /**
+     * Name of the package.
+     */
+    private String packageName;
+
+    /**
+     * Depth at which a type declaration is nested, 0 for top level type declarations.
+     */
+    private int depth;
+
+    /**
+     * Creates a new {@code UnusedLocalVariableCheck} instance.
+     */
+<span class="fc" id="L242">    public UnusedLocalVariableCheck() {</span>
+<span class="fc" id="L243">        variables = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L244">        typeDeclarations = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L245">        typeDeclAstToTypeDeclDesc = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L246">        anonInnerAstToTypeDeclDesc = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L247">        anonInnerClassHolders = new HashSet&lt;&gt;();</span>
+<span class="fc" id="L248">        packageName = null;</span>
+<span class="fc" id="L249">        depth = 0;</span>
+<span class="fc" id="L250">    }</span>
+
+    @Override
+    public int[] getDefaultTokens() {
+<span class="fc" id="L254">        return new int[] {</span>
+            TokenTypes.DOT,
+            TokenTypes.VARIABLE_DEF,
+            TokenTypes.IDENT,
+            TokenTypes.SLIST,
+            TokenTypes.LITERAL_FOR,
+            TokenTypes.OBJBLOCK,
+            TokenTypes.CLASS_DEF,
+            TokenTypes.INTERFACE_DEF,
+            TokenTypes.ANNOTATION_DEF,
+            TokenTypes.PACKAGE_DEF,
+            TokenTypes.LITERAL_NEW,
+            TokenTypes.METHOD_DEF,
+            TokenTypes.CTOR_DEF,
+            TokenTypes.STATIC_INIT,
+            TokenTypes.INSTANCE_INIT,
+            TokenTypes.COMPILATION_UNIT,
+            TokenTypes.LAMBDA,
+            TokenTypes.ENUM_DEF,
+            TokenTypes.RECORD_DEF,
+            TokenTypes.COMPACT_CTOR_DEF,
+        };
+    }
+
+    @Override
+    public int[] getAcceptableTokens() {
+<span class="fc" id="L280">        return getDefaultTokens();</span>
+    }
+
+    @Override
+    public int[] getRequiredTokens() {
+<span class="fc" id="L285">        return getDefaultTokens();</span>
+    }
+
+    @Override
+    public void beginTree(DetailAST root) {
+        // No need to set blockContainingLocalAnonInnerClass to null, if
+        // its value gets changed during the check then it is changed back to null
+        // inside the check only.
+<span class="fc" id="L293">        variables.clear();</span>
+<span class="fc" id="L294">        typeDeclarations.clear();</span>
+<span class="fc" id="L295">        typeDeclAstToTypeDeclDesc.clear();</span>
+<span class="fc" id="L296">        anonInnerAstToTypeDeclDesc.clear();</span>
+<span class="fc" id="L297">        anonInnerClassHolders.clear();</span>
+<span class="fc" id="L298">        packageName = null;</span>
+<span class="fc" id="L299">        depth = 0;</span>
+<span class="fc" id="L300">    }</span>
+
+    @Override
+    public void visitToken(DetailAST ast) {
+<span class="fc" id="L304">        final int type = ast.getType();</span>
+<span class="fc bfc" id="L305" title="All 2 branches covered.">        if (type == TokenTypes.DOT) {</span>
+<span class="fc" id="L306">            visitDotToken(ast, variables);</span>
+        }
+<span class="fc bfc" id="L308" title="All 2 branches covered.">        else if (type == TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L309">            visitVariableDefToken(ast);</span>
+        }
+<span class="fc bfc" id="L311" title="All 2 branches covered.">        else if (type == TokenTypes.IDENT) {</span>
+<span class="fc" id="L312">            visitIdentToken(ast, variables);</span>
+        }
+<span class="fc bfc" id="L314" title="All 2 branches covered.">        else if (type == TokenTypes.LITERAL_NEW</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">                &amp;&amp; isInsideLocalAnonInnerClass(ast)) {</span>
+<span class="fc" id="L316">            visitLocalAnonInnerClass(ast);</span>
+        }
+<span class="fc bfc" id="L318" title="All 2 branches covered.">        else if (TokenUtil.isTypeDeclaration(type)) {</span>
+<span class="fc" id="L319">            visitTypeDeclarationToken(ast);</span>
+        }
+<span class="fc bfc" id="L321" title="All 2 branches covered.">        else if (type == TokenTypes.PACKAGE_DEF) {</span>
+<span class="fc" id="L322">            packageName = extractQualifiedName(ast.getFirstChild().getNextSibling());</span>
+        }
+<span class="fc" id="L324">    }</span>
+
+    @Override
+    public void leaveToken(DetailAST ast) {
+<span class="fc bfc" id="L328" title="All 2 branches covered.">        if (TokenUtil.isOfType(ast, SCOPES)) {</span>
+<span class="fc" id="L329">            logViolations(ast, variables);</span>
+        }
+<span class="fc bfc" id="L331" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.COMPILATION_UNIT) {</span>
+<span class="fc" id="L332">            leaveCompilationUnit();</span>
+        }
+<span class="fc bfc" id="L334" title="All 2 branches covered.">        else if (isNonLocalTypeDeclaration(ast)) {</span>
+<span class="fc" id="L335">            depth--;</span>
+<span class="fc" id="L336">            typeDeclarations.pop();</span>
+        }
+<span class="fc" id="L338">    }</span>
+
+    /**
+     * Visit ast of type {@link TokenTypes#DOT}.
+     *
+     * @param dotAst dotAst
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private static void visitDotToken(DetailAST dotAst, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc bfc" id="L347" title="All 2 branches covered.">        if (dotAst.getParent().getType() != TokenTypes.LITERAL_NEW</span>
+<span class="fc bfc" id="L348" title="All 2 branches covered.">                &amp;&amp; shouldCheckIdentTokenNestedUnderDot(dotAst)) {</span>
+<span class="fc" id="L349">            checkIdentifierAst(dotAst.findFirstToken(TokenTypes.IDENT), variablesStack);</span>
+        }
+<span class="fc" id="L351">    }</span>
+
+    /**
+     * Visit ast of type {@link TokenTypes#VARIABLE_DEF}.
+     *
+     * @param varDefAst varDefAst
+     */
+    private void visitVariableDefToken(DetailAST varDefAst) {
+<span class="fc" id="L359">        addLocalVariables(varDefAst, variables);</span>
+<span class="fc" id="L360">        addInstanceOrClassVar(varDefAst);</span>
+<span class="fc" id="L361">    }</span>
+
+    /**
+     * Visit ast of type {@link TokenTypes#IDENT}.
+     *
+     * @param identAst identAst
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private static void visitIdentToken(DetailAST identAst, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc" id="L370">        final DetailAST parentAst = identAst.getParent();</span>
+<span class="fc bfc" id="L371" title="All 2 branches covered.">        if (!TokenUtil.isOfType(parentAst, UNACCEPTABLE_PARENT_OF_IDENT)</span>
+<span class="fc bfc" id="L372" title="All 2 branches covered.">                &amp;&amp; shouldCheckIdentWithMethodRefParent(identAst)) {</span>
+<span class="fc" id="L373">            checkIdentifierAst(identAst, variablesStack);</span>
+        }
+<span class="fc" id="L375">    }</span>
+
+    /**
+     * Visit the type declaration token.
+     *
+     * @param typeDeclAst type declaration ast
+     */
+    private void visitTypeDeclarationToken(DetailAST typeDeclAst) {
+<span class="fc bfc" id="L383" title="All 2 branches covered.">        if (isNonLocalTypeDeclaration(typeDeclAst)) {</span>
+<span class="fc" id="L384">            final String qualifiedName = getQualifiedTypeDeclarationName(typeDeclAst);</span>
+<span class="fc" id="L385">            final TypeDeclDesc currTypeDecl = new TypeDeclDesc(qualifiedName, depth, typeDeclAst);</span>
+<span class="fc" id="L386">            depth++;</span>
+<span class="fc" id="L387">            typeDeclarations.push(currTypeDecl);</span>
+<span class="fc" id="L388">            typeDeclAstToTypeDeclDesc.put(typeDeclAst, currTypeDecl);</span>
+        }
+<span class="fc" id="L390">    }</span>
+
+    /**
+     * Visit the local anon inner class.
+     *
+     * @param literalNewAst literalNewAst
+     */
+    private void visitLocalAnonInnerClass(DetailAST literalNewAst) {
+<span class="fc" id="L398">        anonInnerAstToTypeDeclDesc.put(literalNewAst, typeDeclarations.peek());</span>
+<span class="fc" id="L399">        anonInnerClassHolders.add(getBlockContainingLocalAnonInnerClass(literalNewAst));</span>
+<span class="fc" id="L400">    }</span>
+
+    /**
+     * Get name of package and super class of anon inner class by concatenating
+     * the identifier values under {@link TokenTypes#DOT}.
+     * Duplicated, until &lt;a&gt;https://github.com/checkstyle/checkstyle/issues/11201&lt;/a&gt;
+     *
+     * @param ast ast to extract superclass or package name from
+     * @return qualified name
+     */
+    private static String extractQualifiedName(DetailAST ast) {
+<span class="fc" id="L411">        return FullIdent.createFullIdent(ast).getText();</span>
+    }
+
+    /**
+     * Whether ast node of type {@link TokenTypes#LITERAL_NEW} is a part of a local
+     * anonymous inner class.
+     *
+     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}
+     * @return true if variableDefAst is an instance variable in local anonymous inner class
+     */
+    private static boolean isInsideLocalAnonInnerClass(DetailAST literalNewAst) {
+<span class="fc" id="L422">        boolean result = false;</span>
+<span class="fc" id="L423">        final DetailAST lastChild = literalNewAst.getLastChild();</span>
+<span class="fc bfc" id="L424" title="All 4 branches covered.">        if (lastChild != null &amp;&amp; lastChild.getType() == TokenTypes.OBJBLOCK) {</span>
+<span class="fc" id="L425">            DetailAST parentAst = literalNewAst.getParent();</span>
+<span class="fc bfc" id="L426" title="All 2 branches covered.">            while (parentAst.getType() != TokenTypes.SLIST) {</span>
+<span class="fc bfc" id="L427" title="All 2 branches covered.">                if (TokenUtil.isTypeDeclaration(parentAst.getParent().getType())) {</span>
+<span class="fc" id="L428">                    break;</span>
+                }
+<span class="fc" id="L430">                parentAst = parentAst.getParent();</span>
+            }
+<span class="fc bfc" id="L432" title="All 2 branches covered.">            result = parentAst.getType() == TokenTypes.SLIST;</span>
+        }
+<span class="fc" id="L434">        return result;</span>
+    }
+
+    /**
+     * Traverse {@code variablesStack} stack and log the violations.
+     *
+     * @param scopeAst ast node of type {@link UnusedLocalVariableCheck#SCOPES}
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private void logViolations(DetailAST scopeAst, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc bfc" id="L444" title="All 4 branches covered.">        while (!variablesStack.isEmpty() &amp;&amp; variablesStack.peek().getScope() == scopeAst) {</span>
+<span class="fc" id="L445">            final VariableDesc variableDesc = variablesStack.pop();</span>
+<span class="fc bfc" id="L446" title="All 2 branches covered.">            if (!variableDesc.isUsed()</span>
+<span class="fc bfc" id="L447" title="All 2 branches covered.">                    &amp;&amp; !variableDesc.isInstVarOrClassVar()) {</span>
+<span class="fc" id="L448">                final DetailAST typeAst = variableDesc.getTypeAst();</span>
+<span class="fc" id="L449">                log(typeAst, MSG_UNUSED_LOCAL_VARIABLE, variableDesc.getName());</span>
+            }
+<span class="fc" id="L451">        }</span>
+<span class="fc" id="L452">    }</span>
+
+    /**
+     * We process all the blocks containing local anonymous inner classes
+     * separately after processing all the other nodes. This is being done
+     * due to the fact the instance variables of local anon inner classes can
+     * cast a shadow on local variables.
+     */
+    private void leaveCompilationUnit() {
+<span class="fc" id="L461">        anonInnerClassHolders.forEach(holder -&gt; {</span>
+<span class="fc" id="L462">            iterateOverBlockContainingLocalAnonInnerClass(holder, new ArrayDeque&lt;&gt;());</span>
+<span class="fc" id="L463">        });</span>
+<span class="fc" id="L464">    }</span>
+
+    /**
+     * Whether a type declaration is non-local. Annotated interfaces are always non-local.
+     *
+     * @param typeDeclAst type declaration ast
+     * @return true if type declaration is non-local
+     */
+    private static boolean isNonLocalTypeDeclaration(DetailAST typeDeclAst) {
+<span class="fc bfc" id="L473" title="All 2 branches covered.">        return TokenUtil.isTypeDeclaration(typeDeclAst.getType())</span>
+<span class="fc bfc" id="L474" title="All 2 branches covered.">                &amp;&amp; typeDeclAst.getParent().getType() != TokenTypes.SLIST;</span>
+    }
+
+    /**
+     * Get the block containing local anon inner class.
+     *
+     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}
+     * @return the block containing local anon inner class
+     */
+    private static DetailAST getBlockContainingLocalAnonInnerClass(DetailAST literalNewAst) {
+<span class="fc" id="L484">        DetailAST parentAst = literalNewAst.getParent();</span>
+<span class="fc" id="L485">        DetailAST result = null;</span>
+<span class="fc bfc" id="L486" title="All 2 branches covered.">        while (!TokenUtil.isOfType(parentAst, CONTAINERS_FOR_ANON_INNERS)) {</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">            if (parentAst.getType() == TokenTypes.LAMBDA</span>
+<span class="fc" id="L488">                    &amp;&amp; parentAst.getParent()</span>
+<span class="fc bfc" id="L489" title="All 2 branches covered.">                    .getParent().getParent().getType() == TokenTypes.OBJBLOCK) {</span>
+<span class="fc" id="L490">                result = parentAst;</span>
+<span class="fc" id="L491">                break;</span>
+            }
+<span class="fc" id="L493">            parentAst = parentAst.getParent();</span>
+<span class="fc" id="L494">            result = parentAst;</span>
+        }
+<span class="fc" id="L496">        return result;</span>
+    }
+
+    /**
+     * Add local variables to the {@code variablesStack} stack.
+     * Also adds the instance variables defined in a local anonymous inner class.
+     *
+     * @param varDefAst ast node of type {@link TokenTypes#VARIABLE_DEF}
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private static void addLocalVariables(DetailAST varDefAst, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc" id="L507">        final DetailAST parentAst = varDefAst.getParent();</span>
+<span class="fc" id="L508">        final DetailAST grandParent = parentAst.getParent();</span>
+<span class="fc" id="L509">        final boolean isInstanceVarInAnonymousInnerClass =</span>
+<span class="fc bfc" id="L510" title="All 2 branches covered.">                grandParent.getType() == TokenTypes.LITERAL_NEW;</span>
+<span class="fc bfc" id="L511" title="All 2 branches covered.">        if (isInstanceVarInAnonymousInnerClass</span>
+<span class="fc bfc" id="L512" title="All 2 branches covered.">                || parentAst.getType() != TokenTypes.OBJBLOCK) {</span>
+<span class="fc" id="L513">            final DetailAST ident = varDefAst.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L514">            final VariableDesc desc = new VariableDesc(ident.getText(),</span>
+<span class="fc" id="L515">                    varDefAst.findFirstToken(TokenTypes.TYPE), findScopeOfVariable(varDefAst));</span>
+<span class="fc bfc" id="L516" title="All 2 branches covered.">            if (isInstanceVarInAnonymousInnerClass) {</span>
+<span class="fc" id="L517">                desc.registerAsInstOrClassVar();</span>
+            }
+<span class="fc" id="L519">            variablesStack.push(desc);</span>
+        }
+<span class="fc" id="L521">    }</span>
+
+    /**
+     * Add instance variables and class variables to the
+     * {@link TypeDeclDesc#instanceAndClassVarStack}.
+     *
+     * @param varDefAst ast node of type {@link TokenTypes#VARIABLE_DEF}
+     */
+    private void addInstanceOrClassVar(DetailAST varDefAst) {
+<span class="fc" id="L530">        final DetailAST parentAst = varDefAst.getParent();</span>
+<span class="fc bfc" id="L531" title="All 2 branches covered.">        if (isNonLocalTypeDeclaration(parentAst.getParent())</span>
+<span class="fc bfc" id="L532" title="All 2 branches covered.">                &amp;&amp; !isPrivateInstanceVariable(varDefAst)) {</span>
+<span class="fc" id="L533">            final DetailAST ident = varDefAst.findFirstToken(TokenTypes.IDENT);</span>
+<span class="fc" id="L534">            final VariableDesc desc = new VariableDesc(ident.getText(),</span>
+<span class="fc" id="L535">                    varDefAst.findFirstToken(TokenTypes.TYPE), findScopeOfVariable(varDefAst));</span>
+<span class="fc" id="L536">            typeDeclAstToTypeDeclDesc.get(parentAst.getParent()).addInstOrClassVar(desc);</span>
+        }
+<span class="fc" id="L538">    }</span>
+
+    /**
+     * Whether instance variable or class variable have private access modifier.
+     *
+     * @param varDefAst ast node of type {@link TokenTypes#VARIABLE_DEF}
+     * @return true if instance variable or class variable have private access modifier
+     */
+    private static boolean isPrivateInstanceVariable(DetailAST varDefAst) {
+<span class="fc" id="L547">        final AccessModifierOption varAccessModifier =</span>
+<span class="fc" id="L548">                CheckUtil.getAccessModifierFromModifiersToken(varDefAst);</span>
+<span class="fc bfc" id="L549" title="All 2 branches covered.">        return varAccessModifier == AccessModifierOption.PRIVATE;</span>
+    }
+
+    /**
+     * Get the {@link TypeDeclDesc} of the super class of anonymous inner class.
+     *
+     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}
+     * @return {@link TypeDeclDesc} of the super class of anonymous inner class
+     */
+    private TypeDeclDesc getSuperClassOfAnonInnerClass(DetailAST literalNewAst) {
+<span class="fc" id="L559">        TypeDeclDesc obtainedClass = null;</span>
+<span class="fc" id="L560">        final String shortNameOfClass = getShortNameOfAnonInnerClass(literalNewAst);</span>
+<span class="fc bfc" id="L561" title="All 4 branches covered.">        if (packageName != null &amp;&amp; shortNameOfClass.startsWith(packageName)) {</span>
+<span class="fc" id="L562">            final Optional&lt;TypeDeclDesc&gt; classWithCompletePackageName =</span>
+<span class="fc" id="L563">                    typeDeclAstToTypeDeclDesc.values()</span>
+<span class="fc" id="L564">                    .stream()</span>
+<span class="fc" id="L565">                    .filter(typeDeclDesc -&gt; {</span>
+<span class="fc" id="L566">                        return typeDeclDesc.getQualifiedName().equals(shortNameOfClass);</span>
+                    })
+<span class="fc" id="L568">                    .findFirst();</span>
+<span class="fc bfc" id="L569" title="All 2 branches covered.">            if (classWithCompletePackageName.isPresent()) {</span>
+<span class="fc" id="L570">                obtainedClass = classWithCompletePackageName.get();</span>
+            }
+<span class="fc" id="L572">        }</span>
+        else {
+<span class="fc" id="L574">            final List&lt;TypeDeclDesc&gt; typeDeclWithSameName = typeDeclWithSameName(shortNameOfClass);</span>
+<span class="fc bfc" id="L575" title="All 2 branches covered.">            if (!typeDeclWithSameName.isEmpty()) {</span>
+<span class="fc" id="L576">                obtainedClass = getTheNearestClass(</span>
+<span class="fc" id="L577">                        anonInnerAstToTypeDeclDesc.get(literalNewAst).getQualifiedName(),</span>
+                        typeDeclWithSameName);
+            }
+        }
+<span class="fc" id="L581">        return obtainedClass;</span>
+    }
+
+    /**
+     * Get the short name of super class of anonymous inner class.
+     * Example-
+     * &lt;pre&gt;
+     * TestClass.NestedClass obj = new Test().new NestedClass() {};
+     * // Short name will be Test.NestedClass
+     * &lt;/pre&gt;
+     *
+     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}
+     * @return short name of base class of anonymous inner class
+     */
+    public static String getShortNameOfAnonInnerClass(DetailAST literalNewAst) {
+<span class="fc" id="L596">        DetailAST parentAst = literalNewAst.getParent();</span>
+<span class="fc bfc" id="L597" title="All 2 branches covered.">        while (TokenUtil.isOfType(parentAst, TokenTypes.LITERAL_NEW, TokenTypes.DOT)) {</span>
+<span class="fc" id="L598">            parentAst = parentAst.getParent();</span>
+        }
+<span class="fc" id="L600">        final DetailAST firstChild = parentAst.getFirstChild();</span>
+<span class="fc" id="L601">        return extractQualifiedName(firstChild);</span>
+    }
+
+    /**
+     * Add non-private instance and class variables of the super class of the anonymous class
+     * to the variables stack.
+     *
+     * @param obtainedClass super class of the anon inner class
+     * @param variablesStack stack of all the relevant variables in the scope
+     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}
+     */
+    private void modifyVariablesStack(TypeDeclDesc obtainedClass,
+            Deque&lt;VariableDesc&gt; variablesStack,
+            DetailAST literalNewAst) {
+<span class="fc bfc" id="L615" title="All 2 branches covered.">        if (obtainedClass != null) {</span>
+<span class="fc" id="L616">            final Deque&lt;VariableDesc&gt; instAndClassVarDeque = typeDeclAstToTypeDeclDesc</span>
+<span class="fc" id="L617">                    .get(obtainedClass.getTypeDeclAst())</span>
+<span class="fc" id="L618">                    .getUpdatedCopyOfVarStack(literalNewAst);</span>
+<span class="fc" id="L619">            instAndClassVarDeque.forEach(variablesStack::push);</span>
+        }
+<span class="fc" id="L621">    }</span>
+
+    /**
+     * Checks if there is a type declaration with same name as the super class.
+     * Duplicated, until &lt;a&gt;https://github.com/checkstyle/checkstyle/issues/11201&lt;/a&gt;
+     *
+     * @param superClassName name of the super class
+     * @return true if there is another type declaration with same name.
+     */
+    private List&lt;TypeDeclDesc&gt; typeDeclWithSameName(String superClassName) {
+<span class="fc" id="L631">        return typeDeclAstToTypeDeclDesc.values().stream()</span>
+<span class="fc" id="L632">                .filter(typeDeclDesc -&gt; {</span>
+<span class="fc" id="L633">                    return hasSameNameAsSuperClass(superClassName, typeDeclDesc);</span>
+                })
+<span class="fc" id="L635">                .collect(Collectors.toList());</span>
+    }
+
+    /**
+     * Whether the qualified name of {@code typeDeclDesc} matches the super class name.
+     *
+     * @param superClassName name of the super class
+     * @param typeDeclDesc type declaration description
+     * @return {@code true} if the qualified name of {@code typeDeclDesc}
+     *         matches the super class name
+     */
+    private boolean hasSameNameAsSuperClass(String superClassName, TypeDeclDesc typeDeclDesc) {
+        final boolean result;
+<span class="fc bfc" id="L648" title="All 4 branches covered.">        if (packageName == null &amp;&amp; typeDeclDesc.getDepth() == 0) {</span>
+<span class="fc" id="L649">            result = typeDeclDesc.getQualifiedName().equals(superClassName);</span>
+        }
+        else {
+<span class="fc" id="L652">            result = typeDeclDesc.getQualifiedName()</span>
+<span class="fc" id="L653">                    .endsWith(PACKAGE_SEPARATOR + superClassName);</span>
+        }
+<span class="fc" id="L655">        return result;</span>
+    }
+
+    /**
+     * For all type declarations with the same name as the superclass, gets the nearest type
+     * declaration.
+     * Duplicated, until &lt;a&gt;https://github.com/checkstyle/checkstyle/issues/11201&lt;/a&gt;
+     *
+     * @param outerTypeDeclName outer type declaration of anonymous inner class
+     * @param typeDeclWithSameName typeDeclarations which have the same name as the super class
+     * @return the nearest class
+     */
+    private static TypeDeclDesc getTheNearestClass(String outerTypeDeclName,
+            List&lt;TypeDeclDesc&gt; typeDeclWithSameName) {
+<span class="fc" id="L669">        return Collections.min(typeDeclWithSameName, (first, second) -&gt; {</span>
+<span class="fc" id="L670">            int diff = Integer.compare(</span>
+<span class="fc" id="L671">                    typeDeclNameMatchingCount(outerTypeDeclName, second.getQualifiedName()),</span>
+<span class="fc" id="L672">                    typeDeclNameMatchingCount(outerTypeDeclName, first.getQualifiedName()));</span>
+<span class="fc bfc" id="L673" title="All 2 branches covered.">            if (diff == 0) {</span>
+<span class="fc" id="L674">                diff = Integer.compare(first.getDepth(), second.getDepth());</span>
+            }
+<span class="fc" id="L676">            return diff;</span>
+        });
+    }
+
+    /**
+     * Calculates and returns the type declaration name matching count.
+     *
+     * &lt;p&gt;
+     * Suppose our pattern class is {@code foo.a.b} and class to be matched is
+     * {@code foo.a.ball} then type declaration name matching count would be calculated by
+     * comparing every character, and updating main counter when we hit &quot;.&quot; to prevent matching
+     * &quot;a.b&quot; with &quot;a.ball&quot;. In this case type declaration name matching count
+     * would be equal to 6 and not 7 (b of ball is not counted).
+     * &lt;/p&gt;
+     * Duplicated, until &lt;a&gt;https://github.com/checkstyle/checkstyle/issues/11201&lt;/a&gt;
+     *
+     * @param patternClass class against which the given class has to be matched
+     * @param classToBeMatched class to be matched
+     * @return class name matching count
+     */
+    private static int typeDeclNameMatchingCount(String patternClass, String classToBeMatched) {
+<span class="fc" id="L697">        final char packageSeparator = PACKAGE_SEPARATOR.charAt(0);</span>
+<span class="fc" id="L698">        final int length = Math.min(classToBeMatched.length(), patternClass.length());</span>
+<span class="fc" id="L699">        int result = 0;</span>
+<span class="fc bfc" id="L700" title="All 4 branches covered.">        for (int i = 0; i &lt; length &amp;&amp; patternClass.charAt(i) == classToBeMatched.charAt(i); ++i) {</span>
+<span class="fc bfc" id="L701" title="All 2 branches covered.">            if (patternClass.charAt(i) == packageSeparator) {</span>
+<span class="fc" id="L702">                result = i;</span>
+            }
+        }
+<span class="fc" id="L705">        return result;</span>
+    }
+
+    /**
+     * Get qualified type declaration name from type ast.
+     * Duplicated, until &lt;a&gt;https://github.com/checkstyle/checkstyle/issues/11201&lt;/a&gt;
+     *
+     * @param typeDeclAst type declaration ast
+     * @return qualified name of type declaration
+     */
+    private String getQualifiedTypeDeclarationName(DetailAST typeDeclAst) {
+<span class="fc" id="L716">        final String className = typeDeclAst.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L717">        String outerClassQualifiedName = null;</span>
+<span class="fc bfc" id="L718" title="All 2 branches covered.">        if (!typeDeclarations.isEmpty()) {</span>
+<span class="fc" id="L719">            outerClassQualifiedName = typeDeclarations.peek().getQualifiedName();</span>
+        }
+<span class="fc" id="L721">        return getQualifiedTypeDeclarationName(packageName, outerClassQualifiedName, className);</span>
+    }
+
+    /**
+     * Get the qualified name of type declaration by combining {@code packageName},
+     * {@code outerClassQualifiedName} and {@code className}.
+     * Duplicated, until &lt;a&gt;https://github.com/checkstyle/checkstyle/issues/11201&lt;/a&gt;
+     *
+     * @param packageName packageName
+     * @param outerClassQualifiedName outerClassQualifiedName
+     * @param className className
+     * @return the qualified name of type declaration by combining {@code packageName},
+     *         {@code outerClassQualifiedName} and {@code className}
+     */
+    private static String getQualifiedTypeDeclarationName(String packageName,
+            String outerClassQualifiedName, String className) {
+        final String qualifiedClassName;
+
+<span class="fc bfc" id="L739" title="All 2 branches covered.">        if (outerClassQualifiedName == null) {</span>
+<span class="fc bfc" id="L740" title="All 2 branches covered.">            if (packageName == null) {</span>
+<span class="fc" id="L741">                qualifiedClassName = className;</span>
+            }
+            else {
+<span class="fc" id="L744">                qualifiedClassName = packageName + PACKAGE_SEPARATOR + className;</span>
+            }
+        }
+        else {
+<span class="fc" id="L748">            qualifiedClassName = outerClassQualifiedName + PACKAGE_SEPARATOR + className;</span>
+        }
+<span class="fc" id="L750">        return qualifiedClassName;</span>
+    }
+
+    /**
+     * Iterate over all the ast nodes present under {@code ast}.
+     *
+     * @param ast ast
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private void iterateOverBlockContainingLocalAnonInnerClass(
+            DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc" id="L761">        DetailAST currNode = ast;</span>
+<span class="fc bfc" id="L762" title="All 2 branches covered.">        while (currNode != null) {</span>
+<span class="fc" id="L763">            customVisitToken(currNode, variablesStack);</span>
+<span class="fc" id="L764">            DetailAST toVisit = currNode.getFirstChild();</span>
+<span class="fc bfc" id="L765" title="All 4 branches covered.">            while (currNode != ast &amp;&amp; toVisit == null) {</span>
+<span class="fc" id="L766">                customLeaveToken(currNode, variablesStack);</span>
+<span class="fc" id="L767">                toVisit = currNode.getNextSibling();</span>
+<span class="fc" id="L768">                currNode = currNode.getParent();</span>
+            }
+<span class="fc" id="L770">            currNode = toVisit;</span>
+<span class="fc" id="L771">        }</span>
+<span class="fc" id="L772">    }</span>
+
+    /**
+     * Visit all ast nodes under {@link UnusedLocalVariableCheck#anonInnerClassHolders} once
+     * again.
+     *
+     * @param ast ast
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private void customVisitToken(DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc" id="L782">        final int type = ast.getType();</span>
+<span class="fc bfc" id="L783" title="All 2 branches covered.">        if (type == TokenTypes.DOT) {</span>
+<span class="fc" id="L784">            visitDotToken(ast, variablesStack);</span>
+        }
+<span class="fc bfc" id="L786" title="All 2 branches covered.">        else if (type == TokenTypes.VARIABLE_DEF) {</span>
+<span class="fc" id="L787">            addLocalVariables(ast, variablesStack);</span>
+        }
+<span class="fc bfc" id="L789" title="All 2 branches covered.">        else if (type == TokenTypes.IDENT) {</span>
+<span class="fc" id="L790">            visitIdentToken(ast, variablesStack);</span>
+        }
+<span class="fc bfc" id="L792" title="All 2 branches covered.">        else if (isInsideLocalAnonInnerClass(ast)) {</span>
+<span class="fc" id="L793">            final TypeDeclDesc obtainedClass = getSuperClassOfAnonInnerClass(ast);</span>
+<span class="fc" id="L794">            modifyVariablesStack(obtainedClass, variablesStack, ast);</span>
+        }
+<span class="fc" id="L796">    }</span>
+
+    /**
+     * Leave all ast nodes under {@link UnusedLocalVariableCheck#anonInnerClassHolders} once
+     * again.
+     *
+     * @param ast ast
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private void customLeaveToken(DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc" id="L806">        logViolations(ast, variablesStack);</span>
+<span class="fc" id="L807">    }</span>
+
+    /**
+     * Whether an ident with parent node of type {@link TokenTypes#METHOD_REF}
+     * should be checked or not.
+     *
+     * @param identAst identAst
+     * @return true if an ident with parent node of type {@link TokenTypes#METHOD_REF}
+     *         should be checked or if the parent type is not {@link TokenTypes#METHOD_REF}
+     */
+    public static boolean shouldCheckIdentWithMethodRefParent(DetailAST identAst) {
+<span class="fc" id="L818">        final DetailAST parent = identAst.getParent();</span>
+<span class="fc" id="L819">        boolean result = true;</span>
+<span class="fc bfc" id="L820" title="All 2 branches covered.">        if (parent.getType() == TokenTypes.METHOD_REF) {</span>
+<span class="fc bfc" id="L821" title="All 2 branches covered.">            result = parent.getFirstChild() == identAst</span>
+<span class="fc bfc" id="L822" title="All 2 branches covered.">                    &amp;&amp; parent.getLastChild().getType() != TokenTypes.LITERAL_NEW;</span>
+        }
+<span class="fc" id="L824">        return result;</span>
+    }
+
+    /**
+     * Whether to check identifier token nested under dotAst.
+     *
+     * @param dotAst dotAst
+     * @return true if ident nested under dotAst should be checked
+     */
+    public static boolean shouldCheckIdentTokenNestedUnderDot(DetailAST dotAst) {
+
+<span class="fc" id="L835">        return !TokenUtil.findFirstTokenByPredicate(dotAst,</span>
+                        childAst -&gt; {
+<span class="fc" id="L837">                            return TokenUtil.isOfType(childAst,</span>
+                                    UNACCEPTABLE_CHILD_OF_DOT);
+                        })
+<span class="fc bfc" id="L840" title="All 2 branches covered.">                .isPresent();</span>
+    }
+
+    /**
+     * Checks the identifier ast.
+     *
+     * @param identAst ast of type {@link TokenTypes#IDENT}
+     * @param variablesStack stack of all the relevant variables in the scope
+     */
+    private static void checkIdentifierAst(DetailAST identAst, Deque&lt;VariableDesc&gt; variablesStack) {
+<span class="fc bfc" id="L850" title="All 2 branches covered.">        for (VariableDesc variableDesc : variablesStack) {</span>
+<span class="fc bfc" id="L851" title="All 2 branches covered.">            if (identAst.getText().equals(variableDesc.getName())</span>
+<span class="fc bfc" id="L852" title="All 2 branches covered.">                    &amp;&amp; !isLeftHandSideValue(identAst)) {</span>
+<span class="fc" id="L853">                variableDesc.registerAsUsed();</span>
+<span class="fc" id="L854">                break;</span>
+            }
+<span class="fc" id="L856">        }</span>
+<span class="fc" id="L857">    }</span>
+
+    /**
+     * Find the scope of variable.
+     *
+     * @param variableDef ast of type {@link TokenTypes#VARIABLE_DEF}
+     * @return scope of variableDef
+     */
+    private static DetailAST findScopeOfVariable(DetailAST variableDef) {
+        final DetailAST result;
+<span class="fc" id="L867">        final DetailAST parentAst = variableDef.getParent();</span>
+<span class="fc bfc" id="L868" title="All 2 branches covered.">        if (TokenUtil.isOfType(parentAst, TokenTypes.SLIST, TokenTypes.OBJBLOCK)) {</span>
+<span class="fc" id="L869">            result = parentAst;</span>
+        }
+        else {
+<span class="fc" id="L872">            result = parentAst.getParent();</span>
+        }
+<span class="fc" id="L874">        return result;</span>
+    }
+
+    /**
+     * Checks whether the ast of type {@link TokenTypes#IDENT} is
+     * used as left-hand side value. An identifier is being used as a left-hand side
+     * value if it is used as the left operand of an assignment or as an
+     * operand of a stand-alone increment or decrement.
+     *
+     * @param identAst ast of type {@link TokenTypes#IDENT}
+     * @return true if identAst is used as a left-hand side value
+     */
+    private static boolean isLeftHandSideValue(DetailAST identAst) {
+<span class="fc" id="L887">        final DetailAST parent = identAst.getParent();</span>
+<span class="fc bfc" id="L888" title="All 2 branches covered.">        return isStandAloneIncrementOrDecrement(identAst)</span>
+<span class="fc bfc" id="L889" title="All 2 branches covered.">                || parent.getType() == TokenTypes.ASSIGN</span>
+<span class="fc bfc" id="L890" title="All 2 branches covered.">                &amp;&amp; identAst != parent.getLastChild();</span>
+    }
+
+    /**
+     * Checks whether the ast of type {@link TokenTypes#IDENT} is used as
+     * an operand of a stand-alone increment or decrement.
+     *
+     * @param identAst ast of type {@link TokenTypes#IDENT}
+     * @return true if identAst is used as an operand of stand-alone
+     *         increment or decrement
+     */
+    private static boolean isStandAloneIncrementOrDecrement(DetailAST identAst) {
+<span class="fc" id="L902">        final DetailAST parent = identAst.getParent();</span>
+<span class="fc" id="L903">        final DetailAST grandParent = parent.getParent();</span>
+<span class="fc bfc" id="L904" title="All 2 branches covered.">        return TokenUtil.isOfType(parent, INCREMENT_AND_DECREMENT_TOKENS)</span>
+<span class="fc bfc" id="L905" title="All 2 branches covered.">                &amp;&amp; TokenUtil.isOfType(grandParent, TokenTypes.EXPR)</span>
+<span class="fc bfc" id="L906" title="All 2 branches covered.">                &amp;&amp; !isIncrementOrDecrementVariableUsed(grandParent);</span>
+    }
+
+    /**
+     * A variable with increment or decrement operator is considered used if it
+     * is used as an argument or as an array index or for assigning value
+     * to a variable.
+     *
+     * @param exprAst ast of type {@link TokenTypes#EXPR}
+     * @return true if variable nested in exprAst is used
+     */
+    private static boolean isIncrementOrDecrementVariableUsed(DetailAST exprAst) {
+<span class="fc bfc" id="L918" title="All 2 branches covered.">        return TokenUtil.isOfType(exprAst.getParent(),</span>
+                TokenTypes.ELIST, TokenTypes.INDEX_OP, TokenTypes.ASSIGN)
+<span class="fc bfc" id="L920" title="All 2 branches covered.">                &amp;&amp; exprAst.getParent().getParent().getType() != TokenTypes.FOR_ITERATOR;</span>
+    }
+
+    /**
+     * Maintains information about the variable.
+     */
+    private static final class VariableDesc {
+
+        /**
+         * The name of the variable.
+         */
+        private final String name;
+
+        /**
+         * Ast of type {@link TokenTypes#TYPE}.
+         */
+        private final DetailAST typeAst;
+
+        /**
+         * The scope of variable is determined by the ast of type
+         * {@link TokenTypes#SLIST} or {@link TokenTypes#LITERAL_FOR}
+         * or {@link TokenTypes#OBJBLOCK} which is enclosing the variable.
+         */
+        private final DetailAST scope;
+
+        /**
+         * Is an instance variable or a class variable.
+         */
+        private boolean instVarOrClassVar;
+
+        /**
+         * Is the variable used.
+         */
+        private boolean used;
+
+        /**
+         * Create a new VariableDesc instance.
+         *
+         * @param name name of the variable
+         * @param typeAst ast of type {@link TokenTypes#TYPE}
+         * @param scope ast of type {@link TokenTypes#SLIST} or
+         *              {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}
+         *              which is enclosing the variable
+         */
+<span class="fc" id="L964">        /* package */ VariableDesc(String name, DetailAST typeAst, DetailAST scope) {</span>
+<span class="fc" id="L965">            this.name = name;</span>
+<span class="fc" id="L966">            this.typeAst = typeAst;</span>
+<span class="fc" id="L967">            this.scope = scope;</span>
+<span class="fc" id="L968">        }</span>
+
+        /**
+         * Get the name of variable.
+         *
+         * @return name of variable
+         */
+        public String getName() {
+<span class="fc" id="L976">            return name;</span>
+        }
+
+        /**
+         * Get the associated ast node of type {@link TokenTypes#TYPE}.
+         *
+         * @return the associated ast node of type {@link TokenTypes#TYPE}
+         */
+        public DetailAST getTypeAst() {
+<span class="fc" id="L985">            return typeAst;</span>
+        }
+
+        /**
+         * Get ast of type {@link TokenTypes#SLIST}
+         * or {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}
+         * which is enclosing the variable i.e. its scope.
+         *
+         * @return the scope associated with the variable
+         */
+        public DetailAST getScope() {
+<span class="fc" id="L996">            return scope;</span>
+        }
+
+        /**
+         * Register the variable as used.
+         */
+        public void registerAsUsed() {
+<span class="fc" id="L1003">            used = true;</span>
+<span class="fc" id="L1004">        }</span>
+
+        /**
+         * Register the variable as an instance variable or
+         * class variable.
+         */
+        public void registerAsInstOrClassVar() {
+<span class="fc" id="L1011">            instVarOrClassVar = true;</span>
+<span class="fc" id="L1012">        }</span>
+
+        /**
+         * Is the variable used or not.
+         *
+         * @return true if variable is used
+         */
+        public boolean isUsed() {
+<span class="fc" id="L1020">            return used;</span>
+        }
+
+        /**
+         * Is an instance variable or a class variable.
+         *
+         * @return true if is an instance variable or a class variable
+         */
+        public boolean isInstVarOrClassVar() {
+<span class="fc" id="L1029">            return instVarOrClassVar;</span>
+        }
+    }
+
+    /**
+     * Maintains information about the type declaration.
+     * Any ast node of type {@link TokenTypes#CLASS_DEF} or {@link TokenTypes#INTERFACE_DEF}
+     * or {@link TokenTypes#ENUM_DEF} or {@link TokenTypes#ANNOTATION_DEF}
+     * or {@link TokenTypes#RECORD_DEF} is considered as a type declaration.
+     */
+    private static class TypeDeclDesc {
+
+        /**
+         * Complete type declaration name with package name and outer type declaration name.
+         */
+        private final String qualifiedName;
+
+        /**
+         * Depth of nesting of type declaration.
+         */
+        private final int depth;
+
+        /**
+         * Type declaration ast node.
+         */
+        private final DetailAST typeDeclAst;
+
+        /**
+         * A stack of type declaration's instance and static variables.
+         */
+        private final Deque&lt;VariableDesc&gt; instanceAndClassVarStack;
+
+        /**
+         * Create a new TypeDeclDesc instance.
+         *
+         * @param qualifiedName qualified name
+         * @param depth depth of nesting
+         * @param typeDeclAst type declaration ast node
+         */
+        /* package */ TypeDeclDesc(String qualifiedName, int depth,
+<span class="fc" id="L1069">                DetailAST typeDeclAst) {</span>
+<span class="fc" id="L1070">            this.qualifiedName = qualifiedName;</span>
+<span class="fc" id="L1071">            this.depth = depth;</span>
+<span class="fc" id="L1072">            this.typeDeclAst = typeDeclAst;</span>
+<span class="fc" id="L1073">            instanceAndClassVarStack = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L1074">        }</span>
+
+        /**
+         * Get the complete type declaration name i.e. type declaration name with package name
+         * and outer type declaration name.
+         *
+         * @return qualified class name
+         */
+        public String getQualifiedName() {
+<span class="fc" id="L1083">            return qualifiedName;</span>
+        }
+
+        /**
+         * Get the depth of type declaration.
+         *
+         * @return the depth of nesting of type declaration
+         */
+        public int getDepth() {
+<span class="fc" id="L1092">            return depth;</span>
+        }
+
+        /**
+         * Get the type declaration ast node.
+         *
+         * @return ast node of the type declaration
+         */
+        public DetailAST getTypeDeclAst() {
+<span class="fc" id="L1101">            return typeDeclAst;</span>
+        }
+
+        /**
+         * Get the copy of variables in instanceAndClassVar stack with updated scope.
+         *
+         * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}
+         * @return copy of variables in instanceAndClassVar stack with updated scope.
+         */
+        public Deque&lt;VariableDesc&gt; getUpdatedCopyOfVarStack(DetailAST literalNewAst) {
+<span class="fc" id="L1111">            final DetailAST updatedScope = literalNewAst.getLastChild();</span>
+<span class="fc" id="L1112">            final Deque&lt;VariableDesc&gt; instAndClassVarDeque = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L1113">            instanceAndClassVarStack.forEach(instVar -&gt; {</span>
+<span class="fc" id="L1114">                final VariableDesc variableDesc = new VariableDesc(instVar.getName(),</span>
+<span class="fc" id="L1115">                        instVar.getTypeAst(), updatedScope);</span>
+<span class="fc" id="L1116">                variableDesc.registerAsInstOrClassVar();</span>
+<span class="fc" id="L1117">                instAndClassVarDeque.push(variableDesc);</span>
+<span class="fc" id="L1118">            });</span>
+<span class="fc" id="L1119">            return instAndClassVarDeque;</span>
+        }
+
+        /**
+         * Add an instance variable or class variable to the stack.
+         *
+         * @param variableDesc variable to be added
+         */
+        public void addInstOrClassVar(VariableDesc variableDesc) {
+<span class="fc" id="L1128">            instanceAndClassVarStack.push(variableDesc);</span>
+<span class="fc" id="L1129">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>
