@@ -48,7 +48,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * Final modifier on methods of final and anonymous classes.
  * &lt;/li&gt;
  * &lt;li&gt;
- * Inner {@code interface} declarations that are declared as {@code static}.
+ * Type declarations nested under interfaces that are declared as {@code public} or {@code static}.
  * &lt;/li&gt;
  * &lt;li&gt;
  * Class constructors.
@@ -58,13 +58,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * &lt;/li&gt;
  * &lt;/ol&gt;
  * &lt;p&gt;
- * Interfaces by definition are abstract so the {@code abstract}
- * modifier on the interface is redundant.
+ * interfaces by definition are abstract so the {@code abstract} modifier is redundant on them.
  * &lt;/p&gt;
- * &lt;p&gt;Classes inside of interfaces by definition are public and static,
- * so the {@code public} and {@code static} modifiers
- * on the inner classes are redundant. On the other hand, classes
- * inside of interfaces can be abstract or non abstract.
+ * &lt;p&gt;Type declarations nested under interfaces by definition are public and static,
+ * so the {@code public} and {@code static} modifiers on nested type declarations are redundant.
+ * On the other hand, classes inside of interfaces can be abstract or non abstract.
  * So, {@code abstract} modifier is allowed.
  * &lt;/p&gt;
  * &lt;p&gt;Fields in interfaces and annotations are automatically
@@ -155,7 +153,9 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ENUM_DEF&quot;&gt;
  * ENUM_DEF&lt;/a&gt;,
  * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#RESOURCE&quot;&gt;
- * RESOURCE&lt;/a&gt;.
+ * RESOURCE&lt;/a&gt;,
+ * &lt;a href=&quot;https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ANNOTATION_DEF&quot;&gt;
+ * ANNOTATION_DEF&lt;/a&gt;.
  * &lt;/li&gt;
  * &lt;/ul&gt;
  * &lt;p&gt;
@@ -225,38 +225,55 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
             TokenTypes.CLASS_DEF,
             TokenTypes.ENUM_DEF,
             TokenTypes.RESOURCE,
+            TokenTypes.ANNOTATION_DEF,
         };
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc bfc" id="L233" title="All 2 branches covered.">        if (ast.getType() == TokenTypes.INTERFACE_DEF) {</span>
-<span class="fc" id="L234">            checkInterfaceModifiers(ast);</span>
+<span class="fc bfc" id="L234" title="All 7 branches covered.">        switch (ast.getType()) {</span>
+            case TokenTypes.INTERFACE_DEF:
+            case TokenTypes.ANNOTATION_DEF:
+<span class="fc" id="L237">                checkInterfaceModifiers(ast);</span>
+<span class="fc" id="L238">                break;</span>
+            case TokenTypes.ENUM_DEF:
+<span class="fc" id="L240">                checkForRedundantModifier(ast, TokenTypes.LITERAL_STATIC);</span>
+<span class="fc" id="L241">                break;</span>
+            case TokenTypes.CTOR_DEF:
+<span class="fc" id="L243">                checkConstructorModifiers(ast);</span>
+<span class="fc" id="L244">                break;</span>
+            case TokenTypes.METHOD_DEF:
+<span class="fc" id="L246">                processMethods(ast);</span>
+<span class="fc" id="L247">                break;</span>
+            case TokenTypes.RESOURCE:
+<span class="fc" id="L249">                processResources(ast);</span>
+<span class="fc" id="L250">                break;</span>
+            case TokenTypes.CLASS_DEF:
+            case TokenTypes.VARIABLE_DEF:
+            case TokenTypes.ANNOTATION_FIELD_DEF:
+<span class="fc" id="L254">                break;</span>
+            default:
+<span class="fc" id="L256">                throw new IllegalStateException(&quot;Unexpected token type: &quot; + ast.getType());</span>
         }
-<span class="fc bfc" id="L236" title="All 2 branches covered.">        else if (ast.getType() == TokenTypes.ENUM_DEF) {</span>
-<span class="fc" id="L237">            checkEnumDef(ast);</span>
+
+<span class="fc bfc" id="L259" title="All 2 branches covered.">        if (isInterfaceOrAnnotationMember(ast)) {</span>
+<span class="fc" id="L260">            processInterfaceOrAnnotation(ast);</span>
+        }
+<span class="fc" id="L262">    }</span>
+
+    /**
+     * Check modifiers of constructor.
+     *
+     * @param ctorDefAst ast node of type {@link TokenTypes#CTOR_DEF}
+     */
+    private void checkConstructorModifiers(DetailAST ctorDefAst) {
+<span class="fc bfc" id="L270" title="All 2 branches covered.">        if (isEnumMember(ctorDefAst)) {</span>
+<span class="fc" id="L271">            checkEnumConstructorModifiers(ctorDefAst);</span>
         }
         else {
-<span class="fc bfc" id="L240" title="All 2 branches covered.">            if (ast.getType() == TokenTypes.CTOR_DEF) {</span>
-<span class="fc bfc" id="L241" title="All 2 branches covered.">                if (isEnumMember(ast)) {</span>
-<span class="fc" id="L242">                    checkEnumConstructorModifiers(ast);</span>
-                }
-                else {
-<span class="fc" id="L245">                    checkClassConstructorModifiers(ast);</span>
-                }
-            }
-<span class="fc bfc" id="L248" title="All 2 branches covered.">            else if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
-<span class="fc" id="L249">                processMethods(ast);</span>
-            }
-<span class="fc bfc" id="L251" title="All 2 branches covered.">            else if (ast.getType() == TokenTypes.RESOURCE) {</span>
-<span class="fc" id="L252">                processResources(ast);</span>
-            }
-
-<span class="fc bfc" id="L255" title="All 2 branches covered.">            if (isInterfaceOrAnnotationMember(ast)) {</span>
-<span class="fc" id="L256">                processInterfaceOrAnnotation(ast);</span>
-            }
+<span class="fc" id="L274">            checkClassConstructorModifiers(ctorDefAst);</span>
         }
-<span class="fc" id="L259">    }</span>
+<span class="fc" id="L276">    }</span>
 
     /**
      * Checks if interface has proper modifiers.
@@ -264,17 +281,17 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast interface to check
      */
     private void checkInterfaceModifiers(DetailAST ast) {
-<span class="fc" id="L267">        final DetailAST modifiers =</span>
-<span class="fc" id="L268">            ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L284">        final DetailAST modifiers =</span>
+<span class="fc" id="L285">            ast.findFirstToken(TokenTypes.MODIFIERS);</span>
 
-<span class="fc bfc" id="L270" title="All 2 branches covered.">        for (final int tokenType : TOKENS_FOR_INTERFACE_MODIFIERS) {</span>
-<span class="fc" id="L271">            final DetailAST modifier =</span>
-<span class="fc" id="L272">                    modifiers.findFirstToken(tokenType);</span>
-<span class="fc bfc" id="L273" title="All 2 branches covered.">            if (modifier != null) {</span>
-<span class="fc" id="L274">                log(modifier, MSG_KEY, modifier.getText());</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        for (final int tokenType : TOKENS_FOR_INTERFACE_MODIFIERS) {</span>
+<span class="fc" id="L288">            final DetailAST modifier =</span>
+<span class="fc" id="L289">                    modifiers.findFirstToken(tokenType);</span>
+<span class="fc bfc" id="L290" title="All 2 branches covered.">            if (modifier != null) {</span>
+<span class="fc" id="L291">                log(modifier, MSG_KEY, modifier.getText());</span>
             }
         }
-<span class="fc" id="L277">    }</span>
+<span class="fc" id="L294">    }</span>
 
     /**
      * Check if enum constructor has proper modifiers.
@@ -282,25 +299,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast constructor of enum
      */
     private void checkEnumConstructorModifiers(DetailAST ast) {
-<span class="fc" id="L285">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L286">        TokenUtil.findFirstTokenByPredicate(</span>
-<span class="fc bfc" id="L287" title="All 2 branches covered.">            modifiers, mod -&gt; mod.getType() != TokenTypes.ANNOTATION</span>
-<span class="fc" id="L288">        ).ifPresent(modifier -&gt; log(modifier, MSG_KEY, modifier.getText()));</span>
-<span class="fc" id="L289">    }</span>
-
-    /**
-     * Checks whether enum has proper modifiers.
-     *
-     * @param ast enum definition.
-     */
-    private void checkEnumDef(DetailAST ast) {
-<span class="fc bfc" id="L297" title="All 2 branches covered.">        if (isInterfaceOrAnnotationMember(ast)) {</span>
-<span class="fc" id="L298">            processInterfaceOrAnnotation(ast);</span>
-        }
-        else {
-<span class="fc" id="L301">            checkForRedundantModifier(ast, TokenTypes.LITERAL_STATIC);</span>
-        }
-<span class="fc" id="L303">    }</span>
+<span class="fc" id="L302">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L303">        TokenUtil.findFirstTokenByPredicate(</span>
+<span class="fc bfc" id="L304" title="All 2 branches covered.">            modifiers, mod -&gt; mod.getType() != TokenTypes.ANNOTATION</span>
+<span class="fc" id="L305">        ).ifPresent(modifier -&gt; log(modifier, MSG_KEY, modifier.getText()));</span>
+<span class="fc" id="L306">    }</span>
 
     /**
      * Do validation of interface of annotation.
@@ -308,27 +311,27 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast token AST
      */
     private void processInterfaceOrAnnotation(DetailAST ast) {
-<span class="fc" id="L311">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L312">        DetailAST modifier = modifiers.getFirstChild();</span>
-<span class="fc bfc" id="L313" title="All 2 branches covered.">        while (modifier != null) {</span>
+<span class="fc" id="L314">        final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L315">        DetailAST modifier = modifiers.getFirstChild();</span>
+<span class="fc bfc" id="L316" title="All 2 branches covered.">        while (modifier != null) {</span>
             // javac does not allow final or static in interface methods
             // order annotation fields hence no need to check that this
             // is not a method or annotation field
 
-<span class="fc" id="L318">            final int type = modifier.getType();</span>
-<span class="fc bfc" id="L319" title="All 4 branches covered.">            if (type == TokenTypes.LITERAL_PUBLIC</span>
+<span class="fc" id="L321">            final int type = modifier.getType();</span>
+<span class="fc bfc" id="L322" title="All 4 branches covered.">            if (type == TokenTypes.LITERAL_PUBLIC</span>
                 || type == TokenTypes.LITERAL_STATIC
-<span class="fc bfc" id="L321" title="All 4 branches covered.">                        &amp;&amp; ast.getType() != TokenTypes.METHOD_DEF</span>
+<span class="fc bfc" id="L324" title="All 4 branches covered.">                        &amp;&amp; ast.getType() != TokenTypes.METHOD_DEF</span>
                 || type == TokenTypes.ABSTRACT
-<span class="fc bfc" id="L323" title="All 4 branches covered.">                        &amp;&amp; ast.getType() != TokenTypes.CLASS_DEF</span>
+<span class="fc bfc" id="L326" title="All 4 branches covered.">                        &amp;&amp; ast.getType() != TokenTypes.CLASS_DEF</span>
                 || type == TokenTypes.FINAL
-<span class="fc bfc" id="L325" title="All 2 branches covered.">                        &amp;&amp; ast.getType() != TokenTypes.CLASS_DEF) {</span>
-<span class="fc" id="L326">                log(modifier, MSG_KEY, modifier.getText());</span>
+<span class="fc bfc" id="L328" title="All 2 branches covered.">                        &amp;&amp; ast.getType() != TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L329">                log(modifier, MSG_KEY, modifier.getText());</span>
             }
 
-<span class="fc" id="L329">            modifier = modifier.getNextSibling();</span>
-<span class="fc" id="L330">        }</span>
-<span class="fc" id="L331">    }</span>
+<span class="fc" id="L332">            modifier = modifier.getNextSibling();</span>
+<span class="fc" id="L333">        }</span>
+<span class="fc" id="L334">    }</span>
 
     /**
      * Process validation of Methods.
@@ -336,41 +339,41 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast method AST
      */
     private void processMethods(DetailAST ast) {
-<span class="fc" id="L339">        final DetailAST modifiers =</span>
-<span class="fc" id="L340">                        ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L342">        final DetailAST modifiers =</span>
+<span class="fc" id="L343">                        ast.findFirstToken(TokenTypes.MODIFIERS);</span>
         // private method?
-<span class="fc" id="L342">        boolean checkFinal =</span>
-<span class="fc bfc" id="L343" title="All 2 branches covered.">            modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) != null;</span>
+<span class="fc" id="L345">        boolean checkFinal =</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">            modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) != null;</span>
         // declared in a final class?
-<span class="fc" id="L345">        DetailAST parent = ast.getParent();</span>
-<span class="fc bfc" id="L346" title="All 4 branches covered.">        while (parent != null &amp;&amp; !checkFinal) {</span>
-<span class="fc bfc" id="L347" title="All 2 branches covered.">            if (parent.getType() == TokenTypes.CLASS_DEF) {</span>
-<span class="fc" id="L348">                final DetailAST classModifiers =</span>
-<span class="fc" id="L349">                    parent.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L350" title="All 2 branches covered.">                checkFinal = classModifiers.findFirstToken(TokenTypes.FINAL) != null;</span>
-<span class="fc" id="L351">                parent = null;</span>
-<span class="fc" id="L352">            }</span>
-<span class="fc bfc" id="L353" title="All 2 branches covered.">            else if (parent.getType() == TokenTypes.LITERAL_NEW</span>
-<span class="fc bfc" id="L354" title="All 2 branches covered.">                    || parent.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
-<span class="fc" id="L355">                checkFinal = true;</span>
-<span class="fc" id="L356">                parent = null;</span>
+<span class="fc" id="L348">        DetailAST parent = ast.getParent();</span>
+<span class="fc bfc" id="L349" title="All 4 branches covered.">        while (parent != null &amp;&amp; !checkFinal) {</span>
+<span class="fc bfc" id="L350" title="All 2 branches covered.">            if (parent.getType() == TokenTypes.CLASS_DEF) {</span>
+<span class="fc" id="L351">                final DetailAST classModifiers =</span>
+<span class="fc" id="L352">                    parent.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">                checkFinal = classModifiers.findFirstToken(TokenTypes.FINAL) != null;</span>
+<span class="fc" id="L354">                parent = null;</span>
+<span class="fc" id="L355">            }</span>
+<span class="fc bfc" id="L356" title="All 2 branches covered.">            else if (parent.getType() == TokenTypes.LITERAL_NEW</span>
+<span class="fc bfc" id="L357" title="All 2 branches covered.">                    || parent.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
+<span class="fc" id="L358">                checkFinal = true;</span>
+<span class="fc" id="L359">                parent = null;</span>
             }
-<span class="fc bfc" id="L358" title="All 2 branches covered.">            else if (parent.getType() == TokenTypes.ENUM_DEF) {</span>
-<span class="fc bfc" id="L359" title="All 2 branches covered.">                checkFinal = modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
-<span class="fc" id="L360">                parent = null;</span>
+<span class="fc bfc" id="L361" title="All 2 branches covered.">            else if (parent.getType() == TokenTypes.ENUM_DEF) {</span>
+<span class="fc bfc" id="L362" title="All 2 branches covered.">                checkFinal = modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</span>
+<span class="fc" id="L363">                parent = null;</span>
             }
             else {
-<span class="fc" id="L363">                parent = parent.getParent();</span>
+<span class="fc" id="L366">                parent = parent.getParent();</span>
             }
         }
-<span class="fc bfc" id="L366" title="All 4 branches covered.">        if (checkFinal &amp;&amp; !isAnnotatedWithSafeVarargs(ast)) {</span>
-<span class="fc" id="L367">            checkForRedundantModifier(ast, TokenTypes.FINAL);</span>
+<span class="fc bfc" id="L369" title="All 4 branches covered.">        if (checkFinal &amp;&amp; !isAnnotatedWithSafeVarargs(ast)) {</span>
+<span class="fc" id="L370">            checkForRedundantModifier(ast, TokenTypes.FINAL);</span>
         }
 
-<span class="fc bfc" id="L370" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.SLIST) == null) {</span>
-<span class="fc" id="L371">            processAbstractMethodParameters(ast);</span>
+<span class="fc bfc" id="L373" title="All 2 branches covered.">        if (ast.findFirstToken(TokenTypes.SLIST) == null) {</span>
+<span class="fc" id="L374">            processAbstractMethodParameters(ast);</span>
         }
-<span class="fc" id="L373">    }</span>
+<span class="fc" id="L376">    }</span>
 
     /**
      * Process validation of parameters for Methods with no definition.
@@ -378,11 +381,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast method AST
      */
     private void processAbstractMethodParameters(DetailAST ast) {
-<span class="fc" id="L381">        final DetailAST parameters = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
-<span class="fc" id="L382">        TokenUtil.forEachChild(parameters, TokenTypes.PARAMETER_DEF, paramDef -&gt; {</span>
-<span class="fc" id="L383">            checkForRedundantModifier(paramDef, TokenTypes.FINAL);</span>
-<span class="fc" id="L384">        });</span>
-<span class="fc" id="L385">    }</span>
+<span class="fc" id="L384">        final DetailAST parameters = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="fc" id="L385">        TokenUtil.forEachChild(parameters, TokenTypes.PARAMETER_DEF, paramDef -&gt; {</span>
+<span class="fc" id="L386">            checkForRedundantModifier(paramDef, TokenTypes.FINAL);</span>
+<span class="fc" id="L387">        });</span>
+<span class="fc" id="L388">    }</span>
 
     /**
      * Check if class constructor has proper modifiers.
@@ -390,11 +393,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param classCtorAst class constructor ast
      */
     private void checkClassConstructorModifiers(DetailAST classCtorAst) {
-<span class="fc" id="L393">        final DetailAST classDef = classCtorAst.getParent().getParent();</span>
-<span class="fc bfc" id="L394" title="All 4 branches covered.">        if (!isClassPublic(classDef) &amp;&amp; !isClassProtected(classDef)) {</span>
-<span class="fc" id="L395">            checkForRedundantModifier(classCtorAst, TokenTypes.LITERAL_PUBLIC);</span>
+<span class="fc" id="L396">        final DetailAST classDef = classCtorAst.getParent().getParent();</span>
+<span class="fc bfc" id="L397" title="All 4 branches covered.">        if (!isClassPublic(classDef) &amp;&amp; !isClassProtected(classDef)) {</span>
+<span class="fc" id="L398">            checkForRedundantModifier(classCtorAst, TokenTypes.LITERAL_PUBLIC);</span>
         }
-<span class="fc" id="L397">    }</span>
+<span class="fc" id="L400">    }</span>
 
     /**
      * Checks if given resource has redundant modifiers.
@@ -402,8 +405,8 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param ast ast
      */
     private void processResources(DetailAST ast) {
-<span class="fc" id="L405">        checkForRedundantModifier(ast, TokenTypes.FINAL);</span>
-<span class="fc" id="L406">    }</span>
+<span class="fc" id="L408">        checkForRedundantModifier(ast, TokenTypes.FINAL);</span>
+<span class="fc" id="L409">    }</span>
 
     /**
      * Checks if given ast has a redundant modifier.
@@ -412,13 +415,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @param modifierType The modifier to check for.
      */
     private void checkForRedundantModifier(DetailAST ast, int modifierType) {
-<span class="fc" id="L415">        Optional.ofNullable(ast.findFirstToken(TokenTypes.MODIFIERS))</span>
-<span class="fc" id="L416">            .ifPresent(modifiers -&gt; {</span>
-<span class="fc" id="L417">                TokenUtil.forEachChild(modifiers, modifierType, modifier -&gt; {</span>
-<span class="fc" id="L418">                    log(modifier, MSG_KEY, modifier.getText());</span>
-<span class="fc" id="L419">                });</span>
-<span class="fc" id="L420">            });</span>
-<span class="fc" id="L421">    }</span>
+<span class="fc" id="L418">        Optional.ofNullable(ast.findFirstToken(TokenTypes.MODIFIERS))</span>
+<span class="fc" id="L419">            .ifPresent(modifiers -&gt; {</span>
+<span class="fc" id="L420">                TokenUtil.forEachChild(modifiers, modifierType, modifier -&gt; {</span>
+<span class="fc" id="L421">                    log(modifier, MSG_KEY, modifier.getText());</span>
+<span class="fc" id="L422">                });</span>
+<span class="fc" id="L423">            });</span>
+<span class="fc" id="L424">    }</span>
 
     /**
      * Checks if given class ast has protected modifier.
@@ -427,9 +430,9 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if class is protected, false otherwise
      */
     private static boolean isClassProtected(DetailAST classDef) {
-<span class="fc" id="L430">        final DetailAST classModifiers =</span>
-<span class="fc" id="L431">                classDef.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L432" title="All 2 branches covered.">        return classModifiers.findFirstToken(TokenTypes.LITERAL_PROTECTED) != null;</span>
+<span class="fc" id="L433">        final DetailAST classModifiers =</span>
+<span class="fc" id="L434">                classDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L435" title="All 2 branches covered.">        return classModifiers.findFirstToken(TokenTypes.LITERAL_PROTECTED) != null;</span>
     }
 
     /**
@@ -439,23 +442,23 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if class is accessible from public scope,false otherwise
      */
     private static boolean isClassPublic(DetailAST ast) {
-<span class="fc" id="L442">        boolean isAccessibleFromPublic = false;</span>
-<span class="fc" id="L443">        final DetailAST modifiersAst = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L444">        final boolean hasPublicModifier =</span>
-<span class="fc bfc" id="L445" title="All 2 branches covered.">                modifiersAst.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null;</span>
+<span class="fc" id="L445">        boolean isAccessibleFromPublic = false;</span>
+<span class="fc" id="L446">        final DetailAST modifiersAst = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L447">        final boolean hasPublicModifier =</span>
+<span class="fc bfc" id="L448" title="All 2 branches covered.">                modifiersAst.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null;</span>
 
-<span class="fc bfc" id="L447" title="All 2 branches covered.">        if (TokenUtil.isRootNode(ast.getParent())) {</span>
-<span class="fc" id="L448">            isAccessibleFromPublic = hasPublicModifier;</span>
+<span class="fc bfc" id="L450" title="All 2 branches covered.">        if (TokenUtil.isRootNode(ast.getParent())) {</span>
+<span class="fc" id="L451">            isAccessibleFromPublic = hasPublicModifier;</span>
         }
         else {
-<span class="fc" id="L451">            final DetailAST parentClassAst = ast.getParent().getParent();</span>
+<span class="fc" id="L454">            final DetailAST parentClassAst = ast.getParent().getParent();</span>
 
-<span class="fc bfc" id="L453" title="All 4 branches covered.">            if (hasPublicModifier || parentClassAst.getType() == TokenTypes.INTERFACE_DEF) {</span>
-<span class="fc" id="L454">                isAccessibleFromPublic = isClassPublic(parentClassAst);</span>
+<span class="fc bfc" id="L456" title="All 4 branches covered.">            if (hasPublicModifier || parentClassAst.getType() == TokenTypes.INTERFACE_DEF) {</span>
+<span class="fc" id="L457">                isAccessibleFromPublic = isClassPublic(parentClassAst);</span>
             }
         }
 
-<span class="fc" id="L458">        return isAccessibleFromPublic;</span>
+<span class="fc" id="L461">        return isAccessibleFromPublic;</span>
     }
 
     /**
@@ -465,8 +468,8 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true if it is an enum member
      */
     private static boolean isEnumMember(DetailAST ast) {
-<span class="fc" id="L468">        final DetailAST parentTypeDef = ast.getParent().getParent();</span>
-<span class="fc bfc" id="L469" title="All 2 branches covered.">        return parentTypeDef.getType() == TokenTypes.ENUM_DEF;</span>
+<span class="fc" id="L471">        final DetailAST parentTypeDef = ast.getParent().getParent();</span>
+<span class="fc bfc" id="L472" title="All 2 branches covered.">        return parentTypeDef.getType() == TokenTypes.ENUM_DEF;</span>
     }
 
     /**
@@ -476,11 +479,11 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true or false
      */
     private static boolean isInterfaceOrAnnotationMember(DetailAST ast) {
-<span class="fc" id="L479">        DetailAST parentTypeDef = ast.getParent();</span>
-<span class="fc" id="L480">        parentTypeDef = parentTypeDef.getParent();</span>
-<span class="fc bfc" id="L481" title="All 2 branches covered.">        return parentTypeDef != null</span>
-<span class="fc bfc" id="L482" title="All 2 branches covered.">                &amp;&amp; (parentTypeDef.getType() == TokenTypes.INTERFACE_DEF</span>
-<span class="fc bfc" id="L483" title="All 2 branches covered.">                    || parentTypeDef.getType() == TokenTypes.ANNOTATION_DEF);</span>
+<span class="fc" id="L482">        DetailAST parentTypeDef = ast.getParent();</span>
+<span class="fc" id="L483">        parentTypeDef = parentTypeDef.getParent();</span>
+<span class="fc bfc" id="L484" title="All 2 branches covered.">        return parentTypeDef != null</span>
+<span class="fc bfc" id="L485" title="All 2 branches covered.">                &amp;&amp; (parentTypeDef.getType() == TokenTypes.INTERFACE_DEF</span>
+<span class="fc bfc" id="L486" title="All 2 branches covered.">                    || parentTypeDef.getType() == TokenTypes.ANNOTATION_DEF);</span>
     }
 
     /**
@@ -492,15 +495,15 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return true or false
      */
     private static boolean isAnnotatedWithSafeVarargs(DetailAST methodDef) {
-<span class="fc" id="L495">        boolean result = false;</span>
-<span class="fc" id="L496">        final List&lt;DetailAST&gt; methodAnnotationsList = getMethodAnnotationsList(methodDef);</span>
-<span class="fc bfc" id="L497" title="All 2 branches covered.">        for (DetailAST annotationNode : methodAnnotationsList) {</span>
-<span class="fc bfc" id="L498" title="All 2 branches covered.">            if (&quot;SafeVarargs&quot;.equals(annotationNode.getLastChild().getText())) {</span>
-<span class="fc" id="L499">                result = true;</span>
-<span class="fc" id="L500">                break;</span>
+<span class="fc" id="L498">        boolean result = false;</span>
+<span class="fc" id="L499">        final List&lt;DetailAST&gt; methodAnnotationsList = getMethodAnnotationsList(methodDef);</span>
+<span class="fc bfc" id="L500" title="All 2 branches covered.">        for (DetailAST annotationNode : methodAnnotationsList) {</span>
+<span class="fc bfc" id="L501" title="All 2 branches covered.">            if (&quot;SafeVarargs&quot;.equals(annotationNode.getLastChild().getText())) {</span>
+<span class="fc" id="L502">                result = true;</span>
+<span class="fc" id="L503">                break;</span>
             }
-<span class="fc" id="L502">        }</span>
-<span class="fc" id="L503">        return result;</span>
+<span class="fc" id="L505">        }</span>
+<span class="fc" id="L506">        return result;</span>
     }
 
     /**
@@ -510,10 +513,10 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return List of annotations
      */
     private static List&lt;DetailAST&gt; getMethodAnnotationsList(DetailAST methodDef) {
-<span class="fc" id="L513">        final List&lt;DetailAST&gt; annotationsList = new ArrayList&lt;&gt;();</span>
-<span class="fc" id="L514">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc" id="L515">        TokenUtil.forEachChild(modifiers, TokenTypes.ANNOTATION, annotationsList::add);</span>
-<span class="fc" id="L516">        return annotationsList;</span>
+<span class="fc" id="L516">        final List&lt;DetailAST&gt; annotationsList = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L517">        final DetailAST modifiers = methodDef.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc" id="L518">        TokenUtil.forEachChild(modifiers, TokenTypes.ANNOTATION, annotationsList::add);</span>
+<span class="fc" id="L519">        return annotationsList;</span>
     }
 
 }
