@@ -245,481 +245,483 @@
 <span class="sourceLineNo">236</span><a id="line.236">        moduleDetails.setDescription(getDescriptionText());</a>
 <span class="sourceLineNo">237</span><a id="line.237">        if (isTopLevelClassJavadoc()) {</a>
 <span class="sourceLineNo">238</span><a id="line.238">            if (moduleDetails.getDescription().isEmpty()) {</a>
-<span class="sourceLineNo">239</span><a id="line.239">                log(rootAst.getLineNumber(), MSG_DESC_MISSING, moduleDetails.getName());</a>
-<span class="sourceLineNo">240</span><a id="line.240">            }</a>
-<span class="sourceLineNo">241</span><a id="line.241">            else if (writeXmlOutput) {</a>
-<span class="sourceLineNo">242</span><a id="line.242">                try {</a>
-<span class="sourceLineNo">243</span><a id="line.243">                    XmlMetaWriter.write(moduleDetails);</a>
-<span class="sourceLineNo">244</span><a id="line.244">                }</a>
-<span class="sourceLineNo">245</span><a id="line.245">                catch (TransformerException | ParserConfigurationException ex) {</a>
-<span class="sourceLineNo">246</span><a id="line.246">                    throw new IllegalStateException(</a>
-<span class="sourceLineNo">247</span><a id="line.247">                            "Failed to write metadata into XML file for module: "</a>
-<span class="sourceLineNo">248</span><a id="line.248">                                    + getModuleSimpleName(), ex);</a>
-<span class="sourceLineNo">249</span><a id="line.249">                }</a>
-<span class="sourceLineNo">250</span><a id="line.250">            }</a>
-<span class="sourceLineNo">251</span><a id="line.251">            if (!writeXmlOutput) {</a>
-<span class="sourceLineNo">252</span><a id="line.252">                MODULE_DETAILS_STORE.put(moduleDetails.getFullQualifiedName(), moduleDetails);</a>
-<span class="sourceLineNo">253</span><a id="line.253">            }</a>
-<span class="sourceLineNo">254</span><a id="line.254"></a>
-<span class="sourceLineNo">255</span><a id="line.255">        }</a>
-<span class="sourceLineNo">256</span><a id="line.256">    }</a>
-<span class="sourceLineNo">257</span><a id="line.257"></a>
-<span class="sourceLineNo">258</span><a id="line.258">    /**</a>
-<span class="sourceLineNo">259</span><a id="line.259">     * Method containing the core logic of scraping. This keeps track and decides which phase of</a>
-<span class="sourceLineNo">260</span><a id="line.260">     * scraping we are in, and accordingly call other subroutines.</a>
-<span class="sourceLineNo">261</span><a id="line.261">     *</a>
-<span class="sourceLineNo">262</span><a id="line.262">     * @param ast javadoc ast</a>
-<span class="sourceLineNo">263</span><a id="line.263">     */</a>
-<span class="sourceLineNo">264</span><a id="line.264">    private void scrapeContent(DetailNode ast) {</a>
-<span class="sourceLineNo">265</span><a id="line.265">        if (ast.getType() == JavadocTokenTypes.PARAGRAPH) {</a>
-<span class="sourceLineNo">266</span><a id="line.266">            if (isParentText(ast)) {</a>
-<span class="sourceLineNo">267</span><a id="line.267">                parentSectionStartIdx = getParentIndexOf(ast);</a>
-<span class="sourceLineNo">268</span><a id="line.268">                moduleDetails.setParent(getParentText(ast));</a>
-<span class="sourceLineNo">269</span><a id="line.269">            }</a>
-<span class="sourceLineNo">270</span><a id="line.270">            else if (isViolationMessagesText(ast)) {</a>
-<span class="sourceLineNo">271</span><a id="line.271">                scrapingViolationMessageList = true;</a>
-<span class="sourceLineNo">272</span><a id="line.272">            }</a>
-<span class="sourceLineNo">273</span><a id="line.273">            else if (exampleSectionStartIdx == -1</a>
-<span class="sourceLineNo">274</span><a id="line.274">                    &amp;&amp; isExamplesText(ast)) {</a>
-<span class="sourceLineNo">275</span><a id="line.275">                exampleSectionStartIdx = getParentIndexOf(ast);</a>
-<span class="sourceLineNo">276</span><a id="line.276">            }</a>
-<span class="sourceLineNo">277</span><a id="line.277">        }</a>
-<span class="sourceLineNo">278</span><a id="line.278">        else if (ast.getType() == JavadocTokenTypes.LI) {</a>
-<span class="sourceLineNo">279</span><a id="line.279">            if (isPropertyList(ast)) {</a>
-<span class="sourceLineNo">280</span><a id="line.280">                if (propertySectionStartIdx == -1) {</a>
-<span class="sourceLineNo">281</span><a id="line.281">                    propertySectionStartIdx = getParentIndexOf(ast);</a>
-<span class="sourceLineNo">282</span><a id="line.282">                }</a>
-<span class="sourceLineNo">283</span><a id="line.283">                moduleDetails.addToProperties(createProperties(ast));</a>
-<span class="sourceLineNo">284</span><a id="line.284">            }</a>
-<span class="sourceLineNo">285</span><a id="line.285">            else if (scrapingViolationMessageList) {</a>
-<span class="sourceLineNo">286</span><a id="line.286">                moduleDetails.addToViolationMessages(getViolationMessages(ast));</a>
-<span class="sourceLineNo">287</span><a id="line.287">            }</a>
-<span class="sourceLineNo">288</span><a id="line.288">        }</a>
-<span class="sourceLineNo">289</span><a id="line.289">    }</a>
-<span class="sourceLineNo">290</span><a id="line.290"></a>
-<span class="sourceLineNo">291</span><a id="line.291">    /**</a>
-<span class="sourceLineNo">292</span><a id="line.292">     * Create the modulePropertyDetails content.</a>
-<span class="sourceLineNo">293</span><a id="line.293">     *</a>
-<span class="sourceLineNo">294</span><a id="line.294">     * @param nodeLi list item javadoc node</a>
-<span class="sourceLineNo">295</span><a id="line.295">     * @return modulePropertyDetail object for the corresponding property</a>
-<span class="sourceLineNo">296</span><a id="line.296">     */</a>
-<span class="sourceLineNo">297</span><a id="line.297">    private static ModulePropertyDetails createProperties(DetailNode nodeLi) {</a>
-<span class="sourceLineNo">298</span><a id="line.298">        final ModulePropertyDetails modulePropertyDetails = new ModulePropertyDetails();</a>
-<span class="sourceLineNo">299</span><a id="line.299"></a>
-<span class="sourceLineNo">300</span><a id="line.300">        final Optional&lt;DetailNode&gt; propertyNameNode = getFirstChildOfType(nodeLi,</a>
-<span class="sourceLineNo">301</span><a id="line.301">                JavadocTokenTypes.JAVADOC_INLINE_TAG, 0);</a>
-<span class="sourceLineNo">302</span><a id="line.302">        if (propertyNameNode.isPresent()) {</a>
-<span class="sourceLineNo">303</span><a id="line.303">            final DetailNode propertyNameTag = propertyNameNode.get();</a>
-<span class="sourceLineNo">304</span><a id="line.304">            final String propertyName = getTextFromTag(propertyNameTag);</a>
-<span class="sourceLineNo">305</span><a id="line.305"></a>
-<span class="sourceLineNo">306</span><a id="line.306">            final DetailNode propertyType = getFirstChildOfMatchingText(nodeLi, TYPE_TAG)</a>
-<span class="sourceLineNo">307</span><a id="line.307">                .orElseThrow(() -&gt; {</a>
-<span class="sourceLineNo">308</span><a id="line.308">                    return new MetadataGenerationException(String.format(</a>
-<span class="sourceLineNo">309</span><a id="line.309">                        Locale.ROOT, PROP_TYPE_MISSING, propertyName)</a>
-<span class="sourceLineNo">310</span><a id="line.310">                    );</a>
-<span class="sourceLineNo">311</span><a id="line.311">                });</a>
-<span class="sourceLineNo">312</span><a id="line.312">            final String propertyDesc = DESC_CLEAN.matcher(</a>
-<span class="sourceLineNo">313</span><a id="line.313">                    constructSubTreeText(nodeLi, propertyNameTag.getIndex() + 1,</a>
-<span class="sourceLineNo">314</span><a id="line.314">                            propertyType.getIndex() - 1))</a>
-<span class="sourceLineNo">315</span><a id="line.315">                    .replaceAll(Matcher.quoteReplacement(""));</a>
-<span class="sourceLineNo">316</span><a id="line.316"></a>
-<span class="sourceLineNo">317</span><a id="line.317">            modulePropertyDetails.setDescription(propertyDesc.trim());</a>
-<span class="sourceLineNo">318</span><a id="line.318">            modulePropertyDetails.setName(propertyName);</a>
-<span class="sourceLineNo">319</span><a id="line.319">            modulePropertyDetails.setType(getTagTextFromProperty(nodeLi, propertyType));</a>
-<span class="sourceLineNo">320</span><a id="line.320"></a>
-<span class="sourceLineNo">321</span><a id="line.321">            final Optional&lt;DetailNode&gt; validationTypeNodeOpt = getFirstChildOfMatchingText(nodeLi,</a>
-<span class="sourceLineNo">322</span><a id="line.322">                VALIDATION_TYPE_TAG);</a>
-<span class="sourceLineNo">323</span><a id="line.323">            if (validationTypeNodeOpt.isPresent()) {</a>
-<span class="sourceLineNo">324</span><a id="line.324">                final DetailNode validationTypeNode = validationTypeNodeOpt.get();</a>
-<span class="sourceLineNo">325</span><a id="line.325">                modulePropertyDetails.setValidationType(getTagTextFromProperty(nodeLi,</a>
-<span class="sourceLineNo">326</span><a id="line.326">                    validationTypeNode));</a>
-<span class="sourceLineNo">327</span><a id="line.327">            }</a>
-<span class="sourceLineNo">328</span><a id="line.328"></a>
-<span class="sourceLineNo">329</span><a id="line.329">            final String defaultValue = getFirstChildOfMatchingText(nodeLi, DEFAULT_VALUE_TAG)</a>
-<span class="sourceLineNo">330</span><a id="line.330">                .map(defaultValueNode -&gt; getPropertyDefaultText(nodeLi, defaultValueNode))</a>
-<span class="sourceLineNo">331</span><a id="line.331">                .orElseThrow(() -&gt; {</a>
-<span class="sourceLineNo">332</span><a id="line.332">                    return new MetadataGenerationException(String.format(</a>
-<span class="sourceLineNo">333</span><a id="line.333">                        Locale.ROOT, PROP_DEFAULT_VALUE_MISSING, propertyName)</a>
-<span class="sourceLineNo">334</span><a id="line.334">                    );</a>
-<span class="sourceLineNo">335</span><a id="line.335">                });</a>
-<span class="sourceLineNo">336</span><a id="line.336">            if (!PROPERTIES_TO_NOT_WRITE.contains(defaultValue)) {</a>
-<span class="sourceLineNo">337</span><a id="line.337">                modulePropertyDetails.setDefaultValue(defaultValue);</a>
-<span class="sourceLineNo">338</span><a id="line.338">            }</a>
-<span class="sourceLineNo">339</span><a id="line.339">        }</a>
-<span class="sourceLineNo">340</span><a id="line.340">        return modulePropertyDetails;</a>
-<span class="sourceLineNo">341</span><a id="line.341">    }</a>
-<span class="sourceLineNo">342</span><a id="line.342"></a>
-<span class="sourceLineNo">343</span><a id="line.343">    /**</a>
-<span class="sourceLineNo">344</span><a id="line.344">     * Get tag text from property data.</a>
-<span class="sourceLineNo">345</span><a id="line.345">     *</a>
-<span class="sourceLineNo">346</span><a id="line.346">     * @param nodeLi javadoc li item node</a>
-<span class="sourceLineNo">347</span><a id="line.347">     * @param propertyMeta property javadoc node</a>
-<span class="sourceLineNo">348</span><a id="line.348">     * @return property metadata text</a>
-<span class="sourceLineNo">349</span><a id="line.349">     */</a>
-<span class="sourceLineNo">350</span><a id="line.350">    private static String getTagTextFromProperty(DetailNode nodeLi, DetailNode propertyMeta) {</a>
-<span class="sourceLineNo">351</span><a id="line.351">        final Optional&lt;DetailNode&gt; tagNodeOpt = getFirstChildOfType(nodeLi,</a>
-<span class="sourceLineNo">352</span><a id="line.352">                JavadocTokenTypes.JAVADOC_INLINE_TAG, propertyMeta.getIndex() + 1);</a>
-<span class="sourceLineNo">353</span><a id="line.353">        DetailNode tagNode = null;</a>
-<span class="sourceLineNo">354</span><a id="line.354">        if (tagNodeOpt.isPresent()) {</a>
-<span class="sourceLineNo">355</span><a id="line.355">            tagNode = tagNodeOpt.get();</a>
-<span class="sourceLineNo">356</span><a id="line.356">        }</a>
-<span class="sourceLineNo">357</span><a id="line.357">        return getTextFromTag(tagNode);</a>
-<span class="sourceLineNo">358</span><a id="line.358">    }</a>
-<span class="sourceLineNo">359</span><a id="line.359"></a>
-<span class="sourceLineNo">360</span><a id="line.360">    /**</a>
-<span class="sourceLineNo">361</span><a id="line.361">     * Clean up the default token text by removing hyperlinks, and only keeping token type text.</a>
-<span class="sourceLineNo">362</span><a id="line.362">     *</a>
-<span class="sourceLineNo">363</span><a id="line.363">     * @param initialText unclean text</a>
-<span class="sourceLineNo">364</span><a id="line.364">     * @return clean text</a>
-<span class="sourceLineNo">365</span><a id="line.365">     */</a>
-<span class="sourceLineNo">366</span><a id="line.366">    private static String cleanDefaultTokensText(String initialText) {</a>
-<span class="sourceLineNo">367</span><a id="line.367">        final Set&lt;String&gt; tokens = new LinkedHashSet&lt;&gt;();</a>
-<span class="sourceLineNo">368</span><a id="line.368">        final Matcher matcher = TOKEN_TEXT_PATTERN.matcher(initialText);</a>
-<span class="sourceLineNo">369</span><a id="line.369">        while (matcher.find()) {</a>
-<span class="sourceLineNo">370</span><a id="line.370">            tokens.add(matcher.group(0));</a>
-<span class="sourceLineNo">371</span><a id="line.371">        }</a>
-<span class="sourceLineNo">372</span><a id="line.372">        return String.join(",", tokens);</a>
-<span class="sourceLineNo">373</span><a id="line.373">    }</a>
-<span class="sourceLineNo">374</span><a id="line.374"></a>
-<span class="sourceLineNo">375</span><a id="line.375">    /**</a>
-<span class="sourceLineNo">376</span><a id="line.376">     * Performs a DFS of the subtree with a node as the root and constructs the text of that</a>
-<span class="sourceLineNo">377</span><a id="line.377">     * tree, ignoring JavadocToken texts.</a>
-<span class="sourceLineNo">378</span><a id="line.378">     *</a>
-<span class="sourceLineNo">379</span><a id="line.379">     * @param node root node of subtree</a>
-<span class="sourceLineNo">380</span><a id="line.380">     * @param childLeftLimit the left index of root children from where to scan</a>
-<span class="sourceLineNo">381</span><a id="line.381">     * @param childRightLimit the right index of root children till where to scan</a>
-<span class="sourceLineNo">382</span><a id="line.382">     * @return constructed text of subtree</a>
-<span class="sourceLineNo">383</span><a id="line.383">     */</a>
-<span class="sourceLineNo">384</span><a id="line.384">    private static String constructSubTreeText(DetailNode node, int childLeftLimit,</a>
-<span class="sourceLineNo">385</span><a id="line.385">                                               int childRightLimit) {</a>
-<span class="sourceLineNo">386</span><a id="line.386">        final StringBuilder result = new StringBuilder(1024);</a>
-<span class="sourceLineNo">387</span><a id="line.387">        DetailNode detailNode = node;</a>
-<span class="sourceLineNo">388</span><a id="line.388"></a>
-<span class="sourceLineNo">389</span><a id="line.389">        final Deque&lt;DetailNode&gt; stack = new ArrayDeque&lt;&gt;();</a>
-<span class="sourceLineNo">390</span><a id="line.390">        stack.addFirst(detailNode);</a>
-<span class="sourceLineNo">391</span><a id="line.391">        final Set&lt;DetailNode&gt; visited = new HashSet&lt;&gt;();</a>
-<span class="sourceLineNo">392</span><a id="line.392">        while (!stack.isEmpty()) {</a>
-<span class="sourceLineNo">393</span><a id="line.393">            detailNode = stack.getFirst();</a>
-<span class="sourceLineNo">394</span><a id="line.394">            stack.removeFirst();</a>
-<span class="sourceLineNo">395</span><a id="line.395"></a>
-<span class="sourceLineNo">396</span><a id="line.396">            if (!visited.contains(detailNode)) {</a>
-<span class="sourceLineNo">397</span><a id="line.397">                final String childText = detailNode.getText();</a>
-<span class="sourceLineNo">398</span><a id="line.398">                if (detailNode.getType() != JavadocTokenTypes.LEADING_ASTERISK</a>
-<span class="sourceLineNo">399</span><a id="line.399">                        &amp;&amp; !TOKEN_TEXT_PATTERN.matcher(childText).matches()) {</a>
-<span class="sourceLineNo">400</span><a id="line.400">                    result.insert(0, detailNode.getText());</a>
-<span class="sourceLineNo">401</span><a id="line.401">                }</a>
-<span class="sourceLineNo">402</span><a id="line.402">                visited.add(detailNode);</a>
-<span class="sourceLineNo">403</span><a id="line.403">            }</a>
-<span class="sourceLineNo">404</span><a id="line.404"></a>
-<span class="sourceLineNo">405</span><a id="line.405">            for (DetailNode child : detailNode.getChildren()) {</a>
-<span class="sourceLineNo">406</span><a id="line.406">                if (child.getParent().equals(node)</a>
-<span class="sourceLineNo">407</span><a id="line.407">                        &amp;&amp; (child.getIndex() &lt; childLeftLimit</a>
-<span class="sourceLineNo">408</span><a id="line.408">                        || child.getIndex() &gt; childRightLimit)) {</a>
-<span class="sourceLineNo">409</span><a id="line.409">                    continue;</a>
-<span class="sourceLineNo">410</span><a id="line.410">                }</a>
-<span class="sourceLineNo">411</span><a id="line.411">                if (!visited.contains(child)) {</a>
-<span class="sourceLineNo">412</span><a id="line.412">                    stack.addFirst(child);</a>
-<span class="sourceLineNo">413</span><a id="line.413">                }</a>
-<span class="sourceLineNo">414</span><a id="line.414">            }</a>
-<span class="sourceLineNo">415</span><a id="line.415">        }</a>
-<span class="sourceLineNo">416</span><a id="line.416">        return result.toString().trim();</a>
-<span class="sourceLineNo">417</span><a id="line.417">    }</a>
-<span class="sourceLineNo">418</span><a id="line.418"></a>
-<span class="sourceLineNo">419</span><a id="line.419">    /**</a>
-<span class="sourceLineNo">420</span><a id="line.420">     * Create the description text with starting index as 0 and ending index would be the first</a>
-<span class="sourceLineNo">421</span><a id="line.421">     * valid non zero index amongst in the order of {@code propertySectionStartIdx},</a>
-<span class="sourceLineNo">422</span><a id="line.422">     * {@code exampleSectionStartIdx} and {@code parentSectionStartIdx}.</a>
-<span class="sourceLineNo">423</span><a id="line.423">     *</a>
-<span class="sourceLineNo">424</span><a id="line.424">     * @return description text</a>
-<span class="sourceLineNo">425</span><a id="line.425">     */</a>
-<span class="sourceLineNo">426</span><a id="line.426">    private String getDescriptionText() {</a>
-<span class="sourceLineNo">427</span><a id="line.427">        final int descriptionEndIdx;</a>
-<span class="sourceLineNo">428</span><a id="line.428">        if (propertySectionStartIdx &gt; -1) {</a>
-<span class="sourceLineNo">429</span><a id="line.429">            descriptionEndIdx = propertySectionStartIdx;</a>
-<span class="sourceLineNo">430</span><a id="line.430">        }</a>
-<span class="sourceLineNo">431</span><a id="line.431">        else if (exampleSectionStartIdx &gt; -1) {</a>
-<span class="sourceLineNo">432</span><a id="line.432">            descriptionEndIdx = exampleSectionStartIdx;</a>
-<span class="sourceLineNo">433</span><a id="line.433">        }</a>
-<span class="sourceLineNo">434</span><a id="line.434">        else {</a>
-<span class="sourceLineNo">435</span><a id="line.435">            descriptionEndIdx = parentSectionStartIdx;</a>
-<span class="sourceLineNo">436</span><a id="line.436">        }</a>
-<span class="sourceLineNo">437</span><a id="line.437">        return constructSubTreeText(rootNode, 0, descriptionEndIdx - 1);</a>
-<span class="sourceLineNo">438</span><a id="line.438">    }</a>
-<span class="sourceLineNo">439</span><a id="line.439"></a>
-<span class="sourceLineNo">440</span><a id="line.440">    /**</a>
-<span class="sourceLineNo">441</span><a id="line.441">     * Create property default text, which is either normal property value or list of tokens.</a>
-<span class="sourceLineNo">442</span><a id="line.442">     *</a>
-<span class="sourceLineNo">443</span><a id="line.443">     * @param nodeLi list item javadoc node</a>
-<span class="sourceLineNo">444</span><a id="line.444">     * @param defaultValueNode default value node</a>
-<span class="sourceLineNo">445</span><a id="line.445">     * @return default property text</a>
-<span class="sourceLineNo">446</span><a id="line.446">     */</a>
-<span class="sourceLineNo">447</span><a id="line.447">    private static String getPropertyDefaultText(DetailNode nodeLi, DetailNode defaultValueNode) {</a>
-<span class="sourceLineNo">448</span><a id="line.448">        final Optional&lt;DetailNode&gt; propertyDefaultValueTag = getFirstChildOfType(nodeLi,</a>
-<span class="sourceLineNo">449</span><a id="line.449">                JavadocTokenTypes.JAVADOC_INLINE_TAG, defaultValueNode.getIndex() + 1);</a>
-<span class="sourceLineNo">450</span><a id="line.450">        final String result;</a>
-<span class="sourceLineNo">451</span><a id="line.451">        if (propertyDefaultValueTag.isPresent()) {</a>
-<span class="sourceLineNo">452</span><a id="line.452">            result = getTextFromTag(propertyDefaultValueTag.get());</a>
-<span class="sourceLineNo">453</span><a id="line.453">        }</a>
-<span class="sourceLineNo">454</span><a id="line.454">        else {</a>
-<span class="sourceLineNo">455</span><a id="line.455">            final String tokenText = constructSubTreeText(nodeLi,</a>
-<span class="sourceLineNo">456</span><a id="line.456">                    defaultValueNode.getIndex(), nodeLi.getChildren().length);</a>
-<span class="sourceLineNo">457</span><a id="line.457">            result = cleanDefaultTokensText(tokenText);</a>
-<span class="sourceLineNo">458</span><a id="line.458">        }</a>
-<span class="sourceLineNo">459</span><a id="line.459">        return result;</a>
-<span class="sourceLineNo">460</span><a id="line.460">    }</a>
-<span class="sourceLineNo">461</span><a id="line.461"></a>
-<span class="sourceLineNo">462</span><a id="line.462">    /**</a>
-<span class="sourceLineNo">463</span><a id="line.463">     * Get the violation message text for a specific key from the list item.</a>
-<span class="sourceLineNo">464</span><a id="line.464">     *</a>
-<span class="sourceLineNo">465</span><a id="line.465">     * @param nodeLi list item javadoc node</a>
-<span class="sourceLineNo">466</span><a id="line.466">     * @return violation message key text</a>
-<span class="sourceLineNo">467</span><a id="line.467">     */</a>
-<span class="sourceLineNo">468</span><a id="line.468">    private static String getViolationMessages(DetailNode nodeLi) {</a>
-<span class="sourceLineNo">469</span><a id="line.469">        final Optional&lt;DetailNode&gt; resultNode = getFirstChildOfType(nodeLi,</a>
-<span class="sourceLineNo">470</span><a id="line.470">                JavadocTokenTypes.JAVADOC_INLINE_TAG, 0);</a>
-<span class="sourceLineNo">471</span><a id="line.471">        return resultNode.map(JavadocMetadataScraper::getTextFromTag).orElse("");</a>
-<span class="sourceLineNo">472</span><a id="line.472">    }</a>
-<span class="sourceLineNo">473</span><a id="line.473"></a>
-<span class="sourceLineNo">474</span><a id="line.474">    /**</a>
-<span class="sourceLineNo">475</span><a id="line.475">     * Get text from {@code JavadocTokenTypes.JAVADOC_INLINE_TAG}.</a>
-<span class="sourceLineNo">476</span><a id="line.476">     *</a>
-<span class="sourceLineNo">477</span><a id="line.477">     * @param nodeTag target javadoc tag</a>
-<span class="sourceLineNo">478</span><a id="line.478">     * @return text contained by the tag</a>
-<span class="sourceLineNo">479</span><a id="line.479">     */</a>
-<span class="sourceLineNo">480</span><a id="line.480">    private static String getTextFromTag(DetailNode nodeTag) {</a>
-<span class="sourceLineNo">481</span><a id="line.481">        return Optional.ofNullable(nodeTag).map(JavadocMetadataScraper::getText).orElse("");</a>
-<span class="sourceLineNo">482</span><a id="line.482">    }</a>
-<span class="sourceLineNo">483</span><a id="line.483"></a>
-<span class="sourceLineNo">484</span><a id="line.484">    /**</a>
-<span class="sourceLineNo">485</span><a id="line.485">     * Returns the first child node which matches the provided {@code TokenType} and has the</a>
-<span class="sourceLineNo">486</span><a id="line.486">     * children index after the offset value.</a>
-<span class="sourceLineNo">487</span><a id="line.487">     *</a>
-<span class="sourceLineNo">488</span><a id="line.488">     * @param node parent node</a>
-<span class="sourceLineNo">489</span><a id="line.489">     * @param tokenType token type to match</a>
-<span class="sourceLineNo">490</span><a id="line.490">     * @param offset children array index offset</a>
-<span class="sourceLineNo">491</span><a id="line.491">     * @return the first child satisfying the conditions</a>
-<span class="sourceLineNo">492</span><a id="line.492">     */</a>
-<span class="sourceLineNo">493</span><a id="line.493">    private static Optional&lt;DetailNode&gt; getFirstChildOfType(DetailNode node, int tokenType,</a>
-<span class="sourceLineNo">494</span><a id="line.494">                                                            int offset) {</a>
-<span class="sourceLineNo">495</span><a id="line.495">        return Arrays.stream(node.getChildren())</a>
-<span class="sourceLineNo">496</span><a id="line.496">                .filter(child -&gt; child.getIndex() &gt;= offset &amp;&amp; child.getType() == tokenType)</a>
-<span class="sourceLineNo">497</span><a id="line.497">                .findFirst();</a>
-<span class="sourceLineNo">498</span><a id="line.498">    }</a>
-<span class="sourceLineNo">499</span><a id="line.499"></a>
-<span class="sourceLineNo">500</span><a id="line.500">    /**</a>
-<span class="sourceLineNo">501</span><a id="line.501">     * Get joined text from all text children nodes.</a>
-<span class="sourceLineNo">502</span><a id="line.502">     *</a>
-<span class="sourceLineNo">503</span><a id="line.503">     * @param parentNode parent node</a>
-<span class="sourceLineNo">504</span><a id="line.504">     * @return the joined text of node</a>
-<span class="sourceLineNo">505</span><a id="line.505">     */</a>
-<span class="sourceLineNo">506</span><a id="line.506">    private static String getText(DetailNode parentNode) {</a>
-<span class="sourceLineNo">507</span><a id="line.507">        return Arrays.stream(parentNode.getChildren())</a>
-<span class="sourceLineNo">508</span><a id="line.508">                .filter(child -&gt; child.getType() == JavadocTokenTypes.TEXT)</a>
-<span class="sourceLineNo">509</span><a id="line.509">                .map(node -&gt; QUOTE_PATTERN.matcher(node.getText().trim()).replaceAll(""))</a>
-<span class="sourceLineNo">510</span><a id="line.510">                .collect(Collectors.joining(" "));</a>
-<span class="sourceLineNo">511</span><a id="line.511">    }</a>
-<span class="sourceLineNo">512</span><a id="line.512"></a>
-<span class="sourceLineNo">513</span><a id="line.513">    /**</a>
-<span class="sourceLineNo">514</span><a id="line.514">     * Get first child of parent node matching the provided pattern.</a>
-<span class="sourceLineNo">515</span><a id="line.515">     *</a>
-<span class="sourceLineNo">516</span><a id="line.516">     * @param node parent node</a>
-<span class="sourceLineNo">517</span><a id="line.517">     * @param pattern pattern to match against</a>
-<span class="sourceLineNo">518</span><a id="line.518">     * @return the first child node matching the condition</a>
-<span class="sourceLineNo">519</span><a id="line.519">     */</a>
-<span class="sourceLineNo">520</span><a id="line.520">    private static Optional&lt;DetailNode&gt; getFirstChildOfMatchingText(DetailNode node,</a>
-<span class="sourceLineNo">521</span><a id="line.521">                                                                    Pattern pattern) {</a>
-<span class="sourceLineNo">522</span><a id="line.522">        return Arrays.stream(node.getChildren())</a>
-<span class="sourceLineNo">523</span><a id="line.523">                .filter(child -&gt; pattern.matcher(child.getText()).matches())</a>
-<span class="sourceLineNo">524</span><a id="line.524">                .findFirst();</a>
-<span class="sourceLineNo">525</span><a id="line.525">    }</a>
-<span class="sourceLineNo">526</span><a id="line.526"></a>
-<span class="sourceLineNo">527</span><a id="line.527">    /**</a>
-<span class="sourceLineNo">528</span><a id="line.528">     * Returns parent node, removing modifier/annotation nodes.</a>
-<span class="sourceLineNo">529</span><a id="line.529">     *</a>
-<span class="sourceLineNo">530</span><a id="line.530">     * @param commentBlock child node.</a>
-<span class="sourceLineNo">531</span><a id="line.531">     * @return parent node.</a>
-<span class="sourceLineNo">532</span><a id="line.532">     */</a>
-<span class="sourceLineNo">533</span><a id="line.533">    private static DetailAST getParent(DetailAST commentBlock) {</a>
-<span class="sourceLineNo">534</span><a id="line.534">        final DetailAST parentNode = commentBlock.getParent();</a>
-<span class="sourceLineNo">535</span><a id="line.535">        DetailAST result = parentNode;</a>
-<span class="sourceLineNo">536</span><a id="line.536">        if (result.getType() == TokenTypes.ANNOTATION) {</a>
-<span class="sourceLineNo">537</span><a id="line.537">            result = parentNode.getParent().getParent();</a>
-<span class="sourceLineNo">538</span><a id="line.538">        }</a>
-<span class="sourceLineNo">539</span><a id="line.539">        else if (result.getType() == TokenTypes.MODIFIERS) {</a>
-<span class="sourceLineNo">540</span><a id="line.540">            result = parentNode.getParent();</a>
-<span class="sourceLineNo">541</span><a id="line.541">        }</a>
-<span class="sourceLineNo">542</span><a id="line.542">        return result;</a>
-<span class="sourceLineNo">543</span><a id="line.543">    }</a>
-<span class="sourceLineNo">544</span><a id="line.544"></a>
-<span class="sourceLineNo">545</span><a id="line.545">    /**</a>
-<span class="sourceLineNo">546</span><a id="line.546">     * Traverse parents until we reach the root node (@code{JavadocTokenTypes.JAVADOC})</a>
-<span class="sourceLineNo">547</span><a id="line.547">     * child and return its index.</a>
-<span class="sourceLineNo">548</span><a id="line.548">     *</a>
-<span class="sourceLineNo">549</span><a id="line.549">     * @param node subtree child node</a>
-<span class="sourceLineNo">550</span><a id="line.550">     * @return root node child index</a>
-<span class="sourceLineNo">551</span><a id="line.551">     */</a>
-<span class="sourceLineNo">552</span><a id="line.552">    private static int getParentIndexOf(DetailNode node) {</a>
-<span class="sourceLineNo">553</span><a id="line.553">        DetailNode currNode = node;</a>
-<span class="sourceLineNo">554</span><a id="line.554">        while (currNode.getParent().getIndex() != -1) {</a>
-<span class="sourceLineNo">555</span><a id="line.555">            currNode = currNode.getParent();</a>
-<span class="sourceLineNo">556</span><a id="line.556">        }</a>
-<span class="sourceLineNo">557</span><a id="line.557">        return currNode.getIndex();</a>
-<span class="sourceLineNo">558</span><a id="line.558">    }</a>
-<span class="sourceLineNo">559</span><a id="line.559"></a>
-<span class="sourceLineNo">560</span><a id="line.560">    /**</a>
-<span class="sourceLineNo">561</span><a id="line.561">     * Get module parent text from paragraph javadoc node.</a>
-<span class="sourceLineNo">562</span><a id="line.562">     *</a>
-<span class="sourceLineNo">563</span><a id="line.563">     * @param nodeParagraph paragraph javadoc node</a>
-<span class="sourceLineNo">564</span><a id="line.564">     * @return parent text</a>
-<span class="sourceLineNo">565</span><a id="line.565">     */</a>
-<span class="sourceLineNo">566</span><a id="line.566">    private static String getParentText(DetailNode nodeParagraph) {</a>
-<span class="sourceLineNo">567</span><a id="line.567">        return getFirstChildOfType(nodeParagraph, JavadocTokenTypes.JAVADOC_INLINE_TAG, 0)</a>
-<span class="sourceLineNo">568</span><a id="line.568">                .map(JavadocMetadataScraper::getTextFromTag)</a>
-<span class="sourceLineNo">569</span><a id="line.569">                .orElse(null);</a>
-<span class="sourceLineNo">570</span><a id="line.570">    }</a>
-<span class="sourceLineNo">571</span><a id="line.571"></a>
-<span class="sourceLineNo">572</span><a id="line.572">    /**</a>
-<span class="sourceLineNo">573</span><a id="line.573">     * Get module type(check/filter/filefilter) based on file name.</a>
-<span class="sourceLineNo">574</span><a id="line.574">     *</a>
-<span class="sourceLineNo">575</span><a id="line.575">     * @return module type</a>
-<span class="sourceLineNo">576</span><a id="line.576">     */</a>
-<span class="sourceLineNo">577</span><a id="line.577">    private ModuleType getModuleType() {</a>
-<span class="sourceLineNo">578</span><a id="line.578">        final String simpleModuleName = getModuleSimpleName();</a>
-<span class="sourceLineNo">579</span><a id="line.579">        final ModuleType result;</a>
-<span class="sourceLineNo">580</span><a id="line.580">        if (simpleModuleName.endsWith("FileFilter")) {</a>
-<span class="sourceLineNo">581</span><a id="line.581">            result = ModuleType.FILEFILTER;</a>
-<span class="sourceLineNo">582</span><a id="line.582">        }</a>
-<span class="sourceLineNo">583</span><a id="line.583">        else if (simpleModuleName.endsWith("Filter")) {</a>
-<span class="sourceLineNo">584</span><a id="line.584">            result = ModuleType.FILTER;</a>
-<span class="sourceLineNo">585</span><a id="line.585">        }</a>
-<span class="sourceLineNo">586</span><a id="line.586">        else {</a>
-<span class="sourceLineNo">587</span><a id="line.587">            result = ModuleType.CHECK;</a>
-<span class="sourceLineNo">588</span><a id="line.588">        }</a>
-<span class="sourceLineNo">589</span><a id="line.589">        return result;</a>
-<span class="sourceLineNo">590</span><a id="line.590">    }</a>
-<span class="sourceLineNo">591</span><a id="line.591"></a>
-<span class="sourceLineNo">592</span><a id="line.592">    /**</a>
-<span class="sourceLineNo">593</span><a id="line.593">     * Extract simple file name from the whole file path name.</a>
-<span class="sourceLineNo">594</span><a id="line.594">     *</a>
-<span class="sourceLineNo">595</span><a id="line.595">     * @return simple module name</a>
-<span class="sourceLineNo">596</span><a id="line.596">     */</a>
-<span class="sourceLineNo">597</span><a id="line.597">    // suppress deprecation until https://github.com/checkstyle/checkstyle/issues/11166</a>
-<span class="sourceLineNo">598</span><a id="line.598">    @SuppressWarnings("deprecation")</a>
-<span class="sourceLineNo">599</span><a id="line.599">    private String getModuleSimpleName() {</a>
-<span class="sourceLineNo">600</span><a id="line.600">        final String fullFileName = getFileContents().getFileName();</a>
-<span class="sourceLineNo">601</span><a id="line.601">        final String[] pathTokens = FILE_SEPARATOR_PATTERN.split(fullFileName);</a>
-<span class="sourceLineNo">602</span><a id="line.602">        final String fileName = pathTokens[pathTokens.length - 1];</a>
-<span class="sourceLineNo">603</span><a id="line.603">        return fileName.substring(0, fileName.length() - JAVA_FILE_EXTENSION.length());</a>
-<span class="sourceLineNo">604</span><a id="line.604">    }</a>
-<span class="sourceLineNo">605</span><a id="line.605"></a>
-<span class="sourceLineNo">606</span><a id="line.606">    /**</a>
-<span class="sourceLineNo">607</span><a id="line.607">     * Retrieve package name of module from the absolute file path.</a>
-<span class="sourceLineNo">608</span><a id="line.608">     *</a>
-<span class="sourceLineNo">609</span><a id="line.609">     * @param filePath absolute file path</a>
-<span class="sourceLineNo">610</span><a id="line.610">     * @return package name</a>
-<span class="sourceLineNo">611</span><a id="line.611">     */</a>
-<span class="sourceLineNo">612</span><a id="line.612">    private static String getPackageName(String filePath) {</a>
-<span class="sourceLineNo">613</span><a id="line.613">        final Deque&lt;String&gt; result = new ArrayDeque&lt;&gt;();</a>
-<span class="sourceLineNo">614</span><a id="line.614">        final String[] filePathTokens = FILE_SEPARATOR_PATTERN.split(filePath);</a>
-<span class="sourceLineNo">615</span><a id="line.615">        for (int i = filePathTokens.length - 1; i &gt;= 0; i--) {</a>
-<span class="sourceLineNo">616</span><a id="line.616">            if ("java".equals(filePathTokens[i]) || "resources".equals(filePathTokens[i])) {</a>
-<span class="sourceLineNo">617</span><a id="line.617">                break;</a>
-<span class="sourceLineNo">618</span><a id="line.618">            }</a>
-<span class="sourceLineNo">619</span><a id="line.619">            result.addFirst(filePathTokens[i]);</a>
-<span class="sourceLineNo">620</span><a id="line.620">        }</a>
-<span class="sourceLineNo">621</span><a id="line.621">        final String fileName = result.removeLast();</a>
-<span class="sourceLineNo">622</span><a id="line.622">        result.addLast(fileName.substring(0, fileName.length() - JAVA_FILE_EXTENSION.length()));</a>
-<span class="sourceLineNo">623</span><a id="line.623">        return String.join(".", result);</a>
-<span class="sourceLineNo">624</span><a id="line.624">    }</a>
-<span class="sourceLineNo">625</span><a id="line.625"></a>
-<span class="sourceLineNo">626</span><a id="line.626">    /**</a>
-<span class="sourceLineNo">627</span><a id="line.627">     * Getter method for {@code moduleDetailsStore}.</a>
-<span class="sourceLineNo">628</span><a id="line.628">     *</a>
-<span class="sourceLineNo">629</span><a id="line.629">     * @return map containing module details of supplied checks.</a>
-<span class="sourceLineNo">630</span><a id="line.630">     */</a>
-<span class="sourceLineNo">631</span><a id="line.631">    public static Map&lt;String, ModuleDetails&gt; getModuleDetailsStore() {</a>
-<span class="sourceLineNo">632</span><a id="line.632">        return Collections.unmodifiableMap(MODULE_DETAILS_STORE);</a>
-<span class="sourceLineNo">633</span><a id="line.633">    }</a>
-<span class="sourceLineNo">634</span><a id="line.634"></a>
-<span class="sourceLineNo">635</span><a id="line.635">    /** Reset the module detail store of any previous information. */</a>
-<span class="sourceLineNo">636</span><a id="line.636">    public static void resetModuleDetailsStore() {</a>
-<span class="sourceLineNo">637</span><a id="line.637">        MODULE_DETAILS_STORE.clear();</a>
-<span class="sourceLineNo">638</span><a id="line.638">    }</a>
-<span class="sourceLineNo">639</span><a id="line.639"></a>
-<span class="sourceLineNo">640</span><a id="line.640">    /**</a>
-<span class="sourceLineNo">641</span><a id="line.641">     * Check if the current javadoc block comment AST corresponds to the top-level class as we</a>
-<span class="sourceLineNo">642</span><a id="line.642">     * only want to scrape top-level class javadoc.</a>
-<span class="sourceLineNo">643</span><a id="line.643">     *</a>
-<span class="sourceLineNo">644</span><a id="line.644">     * @return true if the current AST corresponds to top level class</a>
-<span class="sourceLineNo">645</span><a id="line.645">     */</a>
-<span class="sourceLineNo">646</span><a id="line.646">    private boolean isTopLevelClassJavadoc() {</a>
-<span class="sourceLineNo">647</span><a id="line.647">        final DetailAST parent = getParent(getBlockCommentAst());</a>
-<span class="sourceLineNo">648</span><a id="line.648">        final Optional&lt;DetailAST&gt; className = TokenUtil</a>
-<span class="sourceLineNo">649</span><a id="line.649">                .findFirstTokenByPredicate(parent, child -&gt; {</a>
-<span class="sourceLineNo">650</span><a id="line.650">                    return parent.getType() == TokenTypes.CLASS_DEF</a>
-<span class="sourceLineNo">651</span><a id="line.651">                            &amp;&amp; child.getType() == TokenTypes.IDENT;</a>
-<span class="sourceLineNo">652</span><a id="line.652">                });</a>
-<span class="sourceLineNo">653</span><a id="line.653">        return className.isPresent()</a>
-<span class="sourceLineNo">654</span><a id="line.654">                &amp;&amp; getModuleSimpleName().equals(className.get().getText());</a>
-<span class="sourceLineNo">655</span><a id="line.655">    }</a>
-<span class="sourceLineNo">656</span><a id="line.656"></a>
-<span class="sourceLineNo">657</span><a id="line.657">    /**</a>
-<span class="sourceLineNo">658</span><a id="line.658">     * Checks whether the paragraph node corresponds to the example section.</a>
-<span class="sourceLineNo">659</span><a id="line.659">     *</a>
-<span class="sourceLineNo">660</span><a id="line.660">     * @param ast javadoc paragraph node</a>
-<span class="sourceLineNo">661</span><a id="line.661">     * @return true if the section matches the example section marker</a>
-<span class="sourceLineNo">662</span><a id="line.662">     */</a>
-<span class="sourceLineNo">663</span><a id="line.663">    private static boolean isExamplesText(DetailNode ast) {</a>
-<span class="sourceLineNo">664</span><a id="line.664">        return isChildNodeTextMatches(ast, EXAMPLES_TAG);</a>
-<span class="sourceLineNo">665</span><a id="line.665">    }</a>
-<span class="sourceLineNo">666</span><a id="line.666"></a>
-<span class="sourceLineNo">667</span><a id="line.667">    /**</a>
-<span class="sourceLineNo">668</span><a id="line.668">     * Checks whether the list item node is part of a property list.</a>
-<span class="sourceLineNo">669</span><a id="line.669">     *</a>
-<span class="sourceLineNo">670</span><a id="line.670">     * @param nodeLi {@code JavadocTokenType.LI} node</a>
-<span class="sourceLineNo">671</span><a id="line.671">     * @return true if the node is part of a property list</a>
-<span class="sourceLineNo">672</span><a id="line.672">     */</a>
-<span class="sourceLineNo">673</span><a id="line.673">    private static boolean isPropertyList(DetailNode nodeLi) {</a>
-<span class="sourceLineNo">674</span><a id="line.674">        return isChildNodeTextMatches(nodeLi, PROPERTY_TAG);</a>
-<span class="sourceLineNo">675</span><a id="line.675">    }</a>
-<span class="sourceLineNo">676</span><a id="line.676"></a>
-<span class="sourceLineNo">677</span><a id="line.677">    /**</a>
-<span class="sourceLineNo">678</span><a id="line.678">     * Checks whether the {@code JavadocTokenType.PARAGRAPH} node is referring to the violation</a>
-<span class="sourceLineNo">679</span><a id="line.679">     * message keys javadoc segment.</a>
-<span class="sourceLineNo">680</span><a id="line.680">     *</a>
-<span class="sourceLineNo">681</span><a id="line.681">     * @param nodeParagraph paragraph javadoc node</a>
-<span class="sourceLineNo">682</span><a id="line.682">     * @return true if paragraph node contains the violation message keys text</a>
-<span class="sourceLineNo">683</span><a id="line.683">     */</a>
-<span class="sourceLineNo">684</span><a id="line.684">    private static boolean isViolationMessagesText(DetailNode nodeParagraph) {</a>
-<span class="sourceLineNo">685</span><a id="line.685">        return isChildNodeTextMatches(nodeParagraph, VIOLATION_MESSAGES_TAG);</a>
-<span class="sourceLineNo">686</span><a id="line.686">    }</a>
-<span class="sourceLineNo">687</span><a id="line.687"></a>
-<span class="sourceLineNo">688</span><a id="line.688">    /**</a>
-<span class="sourceLineNo">689</span><a id="line.689">     * Checks whether the {@code JavadocTokenType.PARAGRAPH} node is referring to the parent</a>
-<span class="sourceLineNo">690</span><a id="line.690">     * javadoc segment.</a>
-<span class="sourceLineNo">691</span><a id="line.691">     *</a>
-<span class="sourceLineNo">692</span><a id="line.692">     * @param nodeParagraph paragraph javadoc node</a>
-<span class="sourceLineNo">693</span><a id="line.693">     * @return true if paragraph node contains the parent text</a>
-<span class="sourceLineNo">694</span><a id="line.694">     */</a>
-<span class="sourceLineNo">695</span><a id="line.695">    private static boolean isParentText(DetailNode nodeParagraph) {</a>
-<span class="sourceLineNo">696</span><a id="line.696">        return isChildNodeTextMatches(nodeParagraph, PARENT_TAG);</a>
-<span class="sourceLineNo">697</span><a id="line.697">    }</a>
-<span class="sourceLineNo">698</span><a id="line.698"></a>
-<span class="sourceLineNo">699</span><a id="line.699">    /**</a>
-<span class="sourceLineNo">700</span><a id="line.700">     * Checks whether the first child {@code JavadocTokenType.TEXT} node matches given pattern.</a>
-<span class="sourceLineNo">701</span><a id="line.701">     *</a>
-<span class="sourceLineNo">702</span><a id="line.702">     * @param ast parent javadoc node</a>
-<span class="sourceLineNo">703</span><a id="line.703">     * @param pattern pattern to match</a>
-<span class="sourceLineNo">704</span><a id="line.704">     * @return true if one of child text nodes matches pattern</a>
-<span class="sourceLineNo">705</span><a id="line.705">     */</a>
-<span class="sourceLineNo">706</span><a id="line.706">    private static boolean isChildNodeTextMatches(DetailNode ast, Pattern pattern) {</a>
-<span class="sourceLineNo">707</span><a id="line.707">        return getFirstChildOfType(ast, JavadocTokenTypes.TEXT, 0)</a>
-<span class="sourceLineNo">708</span><a id="line.708">                .map(DetailNode::getText)</a>
-<span class="sourceLineNo">709</span><a id="line.709">                .map(pattern::matcher)</a>
-<span class="sourceLineNo">710</span><a id="line.710">                .map(Matcher::matches)</a>
-<span class="sourceLineNo">711</span><a id="line.711">                .orElse(Boolean.FALSE);</a>
-<span class="sourceLineNo">712</span><a id="line.712">    }</a>
-<span class="sourceLineNo">713</span><a id="line.713">}</a>
+<span class="sourceLineNo">239</span><a id="line.239">                final String fullQualifiedName = moduleDetails.getFullQualifiedName();</a>
+<span class="sourceLineNo">240</span><a id="line.240">                log(rootAst.getLineNumber(), MSG_DESC_MISSING,</a>
+<span class="sourceLineNo">241</span><a id="line.241">                        fullQualifiedName.substring(fullQualifiedName.lastIndexOf('.') + 1));</a>
+<span class="sourceLineNo">242</span><a id="line.242">            }</a>
+<span class="sourceLineNo">243</span><a id="line.243">            else if (writeXmlOutput) {</a>
+<span class="sourceLineNo">244</span><a id="line.244">                try {</a>
+<span class="sourceLineNo">245</span><a id="line.245">                    XmlMetaWriter.write(moduleDetails);</a>
+<span class="sourceLineNo">246</span><a id="line.246">                }</a>
+<span class="sourceLineNo">247</span><a id="line.247">                catch (TransformerException | ParserConfigurationException ex) {</a>
+<span class="sourceLineNo">248</span><a id="line.248">                    throw new IllegalStateException(</a>
+<span class="sourceLineNo">249</span><a id="line.249">                            "Failed to write metadata into XML file for module: "</a>
+<span class="sourceLineNo">250</span><a id="line.250">                                    + getModuleSimpleName(), ex);</a>
+<span class="sourceLineNo">251</span><a id="line.251">                }</a>
+<span class="sourceLineNo">252</span><a id="line.252">            }</a>
+<span class="sourceLineNo">253</span><a id="line.253">            if (!writeXmlOutput) {</a>
+<span class="sourceLineNo">254</span><a id="line.254">                MODULE_DETAILS_STORE.put(moduleDetails.getFullQualifiedName(), moduleDetails);</a>
+<span class="sourceLineNo">255</span><a id="line.255">            }</a>
+<span class="sourceLineNo">256</span><a id="line.256"></a>
+<span class="sourceLineNo">257</span><a id="line.257">        }</a>
+<span class="sourceLineNo">258</span><a id="line.258">    }</a>
+<span class="sourceLineNo">259</span><a id="line.259"></a>
+<span class="sourceLineNo">260</span><a id="line.260">    /**</a>
+<span class="sourceLineNo">261</span><a id="line.261">     * Method containing the core logic of scraping. This keeps track and decides which phase of</a>
+<span class="sourceLineNo">262</span><a id="line.262">     * scraping we are in, and accordingly call other subroutines.</a>
+<span class="sourceLineNo">263</span><a id="line.263">     *</a>
+<span class="sourceLineNo">264</span><a id="line.264">     * @param ast javadoc ast</a>
+<span class="sourceLineNo">265</span><a id="line.265">     */</a>
+<span class="sourceLineNo">266</span><a id="line.266">    private void scrapeContent(DetailNode ast) {</a>
+<span class="sourceLineNo">267</span><a id="line.267">        if (ast.getType() == JavadocTokenTypes.PARAGRAPH) {</a>
+<span class="sourceLineNo">268</span><a id="line.268">            if (isParentText(ast)) {</a>
+<span class="sourceLineNo">269</span><a id="line.269">                parentSectionStartIdx = getParentIndexOf(ast);</a>
+<span class="sourceLineNo">270</span><a id="line.270">                moduleDetails.setParent(getParentText(ast));</a>
+<span class="sourceLineNo">271</span><a id="line.271">            }</a>
+<span class="sourceLineNo">272</span><a id="line.272">            else if (isViolationMessagesText(ast)) {</a>
+<span class="sourceLineNo">273</span><a id="line.273">                scrapingViolationMessageList = true;</a>
+<span class="sourceLineNo">274</span><a id="line.274">            }</a>
+<span class="sourceLineNo">275</span><a id="line.275">            else if (exampleSectionStartIdx == -1</a>
+<span class="sourceLineNo">276</span><a id="line.276">                    &amp;&amp; isExamplesText(ast)) {</a>
+<span class="sourceLineNo">277</span><a id="line.277">                exampleSectionStartIdx = getParentIndexOf(ast);</a>
+<span class="sourceLineNo">278</span><a id="line.278">            }</a>
+<span class="sourceLineNo">279</span><a id="line.279">        }</a>
+<span class="sourceLineNo">280</span><a id="line.280">        else if (ast.getType() == JavadocTokenTypes.LI) {</a>
+<span class="sourceLineNo">281</span><a id="line.281">            if (isPropertyList(ast)) {</a>
+<span class="sourceLineNo">282</span><a id="line.282">                if (propertySectionStartIdx == -1) {</a>
+<span class="sourceLineNo">283</span><a id="line.283">                    propertySectionStartIdx = getParentIndexOf(ast);</a>
+<span class="sourceLineNo">284</span><a id="line.284">                }</a>
+<span class="sourceLineNo">285</span><a id="line.285">                moduleDetails.addToProperties(createProperties(ast));</a>
+<span class="sourceLineNo">286</span><a id="line.286">            }</a>
+<span class="sourceLineNo">287</span><a id="line.287">            else if (scrapingViolationMessageList) {</a>
+<span class="sourceLineNo">288</span><a id="line.288">                moduleDetails.addToViolationMessages(getViolationMessages(ast));</a>
+<span class="sourceLineNo">289</span><a id="line.289">            }</a>
+<span class="sourceLineNo">290</span><a id="line.290">        }</a>
+<span class="sourceLineNo">291</span><a id="line.291">    }</a>
+<span class="sourceLineNo">292</span><a id="line.292"></a>
+<span class="sourceLineNo">293</span><a id="line.293">    /**</a>
+<span class="sourceLineNo">294</span><a id="line.294">     * Create the modulePropertyDetails content.</a>
+<span class="sourceLineNo">295</span><a id="line.295">     *</a>
+<span class="sourceLineNo">296</span><a id="line.296">     * @param nodeLi list item javadoc node</a>
+<span class="sourceLineNo">297</span><a id="line.297">     * @return modulePropertyDetail object for the corresponding property</a>
+<span class="sourceLineNo">298</span><a id="line.298">     */</a>
+<span class="sourceLineNo">299</span><a id="line.299">    private static ModulePropertyDetails createProperties(DetailNode nodeLi) {</a>
+<span class="sourceLineNo">300</span><a id="line.300">        final ModulePropertyDetails modulePropertyDetails = new ModulePropertyDetails();</a>
+<span class="sourceLineNo">301</span><a id="line.301"></a>
+<span class="sourceLineNo">302</span><a id="line.302">        final Optional&lt;DetailNode&gt; propertyNameNode = getFirstChildOfType(nodeLi,</a>
+<span class="sourceLineNo">303</span><a id="line.303">                JavadocTokenTypes.JAVADOC_INLINE_TAG, 0);</a>
+<span class="sourceLineNo">304</span><a id="line.304">        if (propertyNameNode.isPresent()) {</a>
+<span class="sourceLineNo">305</span><a id="line.305">            final DetailNode propertyNameTag = propertyNameNode.get();</a>
+<span class="sourceLineNo">306</span><a id="line.306">            final String propertyName = getTextFromTag(propertyNameTag);</a>
+<span class="sourceLineNo">307</span><a id="line.307"></a>
+<span class="sourceLineNo">308</span><a id="line.308">            final DetailNode propertyType = getFirstChildOfMatchingText(nodeLi, TYPE_TAG)</a>
+<span class="sourceLineNo">309</span><a id="line.309">                .orElseThrow(() -&gt; {</a>
+<span class="sourceLineNo">310</span><a id="line.310">                    return new MetadataGenerationException(String.format(</a>
+<span class="sourceLineNo">311</span><a id="line.311">                        Locale.ROOT, PROP_TYPE_MISSING, propertyName)</a>
+<span class="sourceLineNo">312</span><a id="line.312">                    );</a>
+<span class="sourceLineNo">313</span><a id="line.313">                });</a>
+<span class="sourceLineNo">314</span><a id="line.314">            final String propertyDesc = DESC_CLEAN.matcher(</a>
+<span class="sourceLineNo">315</span><a id="line.315">                    constructSubTreeText(nodeLi, propertyNameTag.getIndex() + 1,</a>
+<span class="sourceLineNo">316</span><a id="line.316">                            propertyType.getIndex() - 1))</a>
+<span class="sourceLineNo">317</span><a id="line.317">                    .replaceAll(Matcher.quoteReplacement(""));</a>
+<span class="sourceLineNo">318</span><a id="line.318"></a>
+<span class="sourceLineNo">319</span><a id="line.319">            modulePropertyDetails.setDescription(propertyDesc.trim());</a>
+<span class="sourceLineNo">320</span><a id="line.320">            modulePropertyDetails.setName(propertyName);</a>
+<span class="sourceLineNo">321</span><a id="line.321">            modulePropertyDetails.setType(getTagTextFromProperty(nodeLi, propertyType));</a>
+<span class="sourceLineNo">322</span><a id="line.322"></a>
+<span class="sourceLineNo">323</span><a id="line.323">            final Optional&lt;DetailNode&gt; validationTypeNodeOpt = getFirstChildOfMatchingText(nodeLi,</a>
+<span class="sourceLineNo">324</span><a id="line.324">                VALIDATION_TYPE_TAG);</a>
+<span class="sourceLineNo">325</span><a id="line.325">            if (validationTypeNodeOpt.isPresent()) {</a>
+<span class="sourceLineNo">326</span><a id="line.326">                final DetailNode validationTypeNode = validationTypeNodeOpt.get();</a>
+<span class="sourceLineNo">327</span><a id="line.327">                modulePropertyDetails.setValidationType(getTagTextFromProperty(nodeLi,</a>
+<span class="sourceLineNo">328</span><a id="line.328">                    validationTypeNode));</a>
+<span class="sourceLineNo">329</span><a id="line.329">            }</a>
+<span class="sourceLineNo">330</span><a id="line.330"></a>
+<span class="sourceLineNo">331</span><a id="line.331">            final String defaultValue = getFirstChildOfMatchingText(nodeLi, DEFAULT_VALUE_TAG)</a>
+<span class="sourceLineNo">332</span><a id="line.332">                .map(defaultValueNode -&gt; getPropertyDefaultText(nodeLi, defaultValueNode))</a>
+<span class="sourceLineNo">333</span><a id="line.333">                .orElseThrow(() -&gt; {</a>
+<span class="sourceLineNo">334</span><a id="line.334">                    return new MetadataGenerationException(String.format(</a>
+<span class="sourceLineNo">335</span><a id="line.335">                        Locale.ROOT, PROP_DEFAULT_VALUE_MISSING, propertyName)</a>
+<span class="sourceLineNo">336</span><a id="line.336">                    );</a>
+<span class="sourceLineNo">337</span><a id="line.337">                });</a>
+<span class="sourceLineNo">338</span><a id="line.338">            if (!PROPERTIES_TO_NOT_WRITE.contains(defaultValue)) {</a>
+<span class="sourceLineNo">339</span><a id="line.339">                modulePropertyDetails.setDefaultValue(defaultValue);</a>
+<span class="sourceLineNo">340</span><a id="line.340">            }</a>
+<span class="sourceLineNo">341</span><a id="line.341">        }</a>
+<span class="sourceLineNo">342</span><a id="line.342">        return modulePropertyDetails;</a>
+<span class="sourceLineNo">343</span><a id="line.343">    }</a>
+<span class="sourceLineNo">344</span><a id="line.344"></a>
+<span class="sourceLineNo">345</span><a id="line.345">    /**</a>
+<span class="sourceLineNo">346</span><a id="line.346">     * Get tag text from property data.</a>
+<span class="sourceLineNo">347</span><a id="line.347">     *</a>
+<span class="sourceLineNo">348</span><a id="line.348">     * @param nodeLi javadoc li item node</a>
+<span class="sourceLineNo">349</span><a id="line.349">     * @param propertyMeta property javadoc node</a>
+<span class="sourceLineNo">350</span><a id="line.350">     * @return property metadata text</a>
+<span class="sourceLineNo">351</span><a id="line.351">     */</a>
+<span class="sourceLineNo">352</span><a id="line.352">    private static String getTagTextFromProperty(DetailNode nodeLi, DetailNode propertyMeta) {</a>
+<span class="sourceLineNo">353</span><a id="line.353">        final Optional&lt;DetailNode&gt; tagNodeOpt = getFirstChildOfType(nodeLi,</a>
+<span class="sourceLineNo">354</span><a id="line.354">                JavadocTokenTypes.JAVADOC_INLINE_TAG, propertyMeta.getIndex() + 1);</a>
+<span class="sourceLineNo">355</span><a id="line.355">        DetailNode tagNode = null;</a>
+<span class="sourceLineNo">356</span><a id="line.356">        if (tagNodeOpt.isPresent()) {</a>
+<span class="sourceLineNo">357</span><a id="line.357">            tagNode = tagNodeOpt.get();</a>
+<span class="sourceLineNo">358</span><a id="line.358">        }</a>
+<span class="sourceLineNo">359</span><a id="line.359">        return getTextFromTag(tagNode);</a>
+<span class="sourceLineNo">360</span><a id="line.360">    }</a>
+<span class="sourceLineNo">361</span><a id="line.361"></a>
+<span class="sourceLineNo">362</span><a id="line.362">    /**</a>
+<span class="sourceLineNo">363</span><a id="line.363">     * Clean up the default token text by removing hyperlinks, and only keeping token type text.</a>
+<span class="sourceLineNo">364</span><a id="line.364">     *</a>
+<span class="sourceLineNo">365</span><a id="line.365">     * @param initialText unclean text</a>
+<span class="sourceLineNo">366</span><a id="line.366">     * @return clean text</a>
+<span class="sourceLineNo">367</span><a id="line.367">     */</a>
+<span class="sourceLineNo">368</span><a id="line.368">    private static String cleanDefaultTokensText(String initialText) {</a>
+<span class="sourceLineNo">369</span><a id="line.369">        final Set&lt;String&gt; tokens = new LinkedHashSet&lt;&gt;();</a>
+<span class="sourceLineNo">370</span><a id="line.370">        final Matcher matcher = TOKEN_TEXT_PATTERN.matcher(initialText);</a>
+<span class="sourceLineNo">371</span><a id="line.371">        while (matcher.find()) {</a>
+<span class="sourceLineNo">372</span><a id="line.372">            tokens.add(matcher.group(0));</a>
+<span class="sourceLineNo">373</span><a id="line.373">        }</a>
+<span class="sourceLineNo">374</span><a id="line.374">        return String.join(",", tokens);</a>
+<span class="sourceLineNo">375</span><a id="line.375">    }</a>
+<span class="sourceLineNo">376</span><a id="line.376"></a>
+<span class="sourceLineNo">377</span><a id="line.377">    /**</a>
+<span class="sourceLineNo">378</span><a id="line.378">     * Performs a DFS of the subtree with a node as the root and constructs the text of that</a>
+<span class="sourceLineNo">379</span><a id="line.379">     * tree, ignoring JavadocToken texts.</a>
+<span class="sourceLineNo">380</span><a id="line.380">     *</a>
+<span class="sourceLineNo">381</span><a id="line.381">     * @param node root node of subtree</a>
+<span class="sourceLineNo">382</span><a id="line.382">     * @param childLeftLimit the left index of root children from where to scan</a>
+<span class="sourceLineNo">383</span><a id="line.383">     * @param childRightLimit the right index of root children till where to scan</a>
+<span class="sourceLineNo">384</span><a id="line.384">     * @return constructed text of subtree</a>
+<span class="sourceLineNo">385</span><a id="line.385">     */</a>
+<span class="sourceLineNo">386</span><a id="line.386">    private static String constructSubTreeText(DetailNode node, int childLeftLimit,</a>
+<span class="sourceLineNo">387</span><a id="line.387">                                               int childRightLimit) {</a>
+<span class="sourceLineNo">388</span><a id="line.388">        final StringBuilder result = new StringBuilder(1024);</a>
+<span class="sourceLineNo">389</span><a id="line.389">        DetailNode detailNode = node;</a>
+<span class="sourceLineNo">390</span><a id="line.390"></a>
+<span class="sourceLineNo">391</span><a id="line.391">        final Deque&lt;DetailNode&gt; stack = new ArrayDeque&lt;&gt;();</a>
+<span class="sourceLineNo">392</span><a id="line.392">        stack.addFirst(detailNode);</a>
+<span class="sourceLineNo">393</span><a id="line.393">        final Set&lt;DetailNode&gt; visited = new HashSet&lt;&gt;();</a>
+<span class="sourceLineNo">394</span><a id="line.394">        while (!stack.isEmpty()) {</a>
+<span class="sourceLineNo">395</span><a id="line.395">            detailNode = stack.getFirst();</a>
+<span class="sourceLineNo">396</span><a id="line.396">            stack.removeFirst();</a>
+<span class="sourceLineNo">397</span><a id="line.397"></a>
+<span class="sourceLineNo">398</span><a id="line.398">            if (!visited.contains(detailNode)) {</a>
+<span class="sourceLineNo">399</span><a id="line.399">                final String childText = detailNode.getText();</a>
+<span class="sourceLineNo">400</span><a id="line.400">                if (detailNode.getType() != JavadocTokenTypes.LEADING_ASTERISK</a>
+<span class="sourceLineNo">401</span><a id="line.401">                        &amp;&amp; !TOKEN_TEXT_PATTERN.matcher(childText).matches()) {</a>
+<span class="sourceLineNo">402</span><a id="line.402">                    result.insert(0, detailNode.getText());</a>
+<span class="sourceLineNo">403</span><a id="line.403">                }</a>
+<span class="sourceLineNo">404</span><a id="line.404">                visited.add(detailNode);</a>
+<span class="sourceLineNo">405</span><a id="line.405">            }</a>
+<span class="sourceLineNo">406</span><a id="line.406"></a>
+<span class="sourceLineNo">407</span><a id="line.407">            for (DetailNode child : detailNode.getChildren()) {</a>
+<span class="sourceLineNo">408</span><a id="line.408">                if (child.getParent().equals(node)</a>
+<span class="sourceLineNo">409</span><a id="line.409">                        &amp;&amp; (child.getIndex() &lt; childLeftLimit</a>
+<span class="sourceLineNo">410</span><a id="line.410">                        || child.getIndex() &gt; childRightLimit)) {</a>
+<span class="sourceLineNo">411</span><a id="line.411">                    continue;</a>
+<span class="sourceLineNo">412</span><a id="line.412">                }</a>
+<span class="sourceLineNo">413</span><a id="line.413">                if (!visited.contains(child)) {</a>
+<span class="sourceLineNo">414</span><a id="line.414">                    stack.addFirst(child);</a>
+<span class="sourceLineNo">415</span><a id="line.415">                }</a>
+<span class="sourceLineNo">416</span><a id="line.416">            }</a>
+<span class="sourceLineNo">417</span><a id="line.417">        }</a>
+<span class="sourceLineNo">418</span><a id="line.418">        return result.toString().trim();</a>
+<span class="sourceLineNo">419</span><a id="line.419">    }</a>
+<span class="sourceLineNo">420</span><a id="line.420"></a>
+<span class="sourceLineNo">421</span><a id="line.421">    /**</a>
+<span class="sourceLineNo">422</span><a id="line.422">     * Create the description text with starting index as 0 and ending index would be the first</a>
+<span class="sourceLineNo">423</span><a id="line.423">     * valid non zero index amongst in the order of {@code propertySectionStartIdx},</a>
+<span class="sourceLineNo">424</span><a id="line.424">     * {@code exampleSectionStartIdx} and {@code parentSectionStartIdx}.</a>
+<span class="sourceLineNo">425</span><a id="line.425">     *</a>
+<span class="sourceLineNo">426</span><a id="line.426">     * @return description text</a>
+<span class="sourceLineNo">427</span><a id="line.427">     */</a>
+<span class="sourceLineNo">428</span><a id="line.428">    private String getDescriptionText() {</a>
+<span class="sourceLineNo">429</span><a id="line.429">        final int descriptionEndIdx;</a>
+<span class="sourceLineNo">430</span><a id="line.430">        if (propertySectionStartIdx &gt; -1) {</a>
+<span class="sourceLineNo">431</span><a id="line.431">            descriptionEndIdx = propertySectionStartIdx;</a>
+<span class="sourceLineNo">432</span><a id="line.432">        }</a>
+<span class="sourceLineNo">433</span><a id="line.433">        else if (exampleSectionStartIdx &gt; -1) {</a>
+<span class="sourceLineNo">434</span><a id="line.434">            descriptionEndIdx = exampleSectionStartIdx;</a>
+<span class="sourceLineNo">435</span><a id="line.435">        }</a>
+<span class="sourceLineNo">436</span><a id="line.436">        else {</a>
+<span class="sourceLineNo">437</span><a id="line.437">            descriptionEndIdx = parentSectionStartIdx;</a>
+<span class="sourceLineNo">438</span><a id="line.438">        }</a>
+<span class="sourceLineNo">439</span><a id="line.439">        return constructSubTreeText(rootNode, 0, descriptionEndIdx - 1);</a>
+<span class="sourceLineNo">440</span><a id="line.440">    }</a>
+<span class="sourceLineNo">441</span><a id="line.441"></a>
+<span class="sourceLineNo">442</span><a id="line.442">    /**</a>
+<span class="sourceLineNo">443</span><a id="line.443">     * Create property default text, which is either normal property value or list of tokens.</a>
+<span class="sourceLineNo">444</span><a id="line.444">     *</a>
+<span class="sourceLineNo">445</span><a id="line.445">     * @param nodeLi list item javadoc node</a>
+<span class="sourceLineNo">446</span><a id="line.446">     * @param defaultValueNode default value node</a>
+<span class="sourceLineNo">447</span><a id="line.447">     * @return default property text</a>
+<span class="sourceLineNo">448</span><a id="line.448">     */</a>
+<span class="sourceLineNo">449</span><a id="line.449">    private static String getPropertyDefaultText(DetailNode nodeLi, DetailNode defaultValueNode) {</a>
+<span class="sourceLineNo">450</span><a id="line.450">        final Optional&lt;DetailNode&gt; propertyDefaultValueTag = getFirstChildOfType(nodeLi,</a>
+<span class="sourceLineNo">451</span><a id="line.451">                JavadocTokenTypes.JAVADOC_INLINE_TAG, defaultValueNode.getIndex() + 1);</a>
+<span class="sourceLineNo">452</span><a id="line.452">        final String result;</a>
+<span class="sourceLineNo">453</span><a id="line.453">        if (propertyDefaultValueTag.isPresent()) {</a>
+<span class="sourceLineNo">454</span><a id="line.454">            result = getTextFromTag(propertyDefaultValueTag.get());</a>
+<span class="sourceLineNo">455</span><a id="line.455">        }</a>
+<span class="sourceLineNo">456</span><a id="line.456">        else {</a>
+<span class="sourceLineNo">457</span><a id="line.457">            final String tokenText = constructSubTreeText(nodeLi,</a>
+<span class="sourceLineNo">458</span><a id="line.458">                    defaultValueNode.getIndex(), nodeLi.getChildren().length);</a>
+<span class="sourceLineNo">459</span><a id="line.459">            result = cleanDefaultTokensText(tokenText);</a>
+<span class="sourceLineNo">460</span><a id="line.460">        }</a>
+<span class="sourceLineNo">461</span><a id="line.461">        return result;</a>
+<span class="sourceLineNo">462</span><a id="line.462">    }</a>
+<span class="sourceLineNo">463</span><a id="line.463"></a>
+<span class="sourceLineNo">464</span><a id="line.464">    /**</a>
+<span class="sourceLineNo">465</span><a id="line.465">     * Get the violation message text for a specific key from the list item.</a>
+<span class="sourceLineNo">466</span><a id="line.466">     *</a>
+<span class="sourceLineNo">467</span><a id="line.467">     * @param nodeLi list item javadoc node</a>
+<span class="sourceLineNo">468</span><a id="line.468">     * @return violation message key text</a>
+<span class="sourceLineNo">469</span><a id="line.469">     */</a>
+<span class="sourceLineNo">470</span><a id="line.470">    private static String getViolationMessages(DetailNode nodeLi) {</a>
+<span class="sourceLineNo">471</span><a id="line.471">        final Optional&lt;DetailNode&gt; resultNode = getFirstChildOfType(nodeLi,</a>
+<span class="sourceLineNo">472</span><a id="line.472">                JavadocTokenTypes.JAVADOC_INLINE_TAG, 0);</a>
+<span class="sourceLineNo">473</span><a id="line.473">        return resultNode.map(JavadocMetadataScraper::getTextFromTag).orElse("");</a>
+<span class="sourceLineNo">474</span><a id="line.474">    }</a>
+<span class="sourceLineNo">475</span><a id="line.475"></a>
+<span class="sourceLineNo">476</span><a id="line.476">    /**</a>
+<span class="sourceLineNo">477</span><a id="line.477">     * Get text from {@code JavadocTokenTypes.JAVADOC_INLINE_TAG}.</a>
+<span class="sourceLineNo">478</span><a id="line.478">     *</a>
+<span class="sourceLineNo">479</span><a id="line.479">     * @param nodeTag target javadoc tag</a>
+<span class="sourceLineNo">480</span><a id="line.480">     * @return text contained by the tag</a>
+<span class="sourceLineNo">481</span><a id="line.481">     */</a>
+<span class="sourceLineNo">482</span><a id="line.482">    private static String getTextFromTag(DetailNode nodeTag) {</a>
+<span class="sourceLineNo">483</span><a id="line.483">        return Optional.ofNullable(nodeTag).map(JavadocMetadataScraper::getText).orElse("");</a>
+<span class="sourceLineNo">484</span><a id="line.484">    }</a>
+<span class="sourceLineNo">485</span><a id="line.485"></a>
+<span class="sourceLineNo">486</span><a id="line.486">    /**</a>
+<span class="sourceLineNo">487</span><a id="line.487">     * Returns the first child node which matches the provided {@code TokenType} and has the</a>
+<span class="sourceLineNo">488</span><a id="line.488">     * children index after the offset value.</a>
+<span class="sourceLineNo">489</span><a id="line.489">     *</a>
+<span class="sourceLineNo">490</span><a id="line.490">     * @param node parent node</a>
+<span class="sourceLineNo">491</span><a id="line.491">     * @param tokenType token type to match</a>
+<span class="sourceLineNo">492</span><a id="line.492">     * @param offset children array index offset</a>
+<span class="sourceLineNo">493</span><a id="line.493">     * @return the first child satisfying the conditions</a>
+<span class="sourceLineNo">494</span><a id="line.494">     */</a>
+<span class="sourceLineNo">495</span><a id="line.495">    private static Optional&lt;DetailNode&gt; getFirstChildOfType(DetailNode node, int tokenType,</a>
+<span class="sourceLineNo">496</span><a id="line.496">                                                            int offset) {</a>
+<span class="sourceLineNo">497</span><a id="line.497">        return Arrays.stream(node.getChildren())</a>
+<span class="sourceLineNo">498</span><a id="line.498">                .filter(child -&gt; child.getIndex() &gt;= offset &amp;&amp; child.getType() == tokenType)</a>
+<span class="sourceLineNo">499</span><a id="line.499">                .findFirst();</a>
+<span class="sourceLineNo">500</span><a id="line.500">    }</a>
+<span class="sourceLineNo">501</span><a id="line.501"></a>
+<span class="sourceLineNo">502</span><a id="line.502">    /**</a>
+<span class="sourceLineNo">503</span><a id="line.503">     * Get joined text from all text children nodes.</a>
+<span class="sourceLineNo">504</span><a id="line.504">     *</a>
+<span class="sourceLineNo">505</span><a id="line.505">     * @param parentNode parent node</a>
+<span class="sourceLineNo">506</span><a id="line.506">     * @return the joined text of node</a>
+<span class="sourceLineNo">507</span><a id="line.507">     */</a>
+<span class="sourceLineNo">508</span><a id="line.508">    private static String getText(DetailNode parentNode) {</a>
+<span class="sourceLineNo">509</span><a id="line.509">        return Arrays.stream(parentNode.getChildren())</a>
+<span class="sourceLineNo">510</span><a id="line.510">                .filter(child -&gt; child.getType() == JavadocTokenTypes.TEXT)</a>
+<span class="sourceLineNo">511</span><a id="line.511">                .map(node -&gt; QUOTE_PATTERN.matcher(node.getText().trim()).replaceAll(""))</a>
+<span class="sourceLineNo">512</span><a id="line.512">                .collect(Collectors.joining(" "));</a>
+<span class="sourceLineNo">513</span><a id="line.513">    }</a>
+<span class="sourceLineNo">514</span><a id="line.514"></a>
+<span class="sourceLineNo">515</span><a id="line.515">    /**</a>
+<span class="sourceLineNo">516</span><a id="line.516">     * Get first child of parent node matching the provided pattern.</a>
+<span class="sourceLineNo">517</span><a id="line.517">     *</a>
+<span class="sourceLineNo">518</span><a id="line.518">     * @param node parent node</a>
+<span class="sourceLineNo">519</span><a id="line.519">     * @param pattern pattern to match against</a>
+<span class="sourceLineNo">520</span><a id="line.520">     * @return the first child node matching the condition</a>
+<span class="sourceLineNo">521</span><a id="line.521">     */</a>
+<span class="sourceLineNo">522</span><a id="line.522">    private static Optional&lt;DetailNode&gt; getFirstChildOfMatchingText(DetailNode node,</a>
+<span class="sourceLineNo">523</span><a id="line.523">                                                                    Pattern pattern) {</a>
+<span class="sourceLineNo">524</span><a id="line.524">        return Arrays.stream(node.getChildren())</a>
+<span class="sourceLineNo">525</span><a id="line.525">                .filter(child -&gt; pattern.matcher(child.getText()).matches())</a>
+<span class="sourceLineNo">526</span><a id="line.526">                .findFirst();</a>
+<span class="sourceLineNo">527</span><a id="line.527">    }</a>
+<span class="sourceLineNo">528</span><a id="line.528"></a>
+<span class="sourceLineNo">529</span><a id="line.529">    /**</a>
+<span class="sourceLineNo">530</span><a id="line.530">     * Returns parent node, removing modifier/annotation nodes.</a>
+<span class="sourceLineNo">531</span><a id="line.531">     *</a>
+<span class="sourceLineNo">532</span><a id="line.532">     * @param commentBlock child node.</a>
+<span class="sourceLineNo">533</span><a id="line.533">     * @return parent node.</a>
+<span class="sourceLineNo">534</span><a id="line.534">     */</a>
+<span class="sourceLineNo">535</span><a id="line.535">    private static DetailAST getParent(DetailAST commentBlock) {</a>
+<span class="sourceLineNo">536</span><a id="line.536">        final DetailAST parentNode = commentBlock.getParent();</a>
+<span class="sourceLineNo">537</span><a id="line.537">        DetailAST result = parentNode;</a>
+<span class="sourceLineNo">538</span><a id="line.538">        if (result.getType() == TokenTypes.ANNOTATION) {</a>
+<span class="sourceLineNo">539</span><a id="line.539">            result = parentNode.getParent().getParent();</a>
+<span class="sourceLineNo">540</span><a id="line.540">        }</a>
+<span class="sourceLineNo">541</span><a id="line.541">        else if (result.getType() == TokenTypes.MODIFIERS) {</a>
+<span class="sourceLineNo">542</span><a id="line.542">            result = parentNode.getParent();</a>
+<span class="sourceLineNo">543</span><a id="line.543">        }</a>
+<span class="sourceLineNo">544</span><a id="line.544">        return result;</a>
+<span class="sourceLineNo">545</span><a id="line.545">    }</a>
+<span class="sourceLineNo">546</span><a id="line.546"></a>
+<span class="sourceLineNo">547</span><a id="line.547">    /**</a>
+<span class="sourceLineNo">548</span><a id="line.548">     * Traverse parents until we reach the root node (@code{JavadocTokenTypes.JAVADOC})</a>
+<span class="sourceLineNo">549</span><a id="line.549">     * child and return its index.</a>
+<span class="sourceLineNo">550</span><a id="line.550">     *</a>
+<span class="sourceLineNo">551</span><a id="line.551">     * @param node subtree child node</a>
+<span class="sourceLineNo">552</span><a id="line.552">     * @return root node child index</a>
+<span class="sourceLineNo">553</span><a id="line.553">     */</a>
+<span class="sourceLineNo">554</span><a id="line.554">    private static int getParentIndexOf(DetailNode node) {</a>
+<span class="sourceLineNo">555</span><a id="line.555">        DetailNode currNode = node;</a>
+<span class="sourceLineNo">556</span><a id="line.556">        while (currNode.getParent().getIndex() != -1) {</a>
+<span class="sourceLineNo">557</span><a id="line.557">            currNode = currNode.getParent();</a>
+<span class="sourceLineNo">558</span><a id="line.558">        }</a>
+<span class="sourceLineNo">559</span><a id="line.559">        return currNode.getIndex();</a>
+<span class="sourceLineNo">560</span><a id="line.560">    }</a>
+<span class="sourceLineNo">561</span><a id="line.561"></a>
+<span class="sourceLineNo">562</span><a id="line.562">    /**</a>
+<span class="sourceLineNo">563</span><a id="line.563">     * Get module parent text from paragraph javadoc node.</a>
+<span class="sourceLineNo">564</span><a id="line.564">     *</a>
+<span class="sourceLineNo">565</span><a id="line.565">     * @param nodeParagraph paragraph javadoc node</a>
+<span class="sourceLineNo">566</span><a id="line.566">     * @return parent text</a>
+<span class="sourceLineNo">567</span><a id="line.567">     */</a>
+<span class="sourceLineNo">568</span><a id="line.568">    private static String getParentText(DetailNode nodeParagraph) {</a>
+<span class="sourceLineNo">569</span><a id="line.569">        return getFirstChildOfType(nodeParagraph, JavadocTokenTypes.JAVADOC_INLINE_TAG, 0)</a>
+<span class="sourceLineNo">570</span><a id="line.570">                .map(JavadocMetadataScraper::getTextFromTag)</a>
+<span class="sourceLineNo">571</span><a id="line.571">                .orElse(null);</a>
+<span class="sourceLineNo">572</span><a id="line.572">    }</a>
+<span class="sourceLineNo">573</span><a id="line.573"></a>
+<span class="sourceLineNo">574</span><a id="line.574">    /**</a>
+<span class="sourceLineNo">575</span><a id="line.575">     * Get module type(check/filter/filefilter) based on file name.</a>
+<span class="sourceLineNo">576</span><a id="line.576">     *</a>
+<span class="sourceLineNo">577</span><a id="line.577">     * @return module type</a>
+<span class="sourceLineNo">578</span><a id="line.578">     */</a>
+<span class="sourceLineNo">579</span><a id="line.579">    private ModuleType getModuleType() {</a>
+<span class="sourceLineNo">580</span><a id="line.580">        final String simpleModuleName = getModuleSimpleName();</a>
+<span class="sourceLineNo">581</span><a id="line.581">        final ModuleType result;</a>
+<span class="sourceLineNo">582</span><a id="line.582">        if (simpleModuleName.endsWith("FileFilter")) {</a>
+<span class="sourceLineNo">583</span><a id="line.583">            result = ModuleType.FILEFILTER;</a>
+<span class="sourceLineNo">584</span><a id="line.584">        }</a>
+<span class="sourceLineNo">585</span><a id="line.585">        else if (simpleModuleName.endsWith("Filter")) {</a>
+<span class="sourceLineNo">586</span><a id="line.586">            result = ModuleType.FILTER;</a>
+<span class="sourceLineNo">587</span><a id="line.587">        }</a>
+<span class="sourceLineNo">588</span><a id="line.588">        else {</a>
+<span class="sourceLineNo">589</span><a id="line.589">            result = ModuleType.CHECK;</a>
+<span class="sourceLineNo">590</span><a id="line.590">        }</a>
+<span class="sourceLineNo">591</span><a id="line.591">        return result;</a>
+<span class="sourceLineNo">592</span><a id="line.592">    }</a>
+<span class="sourceLineNo">593</span><a id="line.593"></a>
+<span class="sourceLineNo">594</span><a id="line.594">    /**</a>
+<span class="sourceLineNo">595</span><a id="line.595">     * Extract simple file name from the whole file path name.</a>
+<span class="sourceLineNo">596</span><a id="line.596">     *</a>
+<span class="sourceLineNo">597</span><a id="line.597">     * @return simple module name</a>
+<span class="sourceLineNo">598</span><a id="line.598">     */</a>
+<span class="sourceLineNo">599</span><a id="line.599">    // suppress deprecation until https://github.com/checkstyle/checkstyle/issues/11166</a>
+<span class="sourceLineNo">600</span><a id="line.600">    @SuppressWarnings("deprecation")</a>
+<span class="sourceLineNo">601</span><a id="line.601">    private String getModuleSimpleName() {</a>
+<span class="sourceLineNo">602</span><a id="line.602">        final String fullFileName = getFileContents().getFileName();</a>
+<span class="sourceLineNo">603</span><a id="line.603">        final String[] pathTokens = FILE_SEPARATOR_PATTERN.split(fullFileName);</a>
+<span class="sourceLineNo">604</span><a id="line.604">        final String fileName = pathTokens[pathTokens.length - 1];</a>
+<span class="sourceLineNo">605</span><a id="line.605">        return fileName.substring(0, fileName.length() - JAVA_FILE_EXTENSION.length());</a>
+<span class="sourceLineNo">606</span><a id="line.606">    }</a>
+<span class="sourceLineNo">607</span><a id="line.607"></a>
+<span class="sourceLineNo">608</span><a id="line.608">    /**</a>
+<span class="sourceLineNo">609</span><a id="line.609">     * Retrieve package name of module from the absolute file path.</a>
+<span class="sourceLineNo">610</span><a id="line.610">     *</a>
+<span class="sourceLineNo">611</span><a id="line.611">     * @param filePath absolute file path</a>
+<span class="sourceLineNo">612</span><a id="line.612">     * @return package name</a>
+<span class="sourceLineNo">613</span><a id="line.613">     */</a>
+<span class="sourceLineNo">614</span><a id="line.614">    private static String getPackageName(String filePath) {</a>
+<span class="sourceLineNo">615</span><a id="line.615">        final Deque&lt;String&gt; result = new ArrayDeque&lt;&gt;();</a>
+<span class="sourceLineNo">616</span><a id="line.616">        final String[] filePathTokens = FILE_SEPARATOR_PATTERN.split(filePath);</a>
+<span class="sourceLineNo">617</span><a id="line.617">        for (int i = filePathTokens.length - 1; i &gt;= 0; i--) {</a>
+<span class="sourceLineNo">618</span><a id="line.618">            if ("java".equals(filePathTokens[i]) || "resources".equals(filePathTokens[i])) {</a>
+<span class="sourceLineNo">619</span><a id="line.619">                break;</a>
+<span class="sourceLineNo">620</span><a id="line.620">            }</a>
+<span class="sourceLineNo">621</span><a id="line.621">            result.addFirst(filePathTokens[i]);</a>
+<span class="sourceLineNo">622</span><a id="line.622">        }</a>
+<span class="sourceLineNo">623</span><a id="line.623">        final String fileName = result.removeLast();</a>
+<span class="sourceLineNo">624</span><a id="line.624">        result.addLast(fileName.substring(0, fileName.length() - JAVA_FILE_EXTENSION.length()));</a>
+<span class="sourceLineNo">625</span><a id="line.625">        return String.join(".", result);</a>
+<span class="sourceLineNo">626</span><a id="line.626">    }</a>
+<span class="sourceLineNo">627</span><a id="line.627"></a>
+<span class="sourceLineNo">628</span><a id="line.628">    /**</a>
+<span class="sourceLineNo">629</span><a id="line.629">     * Getter method for {@code moduleDetailsStore}.</a>
+<span class="sourceLineNo">630</span><a id="line.630">     *</a>
+<span class="sourceLineNo">631</span><a id="line.631">     * @return map containing module details of supplied checks.</a>
+<span class="sourceLineNo">632</span><a id="line.632">     */</a>
+<span class="sourceLineNo">633</span><a id="line.633">    public static Map&lt;String, ModuleDetails&gt; getModuleDetailsStore() {</a>
+<span class="sourceLineNo">634</span><a id="line.634">        return Collections.unmodifiableMap(MODULE_DETAILS_STORE);</a>
+<span class="sourceLineNo">635</span><a id="line.635">    }</a>
+<span class="sourceLineNo">636</span><a id="line.636"></a>
+<span class="sourceLineNo">637</span><a id="line.637">    /** Reset the module detail store of any previous information. */</a>
+<span class="sourceLineNo">638</span><a id="line.638">    public static void resetModuleDetailsStore() {</a>
+<span class="sourceLineNo">639</span><a id="line.639">        MODULE_DETAILS_STORE.clear();</a>
+<span class="sourceLineNo">640</span><a id="line.640">    }</a>
+<span class="sourceLineNo">641</span><a id="line.641"></a>
+<span class="sourceLineNo">642</span><a id="line.642">    /**</a>
+<span class="sourceLineNo">643</span><a id="line.643">     * Check if the current javadoc block comment AST corresponds to the top-level class as we</a>
+<span class="sourceLineNo">644</span><a id="line.644">     * only want to scrape top-level class javadoc.</a>
+<span class="sourceLineNo">645</span><a id="line.645">     *</a>
+<span class="sourceLineNo">646</span><a id="line.646">     * @return true if the current AST corresponds to top level class</a>
+<span class="sourceLineNo">647</span><a id="line.647">     */</a>
+<span class="sourceLineNo">648</span><a id="line.648">    private boolean isTopLevelClassJavadoc() {</a>
+<span class="sourceLineNo">649</span><a id="line.649">        final DetailAST parent = getParent(getBlockCommentAst());</a>
+<span class="sourceLineNo">650</span><a id="line.650">        final Optional&lt;DetailAST&gt; className = TokenUtil</a>
+<span class="sourceLineNo">651</span><a id="line.651">                .findFirstTokenByPredicate(parent, child -&gt; {</a>
+<span class="sourceLineNo">652</span><a id="line.652">                    return parent.getType() == TokenTypes.CLASS_DEF</a>
+<span class="sourceLineNo">653</span><a id="line.653">                            &amp;&amp; child.getType() == TokenTypes.IDENT;</a>
+<span class="sourceLineNo">654</span><a id="line.654">                });</a>
+<span class="sourceLineNo">655</span><a id="line.655">        return className.isPresent()</a>
+<span class="sourceLineNo">656</span><a id="line.656">                &amp;&amp; getModuleSimpleName().equals(className.get().getText());</a>
+<span class="sourceLineNo">657</span><a id="line.657">    }</a>
+<span class="sourceLineNo">658</span><a id="line.658"></a>
+<span class="sourceLineNo">659</span><a id="line.659">    /**</a>
+<span class="sourceLineNo">660</span><a id="line.660">     * Checks whether the paragraph node corresponds to the example section.</a>
+<span class="sourceLineNo">661</span><a id="line.661">     *</a>
+<span class="sourceLineNo">662</span><a id="line.662">     * @param ast javadoc paragraph node</a>
+<span class="sourceLineNo">663</span><a id="line.663">     * @return true if the section matches the example section marker</a>
+<span class="sourceLineNo">664</span><a id="line.664">     */</a>
+<span class="sourceLineNo">665</span><a id="line.665">    private static boolean isExamplesText(DetailNode ast) {</a>
+<span class="sourceLineNo">666</span><a id="line.666">        return isChildNodeTextMatches(ast, EXAMPLES_TAG);</a>
+<span class="sourceLineNo">667</span><a id="line.667">    }</a>
+<span class="sourceLineNo">668</span><a id="line.668"></a>
+<span class="sourceLineNo">669</span><a id="line.669">    /**</a>
+<span class="sourceLineNo">670</span><a id="line.670">     * Checks whether the list item node is part of a property list.</a>
+<span class="sourceLineNo">671</span><a id="line.671">     *</a>
+<span class="sourceLineNo">672</span><a id="line.672">     * @param nodeLi {@code JavadocTokenType.LI} node</a>
+<span class="sourceLineNo">673</span><a id="line.673">     * @return true if the node is part of a property list</a>
+<span class="sourceLineNo">674</span><a id="line.674">     */</a>
+<span class="sourceLineNo">675</span><a id="line.675">    private static boolean isPropertyList(DetailNode nodeLi) {</a>
+<span class="sourceLineNo">676</span><a id="line.676">        return isChildNodeTextMatches(nodeLi, PROPERTY_TAG);</a>
+<span class="sourceLineNo">677</span><a id="line.677">    }</a>
+<span class="sourceLineNo">678</span><a id="line.678"></a>
+<span class="sourceLineNo">679</span><a id="line.679">    /**</a>
+<span class="sourceLineNo">680</span><a id="line.680">     * Checks whether the {@code JavadocTokenType.PARAGRAPH} node is referring to the violation</a>
+<span class="sourceLineNo">681</span><a id="line.681">     * message keys javadoc segment.</a>
+<span class="sourceLineNo">682</span><a id="line.682">     *</a>
+<span class="sourceLineNo">683</span><a id="line.683">     * @param nodeParagraph paragraph javadoc node</a>
+<span class="sourceLineNo">684</span><a id="line.684">     * @return true if paragraph node contains the violation message keys text</a>
+<span class="sourceLineNo">685</span><a id="line.685">     */</a>
+<span class="sourceLineNo">686</span><a id="line.686">    private static boolean isViolationMessagesText(DetailNode nodeParagraph) {</a>
+<span class="sourceLineNo">687</span><a id="line.687">        return isChildNodeTextMatches(nodeParagraph, VIOLATION_MESSAGES_TAG);</a>
+<span class="sourceLineNo">688</span><a id="line.688">    }</a>
+<span class="sourceLineNo">689</span><a id="line.689"></a>
+<span class="sourceLineNo">690</span><a id="line.690">    /**</a>
+<span class="sourceLineNo">691</span><a id="line.691">     * Checks whether the {@code JavadocTokenType.PARAGRAPH} node is referring to the parent</a>
+<span class="sourceLineNo">692</span><a id="line.692">     * javadoc segment.</a>
+<span class="sourceLineNo">693</span><a id="line.693">     *</a>
+<span class="sourceLineNo">694</span><a id="line.694">     * @param nodeParagraph paragraph javadoc node</a>
+<span class="sourceLineNo">695</span><a id="line.695">     * @return true if paragraph node contains the parent text</a>
+<span class="sourceLineNo">696</span><a id="line.696">     */</a>
+<span class="sourceLineNo">697</span><a id="line.697">    private static boolean isParentText(DetailNode nodeParagraph) {</a>
+<span class="sourceLineNo">698</span><a id="line.698">        return isChildNodeTextMatches(nodeParagraph, PARENT_TAG);</a>
+<span class="sourceLineNo">699</span><a id="line.699">    }</a>
+<span class="sourceLineNo">700</span><a id="line.700"></a>
+<span class="sourceLineNo">701</span><a id="line.701">    /**</a>
+<span class="sourceLineNo">702</span><a id="line.702">     * Checks whether the first child {@code JavadocTokenType.TEXT} node matches given pattern.</a>
+<span class="sourceLineNo">703</span><a id="line.703">     *</a>
+<span class="sourceLineNo">704</span><a id="line.704">     * @param ast parent javadoc node</a>
+<span class="sourceLineNo">705</span><a id="line.705">     * @param pattern pattern to match</a>
+<span class="sourceLineNo">706</span><a id="line.706">     * @return true if one of child text nodes matches pattern</a>
+<span class="sourceLineNo">707</span><a id="line.707">     */</a>
+<span class="sourceLineNo">708</span><a id="line.708">    private static boolean isChildNodeTextMatches(DetailNode ast, Pattern pattern) {</a>
+<span class="sourceLineNo">709</span><a id="line.709">        return getFirstChildOfType(ast, JavadocTokenTypes.TEXT, 0)</a>
+<span class="sourceLineNo">710</span><a id="line.710">                .map(DetailNode::getText)</a>
+<span class="sourceLineNo">711</span><a id="line.711">                .map(pattern::matcher)</a>
+<span class="sourceLineNo">712</span><a id="line.712">                .map(Matcher::matches)</a>
+<span class="sourceLineNo">713</span><a id="line.713">                .orElse(Boolean.FALSE);</a>
+<span class="sourceLineNo">714</span><a id="line.714">    }</a>
+<span class="sourceLineNo">715</span><a id="line.715">}</a>
 
 
 

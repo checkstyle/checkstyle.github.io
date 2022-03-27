@@ -28,8 +28,8 @@ import java.util.Optional;
 import com.puppycrawl.tools.checkstyle.FileStatefulCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
-import com.puppycrawl.tools.checkstyle.api.FullIdent;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
+import com.puppycrawl.tools.checkstyle.utils.CheckUtil;
 import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;
 import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
 
@@ -151,7 +151,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
     public void visitToken(DetailAST ast) {
 <span class="fc bfc" id="L152" title="All 6 branches covered.">        switch (ast.getType()) {</span>
             case TokenTypes.PACKAGE_DEF:
-<span class="fc" id="L154">                packageName = extractQualifiedName(ast.getFirstChild().getNextSibling());</span>
+<span class="fc" id="L154">                packageName = CheckUtil.extractQualifiedName(ast.getFirstChild().getNextSibling());</span>
 <span class="fc" id="L155">                break;</span>
 
             case TokenTypes.ANNOTATION_DEF:
@@ -248,16 +248,6 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
     }
 
     /**
-     * Get name of class (with qualified package if specified) in {@code ast}.
-     *
-     * @param ast ast to extract class name from
-     * @return qualified name
-     */
-    private static String extractQualifiedName(DetailAST ast) {
-<span class="fc" id="L257">        return FullIdent.createFullIdent(ast).getText();</span>
-    }
-
-    /**
      * Register to outer super class of given classAst that
      * given classAst is extending them.
      *
@@ -266,19 +256,19 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private void registerNestedSubclassToOuterSuperClasses(String qualifiedClassName,
                                                            ClassDesc currentClass) {
-<span class="fc" id="L269">        final String superClassName = getSuperClassName(currentClass.getClassAst());</span>
-<span class="fc bfc" id="L270" title="All 2 branches covered.">        if (superClassName != null) {</span>
-<span class="fc" id="L271">            final ClassDesc nearest =</span>
-<span class="fc" id="L272">                    getNearestClassWithSameName(superClassName, qualifiedClassName);</span>
-<span class="fc bfc" id="L273" title="All 2 branches covered.">            if (nearest == null) {</span>
-<span class="fc" id="L274">                Optional.ofNullable(innerClasses.get(superClassName))</span>
-<span class="fc" id="L275">                        .ifPresent(ClassDesc::registerNestedSubclass);</span>
+<span class="fc" id="L259">        final String superClassName = getSuperClassName(currentClass.getClassAst());</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">        if (superClassName != null) {</span>
+<span class="fc" id="L261">            final ClassDesc nearest =</span>
+<span class="fc" id="L262">                    getNearestClassWithSameName(superClassName, qualifiedClassName);</span>
+<span class="fc bfc" id="L263" title="All 2 branches covered.">            if (nearest == null) {</span>
+<span class="fc" id="L264">                Optional.ofNullable(innerClasses.get(superClassName))</span>
+<span class="fc" id="L265">                        .ifPresent(ClassDesc::registerNestedSubclass);</span>
             }
             else {
-<span class="fc" id="L278">                nearest.registerNestedSubclass();</span>
+<span class="fc" id="L268">                nearest.registerNestedSubclass();</span>
             }
         }
-<span class="fc" id="L281">    }</span>
+<span class="fc" id="L271">    }</span>
 
     /**
      * Checks if there is a class with same name.
@@ -289,47 +279,37 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @noinspection CallToStringConcatCanBeReplacedByOperator
      */
     private ClassDesc getNearestClassWithSameName(String className, String superClassName) {
-<span class="fc" id="L292">        final String dotAndClassName = PACKAGE_SEPARATOR.concat(className);</span>
-<span class="fc" id="L293">        return innerClasses.entrySet().stream()</span>
-<span class="fc" id="L294">                .filter(entry -&gt; entry.getKey().endsWith(dotAndClassName))</span>
-<span class="fc" id="L295">                .map(Map.Entry::getValue)</span>
-<span class="fc" id="L296">                .min((first, second) -&gt; {</span>
-<span class="fc" id="L297">                    int diff = Integer.compare(</span>
-<span class="fc" id="L298">                            classNameMatchingCount(superClassName, second.getQualifiedName()),</span>
-<span class="fc" id="L299">                            classNameMatchingCount(superClassName, first.getQualifiedName()));</span>
-<span class="fc bfc" id="L300" title="All 2 branches covered.">                    if (diff == 0) {</span>
-<span class="fc" id="L301">                        diff = Integer.compare(first.getDepth(), second.getDepth());</span>
-                    }
-<span class="fc" id="L303">                    return diff;</span>
+<span class="fc" id="L282">        final String dotAndClassName = PACKAGE_SEPARATOR.concat(className);</span>
+<span class="fc" id="L283">        return innerClasses.entrySet().stream()</span>
+<span class="fc" id="L284">                .filter(entry -&gt; entry.getKey().endsWith(dotAndClassName))</span>
+<span class="fc" id="L285">                .map(Map.Entry::getValue)</span>
+<span class="fc" id="L286">                .min((first, second) -&gt; {</span>
+<span class="fc" id="L287">                    return getClassDeclarationNameMatchingCountDiff(superClassName, first, second);</span>
                 })
-<span class="fc" id="L305">                .orElse(null);</span>
+<span class="fc" id="L289">                .orElse(null);</span>
     }
 
     /**
-     * Calculates and returns the class name matching count.
+     * Get the difference between class declaration name matching count. If the difference between
+     * them is zero, then their depth is compared to obtain the result.
      *
-     * &lt;p&gt;
-     * Suppose our pattern class is {@code foo.a.b} and class to be matched is
-     * {@code foo.a.ball} then classNameMatchingCount would be calculated by comparing every
-     * character, and updating main counter when we hit &quot;.&quot;
-     * to prevent matching &quot;a.b&quot; with &quot;a.ball&quot;. In this case classNameMatchingCount would
-     * be equal to 6 and not 7 (b of ball is not counted).
-     * &lt;/p&gt;
-     *
-     * @param patternClass class against which the given class has to be matched
-     * @param classToBeMatched class to be matched
-     * @return class name matching count
+     * @param superClassName name of the super class
+     * @param firstClass first input class
+     * @param secondClass second input class
+     * @return difference between class declaration name matching count
      */
-    private static int classNameMatchingCount(String patternClass, String classToBeMatched) {
-<span class="fc" id="L324">        final char packageSeparator = PACKAGE_SEPARATOR.charAt(0);</span>
-<span class="fc" id="L325">        final int length = Math.min(classToBeMatched.length(), patternClass.length());</span>
-<span class="fc" id="L326">        int result = 0;</span>
-<span class="fc bfc" id="L327" title="All 4 branches covered.">        for (int i = 0; i &lt; length &amp;&amp; patternClass.charAt(i) == classToBeMatched.charAt(i); ++i) {</span>
-<span class="fc bfc" id="L328" title="All 2 branches covered.">            if (patternClass.charAt(i) == packageSeparator) {</span>
-<span class="fc" id="L329">                result = i;</span>
-            }
+    private static int getClassDeclarationNameMatchingCountDiff(String superClassName,
+                                                                ClassDesc firstClass,
+                                                                ClassDesc secondClass) {
+<span class="fc" id="L304">        int diff = Integer.compare(</span>
+            CheckUtil
+<span class="fc" id="L306">                .typeDeclarationNameMatchingCount(superClassName, secondClass.getQualifiedName()),</span>
+            CheckUtil
+<span class="fc" id="L308">                .typeDeclarationNameMatchingCount(superClassName, firstClass.getQualifiedName()));</span>
+<span class="fc bfc" id="L309" title="All 2 branches covered.">        if (diff == 0) {</span>
+<span class="fc" id="L310">            diff = Integer.compare(firstClass.getDepth(), secondClass.getDepth());</span>
         }
-<span class="fc" id="L332">        return result;</span>
+<span class="fc" id="L312">        return diff;</span>
     }
 
     /**
@@ -342,8 +322,8 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      */
     private static boolean doesNameOfClassMatchAnonymousInnerClassName(DetailAST ast,
                                                                ClassDesc classDesc) {
-<span class="fc" id="L345">        final String[] className = classDesc.getQualifiedName().split(&quot;\\.&quot;);</span>
-<span class="fc" id="L346">        return ast.getFirstChild().getText().equals(className[className.length - 1]);</span>
+<span class="fc" id="L325">        final String[] className = classDesc.getQualifiedName().split(&quot;\\.&quot;);</span>
+<span class="fc" id="L326">        return ast.getFirstChild().getText().equals(className[className.length - 1]);</span>
     }
 
     /**
@@ -353,40 +333,13 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return qualified class name of a class
      */
     private String getQualifiedClassName(DetailAST classAst) {
-<span class="fc" id="L356">        final String className = classAst.findFirstToken(TokenTypes.IDENT).getText();</span>
-<span class="fc" id="L357">        String outerClassQualifiedName = null;</span>
-<span class="fc bfc" id="L358" title="All 2 branches covered.">        if (!classes.isEmpty()) {</span>
-<span class="fc" id="L359">            outerClassQualifiedName = classes.peek().getQualifiedName();</span>
+<span class="fc" id="L336">        final String className = classAst.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L337">        String outerClassQualifiedName = null;</span>
+<span class="fc bfc" id="L338" title="All 2 branches covered.">        if (!classes.isEmpty()) {</span>
+<span class="fc" id="L339">            outerClassQualifiedName = classes.peek().getQualifiedName();</span>
         }
-<span class="fc" id="L361">        return getQualifiedClassName(packageName, outerClassQualifiedName, className);</span>
-    }
-
-    /**
-     * Calculate qualified class name(package + class name) laying inside given
-     * outer class.
-     *
-     * @param packageName package name, empty string on default package
-     * @param outerClassQualifiedName qualified name(package + class) of outer class,
-     *                           null if doesn't exist
-     * @param className class name
-     * @return qualified class name(package + class name)
-     */
-    private static String getQualifiedClassName(String packageName, String outerClassQualifiedName,
-                                                String className) {
-        final String qualifiedClassName;
-
-<span class="fc bfc" id="L378" title="All 2 branches covered.">        if (outerClassQualifiedName == null) {</span>
-<span class="fc bfc" id="L379" title="All 2 branches covered.">            if (packageName.isEmpty()) {</span>
-<span class="fc" id="L380">                qualifiedClassName = className;</span>
-            }
-            else {
-<span class="fc" id="L383">                qualifiedClassName = packageName + PACKAGE_SEPARATOR + className;</span>
-            }
-        }
-        else {
-<span class="fc" id="L387">            qualifiedClassName = outerClassQualifiedName + PACKAGE_SEPARATOR + className;</span>
-        }
-<span class="fc" id="L389">        return qualifiedClassName;</span>
+<span class="fc" id="L341">        return CheckUtil</span>
+<span class="fc" id="L342">            .getQualifiedTypeDeclarationName(packageName, outerClassQualifiedName, className);</span>
     }
 
     /**
@@ -396,12 +349,12 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return super class name or null if super class is not specified
      */
     private static String getSuperClassName(DetailAST classAst) {
-<span class="fc" id="L399">        String superClassName = null;</span>
-<span class="fc" id="L400">        final DetailAST classExtend = classAst.findFirstToken(TokenTypes.EXTENDS_CLAUSE);</span>
-<span class="fc bfc" id="L401" title="All 2 branches covered.">        if (classExtend != null) {</span>
-<span class="fc" id="L402">            superClassName = extractQualifiedName(classExtend.getFirstChild());</span>
+<span class="fc" id="L352">        String superClassName = null;</span>
+<span class="fc" id="L353">        final DetailAST classExtend = classAst.findFirstToken(TokenTypes.EXTENDS_CLAUSE);</span>
+<span class="fc bfc" id="L354" title="All 2 branches covered.">        if (classExtend != null) {</span>
+<span class="fc" id="L355">            superClassName = CheckUtil.extractQualifiedName(classExtend.getFirstChild());</span>
         }
-<span class="fc" id="L404">        return superClassName;</span>
+<span class="fc" id="L357">        return superClassName;</span>
     }
 
     /**
@@ -411,7 +364,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
      * @return class name
      */
     private static String getClassNameFromQualifiedName(String qualifiedName) {
-<span class="fc" id="L414">        return qualifiedName.substring(qualifiedName.lastIndexOf(PACKAGE_SEPARATOR) + 1);</span>
+<span class="fc" id="L367">        return qualifiedName.substring(qualifiedName.lastIndexOf(PACKAGE_SEPARATOR) + 1);</span>
     }
 
     /** Maintains information about class' ctors. */
@@ -451,14 +404,14 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *  @param depth class nesting level
          *  @param classAst classAst node
          */
-<span class="fc" id="L454">        /* package */ ClassDesc(String qualifiedName, int depth, DetailAST classAst) {</span>
-<span class="fc" id="L455">            this.qualifiedName = qualifiedName;</span>
-<span class="fc" id="L456">            this.depth = depth;</span>
-<span class="fc" id="L457">            this.classAst = classAst;</span>
-<span class="fc" id="L458">            final DetailAST modifiers = classAst.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="fc bfc" id="L459" title="All 2 branches covered.">            declaredAsFinal = modifiers.findFirstToken(TokenTypes.FINAL) != null;</span>
-<span class="fc bfc" id="L460" title="All 2 branches covered.">            declaredAsAbstract = modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</span>
-<span class="fc" id="L461">        }</span>
+<span class="fc" id="L407">        /* package */ ClassDesc(String qualifiedName, int depth, DetailAST classAst) {</span>
+<span class="fc" id="L408">            this.qualifiedName = qualifiedName;</span>
+<span class="fc" id="L409">            this.depth = depth;</span>
+<span class="fc" id="L410">            this.classAst = classAst;</span>
+<span class="fc" id="L411">            final DetailAST modifiers = classAst.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="fc bfc" id="L412" title="All 2 branches covered.">            declaredAsFinal = modifiers.findFirstToken(TokenTypes.FINAL) != null;</span>
+<span class="fc bfc" id="L413" title="All 2 branches covered.">            declaredAsAbstract = modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</span>
+<span class="fc" id="L414">        }</span>
 
         /**
          * Get qualified class name.
@@ -466,7 +419,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return qualified class name
          */
         private String getQualifiedName() {
-<span class="fc" id="L469">            return qualifiedName;</span>
+<span class="fc" id="L422">            return qualifiedName;</span>
         }
 
         /**
@@ -475,28 +428,28 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return classAst node
          */
         public DetailAST getClassAst() {
-<span class="fc" id="L478">            return classAst;</span>
+<span class="fc" id="L431">            return classAst;</span>
         }
 
         /** Adds private ctor. */
         private void registerPrivateCtor() {
-<span class="fc" id="L483">            withPrivateCtor = true;</span>
-<span class="fc" id="L484">        }</span>
+<span class="fc" id="L436">            withPrivateCtor = true;</span>
+<span class="fc" id="L437">        }</span>
 
         /** Adds non-private ctor. */
         private void registerNonPrivateCtor() {
-<span class="fc" id="L488">            withNonPrivateCtor = true;</span>
-<span class="fc" id="L489">        }</span>
+<span class="fc" id="L441">            withNonPrivateCtor = true;</span>
+<span class="fc" id="L442">        }</span>
 
         /** Adds nested subclass. */
         private void registerNestedSubclass() {
-<span class="fc" id="L493">            withNestedSubclass = true;</span>
-<span class="fc" id="L494">        }</span>
+<span class="fc" id="L446">            withNestedSubclass = true;</span>
+<span class="fc" id="L447">        }</span>
 
         /** Adds anonymous inner class. */
         private void registerAnonymousInnerClass() {
-<span class="fc" id="L498">            withAnonymousInnerClass = true;</span>
-<span class="fc" id="L499">        }</span>
+<span class="fc" id="L451">            withAnonymousInnerClass = true;</span>
+<span class="fc" id="L452">        }</span>
 
         /**
          *  Returns class nesting level.
@@ -504,7 +457,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *  @return class nesting level
          */
         private int getDepth() {
-<span class="fc" id="L507">            return depth;</span>
+<span class="fc" id="L460">            return depth;</span>
         }
 
         /**
@@ -513,7 +466,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *  @return true if class has private ctors
          */
         private boolean isWithPrivateCtor() {
-<span class="fc" id="L516">            return withPrivateCtor;</span>
+<span class="fc" id="L469">            return withPrivateCtor;</span>
         }
 
         /**
@@ -522,7 +475,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *  @return true if class has non-private ctors
          */
         private boolean isWithNonPrivateCtor() {
-<span class="fc" id="L525">            return withNonPrivateCtor;</span>
+<span class="fc" id="L478">            return withNonPrivateCtor;</span>
         }
 
         /**
@@ -531,7 +484,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return true if class has nested subclass
          */
         private boolean isWithNestedSubclass() {
-<span class="fc" id="L534">            return withNestedSubclass;</span>
+<span class="fc" id="L487">            return withNestedSubclass;</span>
         }
 
         /**
@@ -540,7 +493,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *  @return true if class is declared as final
          */
         private boolean isDeclaredAsFinal() {
-<span class="fc" id="L543">            return declaredAsFinal;</span>
+<span class="fc" id="L496">            return declaredAsFinal;</span>
         }
 
         /**
@@ -549,7 +502,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          *  @return true if class is declared as final
          */
         private boolean isDeclaredAsAbstract() {
-<span class="fc" id="L552">            return declaredAsAbstract;</span>
+<span class="fc" id="L505">            return declaredAsAbstract;</span>
         }
 
         /**
@@ -558,7 +511,7 @@ import com.puppycrawl.tools.checkstyle.utils.TokenUtil;
          * @return true if class has anonymous inner class
          */
         private boolean isWithAnonymousInnerClass() {
-<span class="fc" id="L561">            return withAnonymousInnerClass;</span>
+<span class="fc" id="L514">            return withAnonymousInnerClass;</span>
         }
 
     }

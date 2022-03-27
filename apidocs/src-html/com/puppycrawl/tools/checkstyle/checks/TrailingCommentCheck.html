@@ -28,278 +28,284 @@
 <span class="sourceLineNo">019</span><a id="line.19"></a>
 <span class="sourceLineNo">020</span><a id="line.20">package com.puppycrawl.tools.checkstyle.checks;</a>
 <span class="sourceLineNo">021</span><a id="line.21"></a>
-<span class="sourceLineNo">022</span><a id="line.22">import java.util.regex.Pattern;</a>
-<span class="sourceLineNo">023</span><a id="line.23"></a>
-<span class="sourceLineNo">024</span><a id="line.24">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
-<span class="sourceLineNo">025</span><a id="line.25">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
-<span class="sourceLineNo">026</span><a id="line.26">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
-<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
-<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
-<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
-<span class="sourceLineNo">030</span><a id="line.30"></a>
-<span class="sourceLineNo">031</span><a id="line.31">/**</a>
-<span class="sourceLineNo">032</span><a id="line.32"> * &lt;p&gt;</a>
-<span class="sourceLineNo">033</span><a id="line.33"> * The check to ensure that lines with code do not end with comment.</a>
-<span class="sourceLineNo">034</span><a id="line.34"> * For the case of {@code //} comments that means that the only thing that should precede</a>
-<span class="sourceLineNo">035</span><a id="line.35"> * it is whitespace. It doesn't check comments if they do not end a line; for example,</a>
-<span class="sourceLineNo">036</span><a id="line.36"> * it accepts the following: &lt;code&gt;Thread.sleep( 10 /*some comment here&amp;#42;/ );&lt;/code&gt;</a>
-<span class="sourceLineNo">037</span><a id="line.37"> * Format property is intended to deal with the &lt;code&gt;} // while&lt;/code&gt; example.</a>
-<span class="sourceLineNo">038</span><a id="line.38"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">039</span><a id="line.39"> * &lt;p&gt;</a>
-<span class="sourceLineNo">040</span><a id="line.40"> * Rationale: Steve McConnell in &lt;cite&gt;Code Complete&lt;/cite&gt; suggests that endline</a>
-<span class="sourceLineNo">041</span><a id="line.41"> * comments are a bad practice. An end line comment would be one that is on</a>
-<span class="sourceLineNo">042</span><a id="line.42"> * the same line as actual code. For example:</a>
-<span class="sourceLineNo">043</span><a id="line.43"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">044</span><a id="line.44"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">045</span><a id="line.45"> * a = b + c;      // Some insightful comment</a>
-<span class="sourceLineNo">046</span><a id="line.46"> * d = e / f;        // Another comment for this line</a>
-<span class="sourceLineNo">047</span><a id="line.47"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">048</span><a id="line.48"> * &lt;p&gt;</a>
-<span class="sourceLineNo">049</span><a id="line.49"> * Quoting &lt;cite&gt;Code Complete&lt;/cite&gt; for the justification:</a>
-<span class="sourceLineNo">050</span><a id="line.50"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">051</span><a id="line.51"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">052</span><a id="line.52"> * &lt;li&gt;</a>
-<span class="sourceLineNo">053</span><a id="line.53"> * "The comments have to be aligned so that they do not interfere with the visual</a>
-<span class="sourceLineNo">054</span><a id="line.54"> * structure of the code. If you don't align them neatly, they'll make your listing</a>
-<span class="sourceLineNo">055</span><a id="line.55"> * look like it's been through a washing machine."</a>
-<span class="sourceLineNo">056</span><a id="line.56"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">057</span><a id="line.57"> * &lt;li&gt;</a>
-<span class="sourceLineNo">058</span><a id="line.58"> * "Endline comments tend to be hard to format...It takes time to align them.</a>
-<span class="sourceLineNo">059</span><a id="line.59"> * Such time is not spent learning more about the code; it's dedicated solely</a>
-<span class="sourceLineNo">060</span><a id="line.60"> * to the tedious task of pressing the spacebar or tab key."</a>
-<span class="sourceLineNo">061</span><a id="line.61"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">062</span><a id="line.62"> * &lt;li&gt;</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * "Endline comments are also hard to maintain. If the code on any line containing</a>
-<span class="sourceLineNo">064</span><a id="line.64"> * an endline comment grows, it bumps the comment farther out, and all the other</a>
-<span class="sourceLineNo">065</span><a id="line.65"> * endline comments will have to bumped out to match. Styles that are hard to</a>
-<span class="sourceLineNo">066</span><a id="line.66"> * maintain aren't maintained...."</a>
-<span class="sourceLineNo">067</span><a id="line.67"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">068</span><a id="line.68"> * &lt;li&gt;</a>
-<span class="sourceLineNo">069</span><a id="line.69"> * "Endline comments also tend to be cryptic. The right side of the line doesn't</a>
-<span class="sourceLineNo">070</span><a id="line.70"> * offer much room and the desire to keep the comment on one line means the comment</a>
-<span class="sourceLineNo">071</span><a id="line.71"> * must be short. Work then goes into making the line as short as possible instead</a>
-<span class="sourceLineNo">072</span><a id="line.72"> * of as clear as possible. The comment usually ends up as cryptic as possible...."</a>
-<span class="sourceLineNo">073</span><a id="line.73"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">074</span><a id="line.74"> * &lt;li&gt;</a>
-<span class="sourceLineNo">075</span><a id="line.75"> * "A systemic problem with endline comments is that it's hard to write a meaningful</a>
-<span class="sourceLineNo">076</span><a id="line.76"> * comment for one line of code. Most endline comments just repeat the line of code,</a>
-<span class="sourceLineNo">077</span><a id="line.77"> * which hurts more than it helps."</a>
-<span class="sourceLineNo">078</span><a id="line.78"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">079</span><a id="line.79"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">080</span><a id="line.80"> * &lt;p&gt;</a>
-<span class="sourceLineNo">081</span><a id="line.81"> * McConnell's comments on being hard to maintain when the size of the line changes</a>
-<span class="sourceLineNo">082</span><a id="line.82"> * are even more important in the age of automated refactorings.</a>
-<span class="sourceLineNo">083</span><a id="line.83"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">084</span><a id="line.84"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">085</span><a id="line.85"> * &lt;li&gt;</a>
-<span class="sourceLineNo">086</span><a id="line.86"> * Property {@code format} - Specify pattern for strings allowed before the comment.</a>
-<span class="sourceLineNo">087</span><a id="line.87"> * Type is {@code java.util.regex.Pattern}.</a>
-<span class="sourceLineNo">088</span><a id="line.88"> * Default value is &lt;code&gt;"^[\s});]*$"&lt;/code&gt;.</a>
-<span class="sourceLineNo">089</span><a id="line.89"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">090</span><a id="line.90"> * &lt;li&gt;</a>
-<span class="sourceLineNo">091</span><a id="line.91"> * Property {@code legalComment} - Define pattern for text allowed in trailing comments.</a>
-<span class="sourceLineNo">092</span><a id="line.92"> * This pattern will not be applied to multiline comments.</a>
-<span class="sourceLineNo">093</span><a id="line.93"> * Type is {@code java.util.regex.Pattern}.</a>
-<span class="sourceLineNo">094</span><a id="line.94"> * Default value is {@code null}.</a>
-<span class="sourceLineNo">095</span><a id="line.95"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">096</span><a id="line.96"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">097</span><a id="line.97"> * &lt;p&gt;</a>
-<span class="sourceLineNo">098</span><a id="line.98"> * To configure the check:</a>
-<span class="sourceLineNo">099</span><a id="line.99"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">100</span><a id="line.100"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">101</span><a id="line.101"> * &amp;lt;module name=&amp;quot;TrailingComment&amp;quot;/&amp;gt;</a>
-<span class="sourceLineNo">102</span><a id="line.102"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">103</span><a id="line.103"> * &lt;p&gt;</a>
-<span class="sourceLineNo">104</span><a id="line.104"> * To configure the check so it enforces only comment on a line:</a>
-<span class="sourceLineNo">105</span><a id="line.105"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">106</span><a id="line.106"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">107</span><a id="line.107"> * &amp;lt;module name=&amp;quot;TrailingComment&amp;quot;&amp;gt;</a>
-<span class="sourceLineNo">108</span><a id="line.108"> *   &amp;lt;property name=&amp;quot;format&amp;quot; value=&amp;quot;^\\s*$&amp;quot;/&amp;gt;</a>
-<span class="sourceLineNo">109</span><a id="line.109"> * &amp;lt;/module&amp;gt;</a>
-<span class="sourceLineNo">110</span><a id="line.110"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">111</span><a id="line.111"> * &lt;p&gt;</a>
-<span class="sourceLineNo">112</span><a id="line.112"> * Example for trailing comments check to suppress specific trailing comment:</a>
-<span class="sourceLineNo">113</span><a id="line.113"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">114</span><a id="line.114"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">115</span><a id="line.115"> * public class Test {</a>
-<span class="sourceLineNo">116</span><a id="line.116"> *   int a; // SUPPRESS CHECKSTYLE</a>
-<span class="sourceLineNo">117</span><a id="line.117"> *   int b; // NOPMD</a>
-<span class="sourceLineNo">118</span><a id="line.118"> *   int c; // NOSONAR</a>
-<span class="sourceLineNo">119</span><a id="line.119"> *   int d; // violation, not suppressed</a>
-<span class="sourceLineNo">120</span><a id="line.120"> * }</a>
-<span class="sourceLineNo">121</span><a id="line.121"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">122</span><a id="line.122"> * &lt;p&gt;</a>
-<span class="sourceLineNo">123</span><a id="line.123"> * To configure check so that trailing comment with exact comments like "SUPPRESS CHECKSTYLE",</a>
-<span class="sourceLineNo">124</span><a id="line.124"> * "NOPMD", "NOSONAR" are suppressed:</a>
-<span class="sourceLineNo">125</span><a id="line.125"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">126</span><a id="line.126"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">127</span><a id="line.127"> * &amp;lt;module name="TrailingComment"/&amp;gt;</a>
-<span class="sourceLineNo">128</span><a id="line.128"> * &amp;lt;module name="SuppressionXpathSingleFilter"&amp;gt;</a>
-<span class="sourceLineNo">129</span><a id="line.129"> *   &amp;lt;property name="checks" value="TrailingCommentCheck"/&amp;gt;</a>
-<span class="sourceLineNo">130</span><a id="line.130"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
-<span class="sourceLineNo">131</span><a id="line.131"> *       [./COMMENT_CONTENT[@text=' NOSONAR\n' or @text=' NOPMD\n'</a>
-<span class="sourceLineNo">132</span><a id="line.132"> *       or @text=' SUPPRESS CHECKSTYLE\n']]"/&amp;gt;</a>
-<span class="sourceLineNo">133</span><a id="line.133"> * &amp;lt;/module&amp;gt;</a>
-<span class="sourceLineNo">134</span><a id="line.134"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">135</span><a id="line.135"> * &lt;p&gt;</a>
-<span class="sourceLineNo">136</span><a id="line.136"> * To configure check so that trailing comment starting with "SUPPRESS CHECKSTYLE", "NOPMD",</a>
-<span class="sourceLineNo">137</span><a id="line.137"> * "NOSONAR" are suppressed:</a>
-<span class="sourceLineNo">138</span><a id="line.138"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">139</span><a id="line.139"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">140</span><a id="line.140"> * &amp;lt;module name="TrailingComment"/&amp;gt; &amp;lt;module name="SuppressionXpathSingleFilter"&amp;gt;</a>
-<span class="sourceLineNo">141</span><a id="line.141"> * &amp;lt;property name="checks" value="TrailingCommentCheck"/&amp;gt;</a>
-<span class="sourceLineNo">142</span><a id="line.142"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
-<span class="sourceLineNo">143</span><a id="line.143"> *       [./COMMENT_CONTENT[starts-with(@text, ' NOPMD')]]"/&amp;gt;</a>
-<span class="sourceLineNo">144</span><a id="line.144"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
-<span class="sourceLineNo">145</span><a id="line.145"> *       [./COMMENT_CONTENT[starts-with(@text, ' SUPPRESS CHECKSTYLE')]]"/&amp;gt;</a>
-<span class="sourceLineNo">146</span><a id="line.146"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
-<span class="sourceLineNo">147</span><a id="line.147"> *       [./COMMENT_CONTENT[starts-with(@text, ' NOSONAR')]]"/&amp;gt;</a>
-<span class="sourceLineNo">148</span><a id="line.148"> * &amp;lt;/module&amp;gt;</a>
-<span class="sourceLineNo">149</span><a id="line.149"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">150</span><a id="line.150"> * &lt;p&gt;</a>
-<span class="sourceLineNo">151</span><a id="line.151"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
-<span class="sourceLineNo">152</span><a id="line.152"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">153</span><a id="line.153"> * &lt;p&gt;</a>
-<span class="sourceLineNo">154</span><a id="line.154"> * Violation Message Keys:</a>
-<span class="sourceLineNo">155</span><a id="line.155"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">156</span><a id="line.156"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">157</span><a id="line.157"> * &lt;li&gt;</a>
-<span class="sourceLineNo">158</span><a id="line.158"> * {@code trailing.comments}</a>
-<span class="sourceLineNo">159</span><a id="line.159"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">160</span><a id="line.160"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">161</span><a id="line.161"> *</a>
-<span class="sourceLineNo">162</span><a id="line.162"> * @noinspection HtmlTagCanBeJavadocTag</a>
-<span class="sourceLineNo">163</span><a id="line.163"> * @since 3.4</a>
-<span class="sourceLineNo">164</span><a id="line.164"> */</a>
-<span class="sourceLineNo">165</span><a id="line.165">@StatelessCheck</a>
-<span class="sourceLineNo">166</span><a id="line.166">public class TrailingCommentCheck extends AbstractCheck {</a>
-<span class="sourceLineNo">167</span><a id="line.167"></a>
-<span class="sourceLineNo">168</span><a id="line.168">    /**</a>
-<span class="sourceLineNo">169</span><a id="line.169">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">170</span><a id="line.170">     * file.</a>
-<span class="sourceLineNo">171</span><a id="line.171">     */</a>
-<span class="sourceLineNo">172</span><a id="line.172">    public static final String MSG_KEY = "trailing.comments";</a>
-<span class="sourceLineNo">173</span><a id="line.173"></a>
-<span class="sourceLineNo">174</span><a id="line.174">    /** Specify pattern for strings to be formatted without comment specifiers. */</a>
-<span class="sourceLineNo">175</span><a id="line.175">    private static final Pattern FORMAT_LINE = Pattern.compile("/");</a>
-<span class="sourceLineNo">176</span><a id="line.176"></a>
-<span class="sourceLineNo">177</span><a id="line.177">    /**</a>
-<span class="sourceLineNo">178</span><a id="line.178">     * Define pattern for text allowed in trailing comments.</a>
-<span class="sourceLineNo">179</span><a id="line.179">     * This pattern will not be applied to multiline comments.</a>
-<span class="sourceLineNo">180</span><a id="line.180">     */</a>
-<span class="sourceLineNo">181</span><a id="line.181">    private Pattern legalComment;</a>
-<span class="sourceLineNo">182</span><a id="line.182"></a>
-<span class="sourceLineNo">183</span><a id="line.183">    /** Specify pattern for strings allowed before the comment. */</a>
-<span class="sourceLineNo">184</span><a id="line.184">    private Pattern format = Pattern.compile("^[\\s});]*$");</a>
-<span class="sourceLineNo">185</span><a id="line.185"></a>
-<span class="sourceLineNo">186</span><a id="line.186">    /**</a>
-<span class="sourceLineNo">187</span><a id="line.187">     * Setter to define pattern for text allowed in trailing comments.</a>
-<span class="sourceLineNo">188</span><a id="line.188">     * This pattern will not be applied to multiline comments.</a>
-<span class="sourceLineNo">189</span><a id="line.189">     *</a>
-<span class="sourceLineNo">190</span><a id="line.190">     * @param legalComment pattern to set.</a>
-<span class="sourceLineNo">191</span><a id="line.191">     */</a>
-<span class="sourceLineNo">192</span><a id="line.192">    public void setLegalComment(final Pattern legalComment) {</a>
-<span class="sourceLineNo">193</span><a id="line.193">        this.legalComment = legalComment;</a>
-<span class="sourceLineNo">194</span><a id="line.194">    }</a>
-<span class="sourceLineNo">195</span><a id="line.195"></a>
-<span class="sourceLineNo">196</span><a id="line.196">    /**</a>
-<span class="sourceLineNo">197</span><a id="line.197">     * Setter to specify pattern for strings allowed before the comment.</a>
-<span class="sourceLineNo">198</span><a id="line.198">     *</a>
-<span class="sourceLineNo">199</span><a id="line.199">     * @param pattern a pattern</a>
-<span class="sourceLineNo">200</span><a id="line.200">     */</a>
-<span class="sourceLineNo">201</span><a id="line.201">    public final void setFormat(Pattern pattern) {</a>
-<span class="sourceLineNo">202</span><a id="line.202">        format = pattern;</a>
-<span class="sourceLineNo">203</span><a id="line.203">    }</a>
-<span class="sourceLineNo">204</span><a id="line.204"></a>
-<span class="sourceLineNo">205</span><a id="line.205">    @Override</a>
-<span class="sourceLineNo">206</span><a id="line.206">    public boolean isCommentNodesRequired() {</a>
-<span class="sourceLineNo">207</span><a id="line.207">        return true;</a>
-<span class="sourceLineNo">208</span><a id="line.208">    }</a>
-<span class="sourceLineNo">209</span><a id="line.209"></a>
-<span class="sourceLineNo">210</span><a id="line.210">    @Override</a>
-<span class="sourceLineNo">211</span><a id="line.211">    public int[] getDefaultTokens() {</a>
-<span class="sourceLineNo">212</span><a id="line.212">        return getRequiredTokens();</a>
-<span class="sourceLineNo">213</span><a id="line.213">    }</a>
-<span class="sourceLineNo">214</span><a id="line.214"></a>
-<span class="sourceLineNo">215</span><a id="line.215">    @Override</a>
-<span class="sourceLineNo">216</span><a id="line.216">    public int[] getAcceptableTokens() {</a>
-<span class="sourceLineNo">217</span><a id="line.217">        return getRequiredTokens();</a>
-<span class="sourceLineNo">218</span><a id="line.218">    }</a>
-<span class="sourceLineNo">219</span><a id="line.219"></a>
-<span class="sourceLineNo">220</span><a id="line.220">    @Override</a>
-<span class="sourceLineNo">221</span><a id="line.221">    public int[] getRequiredTokens() {</a>
-<span class="sourceLineNo">222</span><a id="line.222">        return new int[] {</a>
-<span class="sourceLineNo">223</span><a id="line.223">            TokenTypes.SINGLE_LINE_COMMENT,</a>
-<span class="sourceLineNo">224</span><a id="line.224">            TokenTypes.BLOCK_COMMENT_BEGIN,</a>
-<span class="sourceLineNo">225</span><a id="line.225">        };</a>
-<span class="sourceLineNo">226</span><a id="line.226">    }</a>
-<span class="sourceLineNo">227</span><a id="line.227"></a>
-<span class="sourceLineNo">228</span><a id="line.228">    @Override</a>
-<span class="sourceLineNo">229</span><a id="line.229">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">230</span><a id="line.230">        if (ast.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</a>
-<span class="sourceLineNo">231</span><a id="line.231">            checkSingleLineComment(ast);</a>
-<span class="sourceLineNo">232</span><a id="line.232">        }</a>
-<span class="sourceLineNo">233</span><a id="line.233">        else {</a>
-<span class="sourceLineNo">234</span><a id="line.234">            checkBlockComment(ast);</a>
-<span class="sourceLineNo">235</span><a id="line.235">        }</a>
-<span class="sourceLineNo">236</span><a id="line.236">    }</a>
-<span class="sourceLineNo">237</span><a id="line.237"></a>
-<span class="sourceLineNo">238</span><a id="line.238">    /**</a>
-<span class="sourceLineNo">239</span><a id="line.239">     * Checks if single line comment is legal.</a>
-<span class="sourceLineNo">240</span><a id="line.240">     *</a>
-<span class="sourceLineNo">241</span><a id="line.241">     * @param ast Detail ast element to be checked.</a>
-<span class="sourceLineNo">242</span><a id="line.242">     */</a>
-<span class="sourceLineNo">243</span><a id="line.243">    private void checkSingleLineComment(DetailAST ast) {</a>
-<span class="sourceLineNo">244</span><a id="line.244">        final int lineNo = ast.getLineNo();</a>
-<span class="sourceLineNo">245</span><a id="line.245">        final String comment = ast.getFirstChild().getText();</a>
-<span class="sourceLineNo">246</span><a id="line.246">        final String line = getLines()[lineNo - 1];</a>
-<span class="sourceLineNo">247</span><a id="line.247">        final String lineBefore = line.substring(0, ast.getColumnNo());</a>
-<span class="sourceLineNo">248</span><a id="line.248"></a>
-<span class="sourceLineNo">249</span><a id="line.249">        if (!format.matcher(lineBefore).find() &amp;&amp; !isLegalCommentContent(comment)) {</a>
-<span class="sourceLineNo">250</span><a id="line.250">            log(ast, MSG_KEY);</a>
-<span class="sourceLineNo">251</span><a id="line.251">        }</a>
-<span class="sourceLineNo">252</span><a id="line.252">    }</a>
-<span class="sourceLineNo">253</span><a id="line.253"></a>
-<span class="sourceLineNo">254</span><a id="line.254">    /**</a>
-<span class="sourceLineNo">255</span><a id="line.255">     * Method to check if block comment is in correct format.</a>
-<span class="sourceLineNo">256</span><a id="line.256">     *</a>
-<span class="sourceLineNo">257</span><a id="line.257">     * @param ast Detail ast element to be checked.</a>
-<span class="sourceLineNo">258</span><a id="line.258">     */</a>
-<span class="sourceLineNo">259</span><a id="line.259">    private void checkBlockComment(DetailAST ast) {</a>
-<span class="sourceLineNo">260</span><a id="line.260">        final int lineNo = ast.getLineNo();</a>
-<span class="sourceLineNo">261</span><a id="line.261">        final DetailAST firstChild = ast.getFirstChild();</a>
-<span class="sourceLineNo">262</span><a id="line.262">        final DetailAST lastChild = ast.getLastChild();</a>
-<span class="sourceLineNo">263</span><a id="line.263">        final String comment = firstChild.getText();</a>
-<span class="sourceLineNo">264</span><a id="line.264">        String line = getLines()[lineNo - 1];</a>
-<span class="sourceLineNo">265</span><a id="line.265"></a>
-<span class="sourceLineNo">266</span><a id="line.266">        if (line.length() &gt; lastChild.getColumnNo() + 1) {</a>
-<span class="sourceLineNo">267</span><a id="line.267">            line = line.substring(lastChild.getColumnNo() + 2);</a>
-<span class="sourceLineNo">268</span><a id="line.268">        }</a>
-<span class="sourceLineNo">269</span><a id="line.269"></a>
-<span class="sourceLineNo">270</span><a id="line.270">        line = FORMAT_LINE.matcher(line).replaceAll("");</a>
-<span class="sourceLineNo">271</span><a id="line.271"></a>
-<span class="sourceLineNo">272</span><a id="line.272">        final String lineBefore = getLines()[lineNo - 1].substring(0, ast.getColumnNo());</a>
-<span class="sourceLineNo">273</span><a id="line.273">        final boolean isCommentAtEndOfLine = ast.getLineNo() != lastChild.getLineNo()</a>
-<span class="sourceLineNo">274</span><a id="line.274">                || CommonUtil.isBlank(line);</a>
-<span class="sourceLineNo">275</span><a id="line.275">        final boolean isLegalBlockComment = isLegalCommentContent(comment)</a>
-<span class="sourceLineNo">276</span><a id="line.276">                &amp;&amp; TokenUtil.areOnSameLine(firstChild, lastChild)</a>
-<span class="sourceLineNo">277</span><a id="line.277">                || format.matcher(lineBefore).find();</a>
-<span class="sourceLineNo">278</span><a id="line.278"></a>
-<span class="sourceLineNo">279</span><a id="line.279">        if (isCommentAtEndOfLine &amp;&amp; !isLegalBlockComment) {</a>
-<span class="sourceLineNo">280</span><a id="line.280">            log(ast, MSG_KEY);</a>
-<span class="sourceLineNo">281</span><a id="line.281">        }</a>
-<span class="sourceLineNo">282</span><a id="line.282">    }</a>
-<span class="sourceLineNo">283</span><a id="line.283"></a>
-<span class="sourceLineNo">284</span><a id="line.284">    /**</a>
-<span class="sourceLineNo">285</span><a id="line.285">     * Checks if given comment content is legal.</a>
-<span class="sourceLineNo">286</span><a id="line.286">     *</a>
-<span class="sourceLineNo">287</span><a id="line.287">     * @param commentContent comment content to check.</a>
-<span class="sourceLineNo">288</span><a id="line.288">     * @return true if the content is legal.</a>
-<span class="sourceLineNo">289</span><a id="line.289">     */</a>
-<span class="sourceLineNo">290</span><a id="line.290">    private boolean isLegalCommentContent(String commentContent) {</a>
-<span class="sourceLineNo">291</span><a id="line.291">        return legalComment != null &amp;&amp; legalComment.matcher(commentContent).find();</a>
-<span class="sourceLineNo">292</span><a id="line.292">    }</a>
-<span class="sourceLineNo">293</span><a id="line.293">}</a>
+<span class="sourceLineNo">022</span><a id="line.22">import java.util.Arrays;</a>
+<span class="sourceLineNo">023</span><a id="line.23">import java.util.regex.Pattern;</a>
+<span class="sourceLineNo">024</span><a id="line.24"></a>
+<span class="sourceLineNo">025</span><a id="line.25">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
+<span class="sourceLineNo">026</span><a id="line.26">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
+<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
+<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
+<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
+<span class="sourceLineNo">030</span><a id="line.30">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
+<span class="sourceLineNo">031</span><a id="line.31"></a>
+<span class="sourceLineNo">032</span><a id="line.32">/**</a>
+<span class="sourceLineNo">033</span><a id="line.33"> * &lt;p&gt;</a>
+<span class="sourceLineNo">034</span><a id="line.34"> * The check to ensure that lines with code do not end with comment.</a>
+<span class="sourceLineNo">035</span><a id="line.35"> * For the case of {@code //} comments that means that the only thing that should precede</a>
+<span class="sourceLineNo">036</span><a id="line.36"> * it is whitespace. It doesn't check comments if they do not end a line; for example,</a>
+<span class="sourceLineNo">037</span><a id="line.37"> * it accepts the following: &lt;code&gt;Thread.sleep( 10 /*some comment here&amp;#42;/ );&lt;/code&gt;</a>
+<span class="sourceLineNo">038</span><a id="line.38"> * Format property is intended to deal with the &lt;code&gt;} // while&lt;/code&gt; example.</a>
+<span class="sourceLineNo">039</span><a id="line.39"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">040</span><a id="line.40"> * &lt;p&gt;</a>
+<span class="sourceLineNo">041</span><a id="line.41"> * Rationale: Steve McConnell in &lt;cite&gt;Code Complete&lt;/cite&gt; suggests that endline</a>
+<span class="sourceLineNo">042</span><a id="line.42"> * comments are a bad practice. An end line comment would be one that is on</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * the same line as actual code. For example:</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">046</span><a id="line.46"> * a = b + c;      // Some insightful comment</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * d = e / f;        // Another comment for this line</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * &lt;p&gt;</a>
+<span class="sourceLineNo">050</span><a id="line.50"> * Quoting &lt;cite&gt;Code Complete&lt;/cite&gt; for the justification:</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">052</span><a id="line.52"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * &lt;li&gt;</a>
+<span class="sourceLineNo">054</span><a id="line.54"> * "The comments have to be aligned so that they do not interfere with the visual</a>
+<span class="sourceLineNo">055</span><a id="line.55"> * structure of the code. If you don't align them neatly, they'll make your listing</a>
+<span class="sourceLineNo">056</span><a id="line.56"> * look like it's been through a washing machine."</a>
+<span class="sourceLineNo">057</span><a id="line.57"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * &lt;li&gt;</a>
+<span class="sourceLineNo">059</span><a id="line.59"> * "Endline comments tend to be hard to format...It takes time to align them.</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * Such time is not spent learning more about the code; it's dedicated solely</a>
+<span class="sourceLineNo">061</span><a id="line.61"> * to the tedious task of pressing the spacebar or tab key."</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">063</span><a id="line.63"> * &lt;li&gt;</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * "Endline comments are also hard to maintain. If the code on any line containing</a>
+<span class="sourceLineNo">065</span><a id="line.65"> * an endline comment grows, it bumps the comment farther out, and all the other</a>
+<span class="sourceLineNo">066</span><a id="line.66"> * endline comments will have to bumped out to match. Styles that are hard to</a>
+<span class="sourceLineNo">067</span><a id="line.67"> * maintain aren't maintained...."</a>
+<span class="sourceLineNo">068</span><a id="line.68"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">069</span><a id="line.69"> * &lt;li&gt;</a>
+<span class="sourceLineNo">070</span><a id="line.70"> * "Endline comments also tend to be cryptic. The right side of the line doesn't</a>
+<span class="sourceLineNo">071</span><a id="line.71"> * offer much room and the desire to keep the comment on one line means the comment</a>
+<span class="sourceLineNo">072</span><a id="line.72"> * must be short. Work then goes into making the line as short as possible instead</a>
+<span class="sourceLineNo">073</span><a id="line.73"> * of as clear as possible. The comment usually ends up as cryptic as possible...."</a>
+<span class="sourceLineNo">074</span><a id="line.74"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">075</span><a id="line.75"> * &lt;li&gt;</a>
+<span class="sourceLineNo">076</span><a id="line.76"> * "A systemic problem with endline comments is that it's hard to write a meaningful</a>
+<span class="sourceLineNo">077</span><a id="line.77"> * comment for one line of code. Most endline comments just repeat the line of code,</a>
+<span class="sourceLineNo">078</span><a id="line.78"> * which hurts more than it helps."</a>
+<span class="sourceLineNo">079</span><a id="line.79"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">080</span><a id="line.80"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">081</span><a id="line.81"> * &lt;p&gt;</a>
+<span class="sourceLineNo">082</span><a id="line.82"> * McConnell's comments on being hard to maintain when the size of the line changes</a>
+<span class="sourceLineNo">083</span><a id="line.83"> * are even more important in the age of automated refactorings.</a>
+<span class="sourceLineNo">084</span><a id="line.84"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">085</span><a id="line.85"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">086</span><a id="line.86"> * &lt;li&gt;</a>
+<span class="sourceLineNo">087</span><a id="line.87"> * Property {@code format} - Specify pattern for strings allowed before the comment.</a>
+<span class="sourceLineNo">088</span><a id="line.88"> * Type is {@code java.util.regex.Pattern}.</a>
+<span class="sourceLineNo">089</span><a id="line.89"> * Default value is &lt;code&gt;"^[\s});]*$"&lt;/code&gt;.</a>
+<span class="sourceLineNo">090</span><a id="line.90"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">091</span><a id="line.91"> * &lt;li&gt;</a>
+<span class="sourceLineNo">092</span><a id="line.92"> * Property {@code legalComment} - Define pattern for text allowed in trailing comments.</a>
+<span class="sourceLineNo">093</span><a id="line.93"> * This pattern will not be applied to multiline comments.</a>
+<span class="sourceLineNo">094</span><a id="line.94"> * Type is {@code java.util.regex.Pattern}.</a>
+<span class="sourceLineNo">095</span><a id="line.95"> * Default value is {@code null}.</a>
+<span class="sourceLineNo">096</span><a id="line.96"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">097</span><a id="line.97"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">098</span><a id="line.98"> * &lt;p&gt;</a>
+<span class="sourceLineNo">099</span><a id="line.99"> * To configure the check:</a>
+<span class="sourceLineNo">100</span><a id="line.100"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">101</span><a id="line.101"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">102</span><a id="line.102"> * &amp;lt;module name=&amp;quot;TrailingComment&amp;quot;/&amp;gt;</a>
+<span class="sourceLineNo">103</span><a id="line.103"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">104</span><a id="line.104"> * &lt;p&gt;</a>
+<span class="sourceLineNo">105</span><a id="line.105"> * To configure the check so it enforces only comment on a line:</a>
+<span class="sourceLineNo">106</span><a id="line.106"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">107</span><a id="line.107"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">108</span><a id="line.108"> * &amp;lt;module name=&amp;quot;TrailingComment&amp;quot;&amp;gt;</a>
+<span class="sourceLineNo">109</span><a id="line.109"> *   &amp;lt;property name=&amp;quot;format&amp;quot; value=&amp;quot;^\\s*$&amp;quot;/&amp;gt;</a>
+<span class="sourceLineNo">110</span><a id="line.110"> * &amp;lt;/module&amp;gt;</a>
+<span class="sourceLineNo">111</span><a id="line.111"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">112</span><a id="line.112"> * &lt;p&gt;</a>
+<span class="sourceLineNo">113</span><a id="line.113"> * Example for trailing comments check to suppress specific trailing comment:</a>
+<span class="sourceLineNo">114</span><a id="line.114"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">115</span><a id="line.115"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">116</span><a id="line.116"> * public class Test {</a>
+<span class="sourceLineNo">117</span><a id="line.117"> *   int a; // SUPPRESS CHECKSTYLE</a>
+<span class="sourceLineNo">118</span><a id="line.118"> *   int b; // NOPMD</a>
+<span class="sourceLineNo">119</span><a id="line.119"> *   int c; // NOSONAR</a>
+<span class="sourceLineNo">120</span><a id="line.120"> *   int d; // violation, not suppressed</a>
+<span class="sourceLineNo">121</span><a id="line.121"> * }</a>
+<span class="sourceLineNo">122</span><a id="line.122"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">123</span><a id="line.123"> * &lt;p&gt;</a>
+<span class="sourceLineNo">124</span><a id="line.124"> * To configure check so that trailing comment with exact comments like "SUPPRESS CHECKSTYLE",</a>
+<span class="sourceLineNo">125</span><a id="line.125"> * "NOPMD", "NOSONAR" are suppressed:</a>
+<span class="sourceLineNo">126</span><a id="line.126"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">127</span><a id="line.127"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">128</span><a id="line.128"> * &amp;lt;module name="TrailingComment"/&amp;gt;</a>
+<span class="sourceLineNo">129</span><a id="line.129"> * &amp;lt;module name="SuppressionXpathSingleFilter"&amp;gt;</a>
+<span class="sourceLineNo">130</span><a id="line.130"> *   &amp;lt;property name="checks" value="TrailingCommentCheck"/&amp;gt;</a>
+<span class="sourceLineNo">131</span><a id="line.131"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
+<span class="sourceLineNo">132</span><a id="line.132"> *       [./COMMENT_CONTENT[@text=' NOSONAR\n' or @text=' NOPMD\n'</a>
+<span class="sourceLineNo">133</span><a id="line.133"> *       or @text=' SUPPRESS CHECKSTYLE\n']]"/&amp;gt;</a>
+<span class="sourceLineNo">134</span><a id="line.134"> * &amp;lt;/module&amp;gt;</a>
+<span class="sourceLineNo">135</span><a id="line.135"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">136</span><a id="line.136"> * &lt;p&gt;</a>
+<span class="sourceLineNo">137</span><a id="line.137"> * To configure check so that trailing comment starting with "SUPPRESS CHECKSTYLE", "NOPMD",</a>
+<span class="sourceLineNo">138</span><a id="line.138"> * "NOSONAR" are suppressed:</a>
+<span class="sourceLineNo">139</span><a id="line.139"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">140</span><a id="line.140"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">141</span><a id="line.141"> * &amp;lt;module name="TrailingComment"/&amp;gt; &amp;lt;module name="SuppressionXpathSingleFilter"&amp;gt;</a>
+<span class="sourceLineNo">142</span><a id="line.142"> * &amp;lt;property name="checks" value="TrailingCommentCheck"/&amp;gt;</a>
+<span class="sourceLineNo">143</span><a id="line.143"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
+<span class="sourceLineNo">144</span><a id="line.144"> *       [./COMMENT_CONTENT[starts-with(@text, ' NOPMD')]]"/&amp;gt;</a>
+<span class="sourceLineNo">145</span><a id="line.145"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
+<span class="sourceLineNo">146</span><a id="line.146"> *       [./COMMENT_CONTENT[starts-with(@text, ' SUPPRESS CHECKSTYLE')]]"/&amp;gt;</a>
+<span class="sourceLineNo">147</span><a id="line.147"> *   &amp;lt;property name="query" value="//SINGLE_LINE_COMMENT</a>
+<span class="sourceLineNo">148</span><a id="line.148"> *       [./COMMENT_CONTENT[starts-with(@text, ' NOSONAR')]]"/&amp;gt;</a>
+<span class="sourceLineNo">149</span><a id="line.149"> * &amp;lt;/module&amp;gt;</a>
+<span class="sourceLineNo">150</span><a id="line.150"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">151</span><a id="line.151"> * &lt;p&gt;</a>
+<span class="sourceLineNo">152</span><a id="line.152"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">153</span><a id="line.153"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">154</span><a id="line.154"> * &lt;p&gt;</a>
+<span class="sourceLineNo">155</span><a id="line.155"> * Violation Message Keys:</a>
+<span class="sourceLineNo">156</span><a id="line.156"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">157</span><a id="line.157"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">158</span><a id="line.158"> * &lt;li&gt;</a>
+<span class="sourceLineNo">159</span><a id="line.159"> * {@code trailing.comments}</a>
+<span class="sourceLineNo">160</span><a id="line.160"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">161</span><a id="line.161"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">162</span><a id="line.162"> *</a>
+<span class="sourceLineNo">163</span><a id="line.163"> * @noinspection HtmlTagCanBeJavadocTag</a>
+<span class="sourceLineNo">164</span><a id="line.164"> * @since 3.4</a>
+<span class="sourceLineNo">165</span><a id="line.165"> */</a>
+<span class="sourceLineNo">166</span><a id="line.166">@StatelessCheck</a>
+<span class="sourceLineNo">167</span><a id="line.167">public class TrailingCommentCheck extends AbstractCheck {</a>
+<span class="sourceLineNo">168</span><a id="line.168"></a>
+<span class="sourceLineNo">169</span><a id="line.169">    /**</a>
+<span class="sourceLineNo">170</span><a id="line.170">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">171</span><a id="line.171">     * file.</a>
+<span class="sourceLineNo">172</span><a id="line.172">     */</a>
+<span class="sourceLineNo">173</span><a id="line.173">    public static final String MSG_KEY = "trailing.comments";</a>
+<span class="sourceLineNo">174</span><a id="line.174"></a>
+<span class="sourceLineNo">175</span><a id="line.175">    /** Specify pattern for strings to be formatted without comment specifiers. */</a>
+<span class="sourceLineNo">176</span><a id="line.176">    private static final Pattern FORMAT_LINE = Pattern.compile("/");</a>
+<span class="sourceLineNo">177</span><a id="line.177"></a>
+<span class="sourceLineNo">178</span><a id="line.178">    /**</a>
+<span class="sourceLineNo">179</span><a id="line.179">     * Define pattern for text allowed in trailing comments.</a>
+<span class="sourceLineNo">180</span><a id="line.180">     * This pattern will not be applied to multiline comments.</a>
+<span class="sourceLineNo">181</span><a id="line.181">     */</a>
+<span class="sourceLineNo">182</span><a id="line.182">    private Pattern legalComment;</a>
+<span class="sourceLineNo">183</span><a id="line.183"></a>
+<span class="sourceLineNo">184</span><a id="line.184">    /** Specify pattern for strings allowed before the comment. */</a>
+<span class="sourceLineNo">185</span><a id="line.185">    private Pattern format = Pattern.compile("^[\\s});]*$");</a>
+<span class="sourceLineNo">186</span><a id="line.186"></a>
+<span class="sourceLineNo">187</span><a id="line.187">    /**</a>
+<span class="sourceLineNo">188</span><a id="line.188">     * Setter to define pattern for text allowed in trailing comments.</a>
+<span class="sourceLineNo">189</span><a id="line.189">     * This pattern will not be applied to multiline comments.</a>
+<span class="sourceLineNo">190</span><a id="line.190">     *</a>
+<span class="sourceLineNo">191</span><a id="line.191">     * @param legalComment pattern to set.</a>
+<span class="sourceLineNo">192</span><a id="line.192">     */</a>
+<span class="sourceLineNo">193</span><a id="line.193">    public void setLegalComment(final Pattern legalComment) {</a>
+<span class="sourceLineNo">194</span><a id="line.194">        this.legalComment = legalComment;</a>
+<span class="sourceLineNo">195</span><a id="line.195">    }</a>
+<span class="sourceLineNo">196</span><a id="line.196"></a>
+<span class="sourceLineNo">197</span><a id="line.197">    /**</a>
+<span class="sourceLineNo">198</span><a id="line.198">     * Setter to specify pattern for strings allowed before the comment.</a>
+<span class="sourceLineNo">199</span><a id="line.199">     *</a>
+<span class="sourceLineNo">200</span><a id="line.200">     * @param pattern a pattern</a>
+<span class="sourceLineNo">201</span><a id="line.201">     */</a>
+<span class="sourceLineNo">202</span><a id="line.202">    public final void setFormat(Pattern pattern) {</a>
+<span class="sourceLineNo">203</span><a id="line.203">        format = pattern;</a>
+<span class="sourceLineNo">204</span><a id="line.204">    }</a>
+<span class="sourceLineNo">205</span><a id="line.205"></a>
+<span class="sourceLineNo">206</span><a id="line.206">    @Override</a>
+<span class="sourceLineNo">207</span><a id="line.207">    public boolean isCommentNodesRequired() {</a>
+<span class="sourceLineNo">208</span><a id="line.208">        return true;</a>
+<span class="sourceLineNo">209</span><a id="line.209">    }</a>
+<span class="sourceLineNo">210</span><a id="line.210"></a>
+<span class="sourceLineNo">211</span><a id="line.211">    @Override</a>
+<span class="sourceLineNo">212</span><a id="line.212">    public int[] getDefaultTokens() {</a>
+<span class="sourceLineNo">213</span><a id="line.213">        return getRequiredTokens();</a>
+<span class="sourceLineNo">214</span><a id="line.214">    }</a>
+<span class="sourceLineNo">215</span><a id="line.215"></a>
+<span class="sourceLineNo">216</span><a id="line.216">    @Override</a>
+<span class="sourceLineNo">217</span><a id="line.217">    public int[] getAcceptableTokens() {</a>
+<span class="sourceLineNo">218</span><a id="line.218">        return getRequiredTokens();</a>
+<span class="sourceLineNo">219</span><a id="line.219">    }</a>
+<span class="sourceLineNo">220</span><a id="line.220"></a>
+<span class="sourceLineNo">221</span><a id="line.221">    @Override</a>
+<span class="sourceLineNo">222</span><a id="line.222">    public int[] getRequiredTokens() {</a>
+<span class="sourceLineNo">223</span><a id="line.223">        return new int[] {</a>
+<span class="sourceLineNo">224</span><a id="line.224">            TokenTypes.SINGLE_LINE_COMMENT,</a>
+<span class="sourceLineNo">225</span><a id="line.225">            TokenTypes.BLOCK_COMMENT_BEGIN,</a>
+<span class="sourceLineNo">226</span><a id="line.226">        };</a>
+<span class="sourceLineNo">227</span><a id="line.227">    }</a>
+<span class="sourceLineNo">228</span><a id="line.228"></a>
+<span class="sourceLineNo">229</span><a id="line.229">    @Override</a>
+<span class="sourceLineNo">230</span><a id="line.230">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">231</span><a id="line.231">        if (ast.getType() == TokenTypes.SINGLE_LINE_COMMENT) {</a>
+<span class="sourceLineNo">232</span><a id="line.232">            checkSingleLineComment(ast);</a>
+<span class="sourceLineNo">233</span><a id="line.233">        }</a>
+<span class="sourceLineNo">234</span><a id="line.234">        else {</a>
+<span class="sourceLineNo">235</span><a id="line.235">            checkBlockComment(ast);</a>
+<span class="sourceLineNo">236</span><a id="line.236">        }</a>
+<span class="sourceLineNo">237</span><a id="line.237">    }</a>
+<span class="sourceLineNo">238</span><a id="line.238"></a>
+<span class="sourceLineNo">239</span><a id="line.239">    /**</a>
+<span class="sourceLineNo">240</span><a id="line.240">     * Checks if single line comment is legal.</a>
+<span class="sourceLineNo">241</span><a id="line.241">     *</a>
+<span class="sourceLineNo">242</span><a id="line.242">     * @param ast Detail ast element to be checked.</a>
+<span class="sourceLineNo">243</span><a id="line.243">     */</a>
+<span class="sourceLineNo">244</span><a id="line.244">    private void checkSingleLineComment(DetailAST ast) {</a>
+<span class="sourceLineNo">245</span><a id="line.245">        final int lineNo = ast.getLineNo();</a>
+<span class="sourceLineNo">246</span><a id="line.246">        final String comment = ast.getFirstChild().getText();</a>
+<span class="sourceLineNo">247</span><a id="line.247">        final int[] lineBeforeCodePoints =</a>
+<span class="sourceLineNo">248</span><a id="line.248">                Arrays.copyOfRange(getLineCodePoints(lineNo - 1), 0, ast.getColumnNo());</a>
+<span class="sourceLineNo">249</span><a id="line.249">        final String lineBefore = new String(lineBeforeCodePoints, 0, lineBeforeCodePoints.length);</a>
+<span class="sourceLineNo">250</span><a id="line.250"></a>
+<span class="sourceLineNo">251</span><a id="line.251">        if (!format.matcher(lineBefore).find() &amp;&amp; !isLegalCommentContent(comment)) {</a>
+<span class="sourceLineNo">252</span><a id="line.252">            log(ast, MSG_KEY);</a>
+<span class="sourceLineNo">253</span><a id="line.253">        }</a>
+<span class="sourceLineNo">254</span><a id="line.254">    }</a>
+<span class="sourceLineNo">255</span><a id="line.255"></a>
+<span class="sourceLineNo">256</span><a id="line.256">    /**</a>
+<span class="sourceLineNo">257</span><a id="line.257">     * Method to check if block comment is in correct format.</a>
+<span class="sourceLineNo">258</span><a id="line.258">     *</a>
+<span class="sourceLineNo">259</span><a id="line.259">     * @param ast Detail ast element to be checked.</a>
+<span class="sourceLineNo">260</span><a id="line.260">     */</a>
+<span class="sourceLineNo">261</span><a id="line.261">    private void checkBlockComment(DetailAST ast) {</a>
+<span class="sourceLineNo">262</span><a id="line.262">        final int lineNo = ast.getLineNo();</a>
+<span class="sourceLineNo">263</span><a id="line.263">        final DetailAST firstChild = ast.getFirstChild();</a>
+<span class="sourceLineNo">264</span><a id="line.264">        final DetailAST lastChild = ast.getLastChild();</a>
+<span class="sourceLineNo">265</span><a id="line.265">        final String comment = firstChild.getText();</a>
+<span class="sourceLineNo">266</span><a id="line.266">        int[] lineCodePoints = getLineCodePoints(lineNo - 1);</a>
+<span class="sourceLineNo">267</span><a id="line.267"></a>
+<span class="sourceLineNo">268</span><a id="line.268">        if (lineCodePoints.length &gt; lastChild.getColumnNo() + 1) {</a>
+<span class="sourceLineNo">269</span><a id="line.269">            lineCodePoints = Arrays.copyOfRange(lineCodePoints,</a>
+<span class="sourceLineNo">270</span><a id="line.270">                    lastChild.getColumnNo() + 2, lineCodePoints.length);</a>
+<span class="sourceLineNo">271</span><a id="line.271">        }</a>
+<span class="sourceLineNo">272</span><a id="line.272"></a>
+<span class="sourceLineNo">273</span><a id="line.273">        String line = new String(lineCodePoints, 0, lineCodePoints.length);</a>
+<span class="sourceLineNo">274</span><a id="line.274">        line = FORMAT_LINE.matcher(line).replaceAll("");</a>
+<span class="sourceLineNo">275</span><a id="line.275"></a>
+<span class="sourceLineNo">276</span><a id="line.276">        final int[] lineBeforeCodePoints =</a>
+<span class="sourceLineNo">277</span><a id="line.277">                Arrays.copyOfRange(getLineCodePoints(lineNo - 1), 0, ast.getColumnNo());</a>
+<span class="sourceLineNo">278</span><a id="line.278">        final String lineBefore = new String(lineBeforeCodePoints, 0, lineBeforeCodePoints.length);</a>
+<span class="sourceLineNo">279</span><a id="line.279">        final boolean isCommentAtEndOfLine = ast.getLineNo() != lastChild.getLineNo()</a>
+<span class="sourceLineNo">280</span><a id="line.280">                || CommonUtil.isBlank(line);</a>
+<span class="sourceLineNo">281</span><a id="line.281">        final boolean isLegalBlockComment = isLegalCommentContent(comment)</a>
+<span class="sourceLineNo">282</span><a id="line.282">                &amp;&amp; TokenUtil.areOnSameLine(firstChild, lastChild)</a>
+<span class="sourceLineNo">283</span><a id="line.283">                || format.matcher(lineBefore).find();</a>
+<span class="sourceLineNo">284</span><a id="line.284"></a>
+<span class="sourceLineNo">285</span><a id="line.285">        if (isCommentAtEndOfLine &amp;&amp; !isLegalBlockComment) {</a>
+<span class="sourceLineNo">286</span><a id="line.286">            log(ast, MSG_KEY);</a>
+<span class="sourceLineNo">287</span><a id="line.287">        }</a>
+<span class="sourceLineNo">288</span><a id="line.288">    }</a>
+<span class="sourceLineNo">289</span><a id="line.289"></a>
+<span class="sourceLineNo">290</span><a id="line.290">    /**</a>
+<span class="sourceLineNo">291</span><a id="line.291">     * Checks if given comment content is legal.</a>
+<span class="sourceLineNo">292</span><a id="line.292">     *</a>
+<span class="sourceLineNo">293</span><a id="line.293">     * @param commentContent comment content to check.</a>
+<span class="sourceLineNo">294</span><a id="line.294">     * @return true if the content is legal.</a>
+<span class="sourceLineNo">295</span><a id="line.295">     */</a>
+<span class="sourceLineNo">296</span><a id="line.296">    private boolean isLegalCommentContent(String commentContent) {</a>
+<span class="sourceLineNo">297</span><a id="line.297">        return legalComment != null &amp;&amp; legalComment.matcher(commentContent).find();</a>
+<span class="sourceLineNo">298</span><a id="line.298">    }</a>
+<span class="sourceLineNo">299</span><a id="line.299">}</a>
 
 
 

@@ -21,7 +21,6 @@ package com.puppycrawl.tools.checkstyle;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.Map;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -63,16 +62,10 @@ public class XmlLoader
      * @throws ParserConfigurationException if an error occurs
      */
     protected XmlLoader(Map&lt;String, String&gt; publicIdToResourceNameMap)
-<span class="fc" id="L66">            throws SAXException, ParserConfigurationException {</span>
-<span class="fc" id="L67">        this.publicIdToResourceNameMap = new HashMap&lt;&gt;(publicIdToResourceNameMap);</span>
-<span class="fc" id="L68">        final SAXParserFactory factory = SAXParserFactory.newInstance();</span>
-<span class="fc" id="L69">        LoadExternalDtdFeatureProvider.setFeaturesBySystemProperty(factory);</span>
-<span class="fc" id="L70">        factory.setValidating(true);</span>
-<span class="fc" id="L71">        parser = factory.newSAXParser().getXMLReader();</span>
-<span class="fc" id="L72">        parser.setContentHandler(this);</span>
-<span class="fc" id="L73">        parser.setEntityResolver(this);</span>
-<span class="fc" id="L74">        parser.setErrorHandler(this);</span>
-<span class="fc" id="L75">    }</span>
+<span class="fc" id="L65">            throws SAXException, ParserConfigurationException {</span>
+<span class="fc" id="L66">        this.publicIdToResourceNameMap = Map.copyOf(publicIdToResourceNameMap);</span>
+<span class="fc" id="L67">        parser = createXmlReader(this);</span>
+<span class="fc" id="L68">    }</span>
 
     /**
      * Parses the specified input source.
@@ -83,32 +76,57 @@ public class XmlLoader
      */
     public void parseInputSource(InputSource inputSource)
             throws IOException, SAXException {
-<span class="fc" id="L86">        parser.parse(inputSource);</span>
-<span class="fc" id="L87">    }</span>
+<span class="fc" id="L79">        parser.parse(inputSource);</span>
+<span class="fc" id="L80">    }</span>
 
     @Override
     public InputSource resolveEntity(String publicId, String systemId)
             throws SAXException, IOException {
-        final InputSource inputSource;
-<span class="fc" id="L93">        final String dtdResourceName =</span>
-<span class="fc" id="L94">            publicIdToResourceNameMap.get(publicId);</span>
-<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (dtdResourceName == null) {</span>
-<span class="fc" id="L96">            inputSource = super.resolveEntity(publicId, systemId);</span>
+        final String dtdResourceName;
+<span class="fc bfc" id="L86" title="All 2 branches covered.">        if (publicId == null) {</span>
+<span class="fc" id="L87">            dtdResourceName = null;</span>
         }
         else {
-<span class="fc" id="L99">            final ClassLoader loader =</span>
-<span class="fc" id="L100">                    getClass().getClassLoader();</span>
-<span class="fc" id="L101">            final InputStream dtdIs =</span>
-<span class="fc" id="L102">                    loader.getResourceAsStream(dtdResourceName);</span>
-
-<span class="fc" id="L104">            inputSource = new InputSource(dtdIs);</span>
+<span class="fc" id="L90">            dtdResourceName = publicIdToResourceNameMap.get(publicId);</span>
         }
-<span class="fc" id="L106">        return inputSource;</span>
+        final InputSource inputSource;
+<span class="fc bfc" id="L93" title="All 2 branches covered.">        if (dtdResourceName == null) {</span>
+<span class="fc" id="L94">            inputSource = super.resolveEntity(publicId, systemId);</span>
+        }
+        else {
+<span class="fc" id="L97">            final ClassLoader loader =</span>
+<span class="fc" id="L98">                    getClass().getClassLoader();</span>
+<span class="fc" id="L99">            final InputStream dtdIs =</span>
+<span class="fc" id="L100">                    loader.getResourceAsStream(dtdResourceName);</span>
+
+<span class="fc" id="L102">            inputSource = new InputSource(dtdIs);</span>
+        }
+<span class="fc" id="L104">        return inputSource;</span>
     }
 
     @Override
     public void error(SAXParseException exception) throws SAXException {
-<span class="fc" id="L111">        throw exception;</span>
+<span class="fc" id="L109">        throw exception;</span>
+    }
+
+    /**
+     * Helper method to create {@code XMLReader}.
+     *
+     * @param handler the content handler
+     * @return new XMLReader instance
+     * @throws ParserConfigurationException if a parser cannot be created
+     * @throws SAXException for SAX errors
+     */
+    private static XMLReader createXmlReader(DefaultHandler handler)
+            throws SAXException, ParserConfigurationException {
+<span class="fc" id="L122">        final SAXParserFactory factory = SAXParserFactory.newInstance();</span>
+<span class="fc" id="L123">        LoadExternalDtdFeatureProvider.setFeaturesBySystemProperty(factory);</span>
+<span class="fc" id="L124">        factory.setValidating(true);</span>
+<span class="fc" id="L125">        final XMLReader xmlReader = factory.newSAXParser().getXMLReader();</span>
+<span class="fc" id="L126">        xmlReader.setContentHandler(handler);</span>
+<span class="fc" id="L127">        xmlReader.setEntityResolver(handler);</span>
+<span class="fc" id="L128">        xmlReader.setErrorHandler(handler);</span>
+<span class="fc" id="L129">        return xmlReader;</span>
     }
 
     /**
@@ -147,13 +165,13 @@ public class XmlLoader
         public static void setFeaturesBySystemProperty(SAXParserFactory factory)
                 throws SAXException, ParserConfigurationException {
 
-<span class="fc" id="L150">            final boolean enableExternalDtdLoad = Boolean.parseBoolean(</span>
-<span class="fc" id="L151">                System.getProperty(ENABLE_EXTERNAL_DTD_LOAD, &quot;false&quot;));</span>
+<span class="fc" id="L168">            final boolean enableExternalDtdLoad = Boolean.parseBoolean(</span>
+<span class="fc" id="L169">                System.getProperty(ENABLE_EXTERNAL_DTD_LOAD, &quot;false&quot;));</span>
 
-<span class="fc" id="L153">            factory.setFeature(LOAD_EXTERNAL_DTD, enableExternalDtdLoad);</span>
-<span class="fc" id="L154">            factory.setFeature(EXTERNAL_GENERAL_ENTITIES, enableExternalDtdLoad);</span>
-<span class="fc" id="L155">            factory.setFeature(EXTERNAL_PARAMETER_ENTITIES, enableExternalDtdLoad);</span>
-<span class="fc" id="L156">        }</span>
+<span class="fc" id="L171">            factory.setFeature(LOAD_EXTERNAL_DTD, enableExternalDtdLoad);</span>
+<span class="fc" id="L172">            factory.setFeature(EXTERNAL_GENERAL_ENTITIES, enableExternalDtdLoad);</span>
+<span class="fc" id="L173">            factory.setFeature(EXTERNAL_PARAMETER_ENTITIES, enableExternalDtdLoad);</span>
+<span class="fc" id="L174">        }</span>
 
     }
 
