@@ -19,10 +19,17 @@
 
 package com.puppycrawl.tools.checkstyle.checks.sizes;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
 import com.puppycrawl.tools.checkstyle.StatelessCheck;
 import com.puppycrawl.tools.checkstyle.api.AbstractCheck;
 import com.puppycrawl.tools.checkstyle.api.DetailAST;
-import com.puppycrawl.tools.checkstyle.api.FileContents;
 import com.puppycrawl.tools.checkstyle.api.TokenTypes;
 import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
@@ -42,8 +49,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * Default value is {@code 150}.
  * &lt;/li&gt;
  * &lt;li&gt;
- * Property {@code countEmpty} - Control whether to count empty lines and single
- * line comments of the form {@code //}.
+ * Property {@code countEmpty} - Control whether to count empty lines and comments.
  * Type is {@code boolean}.
  * Default value is {@code true}.
  * &lt;/li&gt;
@@ -67,24 +73,113 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * &amp;lt;module name=&quot;MethodLength&quot;/&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * To configure the check so that it accepts methods with at most 60 lines:
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyClass {
+ *   public MyClass() {  // constructor (line 1)
+ *        /&amp;#42; line 2
+ *            ...
+ *           line 150 &amp;#42;/
+ *   } // line 151, violation, as it is over 150
+ *
+ *   public void firstExample() { // line 1
+ *
+ *       // line 3
+ *       System.out.println(&quot;line 4&quot;);
+ *       /&amp;#42; line 5
+ *          line 6 &amp;#42;/
+ *   } // line 7, OK, as it is less than 150
+ *
+ *   public void secondExample() { // line 1
+ *       // line 2
+ *       System.out.println(&quot;line 3&quot;);
+ *
+ *       /&amp;#42; line 5
+ *           ...
+ *          line 150 &amp;#42;/
+ *   } // line 151, violation, as it is over 150
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check so that it accepts methods with at most 4 lines:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;MethodLength&quot;&amp;gt;
  *   &amp;lt;property name=&quot;tokens&quot; value=&quot;METHOD_DEF&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;max&quot; value=&quot;60&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;max&quot; value=&quot;4&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
  * &lt;/pre&gt;
  * &lt;p&gt;
- * To configure the check so that it accepts methods with at most 60 lines,
- * not counting empty lines and single line comments:
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyTest {
+ *   public MyTest()  {            // constructor (line 1)
+ *       int var1 = 2;             // line 2
+ *       int var2 = 4;             // line 3
+ *       int sum = var1 + var2;  // line 4
+ *   } // line 5, OK, constructor is not mentioned in the tokens
+ *
+ *   public void firstMethod() { // line 1
+ *       // comment (line 2)
+ *       System.out.println(&quot;line 3&quot;);
+ *   } // line 4, OK, as it allows at most 4 lines
+ *
+ *   public void secondMethod() { // line 1
+ *       int index = 0;   // line 2
+ *       if (index &amp;#60; 5) { // line 3
+ *           index++;     // line 4
+ *       }                // line 5
+ *   } // line 6, violation, as it is over 4 lines
+ *
+ *   public void thirdMethod() { // line 1
+ *
+ *       // comment (line 3)
+ *       System.out.println(&quot;line 4&quot;);
+ *   } // line 5, violation, as it is over 4 lines
+ * }
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * To configure the check so that it accepts methods with at most 4 lines,
+ * not counting empty lines and comments:
  * &lt;/p&gt;
  * &lt;pre&gt;
  * &amp;lt;module name=&quot;MethodLength&quot;&amp;gt;
  *   &amp;lt;property name=&quot;tokens&quot; value=&quot;METHOD_DEF&quot;/&amp;gt;
- *   &amp;lt;property name=&quot;max&quot; value=&quot;60&quot;/&amp;gt;
+ *   &amp;lt;property name=&quot;max&quot; value=&quot;4&quot;/&amp;gt;
  *   &amp;lt;property name=&quot;countEmpty&quot; value=&quot;false&quot;/&amp;gt;
  * &amp;lt;/module&amp;gt;
+ * &lt;/pre&gt;
+ * &lt;p&gt;
+ * Example:
+ * &lt;/p&gt;
+ * &lt;pre&gt;
+ * public class MyTest {
+ *   public MyTest()  {          // constructor (line 1)
+ *       int var1 = 2;           // line 2
+ *       int var2 = 4;           // line 3
+ *       int sum = var1 + var2;  // line 4
+ *   } // line 5, OK, constructor is not mentioned in the tokens
+ *
+ *   public void firstMethod() { // line 1
+ *       // comment - not counted as line
+ *       System.out.println(&quot;line 2&quot;);
+ *   } // line 3, OK, as it allows at most 4 lines
+ *
+ *   public void secondMethod() { // line 1
+ *       int index = 0;   // line 2
+ *       if (index &amp;#60; 5) { // line 3
+ *           index++;     // line 4
+ *       }                // line 5
+ *   } // line 6, violation, as it is over 4 lines
+ *
+ *   public void thirdMethod() { // line 1
+ *
+ *       // comment - not counted as line
+ *       System.out.println(&quot;line 2&quot;);
+ *   } // line 3, OK, as it allows at most 4 lines
+ * }
  * &lt;/pre&gt;
  * &lt;p&gt;
  * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}
@@ -101,7 +196,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
  * @since 3.0
  */
 @StatelessCheck
-<span class="fc" id="L104">public class MethodLengthCheck extends AbstractCheck {</span>
+<span class="fc" id="L199">public class MethodLengthCheck extends AbstractCheck {</span>
 
     /**
      * A key is pointing to the warning message text in &quot;messages.properties&quot;
@@ -112,20 +207,20 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
     /** Default maximum number of lines. */
     private static final int DEFAULT_MAX_LINES = 150;
 
-    /** Control whether to count empty lines and single line comments of the form {@code //}. */
-<span class="fc" id="L116">    private boolean countEmpty = true;</span>
+    /** Control whether to count empty lines and comments. */
+<span class="fc" id="L211">    private boolean countEmpty = true;</span>
 
     /** Specify the maximum number of lines allowed. */
-<span class="fc" id="L119">    private int max = DEFAULT_MAX_LINES;</span>
+<span class="fc" id="L214">    private int max = DEFAULT_MAX_LINES;</span>
 
     @Override
     public int[] getDefaultTokens() {
-<span class="fc" id="L123">        return getAcceptableTokens();</span>
+<span class="fc" id="L218">        return getAcceptableTokens();</span>
     }
 
     @Override
     public int[] getAcceptableTokens() {
-<span class="fc" id="L128">        return new int[] {</span>
+<span class="fc" id="L223">        return new int[] {</span>
             TokenTypes.METHOD_DEF,
             TokenTypes.CTOR_DEF,
             TokenTypes.COMPACT_CTOR_DEF,
@@ -134,48 +229,68 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
 
     @Override
     public int[] getRequiredTokens() {
-<span class="fc" id="L137">        return CommonUtil.EMPTY_INT_ARRAY;</span>
+<span class="fc" id="L232">        return CommonUtil.EMPTY_INT_ARRAY;</span>
     }
 
     @Override
     public void visitToken(DetailAST ast) {
-<span class="fc" id="L142">        final DetailAST openingBrace = ast.findFirstToken(TokenTypes.SLIST);</span>
-<span class="fc bfc" id="L143" title="All 2 branches covered.">        if (openingBrace != null) {</span>
-<span class="fc" id="L144">            final DetailAST closingBrace =</span>
-<span class="fc" id="L145">                openingBrace.findFirstToken(TokenTypes.RCURLY);</span>
-<span class="fc" id="L146">            final int length = getLengthOfBlock(openingBrace, closingBrace);</span>
-<span class="fc bfc" id="L147" title="All 2 branches covered.">            if (length &gt; max) {</span>
-<span class="fc" id="L148">                final String methodName = ast.findFirstToken(TokenTypes.IDENT).getText();</span>
-<span class="fc" id="L149">                log(ast, MSG_KEY, length, max, methodName);</span>
+<span class="fc" id="L237">        final DetailAST openingBrace = ast.findFirstToken(TokenTypes.SLIST);</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">        if (openingBrace != null) {</span>
+            final int length;
+<span class="fc bfc" id="L240" title="All 2 branches covered.">            if (countEmpty) {</span>
+<span class="fc" id="L241">                final DetailAST closingBrace = openingBrace.findFirstToken(TokenTypes.RCURLY);</span>
+<span class="fc" id="L242">                length = getLengthOfBlock(openingBrace, closingBrace);</span>
+<span class="fc" id="L243">            }</span>
+            else {
+<span class="fc" id="L245">                length = countUsedLines(openingBrace);</span>
+            }
+<span class="fc bfc" id="L247" title="All 2 branches covered.">            if (length &gt; max) {</span>
+<span class="fc" id="L248">                final String methodName = ast.findFirstToken(TokenTypes.IDENT).getText();</span>
+<span class="fc" id="L249">                log(ast, MSG_KEY, length, max, methodName);</span>
             }
         }
-<span class="fc" id="L152">    }</span>
+<span class="fc" id="L252">    }</span>
 
     /**
-     * Returns length of code only without comments and blank lines.
+     * Returns length of code.
      *
      * @param openingBrace block opening brace
      * @param closingBrace block closing brace
      * @return number of lines with code for current block
      */
-    // suppress deprecation until https://github.com/checkstyle/checkstyle/issues/11166
-    @SuppressWarnings(&quot;deprecation&quot;)
-    private int getLengthOfBlock(DetailAST openingBrace, DetailAST closingBrace) {
-<span class="fc" id="L164">        int length = closingBrace.getLineNo() - openingBrace.getLineNo() + 1;</span>
+    private static int getLengthOfBlock(DetailAST openingBrace, DetailAST closingBrace) {
+<span class="fc" id="L262">        final int startLineNo = openingBrace.getLineNo();</span>
+<span class="fc" id="L263">        final int endLineNo = closingBrace.getLineNo();</span>
+<span class="fc" id="L264">        return endLineNo - startLineNo + 1;</span>
+    }
 
-<span class="fc bfc" id="L166" title="All 2 branches covered.">        if (!countEmpty) {</span>
-<span class="fc" id="L167">            final FileContents contents = getFileContents();</span>
-<span class="fc" id="L168">            final int lastLine = closingBrace.getLineNo();</span>
-            // lastLine - 1 is actual last line index. Last line is line with curly brace,
-            // which is always not empty. So, we make it lastLine - 2 to cover last line that
-            // actually may be empty.
-<span class="fc bfc" id="L172" title="All 2 branches covered.">            for (int i = openingBrace.getLineNo() - 1; i &lt;= lastLine - 2; i++) {</span>
-<span class="fc bfc" id="L173" title="All 4 branches covered.">                if (contents.lineIsBlank(i) || contents.lineIsComment(i)) {</span>
-<span class="fc" id="L174">                    length--;</span>
-                }
+    /**
+     * Count number of used code lines without comments.
+     *
+     * @param ast start ast
+     * @return number of used lines of code
+     */
+    private static int countUsedLines(DetailAST ast) {
+<span class="fc" id="L274">        final Deque&lt;DetailAST&gt; nodes = new ArrayDeque&lt;&gt;();</span>
+<span class="fc" id="L275">        nodes.add(ast);</span>
+<span class="fc" id="L276">        final Set&lt;Integer&gt; usedLines = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L277" title="All 2 branches covered.">        while (!nodes.isEmpty()) {</span>
+<span class="fc" id="L278">            final DetailAST node = nodes.removeFirst();</span>
+<span class="fc" id="L279">            final int lineNo = node.getLineNo();</span>
+            // text block requires special treatment,
+            // since it is the only non-comment token that can span more than one line
+<span class="fc bfc" id="L282" title="All 2 branches covered.">            if (node.getType() == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN) {</span>
+<span class="fc" id="L283">                IntStream.rangeClosed(lineNo, node.getLastChild().getLineNo())</span>
+<span class="fc" id="L284">                    .forEach(usedLines::add);</span>
             }
-        }
-<span class="fc" id="L178">        return length;</span>
+            else {
+<span class="fc" id="L287">                usedLines.add(lineNo);</span>
+<span class="fc" id="L288">                Stream.iterate(</span>
+<span class="fc" id="L289">                    node.getLastChild(), Objects::nonNull, DetailAST::getPreviousSibling</span>
+<span class="fc" id="L290">                ).forEach(nodes::addFirst);</span>
+            }
+<span class="fc" id="L292">        }</span>
+<span class="fc" id="L293">        return usedLines.size();</span>
     }
 
     /**
@@ -184,19 +299,17 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtil;
      * @param length the maximum length of a method.
      */
     public void setMax(int length) {
-<span class="fc" id="L187">        max = length;</span>
-<span class="fc" id="L188">    }</span>
+<span class="fc" id="L302">        max = length;</span>
+<span class="fc" id="L303">    }</span>
 
     /**
-     * Setter to control whether to count empty lines and single line comments
-     * of the form {@code //}.
+     * Setter to control whether to count empty lines and comments.
      *
-     * @param countEmpty whether to count empty and single line comments
-     *     of the form //.
+     * @param countEmpty whether to count empty and comments.
      */
     public void setCountEmpty(boolean countEmpty) {
-<span class="fc" id="L198">        this.countEmpty = countEmpty;</span>
-<span class="fc" id="L199">    }</span>
+<span class="fc" id="L311">        this.countEmpty = countEmpty;</span>
+<span class="fc" id="L312">    }</span>
 
 }
-</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.7.202105040129</span></div></body></html>
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

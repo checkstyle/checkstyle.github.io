@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TreeTable.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">checkstyle</a> &gt; <a href="index.source.html" class="el_package">com.puppycrawl.tools.checkstyle.gui</a> &gt; <span class="el_source">TreeTable.java</span></div><h1>TreeTable.java</h1><pre class="source lang-java linenums">////////////////////////////////////////////////////////////////////////////////
+// checkstyle: Checks Java source code for adherence to a set of rules.
+// Copyright (C) 2001-2022 the original author or authors.
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
+//
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+////////////////////////////////////////////////////////////////////////////////
+
+package com.puppycrawl.tools.checkstyle.gui;
+
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FontMetrics;
+import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.EventObject;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.swing.AbstractAction;
+import javax.swing.Action;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTree;
+import javax.swing.KeyStroke;
+import javax.swing.LookAndFeel;
+import javax.swing.table.TableCellEditor;
+import javax.swing.tree.TreePath;
+
+import com.puppycrawl.tools.checkstyle.api.DetailAST;
+import com.puppycrawl.tools.checkstyle.utils.XpathUtil;
+import com.puppycrawl.tools.checkstyle.xpath.AbstractNode;
+import com.puppycrawl.tools.checkstyle.xpath.RootNode;
+import com.puppycrawl.tools.checkstyle.xpath.XpathQueryGenerator;
+import net.sf.saxon.trans.XPathException;
+
+/**
+ * This example shows how to create a simple TreeTable component,
+ * by using a JTree as a renderer (and editor) for the cells in a
+ * particular column in the JTable.
+ *
+ * &lt;a href=
+ * &quot;https://docs.oracle.com/cd/E48246_01/apirefs.1111/e13403/oracle/ide/controls/TreeTableModel.html&quot;&gt;
+ * Original&amp;nbsp;Source&amp;nbsp;Location&lt;/a&gt;
+ *
+ * @noinspection ThisEscapedInObjectConstruction
+ */
+public final class TreeTable extends JTable {
+
+    /** A unique serial version identifier. */
+    private static final long serialVersionUID = -8493693409423365387L;
+    /** The newline character. */
+    private static final String NEWLINE = &quot;\n&quot;;
+    /** A subclass of JTree. */
+    private final TreeTableCellRenderer tree;
+    /** JTextArea editor. */
+    private JTextArea editor;
+    /** JTextArea xpathEditor. */
+    private JTextArea xpathEditor;
+    /** Line position map. */
+    private List&lt;Integer&gt; linePositionList;
+
+    /**
+     * Creates TreeTable base on TreeTableModel.
+     *
+     * @param treeTableModel Tree table model
+     */
+<span class="fc" id="L83">    public TreeTable(ParseTreeTableModel treeTableModel) {</span>
+        // Create the tree. It will be used as a renderer and editor.
+<span class="fc" id="L85">        tree = new TreeTableCellRenderer(this, treeTableModel);</span>
+
+        // Install a tableModel representing the visible rows in the tree.
+<span class="fc" id="L88">        setModel(new TreeTableModelAdapter(treeTableModel, tree));</span>
+
+        // Force the JTable and JTree to share their row selection models.
+<span class="fc" id="L91">        final ListToTreeSelectionModelWrapper selectionWrapper = new</span>
+                ListToTreeSelectionModelWrapper(this);
+<span class="fc" id="L93">        tree.setSelectionModel(selectionWrapper);</span>
+<span class="fc" id="L94">        setSelectionModel(selectionWrapper.getListSelectionModel());</span>
+
+        // Install the tree editor renderer and editor.
+<span class="fc" id="L97">        setDefaultRenderer(ParseTreeTableModel.class, tree);</span>
+<span class="fc" id="L98">        setDefaultEditor(ParseTreeTableModel.class, new TreeTableCellEditor());</span>
+
+        // No grid.
+<span class="fc" id="L101">        setShowGrid(false);</span>
+
+        // No intercell spacing
+<span class="fc" id="L104">        setIntercellSpacing(new Dimension(0, 0));</span>
+
+        // And update the height of the trees row to match that of
+        // the table.
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">        if (tree.getRowHeight() &lt; 1) {</span>
+            // Metal looks better like this.
+<span class="nc" id="L110">            setRowHeight(getRowHeight());</span>
+        }
+
+<span class="fc" id="L113">        setColumnsInitialWidth();</span>
+
+<span class="fc" id="L115">        final Action expand = new AbstractAction() {</span>
+            private static final long serialVersionUID = -5859674518660156121L;
+
+            @Override
+            public void actionPerformed(ActionEvent event) {
+<span class="fc" id="L120">                expandSelectedNode();</span>
+<span class="fc" id="L121">            }</span>
+        };
+<span class="fc" id="L123">        final KeyStroke stroke = KeyStroke.getKeyStroke(&quot;ENTER&quot;);</span>
+<span class="fc" id="L124">        final String command = &quot;expand/collapse&quot;;</span>
+<span class="fc" id="L125">        getInputMap().put(stroke, command);</span>
+<span class="fc" id="L126">        getActionMap().put(command, expand);</span>
+
+<span class="fc" id="L128">        addMouseListener(new MouseAdapter() {</span>
+            @Override
+            public void mouseClicked(MouseEvent event) {
+<span class="fc bfc" id="L131" title="All 2 branches covered.">                if (event.getClickCount() == 2) {</span>
+<span class="fc" id="L132">                    expandSelectedNode();</span>
+                }
+<span class="fc" id="L134">            }</span>
+        });
+<span class="fc" id="L136">    }</span>
+
+    /**
+     * Do expansion of a tree node.
+     */
+    private void expandSelectedNode() {
+<span class="fc" id="L142">        final TreePath selected = tree.getSelectionPath();</span>
+<span class="fc" id="L143">        makeCodeSelection();</span>
+<span class="fc" id="L144">        generateXpath();</span>
+
+<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (tree.isExpanded(selected)) {</span>
+<span class="fc" id="L147">            tree.collapsePath(selected);</span>
+        }
+        else {
+<span class="fc" id="L150">            tree.expandPath(selected);</span>
+        }
+<span class="fc" id="L152">        tree.setSelectionPath(selected);</span>
+<span class="fc" id="L153">    }</span>
+
+    /**
+     * Make selection of code in a text area.
+     */
+    private void makeCodeSelection() {
+<span class="fc" id="L159">        new CodeSelector(tree.getLastSelectedPathComponent(), editor, linePositionList).select();</span>
+<span class="fc" id="L160">    }</span>
+
+    /**
+     * Generate Xpath.
+     */
+    private void generateXpath() {
+<span class="pc bpc" id="L166" title="1 of 2 branches missed.">        if (tree.getLastSelectedPathComponent() instanceof DetailAST) {</span>
+<span class="fc" id="L167">            final DetailAST ast = (DetailAST) tree.getLastSelectedPathComponent();</span>
+<span class="fc" id="L168">            final String xpath = XpathQueryGenerator.generateXpathQuery(ast);</span>
+<span class="fc" id="L169">            xpathEditor.setText(xpath);</span>
+<span class="fc" id="L170">        }</span>
+        else {
+<span class="nc" id="L172">            xpathEditor.setText(&quot;Xpath is not supported yet for javadoc nodes&quot;);</span>
+        }
+<span class="fc" id="L174">    }</span>
+
+    /**
+     * Set initial value of width for columns in table.
+     */
+    private void setColumnsInitialWidth() {
+<span class="fc" id="L180">        final FontMetrics fontMetrics = getFontMetrics(getFont());</span>
+        // Six character string to contain &quot;Column&quot; column.
+<span class="fc" id="L182">        final int widthOfSixCharacterString = fontMetrics.stringWidth(&quot;XXXXXX&quot;);</span>
+        // Padding must be added to width for columns to make them fully
+        // visible in table header.
+<span class="fc" id="L185">        final int padding = 10;</span>
+<span class="fc" id="L186">        final int widthOfColumnContainingSixCharacterString =</span>
+                widthOfSixCharacterString + padding;
+<span class="fc" id="L188">        getColumn(&quot;Line&quot;).setMaxWidth(widthOfColumnContainingSixCharacterString);</span>
+<span class="fc" id="L189">        getColumn(&quot;Column&quot;).setMaxWidth(widthOfColumnContainingSixCharacterString);</span>
+<span class="fc" id="L190">        final int preferredTreeColumnWidth =</span>
+<span class="fc" id="L191">                Math.toIntExact(Math.round(getPreferredSize().getWidth() * 0.6));</span>
+<span class="fc" id="L192">        getColumn(&quot;Tree&quot;).setPreferredWidth(preferredTreeColumnWidth);</span>
+        // Twenty eight character string to contain &quot;Type&quot; column
+<span class="fc" id="L194">        final int widthOfTwentyEightCharacterString =</span>
+<span class="fc" id="L195">                fontMetrics.stringWidth(&quot;XXXXXXXXXXXXXXXXXXXXXXXXXXXX&quot;);</span>
+<span class="fc" id="L196">        final int preferredTypeColumnWidth = widthOfTwentyEightCharacterString + padding;</span>
+<span class="fc" id="L197">        getColumn(&quot;Type&quot;).setPreferredWidth(preferredTypeColumnWidth);</span>
+<span class="fc" id="L198">    }</span>
+
+    /**
+     * Select Node by Xpath.
+     */
+    public void selectNodeByXpath() {
+<span class="fc" id="L204">        final DetailAST rootAST = (DetailAST) tree.getModel().getRoot();</span>
+<span class="pc bpc" id="L205" title="1 of 2 branches missed.">        if (rootAST.hasChildren()) {</span>
+<span class="fc" id="L206">            final String xpath = xpathEditor.getText();</span>
+
+            try {
+<span class="fc" id="L209">                final Deque&lt;DetailAST&gt; nodes =</span>
+<span class="fc" id="L210">                        XpathUtil.getXpathItems(xpath, new RootNode(rootAST))</span>
+<span class="fc" id="L211">                              .stream()</span>
+<span class="fc" id="L212">                              .map(AbstractNode.class::cast)</span>
+<span class="fc" id="L213">                              .map(AbstractNode::getUnderlyingNode)</span>
+<span class="fc" id="L214">                              .collect(Collectors.toCollection(ArrayDeque::new));</span>
+<span class="fc" id="L215">                updateTreeTable(xpath, nodes);</span>
+            }
+<span class="fc" id="L217">            catch (XPathException exception) {</span>
+<span class="fc" id="L218">                xpathEditor.setText(xpathEditor.getText() + NEWLINE + exception.getMessage());</span>
+<span class="fc" id="L219">            }</span>
+<span class="fc" id="L220">        }</span>
+        else {
+<span class="nc" id="L222">            xpathEditor.setText(&quot;No file Opened&quot;);</span>
+        }
+<span class="fc" id="L224">    }</span>
+
+    /**
+     * Updates the Treetable by expanding paths in the tree and highlighting
+     * associated code.
+     *
+     * @param xpath the XPath query to show in case of no match
+     * @param nodes the deque of DetailAST nodes to match in TreeTable and XPath editor
+     */
+    private void updateTreeTable(String xpath, Deque&lt;DetailAST&gt; nodes) {
+<span class="fc bfc" id="L234" title="All 2 branches covered.">        if (nodes.isEmpty()) {</span>
+<span class="fc" id="L235">            xpathEditor.setText(&quot;No elements matching XPath query '&quot;</span>
+                    + xpath + &quot;' found.&quot;);
+        }
+        else {
+<span class="fc bfc" id="L239" title="All 2 branches covered.">            for (DetailAST node : nodes) {</span>
+<span class="fc" id="L240">                expandTreeTableByPath(node);</span>
+<span class="fc" id="L241">                makeCodeSelection();</span>
+<span class="fc" id="L242">            }</span>
+<span class="fc" id="L243">            xpathEditor.setText(getAllMatchingXpathQueriesText(nodes));</span>
+        }
+<span class="fc" id="L245">    }</span>
+
+    /**
+     * Expands path in tree table to given node so that user can
+     * see the node.
+     *
+     * @param node node to expand table by
+     */
+    private void expandTreeTableByPath(DetailAST node) {
+<span class="fc" id="L254">        TreePath path = new TreePath(node);</span>
+<span class="fc" id="L255">        path = path.pathByAddingChild(node);</span>
+<span class="pc bpc" id="L256" title="1 of 2 branches missed.">        if (!tree.isExpanded(path)) {</span>
+<span class="fc" id="L257">            tree.expandPath(path);</span>
+        }
+<span class="fc" id="L259">        tree.setSelectionPath(path);</span>
+<span class="fc" id="L260">    }</span>
+
+    /**
+     * Generates a String with all matching XPath queries separated
+     * by newlines.
+     *
+     * @param nodes deque of nodes to generate queries for
+     * @return complete text of all XPath expressions separated by newlines.
+     */
+    private static String getAllMatchingXpathQueriesText(Deque&lt;DetailAST&gt; nodes) {
+<span class="fc" id="L270">        return nodes.stream()</span>
+<span class="fc" id="L271">                .map(XpathQueryGenerator::generateXpathQuery)</span>
+<span class="fc" id="L272">                .collect(Collectors.joining(NEWLINE, &quot;&quot;, NEWLINE));</span>
+    }
+
+    /**
+     * Overridden to message super and forward the method to the tree.
+     * Since the tree is not actually in the component hierarchy it will
+     * never receive this unless we forward it in this manner.
+     */
+    @Override
+    public void updateUI() {
+<span class="fc" id="L282">        super.updateUI();</span>
+<span class="pc bpc" id="L283" title="1 of 2 branches missed.">        if (tree != null) {</span>
+<span class="nc" id="L284">            tree.updateUI();</span>
+        }
+        // Use the tree's default foreground and background colors in the
+        // table.
+<span class="fc" id="L288">        LookAndFeel.installColorsAndFont(this, &quot;Tree.background&quot;,</span>
+                &quot;Tree.foreground&quot;, &quot;Tree.font&quot;);
+<span class="fc" id="L290">    }</span>
+
+    /* Workaround for BasicTableUI anomaly. Make sure the UI never tries to
+     * paint the editor. The UI currently uses different techniques to
+     * paint the renderers and editors and overriding setBounds() below
+     * is not the right thing to do for an editor. Returning -1 for the
+     * editing row in this case, ensures the editor is never painted.
+     */
+    @Override
+    public int getEditingRow() {
+<span class="nc" id="L300">        int rowIndex = -1;</span>
+<span class="nc" id="L301">        final Class&lt;?&gt; editingClass = getColumnClass(editingColumn);</span>
+<span class="nc bnc" id="L302" title="All 2 branches missed.">        if (editingClass != ParseTreeTableModel.class) {</span>
+<span class="nc" id="L303">            rowIndex = editingRow;</span>
+        }
+<span class="nc" id="L305">        return rowIndex;</span>
+    }
+
+    /**
+     * Overridden to pass the new rowHeight to the tree.
+     */
+    @Override
+    public void setRowHeight(int newRowHeight) {
+<span class="fc" id="L313">        super.setRowHeight(newRowHeight);</span>
+<span class="pc bpc" id="L314" title="3 of 4 branches missed.">        if (tree != null &amp;&amp; tree.getRowHeight() != newRowHeight) {</span>
+<span class="nc" id="L315">            tree.setRowHeight(getRowHeight());</span>
+        }
+<span class="fc" id="L317">    }</span>
+
+    /**
+     * Returns tree.
+     *
+     * @return the tree that is being shared between the model.
+     */
+    public JTree getTree() {
+<span class="fc" id="L325">        return tree;</span>
+    }
+
+    /**
+     * Sets text area editor.
+     *
+     * @param textArea JTextArea component.
+     */
+    public void setEditor(JTextArea textArea) {
+<span class="fc" id="L334">        editor = textArea;</span>
+<span class="fc" id="L335">    }</span>
+
+    /**
+     * Sets text area xpathEditor.
+     *
+     * @param xpathTextArea JTextArea component.
+     */
+    public void setXpathEditor(JTextArea xpathTextArea) {
+<span class="fc" id="L343">        xpathEditor = xpathTextArea;</span>
+<span class="fc" id="L344">    }</span>
+
+    /**
+     * Sets line position list.
+     *
+     * @param linePositionList Line position list.
+     */
+    public void setLinePositionList(List&lt;Integer&gt; linePositionList) {
+<span class="fc" id="L352">        this.linePositionList = new ArrayList&lt;&gt;(linePositionList);</span>
+<span class="fc" id="L353">    }</span>
+
+    /**
+     * TreeTableCellEditor implementation. Component returned is the
+     * JTree.
+     */
+<span class="fc" id="L359">    private class TreeTableCellEditor extends BaseCellEditor implements</span>
+            TableCellEditor {
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table,
+                Object value,
+                boolean isSelected,
+                int row, int column) {
+<span class="nc" id="L367">            return tree;</span>
+        }
+
+        /**
+         * Overridden to return false, and if the event is a mouse event
+         * it is forwarded to the tree.
+         *
+         * &lt;p&gt;The behavior for this is debatable, and should really be offered
+         * as a property. By returning false, all keyboard actions are
+         * implemented in terms of the table. By returning true, the
+         * tree would get a chance to do something with the keyboard
+         * events. For the most part this is ok. But for certain keys,
+         * such as left/right, the tree will expand/collapse where as
+         * the table focus should really move to a different column. Page
+         * up/down should also be implemented in terms of the table.
+         * By returning false this also has the added benefit that clicking
+         * outside of the bounds of the tree node, but still in the tree
+         * column will select the row, whereas if this returned true
+         * that wouldn't be the case.
+         *
+         * &lt;p&gt;By returning false we are also enforcing the policy that
+         * the tree will never be editable (at least by a key sequence).
+         *
+         * @see TableCellEditor
+         */
+        @Override
+        public boolean isCellEditable(EventObject event) {
+<span class="nc bnc" id="L394" title="All 2 branches missed.">            if (event instanceof MouseEvent) {</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">                for (int counter = getColumnCount() - 1; counter &gt;= 0;</span>
+<span class="nc" id="L396">                     counter--) {</span>
+<span class="nc bnc" id="L397" title="All 2 branches missed.">                    if (getColumnClass(counter) == ParseTreeTableModel.class) {</span>
+<span class="nc" id="L398">                        final MouseEvent mouseEvent = (MouseEvent) event;</span>
+<span class="nc" id="L399">                        final MouseEvent newMouseEvent = new MouseEvent(tree, mouseEvent.getID(),</span>
+<span class="nc" id="L400">                                mouseEvent.getWhen(), mouseEvent.getModifiersEx(),</span>
+<span class="nc" id="L401">                                mouseEvent.getX() - getCellRect(0, counter, true).x,</span>
+<span class="nc" id="L402">                                mouseEvent.getY(), mouseEvent.getClickCount(),</span>
+<span class="nc" id="L403">                                mouseEvent.isPopupTrigger());</span>
+<span class="nc" id="L404">                        tree.dispatchEvent(newMouseEvent);</span>
+<span class="nc" id="L405">                        break;</span>
+                    }
+                }
+            }
+
+<span class="nc" id="L410">            return false;</span>
+        }
+
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>
