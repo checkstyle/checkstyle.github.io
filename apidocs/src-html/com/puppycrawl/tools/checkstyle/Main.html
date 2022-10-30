@@ -57,840 +57,839 @@
 <span class="sourceLineNo">048</span><a id="line.48">import com.puppycrawl.tools.checkstyle.api.CheckstyleException;</a>
 <span class="sourceLineNo">049</span><a id="line.49">import com.puppycrawl.tools.checkstyle.api.Configuration;</a>
 <span class="sourceLineNo">050</span><a id="line.50">import com.puppycrawl.tools.checkstyle.api.RootModule;</a>
-<span class="sourceLineNo">051</span><a id="line.51">import com.puppycrawl.tools.checkstyle.api.Violation;</a>
-<span class="sourceLineNo">052</span><a id="line.52">import com.puppycrawl.tools.checkstyle.utils.ChainedPropertyUtil;</a>
-<span class="sourceLineNo">053</span><a id="line.53">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
-<span class="sourceLineNo">054</span><a id="line.54">import com.puppycrawl.tools.checkstyle.utils.XpathUtil;</a>
-<span class="sourceLineNo">055</span><a id="line.55">import picocli.CommandLine;</a>
-<span class="sourceLineNo">056</span><a id="line.56">import picocli.CommandLine.Command;</a>
-<span class="sourceLineNo">057</span><a id="line.57">import picocli.CommandLine.Option;</a>
-<span class="sourceLineNo">058</span><a id="line.58">import picocli.CommandLine.ParameterException;</a>
-<span class="sourceLineNo">059</span><a id="line.59">import picocli.CommandLine.Parameters;</a>
-<span class="sourceLineNo">060</span><a id="line.60">import picocli.CommandLine.ParseResult;</a>
-<span class="sourceLineNo">061</span><a id="line.61"></a>
-<span class="sourceLineNo">062</span><a id="line.62">/**</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * Wrapper command line program for the Checker.</a>
-<span class="sourceLineNo">064</span><a id="line.64"> */</a>
-<span class="sourceLineNo">065</span><a id="line.65">public final class Main {</a>
-<span class="sourceLineNo">066</span><a id="line.66"></a>
-<span class="sourceLineNo">067</span><a id="line.67">    /**</a>
-<span class="sourceLineNo">068</span><a id="line.68">     * A key pointing to the error counter</a>
-<span class="sourceLineNo">069</span><a id="line.69">     * message in the "messages.properties" file.</a>
-<span class="sourceLineNo">070</span><a id="line.70">     */</a>
-<span class="sourceLineNo">071</span><a id="line.71">    public static final String ERROR_COUNTER = "Main.errorCounter";</a>
-<span class="sourceLineNo">072</span><a id="line.72">    /**</a>
-<span class="sourceLineNo">073</span><a id="line.73">     * A key pointing to the load properties exception</a>
-<span class="sourceLineNo">074</span><a id="line.74">     * message in the "messages.properties" file.</a>
-<span class="sourceLineNo">075</span><a id="line.75">     */</a>
-<span class="sourceLineNo">076</span><a id="line.76">    public static final String LOAD_PROPERTIES_EXCEPTION = "Main.loadProperties";</a>
-<span class="sourceLineNo">077</span><a id="line.77">    /**</a>
-<span class="sourceLineNo">078</span><a id="line.78">     * A key pointing to the create listener exception</a>
-<span class="sourceLineNo">079</span><a id="line.79">     * message in the "messages.properties" file.</a>
-<span class="sourceLineNo">080</span><a id="line.80">     */</a>
-<span class="sourceLineNo">081</span><a id="line.81">    public static final String CREATE_LISTENER_EXCEPTION = "Main.createListener";</a>
-<span class="sourceLineNo">082</span><a id="line.82"></a>
-<span class="sourceLineNo">083</span><a id="line.83">    /** Logger for Main. */</a>
-<span class="sourceLineNo">084</span><a id="line.84">    private static final Log LOG = LogFactory.getLog(Main.class);</a>
-<span class="sourceLineNo">085</span><a id="line.85"></a>
-<span class="sourceLineNo">086</span><a id="line.86">    /** Exit code returned when user specified invalid command line arguments. */</a>
-<span class="sourceLineNo">087</span><a id="line.87">    private static final int EXIT_WITH_INVALID_USER_INPUT_CODE = -1;</a>
-<span class="sourceLineNo">088</span><a id="line.88"></a>
-<span class="sourceLineNo">089</span><a id="line.89">    /** Exit code returned when execution finishes with {@link CheckstyleException}. */</a>
-<span class="sourceLineNo">090</span><a id="line.90">    private static final int EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE = -2;</a>
-<span class="sourceLineNo">091</span><a id="line.91"></a>
-<span class="sourceLineNo">092</span><a id="line.92">    /**</a>
-<span class="sourceLineNo">093</span><a id="line.93">     * Client code should not create instances of this class, but use</a>
-<span class="sourceLineNo">094</span><a id="line.94">     * {@link #main(String[])} method instead.</a>
-<span class="sourceLineNo">095</span><a id="line.95">     */</a>
-<span class="sourceLineNo">096</span><a id="line.96">    private Main() {</a>
-<span class="sourceLineNo">097</span><a id="line.97">    }</a>
-<span class="sourceLineNo">098</span><a id="line.98"></a>
-<span class="sourceLineNo">099</span><a id="line.99">    /**</a>
-<span class="sourceLineNo">100</span><a id="line.100">     * Loops over the files specified checking them for errors. The exit code</a>
-<span class="sourceLineNo">101</span><a id="line.101">     * is the number of errors found in all the files.</a>
-<span class="sourceLineNo">102</span><a id="line.102">     *</a>
-<span class="sourceLineNo">103</span><a id="line.103">     * @param args the command line arguments.</a>
-<span class="sourceLineNo">104</span><a id="line.104">     * @throws IOException if there is a problem with files access</a>
-<span class="sourceLineNo">105</span><a id="line.105">     * @noinspection UseOfSystemOutOrSystemErr, CallToPrintStackTrace, CallToSystemExit</a>
-<span class="sourceLineNo">106</span><a id="line.106">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
-<span class="sourceLineNo">107</span><a id="line.107">     *      usage of System.out and System.err</a>
-<span class="sourceLineNo">108</span><a id="line.108">     * @noinspectionreason CallToPrintStackTrace - driver class for Checkstyle must be able to</a>
-<span class="sourceLineNo">109</span><a id="line.109">     *      show all details in case of failure</a>
-<span class="sourceLineNo">110</span><a id="line.110">     * @noinspectionreason CallToSystemExit - driver class must call exit</a>
-<span class="sourceLineNo">111</span><a id="line.111">     **/</a>
-<span class="sourceLineNo">112</span><a id="line.112">    public static void main(String... args) throws IOException {</a>
-<span class="sourceLineNo">113</span><a id="line.113"></a>
-<span class="sourceLineNo">114</span><a id="line.114">        final CliOptions cliOptions = new CliOptions();</a>
-<span class="sourceLineNo">115</span><a id="line.115">        final CommandLine commandLine = new CommandLine(cliOptions);</a>
-<span class="sourceLineNo">116</span><a id="line.116">        commandLine.setUsageHelpWidth(CliOptions.HELP_WIDTH);</a>
-<span class="sourceLineNo">117</span><a id="line.117">        commandLine.setCaseInsensitiveEnumValuesAllowed(true);</a>
-<span class="sourceLineNo">118</span><a id="line.118"></a>
-<span class="sourceLineNo">119</span><a id="line.119">        // provide proper exit code based on results.</a>
-<span class="sourceLineNo">120</span><a id="line.120">        int exitStatus = 0;</a>
-<span class="sourceLineNo">121</span><a id="line.121">        int errorCounter = 0;</a>
-<span class="sourceLineNo">122</span><a id="line.122">        try {</a>
-<span class="sourceLineNo">123</span><a id="line.123">            final ParseResult parseResult = commandLine.parseArgs(args);</a>
-<span class="sourceLineNo">124</span><a id="line.124">            if (parseResult.isVersionHelpRequested()) {</a>
-<span class="sourceLineNo">125</span><a id="line.125">                System.out.println(getVersionString());</a>
-<span class="sourceLineNo">126</span><a id="line.126">            }</a>
-<span class="sourceLineNo">127</span><a id="line.127">            else if (parseResult.isUsageHelpRequested()) {</a>
-<span class="sourceLineNo">128</span><a id="line.128">                commandLine.usage(System.out);</a>
-<span class="sourceLineNo">129</span><a id="line.129">            }</a>
-<span class="sourceLineNo">130</span><a id="line.130">            else {</a>
-<span class="sourceLineNo">131</span><a id="line.131">                exitStatus = execute(parseResult, cliOptions);</a>
-<span class="sourceLineNo">132</span><a id="line.132">                errorCounter = exitStatus;</a>
-<span class="sourceLineNo">133</span><a id="line.133">            }</a>
-<span class="sourceLineNo">134</span><a id="line.134">        }</a>
-<span class="sourceLineNo">135</span><a id="line.135">        catch (ParameterException ex) {</a>
-<span class="sourceLineNo">136</span><a id="line.136">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</a>
-<span class="sourceLineNo">137</span><a id="line.137">            System.err.println(ex.getMessage());</a>
-<span class="sourceLineNo">138</span><a id="line.138">            System.err.println("Usage: checkstyle [OPTIONS]... FILES...");</a>
-<span class="sourceLineNo">139</span><a id="line.139">            System.err.println("Try 'checkstyle --help' for more information.");</a>
-<span class="sourceLineNo">140</span><a id="line.140">        }</a>
-<span class="sourceLineNo">141</span><a id="line.141">        catch (CheckstyleException ex) {</a>
-<span class="sourceLineNo">142</span><a id="line.142">            exitStatus = EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE;</a>
-<span class="sourceLineNo">143</span><a id="line.143">            errorCounter = 1;</a>
-<span class="sourceLineNo">144</span><a id="line.144">            ex.printStackTrace();</a>
-<span class="sourceLineNo">145</span><a id="line.145">        }</a>
-<span class="sourceLineNo">146</span><a id="line.146">        finally {</a>
-<span class="sourceLineNo">147</span><a id="line.147">            // return exit code base on validation of Checker</a>
-<span class="sourceLineNo">148</span><a id="line.148">            if (errorCounter &gt; 0) {</a>
-<span class="sourceLineNo">149</span><a id="line.149">                final Violation errorCounterViolation = new Violation(1,</a>
-<span class="sourceLineNo">150</span><a id="line.150">                        Definitions.CHECKSTYLE_BUNDLE, ERROR_COUNTER,</a>
-<span class="sourceLineNo">151</span><a id="line.151">                        new String[] {String.valueOf(errorCounter)}, null, Main.class, null);</a>
-<span class="sourceLineNo">152</span><a id="line.152">                // print error count statistic to error output stream,</a>
-<span class="sourceLineNo">153</span><a id="line.153">                // output stream might be used by validation report content</a>
-<span class="sourceLineNo">154</span><a id="line.154">                System.err.println(errorCounterViolation.getViolation());</a>
-<span class="sourceLineNo">155</span><a id="line.155">            }</a>
-<span class="sourceLineNo">156</span><a id="line.156">        }</a>
-<span class="sourceLineNo">157</span><a id="line.157">        Runtime.getRuntime().exit(exitStatus);</a>
-<span class="sourceLineNo">158</span><a id="line.158">    }</a>
-<span class="sourceLineNo">159</span><a id="line.159"></a>
-<span class="sourceLineNo">160</span><a id="line.160">    /**</a>
-<span class="sourceLineNo">161</span><a id="line.161">     * Returns the version string printed when the user requests version help (--version or -V).</a>
-<span class="sourceLineNo">162</span><a id="line.162">     *</a>
-<span class="sourceLineNo">163</span><a id="line.163">     * @return a version string based on the package implementation version</a>
-<span class="sourceLineNo">164</span><a id="line.164">     */</a>
-<span class="sourceLineNo">165</span><a id="line.165">    private static String getVersionString() {</a>
-<span class="sourceLineNo">166</span><a id="line.166">        return "Checkstyle version: " + Main.class.getPackage().getImplementationVersion();</a>
-<span class="sourceLineNo">167</span><a id="line.167">    }</a>
-<span class="sourceLineNo">168</span><a id="line.168"></a>
-<span class="sourceLineNo">169</span><a id="line.169">    /**</a>
-<span class="sourceLineNo">170</span><a id="line.170">     * Validates the user input and returns {@value #EXIT_WITH_INVALID_USER_INPUT_CODE} if</a>
-<span class="sourceLineNo">171</span><a id="line.171">     * invalid, otherwise executes CheckStyle and returns the number of violations.</a>
-<span class="sourceLineNo">172</span><a id="line.172">     *</a>
-<span class="sourceLineNo">173</span><a id="line.173">     * @param parseResult generic access to options and parameters found on the command line</a>
-<span class="sourceLineNo">174</span><a id="line.174">     * @param options encapsulates options and parameters specified on the command line</a>
-<span class="sourceLineNo">175</span><a id="line.175">     * @return number of violations</a>
-<span class="sourceLineNo">176</span><a id="line.176">     * @throws IOException if a file could not be read.</a>
-<span class="sourceLineNo">177</span><a id="line.177">     * @throws CheckstyleException if something happens processing the files.</a>
-<span class="sourceLineNo">178</span><a id="line.178">     * @noinspection UseOfSystemOutOrSystemErr</a>
-<span class="sourceLineNo">179</span><a id="line.179">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
-<span class="sourceLineNo">180</span><a id="line.180">     *      usage of System.out and System.err</a>
-<span class="sourceLineNo">181</span><a id="line.181">     */</a>
-<span class="sourceLineNo">182</span><a id="line.182">    private static int execute(ParseResult parseResult, CliOptions options)</a>
-<span class="sourceLineNo">183</span><a id="line.183">            throws IOException, CheckstyleException {</a>
-<span class="sourceLineNo">184</span><a id="line.184"></a>
-<span class="sourceLineNo">185</span><a id="line.185">        final int exitStatus;</a>
-<span class="sourceLineNo">186</span><a id="line.186"></a>
-<span class="sourceLineNo">187</span><a id="line.187">        // return error if something is wrong in arguments</a>
-<span class="sourceLineNo">188</span><a id="line.188">        final List&lt;File&gt; filesToProcess = getFilesToProcess(options);</a>
-<span class="sourceLineNo">189</span><a id="line.189">        final List&lt;String&gt; messages = options.validateCli(parseResult, filesToProcess);</a>
-<span class="sourceLineNo">190</span><a id="line.190">        final boolean hasMessages = !messages.isEmpty();</a>
-<span class="sourceLineNo">191</span><a id="line.191">        if (hasMessages) {</a>
-<span class="sourceLineNo">192</span><a id="line.192">            messages.forEach(System.out::println);</a>
-<span class="sourceLineNo">193</span><a id="line.193">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</a>
-<span class="sourceLineNo">194</span><a id="line.194">        }</a>
-<span class="sourceLineNo">195</span><a id="line.195">        else {</a>
-<span class="sourceLineNo">196</span><a id="line.196">            exitStatus = runCli(options, filesToProcess);</a>
-<span class="sourceLineNo">197</span><a id="line.197">        }</a>
-<span class="sourceLineNo">198</span><a id="line.198">        return exitStatus;</a>
-<span class="sourceLineNo">199</span><a id="line.199">    }</a>
-<span class="sourceLineNo">200</span><a id="line.200"></a>
-<span class="sourceLineNo">201</span><a id="line.201">    /**</a>
-<span class="sourceLineNo">202</span><a id="line.202">     * Determines the files to process.</a>
-<span class="sourceLineNo">203</span><a id="line.203">     *</a>
-<span class="sourceLineNo">204</span><a id="line.204">     * @param options the user-specified options</a>
-<span class="sourceLineNo">205</span><a id="line.205">     * @return list of files to process</a>
-<span class="sourceLineNo">206</span><a id="line.206">     */</a>
-<span class="sourceLineNo">207</span><a id="line.207">    private static List&lt;File&gt; getFilesToProcess(CliOptions options) {</a>
-<span class="sourceLineNo">208</span><a id="line.208">        final List&lt;Pattern&gt; patternsToExclude = options.getExclusions();</a>
-<span class="sourceLineNo">209</span><a id="line.209"></a>
-<span class="sourceLineNo">210</span><a id="line.210">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</a>
-<span class="sourceLineNo">211</span><a id="line.211">        for (File file : options.files) {</a>
-<span class="sourceLineNo">212</span><a id="line.212">            result.addAll(listFiles(file, patternsToExclude));</a>
-<span class="sourceLineNo">213</span><a id="line.213">        }</a>
-<span class="sourceLineNo">214</span><a id="line.214">        return result;</a>
-<span class="sourceLineNo">215</span><a id="line.215">    }</a>
-<span class="sourceLineNo">216</span><a id="line.216"></a>
-<span class="sourceLineNo">217</span><a id="line.217">    /**</a>
-<span class="sourceLineNo">218</span><a id="line.218">     * Traverses a specified node looking for files to check. Found files are added to</a>
-<span class="sourceLineNo">219</span><a id="line.219">     * a specified list. Subdirectories are also traversed.</a>
-<span class="sourceLineNo">220</span><a id="line.220">     *</a>
-<span class="sourceLineNo">221</span><a id="line.221">     * @param node</a>
-<span class="sourceLineNo">222</span><a id="line.222">     *        the node to process</a>
-<span class="sourceLineNo">223</span><a id="line.223">     * @param patternsToExclude The list of patterns to exclude from searching or being added as</a>
-<span class="sourceLineNo">224</span><a id="line.224">     *        files.</a>
-<span class="sourceLineNo">225</span><a id="line.225">     * @return found files</a>
-<span class="sourceLineNo">226</span><a id="line.226">     */</a>
-<span class="sourceLineNo">227</span><a id="line.227">    private static List&lt;File&gt; listFiles(File node, List&lt;Pattern&gt; patternsToExclude) {</a>
-<span class="sourceLineNo">228</span><a id="line.228">        // could be replaced with org.apache.commons.io.FileUtils.list() method</a>
-<span class="sourceLineNo">229</span><a id="line.229">        // if only we add commons-io library</a>
-<span class="sourceLineNo">230</span><a id="line.230">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</a>
-<span class="sourceLineNo">231</span><a id="line.231"></a>
-<span class="sourceLineNo">232</span><a id="line.232">        if (node.canRead() &amp;&amp; !isPathExcluded(node.getAbsolutePath(), patternsToExclude)) {</a>
-<span class="sourceLineNo">233</span><a id="line.233">            if (node.isDirectory()) {</a>
-<span class="sourceLineNo">234</span><a id="line.234">                final File[] files = node.listFiles();</a>
-<span class="sourceLineNo">235</span><a id="line.235">                // listFiles() can return null, so we need to check it</a>
-<span class="sourceLineNo">236</span><a id="line.236">                if (files != null) {</a>
-<span class="sourceLineNo">237</span><a id="line.237">                    for (File element : files) {</a>
-<span class="sourceLineNo">238</span><a id="line.238">                        result.addAll(listFiles(element, patternsToExclude));</a>
-<span class="sourceLineNo">239</span><a id="line.239">                    }</a>
-<span class="sourceLineNo">240</span><a id="line.240">                }</a>
-<span class="sourceLineNo">241</span><a id="line.241">            }</a>
-<span class="sourceLineNo">242</span><a id="line.242">            else if (node.isFile()) {</a>
-<span class="sourceLineNo">243</span><a id="line.243">                result.add(node);</a>
-<span class="sourceLineNo">244</span><a id="line.244">            }</a>
-<span class="sourceLineNo">245</span><a id="line.245">        }</a>
-<span class="sourceLineNo">246</span><a id="line.246">        return result;</a>
-<span class="sourceLineNo">247</span><a id="line.247">    }</a>
-<span class="sourceLineNo">248</span><a id="line.248"></a>
-<span class="sourceLineNo">249</span><a id="line.249">    /**</a>
-<span class="sourceLineNo">250</span><a id="line.250">     * Checks if a directory/file {@code path} should be excluded based on if it matches one of the</a>
-<span class="sourceLineNo">251</span><a id="line.251">     * patterns supplied.</a>
-<span class="sourceLineNo">252</span><a id="line.252">     *</a>
-<span class="sourceLineNo">253</span><a id="line.253">     * @param path The path of the directory/file to check</a>
-<span class="sourceLineNo">254</span><a id="line.254">     * @param patternsToExclude The collection of patterns to exclude from searching</a>
-<span class="sourceLineNo">255</span><a id="line.255">     *        or being added as files.</a>
-<span class="sourceLineNo">256</span><a id="line.256">     * @return True if the directory/file matches one of the patterns.</a>
-<span class="sourceLineNo">257</span><a id="line.257">     */</a>
-<span class="sourceLineNo">258</span><a id="line.258">    private static boolean isPathExcluded(String path, Iterable&lt;Pattern&gt; patternsToExclude) {</a>
-<span class="sourceLineNo">259</span><a id="line.259">        boolean result = false;</a>
-<span class="sourceLineNo">260</span><a id="line.260"></a>
-<span class="sourceLineNo">261</span><a id="line.261">        for (Pattern pattern : patternsToExclude) {</a>
-<span class="sourceLineNo">262</span><a id="line.262">            if (pattern.matcher(path).find()) {</a>
-<span class="sourceLineNo">263</span><a id="line.263">                result = true;</a>
-<span class="sourceLineNo">264</span><a id="line.264">                break;</a>
-<span class="sourceLineNo">265</span><a id="line.265">            }</a>
-<span class="sourceLineNo">266</span><a id="line.266">        }</a>
-<span class="sourceLineNo">267</span><a id="line.267"></a>
-<span class="sourceLineNo">268</span><a id="line.268">        return result;</a>
-<span class="sourceLineNo">269</span><a id="line.269">    }</a>
-<span class="sourceLineNo">270</span><a id="line.270"></a>
-<span class="sourceLineNo">271</span><a id="line.271">    /**</a>
-<span class="sourceLineNo">272</span><a id="line.272">     * Do execution of CheckStyle based on Command line options.</a>
-<span class="sourceLineNo">273</span><a id="line.273">     *</a>
-<span class="sourceLineNo">274</span><a id="line.274">     * @param options user-specified options</a>
-<span class="sourceLineNo">275</span><a id="line.275">     * @param filesToProcess the list of files whose style to check</a>
-<span class="sourceLineNo">276</span><a id="line.276">     * @return number of violations</a>
-<span class="sourceLineNo">277</span><a id="line.277">     * @throws IOException if a file could not be read.</a>
-<span class="sourceLineNo">278</span><a id="line.278">     * @throws CheckstyleException if something happens processing the files.</a>
-<span class="sourceLineNo">279</span><a id="line.279">     * @noinspection UseOfSystemOutOrSystemErr</a>
-<span class="sourceLineNo">280</span><a id="line.280">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
-<span class="sourceLineNo">281</span><a id="line.281">     *      usage of System.out and System.err</a>
-<span class="sourceLineNo">282</span><a id="line.282">     */</a>
-<span class="sourceLineNo">283</span><a id="line.283">    private static int runCli(CliOptions options, List&lt;File&gt; filesToProcess)</a>
-<span class="sourceLineNo">284</span><a id="line.284">            throws IOException, CheckstyleException {</a>
-<span class="sourceLineNo">285</span><a id="line.285">        int result = 0;</a>
-<span class="sourceLineNo">286</span><a id="line.286">        final boolean hasSuppressionLineColumnNumber = options.suppressionLineColumnNumber != null;</a>
-<span class="sourceLineNo">287</span><a id="line.287"></a>
-<span class="sourceLineNo">288</span><a id="line.288">        // create config helper object</a>
-<span class="sourceLineNo">289</span><a id="line.289">        if (options.printAst) {</a>
-<span class="sourceLineNo">290</span><a id="line.290">            // print AST</a>
-<span class="sourceLineNo">291</span><a id="line.291">            final File file = filesToProcess.get(0);</a>
-<span class="sourceLineNo">292</span><a id="line.292">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</a>
-<span class="sourceLineNo">293</span><a id="line.293">                    JavaParser.Options.WITHOUT_COMMENTS);</a>
-<span class="sourceLineNo">294</span><a id="line.294">            System.out.print(stringAst);</a>
-<span class="sourceLineNo">295</span><a id="line.295">        }</a>
-<span class="sourceLineNo">296</span><a id="line.296">        else if (Objects.nonNull(options.xpath)) {</a>
-<span class="sourceLineNo">297</span><a id="line.297">            final String branch = XpathUtil.printXpathBranch(options.xpath, filesToProcess.get(0));</a>
-<span class="sourceLineNo">298</span><a id="line.298">            System.out.print(branch);</a>
-<span class="sourceLineNo">299</span><a id="line.299">        }</a>
-<span class="sourceLineNo">300</span><a id="line.300">        else if (options.printAstWithComments) {</a>
-<span class="sourceLineNo">301</span><a id="line.301">            final File file = filesToProcess.get(0);</a>
-<span class="sourceLineNo">302</span><a id="line.302">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</a>
-<span class="sourceLineNo">303</span><a id="line.303">                    JavaParser.Options.WITH_COMMENTS);</a>
-<span class="sourceLineNo">304</span><a id="line.304">            System.out.print(stringAst);</a>
-<span class="sourceLineNo">305</span><a id="line.305">        }</a>
-<span class="sourceLineNo">306</span><a id="line.306">        else if (options.printJavadocTree) {</a>
-<span class="sourceLineNo">307</span><a id="line.307">            final File file = filesToProcess.get(0);</a>
-<span class="sourceLineNo">308</span><a id="line.308">            final String stringAst = DetailNodeTreeStringPrinter.printFileAst(file);</a>
-<span class="sourceLineNo">309</span><a id="line.309">            System.out.print(stringAst);</a>
-<span class="sourceLineNo">310</span><a id="line.310">        }</a>
-<span class="sourceLineNo">311</span><a id="line.311">        else if (options.printTreeWithJavadoc) {</a>
-<span class="sourceLineNo">312</span><a id="line.312">            final File file = filesToProcess.get(0);</a>
-<span class="sourceLineNo">313</span><a id="line.313">            final String stringAst = AstTreeStringPrinter.printJavaAndJavadocTree(file);</a>
-<span class="sourceLineNo">314</span><a id="line.314">            System.out.print(stringAst);</a>
-<span class="sourceLineNo">315</span><a id="line.315">        }</a>
-<span class="sourceLineNo">316</span><a id="line.316">        else if (hasSuppressionLineColumnNumber) {</a>
-<span class="sourceLineNo">317</span><a id="line.317">            final File file = filesToProcess.get(0);</a>
-<span class="sourceLineNo">318</span><a id="line.318">            final String stringSuppressions =</a>
-<span class="sourceLineNo">319</span><a id="line.319">                    SuppressionsStringPrinter.printSuppressions(file,</a>
-<span class="sourceLineNo">320</span><a id="line.320">                            options.suppressionLineColumnNumber, options.tabWidth);</a>
-<span class="sourceLineNo">321</span><a id="line.321">            System.out.print(stringSuppressions);</a>
-<span class="sourceLineNo">322</span><a id="line.322">        }</a>
-<span class="sourceLineNo">323</span><a id="line.323">        else {</a>
-<span class="sourceLineNo">324</span><a id="line.324">            if (options.debug) {</a>
-<span class="sourceLineNo">325</span><a id="line.325">                final Logger parentLogger = Logger.getLogger(Main.class.getName()).getParent();</a>
-<span class="sourceLineNo">326</span><a id="line.326">                final ConsoleHandler handler = new ConsoleHandler();</a>
-<span class="sourceLineNo">327</span><a id="line.327">                handler.setLevel(Level.FINEST);</a>
-<span class="sourceLineNo">328</span><a id="line.328">                handler.setFilter(new OnlyCheckstyleLoggersFilter());</a>
-<span class="sourceLineNo">329</span><a id="line.329">                parentLogger.addHandler(handler);</a>
-<span class="sourceLineNo">330</span><a id="line.330">                parentLogger.setLevel(Level.FINEST);</a>
-<span class="sourceLineNo">331</span><a id="line.331">            }</a>
-<span class="sourceLineNo">332</span><a id="line.332">            if (LOG.isDebugEnabled()) {</a>
-<span class="sourceLineNo">333</span><a id="line.333">                LOG.debug("Checkstyle debug logging enabled");</a>
-<span class="sourceLineNo">334</span><a id="line.334">                LOG.debug("Running Checkstyle with version: "</a>
-<span class="sourceLineNo">335</span><a id="line.335">                        + Main.class.getPackage().getImplementationVersion());</a>
-<span class="sourceLineNo">336</span><a id="line.336">            }</a>
-<span class="sourceLineNo">337</span><a id="line.337"></a>
-<span class="sourceLineNo">338</span><a id="line.338">            // run Checker</a>
-<span class="sourceLineNo">339</span><a id="line.339">            result = runCheckstyle(options, filesToProcess);</a>
-<span class="sourceLineNo">340</span><a id="line.340">        }</a>
-<span class="sourceLineNo">341</span><a id="line.341"></a>
-<span class="sourceLineNo">342</span><a id="line.342">        return result;</a>
-<span class="sourceLineNo">343</span><a id="line.343">    }</a>
-<span class="sourceLineNo">344</span><a id="line.344"></a>
-<span class="sourceLineNo">345</span><a id="line.345">    /**</a>
-<span class="sourceLineNo">346</span><a id="line.346">     * Executes required Checkstyle actions based on passed parameters.</a>
-<span class="sourceLineNo">347</span><a id="line.347">     *</a>
-<span class="sourceLineNo">348</span><a id="line.348">     * @param options user-specified options</a>
-<span class="sourceLineNo">349</span><a id="line.349">     * @param filesToProcess the list of files whose style to check</a>
-<span class="sourceLineNo">350</span><a id="line.350">     * @return number of violations of ERROR level</a>
-<span class="sourceLineNo">351</span><a id="line.351">     * @throws IOException</a>
-<span class="sourceLineNo">352</span><a id="line.352">     *         when output file could not be found</a>
-<span class="sourceLineNo">353</span><a id="line.353">     * @throws CheckstyleException</a>
-<span class="sourceLineNo">354</span><a id="line.354">     *         when properties file could not be loaded</a>
-<span class="sourceLineNo">355</span><a id="line.355">     */</a>
-<span class="sourceLineNo">356</span><a id="line.356">    private static int runCheckstyle(CliOptions options, List&lt;File&gt; filesToProcess)</a>
-<span class="sourceLineNo">357</span><a id="line.357">            throws CheckstyleException, IOException {</a>
-<span class="sourceLineNo">358</span><a id="line.358">        // setup the properties</a>
-<span class="sourceLineNo">359</span><a id="line.359">        final Properties props;</a>
-<span class="sourceLineNo">360</span><a id="line.360"></a>
-<span class="sourceLineNo">361</span><a id="line.361">        if (options.propertiesFile == null) {</a>
-<span class="sourceLineNo">362</span><a id="line.362">            props = System.getProperties();</a>
-<span class="sourceLineNo">363</span><a id="line.363">        }</a>
-<span class="sourceLineNo">364</span><a id="line.364">        else {</a>
-<span class="sourceLineNo">365</span><a id="line.365">            props = loadProperties(options.propertiesFile);</a>
-<span class="sourceLineNo">366</span><a id="line.366">        }</a>
-<span class="sourceLineNo">367</span><a id="line.367"></a>
-<span class="sourceLineNo">368</span><a id="line.368">        // create a configuration</a>
-<span class="sourceLineNo">369</span><a id="line.369">        final ThreadModeSettings multiThreadModeSettings =</a>
-<span class="sourceLineNo">370</span><a id="line.370">                new ThreadModeSettings(CliOptions.CHECKER_THREADS_NUMBER,</a>
-<span class="sourceLineNo">371</span><a id="line.371">                        CliOptions.TREE_WALKER_THREADS_NUMBER);</a>
-<span class="sourceLineNo">372</span><a id="line.372"></a>
-<span class="sourceLineNo">373</span><a id="line.373">        final ConfigurationLoader.IgnoredModulesOptions ignoredModulesOptions;</a>
-<span class="sourceLineNo">374</span><a id="line.374">        if (options.executeIgnoredModules) {</a>
-<span class="sourceLineNo">375</span><a id="line.375">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.EXECUTE;</a>
-<span class="sourceLineNo">376</span><a id="line.376">        }</a>
-<span class="sourceLineNo">377</span><a id="line.377">        else {</a>
-<span class="sourceLineNo">378</span><a id="line.378">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.OMIT;</a>
-<span class="sourceLineNo">379</span><a id="line.379">        }</a>
-<span class="sourceLineNo">380</span><a id="line.380"></a>
-<span class="sourceLineNo">381</span><a id="line.381">        final Configuration config = ConfigurationLoader.loadConfiguration(</a>
-<span class="sourceLineNo">382</span><a id="line.382">                options.configurationFile, new PropertiesExpander(props),</a>
-<span class="sourceLineNo">383</span><a id="line.383">                ignoredModulesOptions, multiThreadModeSettings);</a>
-<span class="sourceLineNo">384</span><a id="line.384"></a>
-<span class="sourceLineNo">385</span><a id="line.385">        // create RootModule object and run it</a>
-<span class="sourceLineNo">386</span><a id="line.386">        final int errorCounter;</a>
-<span class="sourceLineNo">387</span><a id="line.387">        final ClassLoader moduleClassLoader = Checker.class.getClassLoader();</a>
-<span class="sourceLineNo">388</span><a id="line.388">        final RootModule rootModule = getRootModule(config.getName(), moduleClassLoader);</a>
-<span class="sourceLineNo">389</span><a id="line.389"></a>
-<span class="sourceLineNo">390</span><a id="line.390">        try {</a>
-<span class="sourceLineNo">391</span><a id="line.391">            final AuditListener listener;</a>
-<span class="sourceLineNo">392</span><a id="line.392">            if (options.generateXpathSuppressionsFile) {</a>
-<span class="sourceLineNo">393</span><a id="line.393">                // create filter to print generated xpath suppressions file</a>
-<span class="sourceLineNo">394</span><a id="line.394">                final Configuration treeWalkerConfig = getTreeWalkerConfig(config);</a>
-<span class="sourceLineNo">395</span><a id="line.395">                if (treeWalkerConfig != null) {</a>
-<span class="sourceLineNo">396</span><a id="line.396">                    final DefaultConfiguration moduleConfig =</a>
-<span class="sourceLineNo">397</span><a id="line.397">                            new DefaultConfiguration(</a>
-<span class="sourceLineNo">398</span><a id="line.398">                                    XpathFileGeneratorAstFilter.class.getName());</a>
-<span class="sourceLineNo">399</span><a id="line.399">                    moduleConfig.addProperty(CliOptions.ATTRIB_TAB_WIDTH_NAME,</a>
-<span class="sourceLineNo">400</span><a id="line.400">                            String.valueOf(options.tabWidth));</a>
-<span class="sourceLineNo">401</span><a id="line.401">                    ((DefaultConfiguration) treeWalkerConfig).addChild(moduleConfig);</a>
-<span class="sourceLineNo">402</span><a id="line.402">                }</a>
-<span class="sourceLineNo">403</span><a id="line.403"></a>
-<span class="sourceLineNo">404</span><a id="line.404">                listener = new XpathFileGeneratorAuditListener(getOutputStream(options.outputPath),</a>
-<span class="sourceLineNo">405</span><a id="line.405">                        getOutputStreamOptions(options.outputPath));</a>
-<span class="sourceLineNo">406</span><a id="line.406">            }</a>
-<span class="sourceLineNo">407</span><a id="line.407">            else {</a>
-<span class="sourceLineNo">408</span><a id="line.408">                listener = createListener(options.format, options.outputPath);</a>
-<span class="sourceLineNo">409</span><a id="line.409">            }</a>
-<span class="sourceLineNo">410</span><a id="line.410"></a>
-<span class="sourceLineNo">411</span><a id="line.411">            rootModule.setModuleClassLoader(moduleClassLoader);</a>
-<span class="sourceLineNo">412</span><a id="line.412">            rootModule.configure(config);</a>
-<span class="sourceLineNo">413</span><a id="line.413">            rootModule.addListener(listener);</a>
-<span class="sourceLineNo">414</span><a id="line.414"></a>
-<span class="sourceLineNo">415</span><a id="line.415">            // run RootModule</a>
-<span class="sourceLineNo">416</span><a id="line.416">            errorCounter = rootModule.process(filesToProcess);</a>
-<span class="sourceLineNo">417</span><a id="line.417">        }</a>
-<span class="sourceLineNo">418</span><a id="line.418">        finally {</a>
-<span class="sourceLineNo">419</span><a id="line.419">            rootModule.destroy();</a>
-<span class="sourceLineNo">420</span><a id="line.420">        }</a>
-<span class="sourceLineNo">421</span><a id="line.421"></a>
-<span class="sourceLineNo">422</span><a id="line.422">        return errorCounter;</a>
-<span class="sourceLineNo">423</span><a id="line.423">    }</a>
-<span class="sourceLineNo">424</span><a id="line.424"></a>
-<span class="sourceLineNo">425</span><a id="line.425">    /**</a>
-<span class="sourceLineNo">426</span><a id="line.426">     * Loads properties from a File.</a>
-<span class="sourceLineNo">427</span><a id="line.427">     *</a>
-<span class="sourceLineNo">428</span><a id="line.428">     * @param file</a>
-<span class="sourceLineNo">429</span><a id="line.429">     *        the properties file</a>
-<span class="sourceLineNo">430</span><a id="line.430">     * @return the properties in file</a>
-<span class="sourceLineNo">431</span><a id="line.431">     * @throws CheckstyleException</a>
-<span class="sourceLineNo">432</span><a id="line.432">     *         when could not load properties file</a>
-<span class="sourceLineNo">433</span><a id="line.433">     */</a>
-<span class="sourceLineNo">434</span><a id="line.434">    private static Properties loadProperties(File file)</a>
-<span class="sourceLineNo">435</span><a id="line.435">            throws CheckstyleException {</a>
-<span class="sourceLineNo">436</span><a id="line.436">        final Properties properties = new Properties();</a>
-<span class="sourceLineNo">437</span><a id="line.437"></a>
-<span class="sourceLineNo">438</span><a id="line.438">        try (InputStream stream = Files.newInputStream(file.toPath())) {</a>
-<span class="sourceLineNo">439</span><a id="line.439">            properties.load(stream);</a>
-<span class="sourceLineNo">440</span><a id="line.440">        }</a>
-<span class="sourceLineNo">441</span><a id="line.441">        catch (final IOException ex) {</a>
-<span class="sourceLineNo">442</span><a id="line.442">            final Violation loadPropertiesExceptionMessage = new Violation(1,</a>
-<span class="sourceLineNo">443</span><a id="line.443">                    Definitions.CHECKSTYLE_BUNDLE, LOAD_PROPERTIES_EXCEPTION,</a>
-<span class="sourceLineNo">444</span><a id="line.444">                    new String[] {file.getAbsolutePath()}, null, Main.class, null);</a>
-<span class="sourceLineNo">445</span><a id="line.445">            throw new CheckstyleException(loadPropertiesExceptionMessage.getViolation(), ex);</a>
-<span class="sourceLineNo">446</span><a id="line.446">        }</a>
-<span class="sourceLineNo">447</span><a id="line.447"></a>
-<span class="sourceLineNo">448</span><a id="line.448">        return ChainedPropertyUtil.getResolvedProperties(properties);</a>
-<span class="sourceLineNo">449</span><a id="line.449">    }</a>
-<span class="sourceLineNo">450</span><a id="line.450"></a>
-<span class="sourceLineNo">451</span><a id="line.451">    /**</a>
-<span class="sourceLineNo">452</span><a id="line.452">     * Creates a new instance of the root module that will control and run</a>
-<span class="sourceLineNo">453</span><a id="line.453">     * Checkstyle.</a>
-<span class="sourceLineNo">454</span><a id="line.454">     *</a>
-<span class="sourceLineNo">455</span><a id="line.455">     * @param name The name of the module. This will either be a short name that</a>
-<span class="sourceLineNo">456</span><a id="line.456">     *        will have to be found or the complete package name.</a>
-<span class="sourceLineNo">457</span><a id="line.457">     * @param moduleClassLoader Class loader used to load the root module.</a>
-<span class="sourceLineNo">458</span><a id="line.458">     * @return The new instance of the root module.</a>
-<span class="sourceLineNo">459</span><a id="line.459">     * @throws CheckstyleException if no module can be instantiated from name</a>
-<span class="sourceLineNo">460</span><a id="line.460">     */</a>
-<span class="sourceLineNo">461</span><a id="line.461">    private static RootModule getRootModule(String name, ClassLoader moduleClassLoader)</a>
-<span class="sourceLineNo">462</span><a id="line.462">            throws CheckstyleException {</a>
-<span class="sourceLineNo">463</span><a id="line.463">        final ModuleFactory factory = new PackageObjectFactory(</a>
-<span class="sourceLineNo">464</span><a id="line.464">                Checker.class.getPackage().getName(), moduleClassLoader);</a>
-<span class="sourceLineNo">465</span><a id="line.465"></a>
-<span class="sourceLineNo">466</span><a id="line.466">        return (RootModule) factory.createModule(name);</a>
-<span class="sourceLineNo">467</span><a id="line.467">    }</a>
-<span class="sourceLineNo">468</span><a id="line.468"></a>
-<span class="sourceLineNo">469</span><a id="line.469">    /**</a>
-<span class="sourceLineNo">470</span><a id="line.470">     * Returns {@code TreeWalker} module configuration.</a>
-<span class="sourceLineNo">471</span><a id="line.471">     *</a>
-<span class="sourceLineNo">472</span><a id="line.472">     * @param config The configuration object.</a>
-<span class="sourceLineNo">473</span><a id="line.473">     * @return The {@code TreeWalker} module configuration.</a>
-<span class="sourceLineNo">474</span><a id="line.474">     */</a>
-<span class="sourceLineNo">475</span><a id="line.475">    private static Configuration getTreeWalkerConfig(Configuration config) {</a>
-<span class="sourceLineNo">476</span><a id="line.476">        Configuration result = null;</a>
-<span class="sourceLineNo">477</span><a id="line.477"></a>
-<span class="sourceLineNo">478</span><a id="line.478">        final Configuration[] children = config.getChildren();</a>
-<span class="sourceLineNo">479</span><a id="line.479">        for (Configuration child : children) {</a>
-<span class="sourceLineNo">480</span><a id="line.480">            if ("TreeWalker".equals(child.getName())) {</a>
-<span class="sourceLineNo">481</span><a id="line.481">                result = child;</a>
-<span class="sourceLineNo">482</span><a id="line.482">                break;</a>
-<span class="sourceLineNo">483</span><a id="line.483">            }</a>
-<span class="sourceLineNo">484</span><a id="line.484">        }</a>
-<span class="sourceLineNo">485</span><a id="line.485">        return result;</a>
-<span class="sourceLineNo">486</span><a id="line.486">    }</a>
-<span class="sourceLineNo">487</span><a id="line.487"></a>
-<span class="sourceLineNo">488</span><a id="line.488">    /**</a>
-<span class="sourceLineNo">489</span><a id="line.489">     * This method creates in AuditListener an open stream for validation data, it must be</a>
-<span class="sourceLineNo">490</span><a id="line.490">     * closed by {@link RootModule} (default implementation is {@link Checker}) by calling</a>
-<span class="sourceLineNo">491</span><a id="line.491">     * {@link AuditListener#auditFinished(AuditEvent)}.</a>
-<span class="sourceLineNo">492</span><a id="line.492">     *</a>
-<span class="sourceLineNo">493</span><a id="line.493">     * @param format format of the audit listener</a>
-<span class="sourceLineNo">494</span><a id="line.494">     * @param outputLocation the location of output</a>
-<span class="sourceLineNo">495</span><a id="line.495">     * @return a fresh new {@code AuditListener}</a>
-<span class="sourceLineNo">496</span><a id="line.496">     * @exception IOException when provided output location is not found</a>
-<span class="sourceLineNo">497</span><a id="line.497">     */</a>
-<span class="sourceLineNo">498</span><a id="line.498">    private static AuditListener createListener(OutputFormat format, Path outputLocation)</a>
-<span class="sourceLineNo">499</span><a id="line.499">            throws IOException {</a>
-<span class="sourceLineNo">500</span><a id="line.500">        final OutputStream out = getOutputStream(outputLocation);</a>
-<span class="sourceLineNo">501</span><a id="line.501">        final AutomaticBean.OutputStreamOptions closeOutputStreamOption =</a>
-<span class="sourceLineNo">502</span><a id="line.502">                getOutputStreamOptions(outputLocation);</a>
-<span class="sourceLineNo">503</span><a id="line.503">        return format.createListener(out, closeOutputStreamOption);</a>
-<span class="sourceLineNo">504</span><a id="line.504">    }</a>
-<span class="sourceLineNo">505</span><a id="line.505"></a>
-<span class="sourceLineNo">506</span><a id="line.506">    /**</a>
-<span class="sourceLineNo">507</span><a id="line.507">     * Create output stream or return System.out</a>
-<span class="sourceLineNo">508</span><a id="line.508">     *</a>
-<span class="sourceLineNo">509</span><a id="line.509">     * @param outputPath output location</a>
-<span class="sourceLineNo">510</span><a id="line.510">     * @return output stream</a>
-<span class="sourceLineNo">511</span><a id="line.511">     * @throws IOException might happen</a>
-<span class="sourceLineNo">512</span><a id="line.512">     * @noinspection UseOfSystemOutOrSystemErr</a>
-<span class="sourceLineNo">513</span><a id="line.513">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
-<span class="sourceLineNo">514</span><a id="line.514">     *      usage of System.out and System.err</a>
-<span class="sourceLineNo">515</span><a id="line.515">     */</a>
-<span class="sourceLineNo">516</span><a id="line.516">    @SuppressWarnings("resource")</a>
-<span class="sourceLineNo">517</span><a id="line.517">    private static OutputStream getOutputStream(Path outputPath) throws IOException {</a>
-<span class="sourceLineNo">518</span><a id="line.518">        final OutputStream result;</a>
-<span class="sourceLineNo">519</span><a id="line.519">        if (outputPath == null) {</a>
-<span class="sourceLineNo">520</span><a id="line.520">            result = System.out;</a>
-<span class="sourceLineNo">521</span><a id="line.521">        }</a>
-<span class="sourceLineNo">522</span><a id="line.522">        else {</a>
-<span class="sourceLineNo">523</span><a id="line.523">            result = Files.newOutputStream(outputPath);</a>
-<span class="sourceLineNo">524</span><a id="line.524">        }</a>
-<span class="sourceLineNo">525</span><a id="line.525">        return result;</a>
-<span class="sourceLineNo">526</span><a id="line.526">    }</a>
-<span class="sourceLineNo">527</span><a id="line.527"></a>
-<span class="sourceLineNo">528</span><a id="line.528">    /**</a>
-<span class="sourceLineNo">529</span><a id="line.529">     * Create {@link AutomaticBean.OutputStreamOptions} for the given location.</a>
-<span class="sourceLineNo">530</span><a id="line.530">     *</a>
-<span class="sourceLineNo">531</span><a id="line.531">     * @param outputPath output location</a>
-<span class="sourceLineNo">532</span><a id="line.532">     * @return output stream options</a>
-<span class="sourceLineNo">533</span><a id="line.533">     */</a>
-<span class="sourceLineNo">534</span><a id="line.534">    private static AutomaticBean.OutputStreamOptions getOutputStreamOptions(Path outputPath) {</a>
-<span class="sourceLineNo">535</span><a id="line.535">        final AutomaticBean.OutputStreamOptions result;</a>
-<span class="sourceLineNo">536</span><a id="line.536">        if (outputPath == null) {</a>
-<span class="sourceLineNo">537</span><a id="line.537">            result = AutomaticBean.OutputStreamOptions.NONE;</a>
-<span class="sourceLineNo">538</span><a id="line.538">        }</a>
-<span class="sourceLineNo">539</span><a id="line.539">        else {</a>
-<span class="sourceLineNo">540</span><a id="line.540">            result = AutomaticBean.OutputStreamOptions.CLOSE;</a>
-<span class="sourceLineNo">541</span><a id="line.541">        }</a>
-<span class="sourceLineNo">542</span><a id="line.542">        return result;</a>
-<span class="sourceLineNo">543</span><a id="line.543">    }</a>
-<span class="sourceLineNo">544</span><a id="line.544"></a>
-<span class="sourceLineNo">545</span><a id="line.545">    /**</a>
-<span class="sourceLineNo">546</span><a id="line.546">     * Enumeration over the possible output formats.</a>
-<span class="sourceLineNo">547</span><a id="line.547">     *</a>
-<span class="sourceLineNo">548</span><a id="line.548">     * @noinspection PackageVisibleInnerClass</a>
-<span class="sourceLineNo">549</span><a id="line.549">     * @noinspectionreason PackageVisibleInnerClass - we keep this enum package visible for tests</a>
-<span class="sourceLineNo">550</span><a id="line.550">     */</a>
-<span class="sourceLineNo">551</span><a id="line.551">    enum OutputFormat {</a>
-<span class="sourceLineNo">552</span><a id="line.552">        /** XML output format. */</a>
-<span class="sourceLineNo">553</span><a id="line.553">        XML,</a>
-<span class="sourceLineNo">554</span><a id="line.554">        /** SARIF output format. */</a>
-<span class="sourceLineNo">555</span><a id="line.555">        SARIF,</a>
-<span class="sourceLineNo">556</span><a id="line.556">        /** Plain output format. */</a>
-<span class="sourceLineNo">557</span><a id="line.557">        PLAIN;</a>
-<span class="sourceLineNo">558</span><a id="line.558"></a>
-<span class="sourceLineNo">559</span><a id="line.559">        /**</a>
-<span class="sourceLineNo">560</span><a id="line.560">         * Returns a new AuditListener for this OutputFormat.</a>
-<span class="sourceLineNo">561</span><a id="line.561">         *</a>
-<span class="sourceLineNo">562</span><a id="line.562">         * @param out the output stream</a>
-<span class="sourceLineNo">563</span><a id="line.563">         * @param options the output stream options</a>
-<span class="sourceLineNo">564</span><a id="line.564">         * @return a new AuditListener for this OutputFormat</a>
-<span class="sourceLineNo">565</span><a id="line.565">         * @throws IOException if there is any IO exception during logger initialization</a>
-<span class="sourceLineNo">566</span><a id="line.566">         */</a>
-<span class="sourceLineNo">567</span><a id="line.567">        public AuditListener createListener(</a>
-<span class="sourceLineNo">568</span><a id="line.568">            OutputStream out,</a>
-<span class="sourceLineNo">569</span><a id="line.569">            AutomaticBean.OutputStreamOptions options) throws IOException {</a>
-<span class="sourceLineNo">570</span><a id="line.570">            final AuditListener result;</a>
-<span class="sourceLineNo">571</span><a id="line.571">            if (this == XML) {</a>
-<span class="sourceLineNo">572</span><a id="line.572">                result = new XMLLogger(out, options);</a>
-<span class="sourceLineNo">573</span><a id="line.573">            }</a>
-<span class="sourceLineNo">574</span><a id="line.574">            else if (this == SARIF) {</a>
-<span class="sourceLineNo">575</span><a id="line.575">                result = new SarifLogger(out, options);</a>
-<span class="sourceLineNo">576</span><a id="line.576">            }</a>
-<span class="sourceLineNo">577</span><a id="line.577">            else {</a>
-<span class="sourceLineNo">578</span><a id="line.578">                result = new DefaultLogger(out, options);</a>
-<span class="sourceLineNo">579</span><a id="line.579">            }</a>
-<span class="sourceLineNo">580</span><a id="line.580">            return result;</a>
-<span class="sourceLineNo">581</span><a id="line.581">        }</a>
-<span class="sourceLineNo">582</span><a id="line.582"></a>
-<span class="sourceLineNo">583</span><a id="line.583">        /**</a>
-<span class="sourceLineNo">584</span><a id="line.584">         * Returns the name in lowercase.</a>
-<span class="sourceLineNo">585</span><a id="line.585">         *</a>
-<span class="sourceLineNo">586</span><a id="line.586">         * @return the enum name in lowercase</a>
-<span class="sourceLineNo">587</span><a id="line.587">         */</a>
-<span class="sourceLineNo">588</span><a id="line.588">        @Override</a>
-<span class="sourceLineNo">589</span><a id="line.589">        public String toString() {</a>
-<span class="sourceLineNo">590</span><a id="line.590">            return name().toLowerCase(Locale.ROOT);</a>
-<span class="sourceLineNo">591</span><a id="line.591">        }</a>
-<span class="sourceLineNo">592</span><a id="line.592">    }</a>
-<span class="sourceLineNo">593</span><a id="line.593"></a>
-<span class="sourceLineNo">594</span><a id="line.594">    /** Log Filter used in debug mode. */</a>
-<span class="sourceLineNo">595</span><a id="line.595">    private static final class OnlyCheckstyleLoggersFilter implements Filter {</a>
-<span class="sourceLineNo">596</span><a id="line.596">        /** Name of the package used to filter on. */</a>
-<span class="sourceLineNo">597</span><a id="line.597">        private final String packageName = Main.class.getPackage().getName();</a>
-<span class="sourceLineNo">598</span><a id="line.598"></a>
-<span class="sourceLineNo">599</span><a id="line.599">        /**</a>
-<span class="sourceLineNo">600</span><a id="line.600">         * Returns whether the specified logRecord should be logged.</a>
-<span class="sourceLineNo">601</span><a id="line.601">         *</a>
-<span class="sourceLineNo">602</span><a id="line.602">         * @param logRecord the logRecord to log</a>
-<span class="sourceLineNo">603</span><a id="line.603">         * @return true if the logger name is in the package of this class or a subpackage</a>
-<span class="sourceLineNo">604</span><a id="line.604">         */</a>
-<span class="sourceLineNo">605</span><a id="line.605">        @Override</a>
-<span class="sourceLineNo">606</span><a id="line.606">        public boolean isLoggable(LogRecord logRecord) {</a>
-<span class="sourceLineNo">607</span><a id="line.607">            return logRecord.getLoggerName().startsWith(packageName);</a>
-<span class="sourceLineNo">608</span><a id="line.608">        }</a>
-<span class="sourceLineNo">609</span><a id="line.609">    }</a>
-<span class="sourceLineNo">610</span><a id="line.610"></a>
-<span class="sourceLineNo">611</span><a id="line.611">    /**</a>
-<span class="sourceLineNo">612</span><a id="line.612">     * Command line options.</a>
-<span class="sourceLineNo">613</span><a id="line.613">     *</a>
-<span class="sourceLineNo">614</span><a id="line.614">     * @noinspection unused, FieldMayBeFinal, CanBeFinal,</a>
-<span class="sourceLineNo">615</span><a id="line.615">     *              MismatchedQueryAndUpdateOfCollection, LocalCanBeFinal</a>
-<span class="sourceLineNo">616</span><a id="line.616">     * @noinspectionreason FieldMayBeFinal - usage of picocli requires</a>
-<span class="sourceLineNo">617</span><a id="line.617">     *      suppression of above inspections</a>
-<span class="sourceLineNo">618</span><a id="line.618">     * @noinspectionreason CanBeFinal - usage of picocli requires</a>
-<span class="sourceLineNo">619</span><a id="line.619">     *      suppression of above inspections</a>
-<span class="sourceLineNo">620</span><a id="line.620">     * @noinspectionreason MismatchedQueryAndUpdateOfCollection - list of files is gathered and used</a>
-<span class="sourceLineNo">621</span><a id="line.621">     *      via reflection by picocli library</a>
-<span class="sourceLineNo">622</span><a id="line.622">     * @noinspectionreason LocalCanBeFinal - usage of picocli requires</a>
-<span class="sourceLineNo">623</span><a id="line.623">     *      suppression of above inspections</a>
-<span class="sourceLineNo">624</span><a id="line.624">     */</a>
-<span class="sourceLineNo">625</span><a id="line.625">    @Command(name = "checkstyle", description = "Checkstyle verifies that the specified "</a>
-<span class="sourceLineNo">626</span><a id="line.626">            + "source code files adhere to the specified rules. By default, violations are "</a>
-<span class="sourceLineNo">627</span><a id="line.627">            + "reported to standard out in plain format. Checkstyle requires a configuration "</a>
-<span class="sourceLineNo">628</span><a id="line.628">            + "XML file that configures the checks to apply.",</a>
-<span class="sourceLineNo">629</span><a id="line.629">            mixinStandardHelpOptions = true)</a>
-<span class="sourceLineNo">630</span><a id="line.630">    private static class CliOptions {</a>
-<span class="sourceLineNo">631</span><a id="line.631"></a>
-<span class="sourceLineNo">632</span><a id="line.632">        /** Width of CLI help option. */</a>
-<span class="sourceLineNo">633</span><a id="line.633">        private static final int HELP_WIDTH = 100;</a>
-<span class="sourceLineNo">634</span><a id="line.634"></a>
-<span class="sourceLineNo">635</span><a id="line.635">        /** The default number of threads to use for checker and the tree walker. */</a>
-<span class="sourceLineNo">636</span><a id="line.636">        private static final int DEFAULT_THREAD_COUNT = 1;</a>
-<span class="sourceLineNo">637</span><a id="line.637"></a>
-<span class="sourceLineNo">638</span><a id="line.638">        /** Name for the moduleConfig attribute 'tabWidth'. */</a>
-<span class="sourceLineNo">639</span><a id="line.639">        private static final String ATTRIB_TAB_WIDTH_NAME = "tabWidth";</a>
-<span class="sourceLineNo">640</span><a id="line.640"></a>
-<span class="sourceLineNo">641</span><a id="line.641">        /** Default output format. */</a>
-<span class="sourceLineNo">642</span><a id="line.642">        private static final OutputFormat DEFAULT_OUTPUT_FORMAT = OutputFormat.PLAIN;</a>
-<span class="sourceLineNo">643</span><a id="line.643"></a>
-<span class="sourceLineNo">644</span><a id="line.644">        /** Option name for output format. */</a>
-<span class="sourceLineNo">645</span><a id="line.645">        private static final String OUTPUT_FORMAT_OPTION = "-f";</a>
-<span class="sourceLineNo">646</span><a id="line.646"></a>
-<span class="sourceLineNo">647</span><a id="line.647">        /**</a>
-<span class="sourceLineNo">648</span><a id="line.648">         * The checker threads number.</a>
-<span class="sourceLineNo">649</span><a id="line.649">         * This option has been skipped for CLI options intentionally.</a>
-<span class="sourceLineNo">650</span><a id="line.650">         *</a>
-<span class="sourceLineNo">651</span><a id="line.651">         */</a>
-<span class="sourceLineNo">652</span><a id="line.652">        private static final int CHECKER_THREADS_NUMBER = DEFAULT_THREAD_COUNT;</a>
-<span class="sourceLineNo">653</span><a id="line.653"></a>
-<span class="sourceLineNo">654</span><a id="line.654">        /**</a>
-<span class="sourceLineNo">655</span><a id="line.655">         * The tree walker threads number.</a>
-<span class="sourceLineNo">656</span><a id="line.656">         *</a>
-<span class="sourceLineNo">657</span><a id="line.657">         */</a>
-<span class="sourceLineNo">658</span><a id="line.658">        private static final int TREE_WALKER_THREADS_NUMBER = DEFAULT_THREAD_COUNT;</a>
-<span class="sourceLineNo">659</span><a id="line.659"></a>
-<span class="sourceLineNo">660</span><a id="line.660">        /** List of file to validate. */</a>
-<span class="sourceLineNo">661</span><a id="line.661">        @Parameters(arity = "1..*", description = "One or more source files to verify")</a>
-<span class="sourceLineNo">662</span><a id="line.662">        private List&lt;File&gt; files;</a>
-<span class="sourceLineNo">663</span><a id="line.663"></a>
-<span class="sourceLineNo">664</span><a id="line.664">        /** Config file location. */</a>
-<span class="sourceLineNo">665</span><a id="line.665">        @Option(names = "-c", description = "Specifies the location of the file that defines"</a>
-<span class="sourceLineNo">666</span><a id="line.666">                + " the configuration modules. The location can either be a filesystem location"</a>
-<span class="sourceLineNo">667</span><a id="line.667">                + ", or a name passed to the ClassLoader.getResource() method.")</a>
-<span class="sourceLineNo">668</span><a id="line.668">        private String configurationFile;</a>
-<span class="sourceLineNo">669</span><a id="line.669"></a>
-<span class="sourceLineNo">670</span><a id="line.670">        /** Output file location. */</a>
-<span class="sourceLineNo">671</span><a id="line.671">        @Option(names = "-o", description = "Sets the output file. Defaults to stdout.")</a>
-<span class="sourceLineNo">672</span><a id="line.672">        private Path outputPath;</a>
-<span class="sourceLineNo">673</span><a id="line.673"></a>
-<span class="sourceLineNo">674</span><a id="line.674">        /** Properties file location. */</a>
-<span class="sourceLineNo">675</span><a id="line.675">        @Option(names = "-p", description = "Sets the property files to load.")</a>
-<span class="sourceLineNo">676</span><a id="line.676">        private File propertiesFile;</a>
-<span class="sourceLineNo">677</span><a id="line.677"></a>
-<span class="sourceLineNo">678</span><a id="line.678">        /** LineNo and columnNo for the suppression. */</a>
-<span class="sourceLineNo">679</span><a id="line.679">        @Option(names = "-s",</a>
-<span class="sourceLineNo">680</span><a id="line.680">                description = "Prints xpath suppressions at the file's line and column position. "</a>
-<span class="sourceLineNo">681</span><a id="line.681">                        + "Argument is the line and column number (separated by a : ) in the file "</a>
-<span class="sourceLineNo">682</span><a id="line.682">                        + "that the suppression should be generated for. The option cannot be used "</a>
-<span class="sourceLineNo">683</span><a id="line.683">                        + "with other options and requires exactly one file to run on to be "</a>
-<span class="sourceLineNo">684</span><a id="line.684">                        + "specified. ATTENTION: generated result will have few queries, joined "</a>
-<span class="sourceLineNo">685</span><a id="line.685">                        + "by pipe(|). Together they will match all AST nodes on "</a>
-<span class="sourceLineNo">686</span><a id="line.686">                        + "specified line and column. You need to choose only one and recheck "</a>
-<span class="sourceLineNo">687</span><a id="line.687">                        + "that it works. Usage of all of them is also ok, but might result in "</a>
-<span class="sourceLineNo">688</span><a id="line.688">                        + "undesirable matching and suppress other issues.")</a>
-<span class="sourceLineNo">689</span><a id="line.689">        private String suppressionLineColumnNumber;</a>
-<span class="sourceLineNo">690</span><a id="line.690"></a>
-<span class="sourceLineNo">691</span><a id="line.691">        /**</a>
-<span class="sourceLineNo">692</span><a id="line.692">         * Tab character length.</a>
-<span class="sourceLineNo">693</span><a id="line.693">         *</a>
-<span class="sourceLineNo">694</span><a id="line.694">         * @noinspection CanBeFinal</a>
-<span class="sourceLineNo">695</span><a id="line.695">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
-<span class="sourceLineNo">696</span><a id="line.696">         *      reflection to manage such fields</a>
-<span class="sourceLineNo">697</span><a id="line.697">         */</a>
-<span class="sourceLineNo">698</span><a id="line.698">        @Option(names = {"-w", "--tabWidth"},</a>
-<span class="sourceLineNo">699</span><a id="line.699">                description = "Sets the length of the tab character. "</a>
-<span class="sourceLineNo">700</span><a id="line.700">                + "Used only with -s option. Default value is ${DEFAULT-VALUE}.")</a>
-<span class="sourceLineNo">701</span><a id="line.701">        private int tabWidth = CommonUtil.DEFAULT_TAB_WIDTH;</a>
-<span class="sourceLineNo">702</span><a id="line.702"></a>
-<span class="sourceLineNo">703</span><a id="line.703">        /** Switch whether to generate suppressions file or not. */</a>
-<span class="sourceLineNo">704</span><a id="line.704">        @Option(names = {"-g", "--generate-xpath-suppression"},</a>
-<span class="sourceLineNo">705</span><a id="line.705">                description = "Generates to output a suppression xml to use to suppress all "</a>
-<span class="sourceLineNo">706</span><a id="line.706">                        + "violations from user's config. Instead of printing every violation, "</a>
-<span class="sourceLineNo">707</span><a id="line.707">                        + "all violations will be catched and single suppressions xml file will "</a>
-<span class="sourceLineNo">708</span><a id="line.708">                        + "be printed out. Used only with -c option. Output "</a>
-<span class="sourceLineNo">709</span><a id="line.709">                        + "location can be specified with -o option.")</a>
-<span class="sourceLineNo">710</span><a id="line.710">        private boolean generateXpathSuppressionsFile;</a>
-<span class="sourceLineNo">711</span><a id="line.711"></a>
-<span class="sourceLineNo">712</span><a id="line.712">        /**</a>
-<span class="sourceLineNo">713</span><a id="line.713">         * Output format.</a>
-<span class="sourceLineNo">714</span><a id="line.714">         *</a>
-<span class="sourceLineNo">715</span><a id="line.715">         * @noinspection CanBeFinal</a>
-<span class="sourceLineNo">716</span><a id="line.716">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
-<span class="sourceLineNo">717</span><a id="line.717">         *      reflection to manage such fields</a>
-<span class="sourceLineNo">718</span><a id="line.718">         */</a>
-<span class="sourceLineNo">719</span><a id="line.719">        @Option(names = "-f",</a>
-<span class="sourceLineNo">720</span><a id="line.720">                description = "Specifies the output format. Valid values: "</a>
-<span class="sourceLineNo">721</span><a id="line.721">                + "${COMPLETION-CANDIDATES} for XMLLogger, SarifLogger, "</a>
-<span class="sourceLineNo">722</span><a id="line.722">                + "and DefaultLogger respectively. Defaults to ${DEFAULT-VALUE}.")</a>
-<span class="sourceLineNo">723</span><a id="line.723">        private OutputFormat format = DEFAULT_OUTPUT_FORMAT;</a>
-<span class="sourceLineNo">724</span><a id="line.724"></a>
-<span class="sourceLineNo">725</span><a id="line.725">        /** Option that controls whether to print the AST of the file. */</a>
-<span class="sourceLineNo">726</span><a id="line.726">        @Option(names = {"-t", "--tree"},</a>
-<span class="sourceLineNo">727</span><a id="line.727">                description = "Prints Abstract Syntax Tree(AST) of the checked file. The option "</a>
-<span class="sourceLineNo">728</span><a id="line.728">                        + "cannot be used other options and requires exactly one file to run on "</a>
-<span class="sourceLineNo">729</span><a id="line.729">                        + "to be specified.")</a>
-<span class="sourceLineNo">730</span><a id="line.730">        private boolean printAst;</a>
-<span class="sourceLineNo">731</span><a id="line.731"></a>
-<span class="sourceLineNo">732</span><a id="line.732">        /** Option that controls whether to print the AST of the file including comments. */</a>
-<span class="sourceLineNo">733</span><a id="line.733">        @Option(names = {"-T", "--treeWithComments"},</a>
-<span class="sourceLineNo">734</span><a id="line.734">                description = "Prints Abstract Syntax Tree(AST) with comment nodes "</a>
-<span class="sourceLineNo">735</span><a id="line.735">                        + "of the checked file. The option cannot be used with other options "</a>
-<span class="sourceLineNo">736</span><a id="line.736">                        + "and requires exactly one file to run on to be specified.")</a>
-<span class="sourceLineNo">737</span><a id="line.737">        private boolean printAstWithComments;</a>
-<span class="sourceLineNo">738</span><a id="line.738"></a>
-<span class="sourceLineNo">739</span><a id="line.739">        /** Option that controls whether to print the parse tree of the javadoc comment. */</a>
-<span class="sourceLineNo">740</span><a id="line.740">        @Option(names = {"-j", "--javadocTree"},</a>
-<span class="sourceLineNo">741</span><a id="line.741">                description = "Prints Parse Tree of the Javadoc comment. "</a>
-<span class="sourceLineNo">742</span><a id="line.742">                        + "The file have to contain only Javadoc comment content without "</a>
-<span class="sourceLineNo">743</span><a id="line.743">                        + "including '/**' and '*/' at the beginning and at the end respectively. "</a>
-<span class="sourceLineNo">744</span><a id="line.744">                        + "The option cannot be used other options and requires exactly one file "</a>
-<span class="sourceLineNo">745</span><a id="line.745">                        + "to run on to be specified.")</a>
-<span class="sourceLineNo">746</span><a id="line.746">        private boolean printJavadocTree;</a>
-<span class="sourceLineNo">747</span><a id="line.747"></a>
-<span class="sourceLineNo">748</span><a id="line.748">        /** Option that controls whether to print the full AST of the file. */</a>
-<span class="sourceLineNo">749</span><a id="line.749">        @Option(names = {"-J", "--treeWithJavadoc"},</a>
-<span class="sourceLineNo">750</span><a id="line.750">                description = "Prints Abstract Syntax Tree(AST) with Javadoc nodes "</a>
-<span class="sourceLineNo">751</span><a id="line.751">                        + "and comment nodes of the checked file. Attention that line number and "</a>
-<span class="sourceLineNo">752</span><a id="line.752">                        + "columns will not be the same as it is a file due to the fact that each "</a>
-<span class="sourceLineNo">753</span><a id="line.753">                        + "javadoc comment is parsed separately from java file. The option cannot "</a>
-<span class="sourceLineNo">754</span><a id="line.754">                        + "be used with other options and requires exactly one file to run on to "</a>
-<span class="sourceLineNo">755</span><a id="line.755">                        + "be specified.")</a>
-<span class="sourceLineNo">756</span><a id="line.756">        private boolean printTreeWithJavadoc;</a>
-<span class="sourceLineNo">757</span><a id="line.757"></a>
-<span class="sourceLineNo">758</span><a id="line.758">        /** Option that controls whether to print debug info. */</a>
-<span class="sourceLineNo">759</span><a id="line.759">        @Option(names = {"-d", "--debug"},</a>
-<span class="sourceLineNo">760</span><a id="line.760">                description = "Prints all debug logging of CheckStyle utility.")</a>
-<span class="sourceLineNo">761</span><a id="line.761">        private boolean debug;</a>
-<span class="sourceLineNo">762</span><a id="line.762"></a>
-<span class="sourceLineNo">763</span><a id="line.763">        /**</a>
-<span class="sourceLineNo">764</span><a id="line.764">         * Option that allows users to specify a list of paths to exclude.</a>
-<span class="sourceLineNo">765</span><a id="line.765">         *</a>
-<span class="sourceLineNo">766</span><a id="line.766">         * @noinspection CanBeFinal</a>
-<span class="sourceLineNo">767</span><a id="line.767">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
-<span class="sourceLineNo">768</span><a id="line.768">         *      reflection to manage such fields</a>
-<span class="sourceLineNo">769</span><a id="line.769">         */</a>
-<span class="sourceLineNo">770</span><a id="line.770">        @Option(names = {"-e", "--exclude"},</a>
-<span class="sourceLineNo">771</span><a id="line.771">                description = "Directory/file to exclude from CheckStyle. The path can be the "</a>
-<span class="sourceLineNo">772</span><a id="line.772">                        + "full, absolute path, or relative to the current path. Multiple "</a>
-<span class="sourceLineNo">773</span><a id="line.773">                        + "excludes are allowed.")</a>
-<span class="sourceLineNo">774</span><a id="line.774">        private List&lt;File&gt; exclude = new ArrayList&lt;&gt;();</a>
-<span class="sourceLineNo">775</span><a id="line.775"></a>
-<span class="sourceLineNo">776</span><a id="line.776">        /**</a>
-<span class="sourceLineNo">777</span><a id="line.777">         * Option that allows users to specify a regex of paths to exclude.</a>
-<span class="sourceLineNo">778</span><a id="line.778">         *</a>
-<span class="sourceLineNo">779</span><a id="line.779">         * @noinspection CanBeFinal</a>
-<span class="sourceLineNo">780</span><a id="line.780">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
-<span class="sourceLineNo">781</span><a id="line.781">         *      reflection to manage such fields</a>
-<span class="sourceLineNo">782</span><a id="line.782">         */</a>
-<span class="sourceLineNo">783</span><a id="line.783">        @Option(names = {"-x", "--exclude-regexp"},</a>
-<span class="sourceLineNo">784</span><a id="line.784">                description = "Directory/file pattern to exclude from CheckStyle. Multiple "</a>
-<span class="sourceLineNo">785</span><a id="line.785">                        + "excludes are allowed.")</a>
-<span class="sourceLineNo">786</span><a id="line.786">        private List&lt;Pattern&gt; excludeRegex = new ArrayList&lt;&gt;();</a>
-<span class="sourceLineNo">787</span><a id="line.787"></a>
-<span class="sourceLineNo">788</span><a id="line.788">        /** Switch whether to execute ignored modules or not. */</a>
-<span class="sourceLineNo">789</span><a id="line.789">        @Option(names = {"-E", "--executeIgnoredModules"},</a>
-<span class="sourceLineNo">790</span><a id="line.790">                description = "Allows ignored modules to be run.")</a>
-<span class="sourceLineNo">791</span><a id="line.791">        private boolean executeIgnoredModules;</a>
-<span class="sourceLineNo">792</span><a id="line.792"></a>
-<span class="sourceLineNo">793</span><a id="line.793">        /** Show AST branches that match xpath. */</a>
-<span class="sourceLineNo">794</span><a id="line.794">        @Option(names = {"-b", "--branch-matching-xpath"},</a>
-<span class="sourceLineNo">795</span><a id="line.795">            description = "Shows Abstract Syntax Tree(AST) branches that match given XPath query.")</a>
-<span class="sourceLineNo">796</span><a id="line.796">        private String xpath;</a>
-<span class="sourceLineNo">797</span><a id="line.797"></a>
-<span class="sourceLineNo">798</span><a id="line.798">        /**</a>
-<span class="sourceLineNo">799</span><a id="line.799">         * Gets the list of exclusions provided through the command line arguments.</a>
-<span class="sourceLineNo">800</span><a id="line.800">         *</a>
-<span class="sourceLineNo">801</span><a id="line.801">         * @return List of exclusion patterns.</a>
-<span class="sourceLineNo">802</span><a id="line.802">         */</a>
-<span class="sourceLineNo">803</span><a id="line.803">        private List&lt;Pattern&gt; getExclusions() {</a>
-<span class="sourceLineNo">804</span><a id="line.804">            final List&lt;Pattern&gt; result = exclude.stream()</a>
-<span class="sourceLineNo">805</span><a id="line.805">                    .map(File::getAbsolutePath)</a>
-<span class="sourceLineNo">806</span><a id="line.806">                    .map(Pattern::quote)</a>
-<span class="sourceLineNo">807</span><a id="line.807">                    .map(pattern -&gt; Pattern.compile("^" + pattern + "$"))</a>
-<span class="sourceLineNo">808</span><a id="line.808">                    .collect(Collectors.toCollection(ArrayList::new));</a>
-<span class="sourceLineNo">809</span><a id="line.809">            result.addAll(excludeRegex);</a>
-<span class="sourceLineNo">810</span><a id="line.810">            return result;</a>
-<span class="sourceLineNo">811</span><a id="line.811">        }</a>
-<span class="sourceLineNo">812</span><a id="line.812"></a>
-<span class="sourceLineNo">813</span><a id="line.813">        /**</a>
-<span class="sourceLineNo">814</span><a id="line.814">         * Validates the user-specified command line options.</a>
-<span class="sourceLineNo">815</span><a id="line.815">         *</a>
-<span class="sourceLineNo">816</span><a id="line.816">         * @param parseResult used to verify if the format option was specified on the command line</a>
-<span class="sourceLineNo">817</span><a id="line.817">         * @param filesToProcess the list of files whose style to check</a>
-<span class="sourceLineNo">818</span><a id="line.818">         * @return list of violations</a>
-<span class="sourceLineNo">819</span><a id="line.819">         */</a>
-<span class="sourceLineNo">820</span><a id="line.820">        // -@cs[CyclomaticComplexity] Breaking apart will damage encapsulation</a>
-<span class="sourceLineNo">821</span><a id="line.821">        private List&lt;String&gt; validateCli(ParseResult parseResult, List&lt;File&gt; filesToProcess) {</a>
-<span class="sourceLineNo">822</span><a id="line.822">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</a>
-<span class="sourceLineNo">823</span><a id="line.823">            final boolean hasConfigurationFile = configurationFile != null;</a>
-<span class="sourceLineNo">824</span><a id="line.824">            final boolean hasSuppressionLineColumnNumber = suppressionLineColumnNumber != null;</a>
-<span class="sourceLineNo">825</span><a id="line.825"></a>
-<span class="sourceLineNo">826</span><a id="line.826">            if (filesToProcess.isEmpty()) {</a>
-<span class="sourceLineNo">827</span><a id="line.827">                result.add("Files to process must be specified, found 0.");</a>
-<span class="sourceLineNo">828</span><a id="line.828">            }</a>
-<span class="sourceLineNo">829</span><a id="line.829">            // ensure there is no conflicting options</a>
-<span class="sourceLineNo">830</span><a id="line.830">            else if (printAst || printAstWithComments || printJavadocTree || printTreeWithJavadoc</a>
-<span class="sourceLineNo">831</span><a id="line.831">                || xpath != null) {</a>
-<span class="sourceLineNo">832</span><a id="line.832">                if (suppressionLineColumnNumber != null || configurationFile != null</a>
-<span class="sourceLineNo">833</span><a id="line.833">                        || propertiesFile != null || outputPath != null</a>
-<span class="sourceLineNo">834</span><a id="line.834">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</a>
-<span class="sourceLineNo">835</span><a id="line.835">                    result.add("Option '-t' cannot be used with other options.");</a>
-<span class="sourceLineNo">836</span><a id="line.836">                }</a>
-<span class="sourceLineNo">837</span><a id="line.837">                else if (filesToProcess.size() &gt; 1) {</a>
-<span class="sourceLineNo">838</span><a id="line.838">                    result.add("Printing AST is allowed for only one file.");</a>
-<span class="sourceLineNo">839</span><a id="line.839">                }</a>
-<span class="sourceLineNo">840</span><a id="line.840">            }</a>
-<span class="sourceLineNo">841</span><a id="line.841">            else if (hasSuppressionLineColumnNumber) {</a>
-<span class="sourceLineNo">842</span><a id="line.842">                if (configurationFile != null || propertiesFile != null</a>
-<span class="sourceLineNo">843</span><a id="line.843">                        || outputPath != null</a>
-<span class="sourceLineNo">844</span><a id="line.844">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</a>
-<span class="sourceLineNo">845</span><a id="line.845">                    result.add("Option '-s' cannot be used with other options.");</a>
-<span class="sourceLineNo">846</span><a id="line.846">                }</a>
-<span class="sourceLineNo">847</span><a id="line.847">                else if (filesToProcess.size() &gt; 1) {</a>
-<span class="sourceLineNo">848</span><a id="line.848">                    result.add("Printing xpath suppressions is allowed for only one file.");</a>
-<span class="sourceLineNo">849</span><a id="line.849">                }</a>
-<span class="sourceLineNo">850</span><a id="line.850">            }</a>
-<span class="sourceLineNo">851</span><a id="line.851">            else if (hasConfigurationFile) {</a>
-<span class="sourceLineNo">852</span><a id="line.852">                try {</a>
-<span class="sourceLineNo">853</span><a id="line.853">                    // test location only</a>
-<span class="sourceLineNo">854</span><a id="line.854">                    CommonUtil.getUriByFilename(configurationFile);</a>
-<span class="sourceLineNo">855</span><a id="line.855">                }</a>
-<span class="sourceLineNo">856</span><a id="line.856">                catch (CheckstyleException ignored) {</a>
-<span class="sourceLineNo">857</span><a id="line.857">                    final String msg = "Could not find config XML file '%s'.";</a>
-<span class="sourceLineNo">858</span><a id="line.858">                    result.add(String.format(Locale.ROOT, msg, configurationFile));</a>
-<span class="sourceLineNo">859</span><a id="line.859">                }</a>
-<span class="sourceLineNo">860</span><a id="line.860">                result.addAll(validateOptionalCliParametersIfConfigDefined());</a>
-<span class="sourceLineNo">861</span><a id="line.861">            }</a>
-<span class="sourceLineNo">862</span><a id="line.862">            else {</a>
-<span class="sourceLineNo">863</span><a id="line.863">                result.add("Must specify a config XML file.");</a>
-<span class="sourceLineNo">864</span><a id="line.864">            }</a>
-<span class="sourceLineNo">865</span><a id="line.865"></a>
-<span class="sourceLineNo">866</span><a id="line.866">            return result;</a>
-<span class="sourceLineNo">867</span><a id="line.867">        }</a>
-<span class="sourceLineNo">868</span><a id="line.868"></a>
-<span class="sourceLineNo">869</span><a id="line.869">        /**</a>
-<span class="sourceLineNo">870</span><a id="line.870">         * Validates optional command line parameters that might be used with config file.</a>
-<span class="sourceLineNo">871</span><a id="line.871">         *</a>
-<span class="sourceLineNo">872</span><a id="line.872">         * @return list of violations</a>
-<span class="sourceLineNo">873</span><a id="line.873">         */</a>
-<span class="sourceLineNo">874</span><a id="line.874">        private List&lt;String&gt; validateOptionalCliParametersIfConfigDefined() {</a>
-<span class="sourceLineNo">875</span><a id="line.875">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</a>
-<span class="sourceLineNo">876</span><a id="line.876">            if (propertiesFile != null &amp;&amp; !propertiesFile.exists()) {</a>
-<span class="sourceLineNo">877</span><a id="line.877">                result.add(String.format(Locale.ROOT,</a>
-<span class="sourceLineNo">878</span><a id="line.878">                        "Could not find file '%s'.", propertiesFile));</a>
-<span class="sourceLineNo">879</span><a id="line.879">            }</a>
-<span class="sourceLineNo">880</span><a id="line.880">            return result;</a>
-<span class="sourceLineNo">881</span><a id="line.881">        }</a>
-<span class="sourceLineNo">882</span><a id="line.882">    }</a>
-<span class="sourceLineNo">883</span><a id="line.883"></a>
-<span class="sourceLineNo">884</span><a id="line.884">}</a>
+<span class="sourceLineNo">051</span><a id="line.51">import com.puppycrawl.tools.checkstyle.utils.ChainedPropertyUtil;</a>
+<span class="sourceLineNo">052</span><a id="line.52">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
+<span class="sourceLineNo">053</span><a id="line.53">import com.puppycrawl.tools.checkstyle.utils.XpathUtil;</a>
+<span class="sourceLineNo">054</span><a id="line.54">import picocli.CommandLine;</a>
+<span class="sourceLineNo">055</span><a id="line.55">import picocli.CommandLine.Command;</a>
+<span class="sourceLineNo">056</span><a id="line.56">import picocli.CommandLine.Option;</a>
+<span class="sourceLineNo">057</span><a id="line.57">import picocli.CommandLine.ParameterException;</a>
+<span class="sourceLineNo">058</span><a id="line.58">import picocli.CommandLine.Parameters;</a>
+<span class="sourceLineNo">059</span><a id="line.59">import picocli.CommandLine.ParseResult;</a>
+<span class="sourceLineNo">060</span><a id="line.60"></a>
+<span class="sourceLineNo">061</span><a id="line.61">/**</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * Wrapper command line program for the Checker.</a>
+<span class="sourceLineNo">063</span><a id="line.63"> */</a>
+<span class="sourceLineNo">064</span><a id="line.64">public final class Main {</a>
+<span class="sourceLineNo">065</span><a id="line.65"></a>
+<span class="sourceLineNo">066</span><a id="line.66">    /**</a>
+<span class="sourceLineNo">067</span><a id="line.67">     * A key pointing to the error counter</a>
+<span class="sourceLineNo">068</span><a id="line.68">     * message in the "messages.properties" file.</a>
+<span class="sourceLineNo">069</span><a id="line.69">     */</a>
+<span class="sourceLineNo">070</span><a id="line.70">    public static final String ERROR_COUNTER = "Main.errorCounter";</a>
+<span class="sourceLineNo">071</span><a id="line.71">    /**</a>
+<span class="sourceLineNo">072</span><a id="line.72">     * A key pointing to the load properties exception</a>
+<span class="sourceLineNo">073</span><a id="line.73">     * message in the "messages.properties" file.</a>
+<span class="sourceLineNo">074</span><a id="line.74">     */</a>
+<span class="sourceLineNo">075</span><a id="line.75">    public static final String LOAD_PROPERTIES_EXCEPTION = "Main.loadProperties";</a>
+<span class="sourceLineNo">076</span><a id="line.76">    /**</a>
+<span class="sourceLineNo">077</span><a id="line.77">     * A key pointing to the create listener exception</a>
+<span class="sourceLineNo">078</span><a id="line.78">     * message in the "messages.properties" file.</a>
+<span class="sourceLineNo">079</span><a id="line.79">     */</a>
+<span class="sourceLineNo">080</span><a id="line.80">    public static final String CREATE_LISTENER_EXCEPTION = "Main.createListener";</a>
+<span class="sourceLineNo">081</span><a id="line.81"></a>
+<span class="sourceLineNo">082</span><a id="line.82">    /** Logger for Main. */</a>
+<span class="sourceLineNo">083</span><a id="line.83">    private static final Log LOG = LogFactory.getLog(Main.class);</a>
+<span class="sourceLineNo">084</span><a id="line.84"></a>
+<span class="sourceLineNo">085</span><a id="line.85">    /** Exit code returned when user specified invalid command line arguments. */</a>
+<span class="sourceLineNo">086</span><a id="line.86">    private static final int EXIT_WITH_INVALID_USER_INPUT_CODE = -1;</a>
+<span class="sourceLineNo">087</span><a id="line.87"></a>
+<span class="sourceLineNo">088</span><a id="line.88">    /** Exit code returned when execution finishes with {@link CheckstyleException}. */</a>
+<span class="sourceLineNo">089</span><a id="line.89">    private static final int EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE = -2;</a>
+<span class="sourceLineNo">090</span><a id="line.90"></a>
+<span class="sourceLineNo">091</span><a id="line.91">    /**</a>
+<span class="sourceLineNo">092</span><a id="line.92">     * Client code should not create instances of this class, but use</a>
+<span class="sourceLineNo">093</span><a id="line.93">     * {@link #main(String[])} method instead.</a>
+<span class="sourceLineNo">094</span><a id="line.94">     */</a>
+<span class="sourceLineNo">095</span><a id="line.95">    private Main() {</a>
+<span class="sourceLineNo">096</span><a id="line.96">    }</a>
+<span class="sourceLineNo">097</span><a id="line.97"></a>
+<span class="sourceLineNo">098</span><a id="line.98">    /**</a>
+<span class="sourceLineNo">099</span><a id="line.99">     * Loops over the files specified checking them for errors. The exit code</a>
+<span class="sourceLineNo">100</span><a id="line.100">     * is the number of errors found in all the files.</a>
+<span class="sourceLineNo">101</span><a id="line.101">     *</a>
+<span class="sourceLineNo">102</span><a id="line.102">     * @param args the command line arguments.</a>
+<span class="sourceLineNo">103</span><a id="line.103">     * @throws IOException if there is a problem with files access</a>
+<span class="sourceLineNo">104</span><a id="line.104">     * @noinspection UseOfSystemOutOrSystemErr, CallToPrintStackTrace, CallToSystemExit</a>
+<span class="sourceLineNo">105</span><a id="line.105">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
+<span class="sourceLineNo">106</span><a id="line.106">     *      usage of System.out and System.err</a>
+<span class="sourceLineNo">107</span><a id="line.107">     * @noinspectionreason CallToPrintStackTrace - driver class for Checkstyle must be able to</a>
+<span class="sourceLineNo">108</span><a id="line.108">     *      show all details in case of failure</a>
+<span class="sourceLineNo">109</span><a id="line.109">     * @noinspectionreason CallToSystemExit - driver class must call exit</a>
+<span class="sourceLineNo">110</span><a id="line.110">     **/</a>
+<span class="sourceLineNo">111</span><a id="line.111">    public static void main(String... args) throws IOException {</a>
+<span class="sourceLineNo">112</span><a id="line.112"></a>
+<span class="sourceLineNo">113</span><a id="line.113">        final CliOptions cliOptions = new CliOptions();</a>
+<span class="sourceLineNo">114</span><a id="line.114">        final CommandLine commandLine = new CommandLine(cliOptions);</a>
+<span class="sourceLineNo">115</span><a id="line.115">        commandLine.setUsageHelpWidth(CliOptions.HELP_WIDTH);</a>
+<span class="sourceLineNo">116</span><a id="line.116">        commandLine.setCaseInsensitiveEnumValuesAllowed(true);</a>
+<span class="sourceLineNo">117</span><a id="line.117"></a>
+<span class="sourceLineNo">118</span><a id="line.118">        // provide proper exit code based on results.</a>
+<span class="sourceLineNo">119</span><a id="line.119">        int exitStatus = 0;</a>
+<span class="sourceLineNo">120</span><a id="line.120">        int errorCounter = 0;</a>
+<span class="sourceLineNo">121</span><a id="line.121">        try {</a>
+<span class="sourceLineNo">122</span><a id="line.122">            final ParseResult parseResult = commandLine.parseArgs(args);</a>
+<span class="sourceLineNo">123</span><a id="line.123">            if (parseResult.isVersionHelpRequested()) {</a>
+<span class="sourceLineNo">124</span><a id="line.124">                System.out.println(getVersionString());</a>
+<span class="sourceLineNo">125</span><a id="line.125">            }</a>
+<span class="sourceLineNo">126</span><a id="line.126">            else if (parseResult.isUsageHelpRequested()) {</a>
+<span class="sourceLineNo">127</span><a id="line.127">                commandLine.usage(System.out);</a>
+<span class="sourceLineNo">128</span><a id="line.128">            }</a>
+<span class="sourceLineNo">129</span><a id="line.129">            else {</a>
+<span class="sourceLineNo">130</span><a id="line.130">                exitStatus = execute(parseResult, cliOptions);</a>
+<span class="sourceLineNo">131</span><a id="line.131">                errorCounter = exitStatus;</a>
+<span class="sourceLineNo">132</span><a id="line.132">            }</a>
+<span class="sourceLineNo">133</span><a id="line.133">        }</a>
+<span class="sourceLineNo">134</span><a id="line.134">        catch (ParameterException ex) {</a>
+<span class="sourceLineNo">135</span><a id="line.135">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</a>
+<span class="sourceLineNo">136</span><a id="line.136">            System.err.println(ex.getMessage());</a>
+<span class="sourceLineNo">137</span><a id="line.137">            System.err.println("Usage: checkstyle [OPTIONS]... FILES...");</a>
+<span class="sourceLineNo">138</span><a id="line.138">            System.err.println("Try 'checkstyle --help' for more information.");</a>
+<span class="sourceLineNo">139</span><a id="line.139">        }</a>
+<span class="sourceLineNo">140</span><a id="line.140">        catch (CheckstyleException ex) {</a>
+<span class="sourceLineNo">141</span><a id="line.141">            exitStatus = EXIT_WITH_CHECKSTYLE_EXCEPTION_CODE;</a>
+<span class="sourceLineNo">142</span><a id="line.142">            errorCounter = 1;</a>
+<span class="sourceLineNo">143</span><a id="line.143">            ex.printStackTrace();</a>
+<span class="sourceLineNo">144</span><a id="line.144">        }</a>
+<span class="sourceLineNo">145</span><a id="line.145">        finally {</a>
+<span class="sourceLineNo">146</span><a id="line.146">            // return exit code base on validation of Checker</a>
+<span class="sourceLineNo">147</span><a id="line.147">            if (errorCounter &gt; 0) {</a>
+<span class="sourceLineNo">148</span><a id="line.148">                final LocalizedMessage errorCounterViolation = new LocalizedMessage(</a>
+<span class="sourceLineNo">149</span><a id="line.149">                        Definitions.CHECKSTYLE_BUNDLE, Main.class,</a>
+<span class="sourceLineNo">150</span><a id="line.150">                        ERROR_COUNTER, String.valueOf(errorCounter));</a>
+<span class="sourceLineNo">151</span><a id="line.151">                // print error count statistic to error output stream,</a>
+<span class="sourceLineNo">152</span><a id="line.152">                // output stream might be used by validation report content</a>
+<span class="sourceLineNo">153</span><a id="line.153">                System.err.println(errorCounterViolation.getMessage());</a>
+<span class="sourceLineNo">154</span><a id="line.154">            }</a>
+<span class="sourceLineNo">155</span><a id="line.155">        }</a>
+<span class="sourceLineNo">156</span><a id="line.156">        Runtime.getRuntime().exit(exitStatus);</a>
+<span class="sourceLineNo">157</span><a id="line.157">    }</a>
+<span class="sourceLineNo">158</span><a id="line.158"></a>
+<span class="sourceLineNo">159</span><a id="line.159">    /**</a>
+<span class="sourceLineNo">160</span><a id="line.160">     * Returns the version string printed when the user requests version help (--version or -V).</a>
+<span class="sourceLineNo">161</span><a id="line.161">     *</a>
+<span class="sourceLineNo">162</span><a id="line.162">     * @return a version string based on the package implementation version</a>
+<span class="sourceLineNo">163</span><a id="line.163">     */</a>
+<span class="sourceLineNo">164</span><a id="line.164">    private static String getVersionString() {</a>
+<span class="sourceLineNo">165</span><a id="line.165">        return "Checkstyle version: " + Main.class.getPackage().getImplementationVersion();</a>
+<span class="sourceLineNo">166</span><a id="line.166">    }</a>
+<span class="sourceLineNo">167</span><a id="line.167"></a>
+<span class="sourceLineNo">168</span><a id="line.168">    /**</a>
+<span class="sourceLineNo">169</span><a id="line.169">     * Validates the user input and returns {@value #EXIT_WITH_INVALID_USER_INPUT_CODE} if</a>
+<span class="sourceLineNo">170</span><a id="line.170">     * invalid, otherwise executes CheckStyle and returns the number of violations.</a>
+<span class="sourceLineNo">171</span><a id="line.171">     *</a>
+<span class="sourceLineNo">172</span><a id="line.172">     * @param parseResult generic access to options and parameters found on the command line</a>
+<span class="sourceLineNo">173</span><a id="line.173">     * @param options encapsulates options and parameters specified on the command line</a>
+<span class="sourceLineNo">174</span><a id="line.174">     * @return number of violations</a>
+<span class="sourceLineNo">175</span><a id="line.175">     * @throws IOException if a file could not be read.</a>
+<span class="sourceLineNo">176</span><a id="line.176">     * @throws CheckstyleException if something happens processing the files.</a>
+<span class="sourceLineNo">177</span><a id="line.177">     * @noinspection UseOfSystemOutOrSystemErr</a>
+<span class="sourceLineNo">178</span><a id="line.178">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
+<span class="sourceLineNo">179</span><a id="line.179">     *      usage of System.out and System.err</a>
+<span class="sourceLineNo">180</span><a id="line.180">     */</a>
+<span class="sourceLineNo">181</span><a id="line.181">    private static int execute(ParseResult parseResult, CliOptions options)</a>
+<span class="sourceLineNo">182</span><a id="line.182">            throws IOException, CheckstyleException {</a>
+<span class="sourceLineNo">183</span><a id="line.183"></a>
+<span class="sourceLineNo">184</span><a id="line.184">        final int exitStatus;</a>
+<span class="sourceLineNo">185</span><a id="line.185"></a>
+<span class="sourceLineNo">186</span><a id="line.186">        // return error if something is wrong in arguments</a>
+<span class="sourceLineNo">187</span><a id="line.187">        final List&lt;File&gt; filesToProcess = getFilesToProcess(options);</a>
+<span class="sourceLineNo">188</span><a id="line.188">        final List&lt;String&gt; messages = options.validateCli(parseResult, filesToProcess);</a>
+<span class="sourceLineNo">189</span><a id="line.189">        final boolean hasMessages = !messages.isEmpty();</a>
+<span class="sourceLineNo">190</span><a id="line.190">        if (hasMessages) {</a>
+<span class="sourceLineNo">191</span><a id="line.191">            messages.forEach(System.out::println);</a>
+<span class="sourceLineNo">192</span><a id="line.192">            exitStatus = EXIT_WITH_INVALID_USER_INPUT_CODE;</a>
+<span class="sourceLineNo">193</span><a id="line.193">        }</a>
+<span class="sourceLineNo">194</span><a id="line.194">        else {</a>
+<span class="sourceLineNo">195</span><a id="line.195">            exitStatus = runCli(options, filesToProcess);</a>
+<span class="sourceLineNo">196</span><a id="line.196">        }</a>
+<span class="sourceLineNo">197</span><a id="line.197">        return exitStatus;</a>
+<span class="sourceLineNo">198</span><a id="line.198">    }</a>
+<span class="sourceLineNo">199</span><a id="line.199"></a>
+<span class="sourceLineNo">200</span><a id="line.200">    /**</a>
+<span class="sourceLineNo">201</span><a id="line.201">     * Determines the files to process.</a>
+<span class="sourceLineNo">202</span><a id="line.202">     *</a>
+<span class="sourceLineNo">203</span><a id="line.203">     * @param options the user-specified options</a>
+<span class="sourceLineNo">204</span><a id="line.204">     * @return list of files to process</a>
+<span class="sourceLineNo">205</span><a id="line.205">     */</a>
+<span class="sourceLineNo">206</span><a id="line.206">    private static List&lt;File&gt; getFilesToProcess(CliOptions options) {</a>
+<span class="sourceLineNo">207</span><a id="line.207">        final List&lt;Pattern&gt; patternsToExclude = options.getExclusions();</a>
+<span class="sourceLineNo">208</span><a id="line.208"></a>
+<span class="sourceLineNo">209</span><a id="line.209">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</a>
+<span class="sourceLineNo">210</span><a id="line.210">        for (File file : options.files) {</a>
+<span class="sourceLineNo">211</span><a id="line.211">            result.addAll(listFiles(file, patternsToExclude));</a>
+<span class="sourceLineNo">212</span><a id="line.212">        }</a>
+<span class="sourceLineNo">213</span><a id="line.213">        return result;</a>
+<span class="sourceLineNo">214</span><a id="line.214">    }</a>
+<span class="sourceLineNo">215</span><a id="line.215"></a>
+<span class="sourceLineNo">216</span><a id="line.216">    /**</a>
+<span class="sourceLineNo">217</span><a id="line.217">     * Traverses a specified node looking for files to check. Found files are added to</a>
+<span class="sourceLineNo">218</span><a id="line.218">     * a specified list. Subdirectories are also traversed.</a>
+<span class="sourceLineNo">219</span><a id="line.219">     *</a>
+<span class="sourceLineNo">220</span><a id="line.220">     * @param node</a>
+<span class="sourceLineNo">221</span><a id="line.221">     *        the node to process</a>
+<span class="sourceLineNo">222</span><a id="line.222">     * @param patternsToExclude The list of patterns to exclude from searching or being added as</a>
+<span class="sourceLineNo">223</span><a id="line.223">     *        files.</a>
+<span class="sourceLineNo">224</span><a id="line.224">     * @return found files</a>
+<span class="sourceLineNo">225</span><a id="line.225">     */</a>
+<span class="sourceLineNo">226</span><a id="line.226">    private static List&lt;File&gt; listFiles(File node, List&lt;Pattern&gt; patternsToExclude) {</a>
+<span class="sourceLineNo">227</span><a id="line.227">        // could be replaced with org.apache.commons.io.FileUtils.list() method</a>
+<span class="sourceLineNo">228</span><a id="line.228">        // if only we add commons-io library</a>
+<span class="sourceLineNo">229</span><a id="line.229">        final List&lt;File&gt; result = new LinkedList&lt;&gt;();</a>
+<span class="sourceLineNo">230</span><a id="line.230"></a>
+<span class="sourceLineNo">231</span><a id="line.231">        if (node.canRead() &amp;&amp; !isPathExcluded(node.getAbsolutePath(), patternsToExclude)) {</a>
+<span class="sourceLineNo">232</span><a id="line.232">            if (node.isDirectory()) {</a>
+<span class="sourceLineNo">233</span><a id="line.233">                final File[] files = node.listFiles();</a>
+<span class="sourceLineNo">234</span><a id="line.234">                // listFiles() can return null, so we need to check it</a>
+<span class="sourceLineNo">235</span><a id="line.235">                if (files != null) {</a>
+<span class="sourceLineNo">236</span><a id="line.236">                    for (File element : files) {</a>
+<span class="sourceLineNo">237</span><a id="line.237">                        result.addAll(listFiles(element, patternsToExclude));</a>
+<span class="sourceLineNo">238</span><a id="line.238">                    }</a>
+<span class="sourceLineNo">239</span><a id="line.239">                }</a>
+<span class="sourceLineNo">240</span><a id="line.240">            }</a>
+<span class="sourceLineNo">241</span><a id="line.241">            else if (node.isFile()) {</a>
+<span class="sourceLineNo">242</span><a id="line.242">                result.add(node);</a>
+<span class="sourceLineNo">243</span><a id="line.243">            }</a>
+<span class="sourceLineNo">244</span><a id="line.244">        }</a>
+<span class="sourceLineNo">245</span><a id="line.245">        return result;</a>
+<span class="sourceLineNo">246</span><a id="line.246">    }</a>
+<span class="sourceLineNo">247</span><a id="line.247"></a>
+<span class="sourceLineNo">248</span><a id="line.248">    /**</a>
+<span class="sourceLineNo">249</span><a id="line.249">     * Checks if a directory/file {@code path} should be excluded based on if it matches one of the</a>
+<span class="sourceLineNo">250</span><a id="line.250">     * patterns supplied.</a>
+<span class="sourceLineNo">251</span><a id="line.251">     *</a>
+<span class="sourceLineNo">252</span><a id="line.252">     * @param path The path of the directory/file to check</a>
+<span class="sourceLineNo">253</span><a id="line.253">     * @param patternsToExclude The collection of patterns to exclude from searching</a>
+<span class="sourceLineNo">254</span><a id="line.254">     *        or being added as files.</a>
+<span class="sourceLineNo">255</span><a id="line.255">     * @return True if the directory/file matches one of the patterns.</a>
+<span class="sourceLineNo">256</span><a id="line.256">     */</a>
+<span class="sourceLineNo">257</span><a id="line.257">    private static boolean isPathExcluded(String path, Iterable&lt;Pattern&gt; patternsToExclude) {</a>
+<span class="sourceLineNo">258</span><a id="line.258">        boolean result = false;</a>
+<span class="sourceLineNo">259</span><a id="line.259"></a>
+<span class="sourceLineNo">260</span><a id="line.260">        for (Pattern pattern : patternsToExclude) {</a>
+<span class="sourceLineNo">261</span><a id="line.261">            if (pattern.matcher(path).find()) {</a>
+<span class="sourceLineNo">262</span><a id="line.262">                result = true;</a>
+<span class="sourceLineNo">263</span><a id="line.263">                break;</a>
+<span class="sourceLineNo">264</span><a id="line.264">            }</a>
+<span class="sourceLineNo">265</span><a id="line.265">        }</a>
+<span class="sourceLineNo">266</span><a id="line.266"></a>
+<span class="sourceLineNo">267</span><a id="line.267">        return result;</a>
+<span class="sourceLineNo">268</span><a id="line.268">    }</a>
+<span class="sourceLineNo">269</span><a id="line.269"></a>
+<span class="sourceLineNo">270</span><a id="line.270">    /**</a>
+<span class="sourceLineNo">271</span><a id="line.271">     * Do execution of CheckStyle based on Command line options.</a>
+<span class="sourceLineNo">272</span><a id="line.272">     *</a>
+<span class="sourceLineNo">273</span><a id="line.273">     * @param options user-specified options</a>
+<span class="sourceLineNo">274</span><a id="line.274">     * @param filesToProcess the list of files whose style to check</a>
+<span class="sourceLineNo">275</span><a id="line.275">     * @return number of violations</a>
+<span class="sourceLineNo">276</span><a id="line.276">     * @throws IOException if a file could not be read.</a>
+<span class="sourceLineNo">277</span><a id="line.277">     * @throws CheckstyleException if something happens processing the files.</a>
+<span class="sourceLineNo">278</span><a id="line.278">     * @noinspection UseOfSystemOutOrSystemErr</a>
+<span class="sourceLineNo">279</span><a id="line.279">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
+<span class="sourceLineNo">280</span><a id="line.280">     *      usage of System.out and System.err</a>
+<span class="sourceLineNo">281</span><a id="line.281">     */</a>
+<span class="sourceLineNo">282</span><a id="line.282">    private static int runCli(CliOptions options, List&lt;File&gt; filesToProcess)</a>
+<span class="sourceLineNo">283</span><a id="line.283">            throws IOException, CheckstyleException {</a>
+<span class="sourceLineNo">284</span><a id="line.284">        int result = 0;</a>
+<span class="sourceLineNo">285</span><a id="line.285">        final boolean hasSuppressionLineColumnNumber = options.suppressionLineColumnNumber != null;</a>
+<span class="sourceLineNo">286</span><a id="line.286"></a>
+<span class="sourceLineNo">287</span><a id="line.287">        // create config helper object</a>
+<span class="sourceLineNo">288</span><a id="line.288">        if (options.printAst) {</a>
+<span class="sourceLineNo">289</span><a id="line.289">            // print AST</a>
+<span class="sourceLineNo">290</span><a id="line.290">            final File file = filesToProcess.get(0);</a>
+<span class="sourceLineNo">291</span><a id="line.291">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</a>
+<span class="sourceLineNo">292</span><a id="line.292">                    JavaParser.Options.WITHOUT_COMMENTS);</a>
+<span class="sourceLineNo">293</span><a id="line.293">            System.out.print(stringAst);</a>
+<span class="sourceLineNo">294</span><a id="line.294">        }</a>
+<span class="sourceLineNo">295</span><a id="line.295">        else if (Objects.nonNull(options.xpath)) {</a>
+<span class="sourceLineNo">296</span><a id="line.296">            final String branch = XpathUtil.printXpathBranch(options.xpath, filesToProcess.get(0));</a>
+<span class="sourceLineNo">297</span><a id="line.297">            System.out.print(branch);</a>
+<span class="sourceLineNo">298</span><a id="line.298">        }</a>
+<span class="sourceLineNo">299</span><a id="line.299">        else if (options.printAstWithComments) {</a>
+<span class="sourceLineNo">300</span><a id="line.300">            final File file = filesToProcess.get(0);</a>
+<span class="sourceLineNo">301</span><a id="line.301">            final String stringAst = AstTreeStringPrinter.printFileAst(file,</a>
+<span class="sourceLineNo">302</span><a id="line.302">                    JavaParser.Options.WITH_COMMENTS);</a>
+<span class="sourceLineNo">303</span><a id="line.303">            System.out.print(stringAst);</a>
+<span class="sourceLineNo">304</span><a id="line.304">        }</a>
+<span class="sourceLineNo">305</span><a id="line.305">        else if (options.printJavadocTree) {</a>
+<span class="sourceLineNo">306</span><a id="line.306">            final File file = filesToProcess.get(0);</a>
+<span class="sourceLineNo">307</span><a id="line.307">            final String stringAst = DetailNodeTreeStringPrinter.printFileAst(file);</a>
+<span class="sourceLineNo">308</span><a id="line.308">            System.out.print(stringAst);</a>
+<span class="sourceLineNo">309</span><a id="line.309">        }</a>
+<span class="sourceLineNo">310</span><a id="line.310">        else if (options.printTreeWithJavadoc) {</a>
+<span class="sourceLineNo">311</span><a id="line.311">            final File file = filesToProcess.get(0);</a>
+<span class="sourceLineNo">312</span><a id="line.312">            final String stringAst = AstTreeStringPrinter.printJavaAndJavadocTree(file);</a>
+<span class="sourceLineNo">313</span><a id="line.313">            System.out.print(stringAst);</a>
+<span class="sourceLineNo">314</span><a id="line.314">        }</a>
+<span class="sourceLineNo">315</span><a id="line.315">        else if (hasSuppressionLineColumnNumber) {</a>
+<span class="sourceLineNo">316</span><a id="line.316">            final File file = filesToProcess.get(0);</a>
+<span class="sourceLineNo">317</span><a id="line.317">            final String stringSuppressions =</a>
+<span class="sourceLineNo">318</span><a id="line.318">                    SuppressionsStringPrinter.printSuppressions(file,</a>
+<span class="sourceLineNo">319</span><a id="line.319">                            options.suppressionLineColumnNumber, options.tabWidth);</a>
+<span class="sourceLineNo">320</span><a id="line.320">            System.out.print(stringSuppressions);</a>
+<span class="sourceLineNo">321</span><a id="line.321">        }</a>
+<span class="sourceLineNo">322</span><a id="line.322">        else {</a>
+<span class="sourceLineNo">323</span><a id="line.323">            if (options.debug) {</a>
+<span class="sourceLineNo">324</span><a id="line.324">                final Logger parentLogger = Logger.getLogger(Main.class.getName()).getParent();</a>
+<span class="sourceLineNo">325</span><a id="line.325">                final ConsoleHandler handler = new ConsoleHandler();</a>
+<span class="sourceLineNo">326</span><a id="line.326">                handler.setLevel(Level.FINEST);</a>
+<span class="sourceLineNo">327</span><a id="line.327">                handler.setFilter(new OnlyCheckstyleLoggersFilter());</a>
+<span class="sourceLineNo">328</span><a id="line.328">                parentLogger.addHandler(handler);</a>
+<span class="sourceLineNo">329</span><a id="line.329">                parentLogger.setLevel(Level.FINEST);</a>
+<span class="sourceLineNo">330</span><a id="line.330">            }</a>
+<span class="sourceLineNo">331</span><a id="line.331">            if (LOG.isDebugEnabled()) {</a>
+<span class="sourceLineNo">332</span><a id="line.332">                LOG.debug("Checkstyle debug logging enabled");</a>
+<span class="sourceLineNo">333</span><a id="line.333">                LOG.debug("Running Checkstyle with version: "</a>
+<span class="sourceLineNo">334</span><a id="line.334">                        + Main.class.getPackage().getImplementationVersion());</a>
+<span class="sourceLineNo">335</span><a id="line.335">            }</a>
+<span class="sourceLineNo">336</span><a id="line.336"></a>
+<span class="sourceLineNo">337</span><a id="line.337">            // run Checker</a>
+<span class="sourceLineNo">338</span><a id="line.338">            result = runCheckstyle(options, filesToProcess);</a>
+<span class="sourceLineNo">339</span><a id="line.339">        }</a>
+<span class="sourceLineNo">340</span><a id="line.340"></a>
+<span class="sourceLineNo">341</span><a id="line.341">        return result;</a>
+<span class="sourceLineNo">342</span><a id="line.342">    }</a>
+<span class="sourceLineNo">343</span><a id="line.343"></a>
+<span class="sourceLineNo">344</span><a id="line.344">    /**</a>
+<span class="sourceLineNo">345</span><a id="line.345">     * Executes required Checkstyle actions based on passed parameters.</a>
+<span class="sourceLineNo">346</span><a id="line.346">     *</a>
+<span class="sourceLineNo">347</span><a id="line.347">     * @param options user-specified options</a>
+<span class="sourceLineNo">348</span><a id="line.348">     * @param filesToProcess the list of files whose style to check</a>
+<span class="sourceLineNo">349</span><a id="line.349">     * @return number of violations of ERROR level</a>
+<span class="sourceLineNo">350</span><a id="line.350">     * @throws IOException</a>
+<span class="sourceLineNo">351</span><a id="line.351">     *         when output file could not be found</a>
+<span class="sourceLineNo">352</span><a id="line.352">     * @throws CheckstyleException</a>
+<span class="sourceLineNo">353</span><a id="line.353">     *         when properties file could not be loaded</a>
+<span class="sourceLineNo">354</span><a id="line.354">     */</a>
+<span class="sourceLineNo">355</span><a id="line.355">    private static int runCheckstyle(CliOptions options, List&lt;File&gt; filesToProcess)</a>
+<span class="sourceLineNo">356</span><a id="line.356">            throws CheckstyleException, IOException {</a>
+<span class="sourceLineNo">357</span><a id="line.357">        // setup the properties</a>
+<span class="sourceLineNo">358</span><a id="line.358">        final Properties props;</a>
+<span class="sourceLineNo">359</span><a id="line.359"></a>
+<span class="sourceLineNo">360</span><a id="line.360">        if (options.propertiesFile == null) {</a>
+<span class="sourceLineNo">361</span><a id="line.361">            props = System.getProperties();</a>
+<span class="sourceLineNo">362</span><a id="line.362">        }</a>
+<span class="sourceLineNo">363</span><a id="line.363">        else {</a>
+<span class="sourceLineNo">364</span><a id="line.364">            props = loadProperties(options.propertiesFile);</a>
+<span class="sourceLineNo">365</span><a id="line.365">        }</a>
+<span class="sourceLineNo">366</span><a id="line.366"></a>
+<span class="sourceLineNo">367</span><a id="line.367">        // create a configuration</a>
+<span class="sourceLineNo">368</span><a id="line.368">        final ThreadModeSettings multiThreadModeSettings =</a>
+<span class="sourceLineNo">369</span><a id="line.369">                new ThreadModeSettings(CliOptions.CHECKER_THREADS_NUMBER,</a>
+<span class="sourceLineNo">370</span><a id="line.370">                        CliOptions.TREE_WALKER_THREADS_NUMBER);</a>
+<span class="sourceLineNo">371</span><a id="line.371"></a>
+<span class="sourceLineNo">372</span><a id="line.372">        final ConfigurationLoader.IgnoredModulesOptions ignoredModulesOptions;</a>
+<span class="sourceLineNo">373</span><a id="line.373">        if (options.executeIgnoredModules) {</a>
+<span class="sourceLineNo">374</span><a id="line.374">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.EXECUTE;</a>
+<span class="sourceLineNo">375</span><a id="line.375">        }</a>
+<span class="sourceLineNo">376</span><a id="line.376">        else {</a>
+<span class="sourceLineNo">377</span><a id="line.377">            ignoredModulesOptions = ConfigurationLoader.IgnoredModulesOptions.OMIT;</a>
+<span class="sourceLineNo">378</span><a id="line.378">        }</a>
+<span class="sourceLineNo">379</span><a id="line.379"></a>
+<span class="sourceLineNo">380</span><a id="line.380">        final Configuration config = ConfigurationLoader.loadConfiguration(</a>
+<span class="sourceLineNo">381</span><a id="line.381">                options.configurationFile, new PropertiesExpander(props),</a>
+<span class="sourceLineNo">382</span><a id="line.382">                ignoredModulesOptions, multiThreadModeSettings);</a>
+<span class="sourceLineNo">383</span><a id="line.383"></a>
+<span class="sourceLineNo">384</span><a id="line.384">        // create RootModule object and run it</a>
+<span class="sourceLineNo">385</span><a id="line.385">        final int errorCounter;</a>
+<span class="sourceLineNo">386</span><a id="line.386">        final ClassLoader moduleClassLoader = Checker.class.getClassLoader();</a>
+<span class="sourceLineNo">387</span><a id="line.387">        final RootModule rootModule = getRootModule(config.getName(), moduleClassLoader);</a>
+<span class="sourceLineNo">388</span><a id="line.388"></a>
+<span class="sourceLineNo">389</span><a id="line.389">        try {</a>
+<span class="sourceLineNo">390</span><a id="line.390">            final AuditListener listener;</a>
+<span class="sourceLineNo">391</span><a id="line.391">            if (options.generateXpathSuppressionsFile) {</a>
+<span class="sourceLineNo">392</span><a id="line.392">                // create filter to print generated xpath suppressions file</a>
+<span class="sourceLineNo">393</span><a id="line.393">                final Configuration treeWalkerConfig = getTreeWalkerConfig(config);</a>
+<span class="sourceLineNo">394</span><a id="line.394">                if (treeWalkerConfig != null) {</a>
+<span class="sourceLineNo">395</span><a id="line.395">                    final DefaultConfiguration moduleConfig =</a>
+<span class="sourceLineNo">396</span><a id="line.396">                            new DefaultConfiguration(</a>
+<span class="sourceLineNo">397</span><a id="line.397">                                    XpathFileGeneratorAstFilter.class.getName());</a>
+<span class="sourceLineNo">398</span><a id="line.398">                    moduleConfig.addProperty(CliOptions.ATTRIB_TAB_WIDTH_NAME,</a>
+<span class="sourceLineNo">399</span><a id="line.399">                            String.valueOf(options.tabWidth));</a>
+<span class="sourceLineNo">400</span><a id="line.400">                    ((DefaultConfiguration) treeWalkerConfig).addChild(moduleConfig);</a>
+<span class="sourceLineNo">401</span><a id="line.401">                }</a>
+<span class="sourceLineNo">402</span><a id="line.402"></a>
+<span class="sourceLineNo">403</span><a id="line.403">                listener = new XpathFileGeneratorAuditListener(getOutputStream(options.outputPath),</a>
+<span class="sourceLineNo">404</span><a id="line.404">                        getOutputStreamOptions(options.outputPath));</a>
+<span class="sourceLineNo">405</span><a id="line.405">            }</a>
+<span class="sourceLineNo">406</span><a id="line.406">            else {</a>
+<span class="sourceLineNo">407</span><a id="line.407">                listener = createListener(options.format, options.outputPath);</a>
+<span class="sourceLineNo">408</span><a id="line.408">            }</a>
+<span class="sourceLineNo">409</span><a id="line.409"></a>
+<span class="sourceLineNo">410</span><a id="line.410">            rootModule.setModuleClassLoader(moduleClassLoader);</a>
+<span class="sourceLineNo">411</span><a id="line.411">            rootModule.configure(config);</a>
+<span class="sourceLineNo">412</span><a id="line.412">            rootModule.addListener(listener);</a>
+<span class="sourceLineNo">413</span><a id="line.413"></a>
+<span class="sourceLineNo">414</span><a id="line.414">            // run RootModule</a>
+<span class="sourceLineNo">415</span><a id="line.415">            errorCounter = rootModule.process(filesToProcess);</a>
+<span class="sourceLineNo">416</span><a id="line.416">        }</a>
+<span class="sourceLineNo">417</span><a id="line.417">        finally {</a>
+<span class="sourceLineNo">418</span><a id="line.418">            rootModule.destroy();</a>
+<span class="sourceLineNo">419</span><a id="line.419">        }</a>
+<span class="sourceLineNo">420</span><a id="line.420"></a>
+<span class="sourceLineNo">421</span><a id="line.421">        return errorCounter;</a>
+<span class="sourceLineNo">422</span><a id="line.422">    }</a>
+<span class="sourceLineNo">423</span><a id="line.423"></a>
+<span class="sourceLineNo">424</span><a id="line.424">    /**</a>
+<span class="sourceLineNo">425</span><a id="line.425">     * Loads properties from a File.</a>
+<span class="sourceLineNo">426</span><a id="line.426">     *</a>
+<span class="sourceLineNo">427</span><a id="line.427">     * @param file</a>
+<span class="sourceLineNo">428</span><a id="line.428">     *        the properties file</a>
+<span class="sourceLineNo">429</span><a id="line.429">     * @return the properties in file</a>
+<span class="sourceLineNo">430</span><a id="line.430">     * @throws CheckstyleException</a>
+<span class="sourceLineNo">431</span><a id="line.431">     *         when could not load properties file</a>
+<span class="sourceLineNo">432</span><a id="line.432">     */</a>
+<span class="sourceLineNo">433</span><a id="line.433">    private static Properties loadProperties(File file)</a>
+<span class="sourceLineNo">434</span><a id="line.434">            throws CheckstyleException {</a>
+<span class="sourceLineNo">435</span><a id="line.435">        final Properties properties = new Properties();</a>
+<span class="sourceLineNo">436</span><a id="line.436"></a>
+<span class="sourceLineNo">437</span><a id="line.437">        try (InputStream stream = Files.newInputStream(file.toPath())) {</a>
+<span class="sourceLineNo">438</span><a id="line.438">            properties.load(stream);</a>
+<span class="sourceLineNo">439</span><a id="line.439">        }</a>
+<span class="sourceLineNo">440</span><a id="line.440">        catch (final IOException ex) {</a>
+<span class="sourceLineNo">441</span><a id="line.441">            final LocalizedMessage loadPropertiesExceptionMessage = new LocalizedMessage(</a>
+<span class="sourceLineNo">442</span><a id="line.442">                    Definitions.CHECKSTYLE_BUNDLE, Main.class,</a>
+<span class="sourceLineNo">443</span><a id="line.443">                    LOAD_PROPERTIES_EXCEPTION, file.getAbsolutePath());</a>
+<span class="sourceLineNo">444</span><a id="line.444">            throw new CheckstyleException(loadPropertiesExceptionMessage.getMessage(), ex);</a>
+<span class="sourceLineNo">445</span><a id="line.445">        }</a>
+<span class="sourceLineNo">446</span><a id="line.446"></a>
+<span class="sourceLineNo">447</span><a id="line.447">        return ChainedPropertyUtil.getResolvedProperties(properties);</a>
+<span class="sourceLineNo">448</span><a id="line.448">    }</a>
+<span class="sourceLineNo">449</span><a id="line.449"></a>
+<span class="sourceLineNo">450</span><a id="line.450">    /**</a>
+<span class="sourceLineNo">451</span><a id="line.451">     * Creates a new instance of the root module that will control and run</a>
+<span class="sourceLineNo">452</span><a id="line.452">     * Checkstyle.</a>
+<span class="sourceLineNo">453</span><a id="line.453">     *</a>
+<span class="sourceLineNo">454</span><a id="line.454">     * @param name The name of the module. This will either be a short name that</a>
+<span class="sourceLineNo">455</span><a id="line.455">     *        will have to be found or the complete package name.</a>
+<span class="sourceLineNo">456</span><a id="line.456">     * @param moduleClassLoader Class loader used to load the root module.</a>
+<span class="sourceLineNo">457</span><a id="line.457">     * @return The new instance of the root module.</a>
+<span class="sourceLineNo">458</span><a id="line.458">     * @throws CheckstyleException if no module can be instantiated from name</a>
+<span class="sourceLineNo">459</span><a id="line.459">     */</a>
+<span class="sourceLineNo">460</span><a id="line.460">    private static RootModule getRootModule(String name, ClassLoader moduleClassLoader)</a>
+<span class="sourceLineNo">461</span><a id="line.461">            throws CheckstyleException {</a>
+<span class="sourceLineNo">462</span><a id="line.462">        final ModuleFactory factory = new PackageObjectFactory(</a>
+<span class="sourceLineNo">463</span><a id="line.463">                Checker.class.getPackage().getName(), moduleClassLoader);</a>
+<span class="sourceLineNo">464</span><a id="line.464"></a>
+<span class="sourceLineNo">465</span><a id="line.465">        return (RootModule) factory.createModule(name);</a>
+<span class="sourceLineNo">466</span><a id="line.466">    }</a>
+<span class="sourceLineNo">467</span><a id="line.467"></a>
+<span class="sourceLineNo">468</span><a id="line.468">    /**</a>
+<span class="sourceLineNo">469</span><a id="line.469">     * Returns {@code TreeWalker} module configuration.</a>
+<span class="sourceLineNo">470</span><a id="line.470">     *</a>
+<span class="sourceLineNo">471</span><a id="line.471">     * @param config The configuration object.</a>
+<span class="sourceLineNo">472</span><a id="line.472">     * @return The {@code TreeWalker} module configuration.</a>
+<span class="sourceLineNo">473</span><a id="line.473">     */</a>
+<span class="sourceLineNo">474</span><a id="line.474">    private static Configuration getTreeWalkerConfig(Configuration config) {</a>
+<span class="sourceLineNo">475</span><a id="line.475">        Configuration result = null;</a>
+<span class="sourceLineNo">476</span><a id="line.476"></a>
+<span class="sourceLineNo">477</span><a id="line.477">        final Configuration[] children = config.getChildren();</a>
+<span class="sourceLineNo">478</span><a id="line.478">        for (Configuration child : children) {</a>
+<span class="sourceLineNo">479</span><a id="line.479">            if ("TreeWalker".equals(child.getName())) {</a>
+<span class="sourceLineNo">480</span><a id="line.480">                result = child;</a>
+<span class="sourceLineNo">481</span><a id="line.481">                break;</a>
+<span class="sourceLineNo">482</span><a id="line.482">            }</a>
+<span class="sourceLineNo">483</span><a id="line.483">        }</a>
+<span class="sourceLineNo">484</span><a id="line.484">        return result;</a>
+<span class="sourceLineNo">485</span><a id="line.485">    }</a>
+<span class="sourceLineNo">486</span><a id="line.486"></a>
+<span class="sourceLineNo">487</span><a id="line.487">    /**</a>
+<span class="sourceLineNo">488</span><a id="line.488">     * This method creates in AuditListener an open stream for validation data, it must be</a>
+<span class="sourceLineNo">489</span><a id="line.489">     * closed by {@link RootModule} (default implementation is {@link Checker}) by calling</a>
+<span class="sourceLineNo">490</span><a id="line.490">     * {@link AuditListener#auditFinished(AuditEvent)}.</a>
+<span class="sourceLineNo">491</span><a id="line.491">     *</a>
+<span class="sourceLineNo">492</span><a id="line.492">     * @param format format of the audit listener</a>
+<span class="sourceLineNo">493</span><a id="line.493">     * @param outputLocation the location of output</a>
+<span class="sourceLineNo">494</span><a id="line.494">     * @return a fresh new {@code AuditListener}</a>
+<span class="sourceLineNo">495</span><a id="line.495">     * @exception IOException when provided output location is not found</a>
+<span class="sourceLineNo">496</span><a id="line.496">     */</a>
+<span class="sourceLineNo">497</span><a id="line.497">    private static AuditListener createListener(OutputFormat format, Path outputLocation)</a>
+<span class="sourceLineNo">498</span><a id="line.498">            throws IOException {</a>
+<span class="sourceLineNo">499</span><a id="line.499">        final OutputStream out = getOutputStream(outputLocation);</a>
+<span class="sourceLineNo">500</span><a id="line.500">        final AutomaticBean.OutputStreamOptions closeOutputStreamOption =</a>
+<span class="sourceLineNo">501</span><a id="line.501">                getOutputStreamOptions(outputLocation);</a>
+<span class="sourceLineNo">502</span><a id="line.502">        return format.createListener(out, closeOutputStreamOption);</a>
+<span class="sourceLineNo">503</span><a id="line.503">    }</a>
+<span class="sourceLineNo">504</span><a id="line.504"></a>
+<span class="sourceLineNo">505</span><a id="line.505">    /**</a>
+<span class="sourceLineNo">506</span><a id="line.506">     * Create output stream or return System.out</a>
+<span class="sourceLineNo">507</span><a id="line.507">     *</a>
+<span class="sourceLineNo">508</span><a id="line.508">     * @param outputPath output location</a>
+<span class="sourceLineNo">509</span><a id="line.509">     * @return output stream</a>
+<span class="sourceLineNo">510</span><a id="line.510">     * @throws IOException might happen</a>
+<span class="sourceLineNo">511</span><a id="line.511">     * @noinspection UseOfSystemOutOrSystemErr</a>
+<span class="sourceLineNo">512</span><a id="line.512">     * @noinspectionreason UseOfSystemOutOrSystemErr - driver class for Checkstyle requires</a>
+<span class="sourceLineNo">513</span><a id="line.513">     *      usage of System.out and System.err</a>
+<span class="sourceLineNo">514</span><a id="line.514">     */</a>
+<span class="sourceLineNo">515</span><a id="line.515">    @SuppressWarnings("resource")</a>
+<span class="sourceLineNo">516</span><a id="line.516">    private static OutputStream getOutputStream(Path outputPath) throws IOException {</a>
+<span class="sourceLineNo">517</span><a id="line.517">        final OutputStream result;</a>
+<span class="sourceLineNo">518</span><a id="line.518">        if (outputPath == null) {</a>
+<span class="sourceLineNo">519</span><a id="line.519">            result = System.out;</a>
+<span class="sourceLineNo">520</span><a id="line.520">        }</a>
+<span class="sourceLineNo">521</span><a id="line.521">        else {</a>
+<span class="sourceLineNo">522</span><a id="line.522">            result = Files.newOutputStream(outputPath);</a>
+<span class="sourceLineNo">523</span><a id="line.523">        }</a>
+<span class="sourceLineNo">524</span><a id="line.524">        return result;</a>
+<span class="sourceLineNo">525</span><a id="line.525">    }</a>
+<span class="sourceLineNo">526</span><a id="line.526"></a>
+<span class="sourceLineNo">527</span><a id="line.527">    /**</a>
+<span class="sourceLineNo">528</span><a id="line.528">     * Create {@link AutomaticBean.OutputStreamOptions} for the given location.</a>
+<span class="sourceLineNo">529</span><a id="line.529">     *</a>
+<span class="sourceLineNo">530</span><a id="line.530">     * @param outputPath output location</a>
+<span class="sourceLineNo">531</span><a id="line.531">     * @return output stream options</a>
+<span class="sourceLineNo">532</span><a id="line.532">     */</a>
+<span class="sourceLineNo">533</span><a id="line.533">    private static AutomaticBean.OutputStreamOptions getOutputStreamOptions(Path outputPath) {</a>
+<span class="sourceLineNo">534</span><a id="line.534">        final AutomaticBean.OutputStreamOptions result;</a>
+<span class="sourceLineNo">535</span><a id="line.535">        if (outputPath == null) {</a>
+<span class="sourceLineNo">536</span><a id="line.536">            result = AutomaticBean.OutputStreamOptions.NONE;</a>
+<span class="sourceLineNo">537</span><a id="line.537">        }</a>
+<span class="sourceLineNo">538</span><a id="line.538">        else {</a>
+<span class="sourceLineNo">539</span><a id="line.539">            result = AutomaticBean.OutputStreamOptions.CLOSE;</a>
+<span class="sourceLineNo">540</span><a id="line.540">        }</a>
+<span class="sourceLineNo">541</span><a id="line.541">        return result;</a>
+<span class="sourceLineNo">542</span><a id="line.542">    }</a>
+<span class="sourceLineNo">543</span><a id="line.543"></a>
+<span class="sourceLineNo">544</span><a id="line.544">    /**</a>
+<span class="sourceLineNo">545</span><a id="line.545">     * Enumeration over the possible output formats.</a>
+<span class="sourceLineNo">546</span><a id="line.546">     *</a>
+<span class="sourceLineNo">547</span><a id="line.547">     * @noinspection PackageVisibleInnerClass</a>
+<span class="sourceLineNo">548</span><a id="line.548">     * @noinspectionreason PackageVisibleInnerClass - we keep this enum package visible for tests</a>
+<span class="sourceLineNo">549</span><a id="line.549">     */</a>
+<span class="sourceLineNo">550</span><a id="line.550">    enum OutputFormat {</a>
+<span class="sourceLineNo">551</span><a id="line.551">        /** XML output format. */</a>
+<span class="sourceLineNo">552</span><a id="line.552">        XML,</a>
+<span class="sourceLineNo">553</span><a id="line.553">        /** SARIF output format. */</a>
+<span class="sourceLineNo">554</span><a id="line.554">        SARIF,</a>
+<span class="sourceLineNo">555</span><a id="line.555">        /** Plain output format. */</a>
+<span class="sourceLineNo">556</span><a id="line.556">        PLAIN;</a>
+<span class="sourceLineNo">557</span><a id="line.557"></a>
+<span class="sourceLineNo">558</span><a id="line.558">        /**</a>
+<span class="sourceLineNo">559</span><a id="line.559">         * Returns a new AuditListener for this OutputFormat.</a>
+<span class="sourceLineNo">560</span><a id="line.560">         *</a>
+<span class="sourceLineNo">561</span><a id="line.561">         * @param out the output stream</a>
+<span class="sourceLineNo">562</span><a id="line.562">         * @param options the output stream options</a>
+<span class="sourceLineNo">563</span><a id="line.563">         * @return a new AuditListener for this OutputFormat</a>
+<span class="sourceLineNo">564</span><a id="line.564">         * @throws IOException if there is any IO exception during logger initialization</a>
+<span class="sourceLineNo">565</span><a id="line.565">         */</a>
+<span class="sourceLineNo">566</span><a id="line.566">        public AuditListener createListener(</a>
+<span class="sourceLineNo">567</span><a id="line.567">            OutputStream out,</a>
+<span class="sourceLineNo">568</span><a id="line.568">            AutomaticBean.OutputStreamOptions options) throws IOException {</a>
+<span class="sourceLineNo">569</span><a id="line.569">            final AuditListener result;</a>
+<span class="sourceLineNo">570</span><a id="line.570">            if (this == XML) {</a>
+<span class="sourceLineNo">571</span><a id="line.571">                result = new XMLLogger(out, options);</a>
+<span class="sourceLineNo">572</span><a id="line.572">            }</a>
+<span class="sourceLineNo">573</span><a id="line.573">            else if (this == SARIF) {</a>
+<span class="sourceLineNo">574</span><a id="line.574">                result = new SarifLogger(out, options);</a>
+<span class="sourceLineNo">575</span><a id="line.575">            }</a>
+<span class="sourceLineNo">576</span><a id="line.576">            else {</a>
+<span class="sourceLineNo">577</span><a id="line.577">                result = new DefaultLogger(out, options);</a>
+<span class="sourceLineNo">578</span><a id="line.578">            }</a>
+<span class="sourceLineNo">579</span><a id="line.579">            return result;</a>
+<span class="sourceLineNo">580</span><a id="line.580">        }</a>
+<span class="sourceLineNo">581</span><a id="line.581"></a>
+<span class="sourceLineNo">582</span><a id="line.582">        /**</a>
+<span class="sourceLineNo">583</span><a id="line.583">         * Returns the name in lowercase.</a>
+<span class="sourceLineNo">584</span><a id="line.584">         *</a>
+<span class="sourceLineNo">585</span><a id="line.585">         * @return the enum name in lowercase</a>
+<span class="sourceLineNo">586</span><a id="line.586">         */</a>
+<span class="sourceLineNo">587</span><a id="line.587">        @Override</a>
+<span class="sourceLineNo">588</span><a id="line.588">        public String toString() {</a>
+<span class="sourceLineNo">589</span><a id="line.589">            return name().toLowerCase(Locale.ROOT);</a>
+<span class="sourceLineNo">590</span><a id="line.590">        }</a>
+<span class="sourceLineNo">591</span><a id="line.591">    }</a>
+<span class="sourceLineNo">592</span><a id="line.592"></a>
+<span class="sourceLineNo">593</span><a id="line.593">    /** Log Filter used in debug mode. */</a>
+<span class="sourceLineNo">594</span><a id="line.594">    private static final class OnlyCheckstyleLoggersFilter implements Filter {</a>
+<span class="sourceLineNo">595</span><a id="line.595">        /** Name of the package used to filter on. */</a>
+<span class="sourceLineNo">596</span><a id="line.596">        private final String packageName = Main.class.getPackage().getName();</a>
+<span class="sourceLineNo">597</span><a id="line.597"></a>
+<span class="sourceLineNo">598</span><a id="line.598">        /**</a>
+<span class="sourceLineNo">599</span><a id="line.599">         * Returns whether the specified logRecord should be logged.</a>
+<span class="sourceLineNo">600</span><a id="line.600">         *</a>
+<span class="sourceLineNo">601</span><a id="line.601">         * @param logRecord the logRecord to log</a>
+<span class="sourceLineNo">602</span><a id="line.602">         * @return true if the logger name is in the package of this class or a subpackage</a>
+<span class="sourceLineNo">603</span><a id="line.603">         */</a>
+<span class="sourceLineNo">604</span><a id="line.604">        @Override</a>
+<span class="sourceLineNo">605</span><a id="line.605">        public boolean isLoggable(LogRecord logRecord) {</a>
+<span class="sourceLineNo">606</span><a id="line.606">            return logRecord.getLoggerName().startsWith(packageName);</a>
+<span class="sourceLineNo">607</span><a id="line.607">        }</a>
+<span class="sourceLineNo">608</span><a id="line.608">    }</a>
+<span class="sourceLineNo">609</span><a id="line.609"></a>
+<span class="sourceLineNo">610</span><a id="line.610">    /**</a>
+<span class="sourceLineNo">611</span><a id="line.611">     * Command line options.</a>
+<span class="sourceLineNo">612</span><a id="line.612">     *</a>
+<span class="sourceLineNo">613</span><a id="line.613">     * @noinspection unused, FieldMayBeFinal, CanBeFinal,</a>
+<span class="sourceLineNo">614</span><a id="line.614">     *              MismatchedQueryAndUpdateOfCollection, LocalCanBeFinal</a>
+<span class="sourceLineNo">615</span><a id="line.615">     * @noinspectionreason FieldMayBeFinal - usage of picocli requires</a>
+<span class="sourceLineNo">616</span><a id="line.616">     *      suppression of above inspections</a>
+<span class="sourceLineNo">617</span><a id="line.617">     * @noinspectionreason CanBeFinal - usage of picocli requires</a>
+<span class="sourceLineNo">618</span><a id="line.618">     *      suppression of above inspections</a>
+<span class="sourceLineNo">619</span><a id="line.619">     * @noinspectionreason MismatchedQueryAndUpdateOfCollection - list of files is gathered and used</a>
+<span class="sourceLineNo">620</span><a id="line.620">     *      via reflection by picocli library</a>
+<span class="sourceLineNo">621</span><a id="line.621">     * @noinspectionreason LocalCanBeFinal - usage of picocli requires</a>
+<span class="sourceLineNo">622</span><a id="line.622">     *      suppression of above inspections</a>
+<span class="sourceLineNo">623</span><a id="line.623">     */</a>
+<span class="sourceLineNo">624</span><a id="line.624">    @Command(name = "checkstyle", description = "Checkstyle verifies that the specified "</a>
+<span class="sourceLineNo">625</span><a id="line.625">            + "source code files adhere to the specified rules. By default, violations are "</a>
+<span class="sourceLineNo">626</span><a id="line.626">            + "reported to standard out in plain format. Checkstyle requires a configuration "</a>
+<span class="sourceLineNo">627</span><a id="line.627">            + "XML file that configures the checks to apply.",</a>
+<span class="sourceLineNo">628</span><a id="line.628">            mixinStandardHelpOptions = true)</a>
+<span class="sourceLineNo">629</span><a id="line.629">    private static class CliOptions {</a>
+<span class="sourceLineNo">630</span><a id="line.630"></a>
+<span class="sourceLineNo">631</span><a id="line.631">        /** Width of CLI help option. */</a>
+<span class="sourceLineNo">632</span><a id="line.632">        private static final int HELP_WIDTH = 100;</a>
+<span class="sourceLineNo">633</span><a id="line.633"></a>
+<span class="sourceLineNo">634</span><a id="line.634">        /** The default number of threads to use for checker and the tree walker. */</a>
+<span class="sourceLineNo">635</span><a id="line.635">        private static final int DEFAULT_THREAD_COUNT = 1;</a>
+<span class="sourceLineNo">636</span><a id="line.636"></a>
+<span class="sourceLineNo">637</span><a id="line.637">        /** Name for the moduleConfig attribute 'tabWidth'. */</a>
+<span class="sourceLineNo">638</span><a id="line.638">        private static final String ATTRIB_TAB_WIDTH_NAME = "tabWidth";</a>
+<span class="sourceLineNo">639</span><a id="line.639"></a>
+<span class="sourceLineNo">640</span><a id="line.640">        /** Default output format. */</a>
+<span class="sourceLineNo">641</span><a id="line.641">        private static final OutputFormat DEFAULT_OUTPUT_FORMAT = OutputFormat.PLAIN;</a>
+<span class="sourceLineNo">642</span><a id="line.642"></a>
+<span class="sourceLineNo">643</span><a id="line.643">        /** Option name for output format. */</a>
+<span class="sourceLineNo">644</span><a id="line.644">        private static final String OUTPUT_FORMAT_OPTION = "-f";</a>
+<span class="sourceLineNo">645</span><a id="line.645"></a>
+<span class="sourceLineNo">646</span><a id="line.646">        /**</a>
+<span class="sourceLineNo">647</span><a id="line.647">         * The checker threads number.</a>
+<span class="sourceLineNo">648</span><a id="line.648">         * This option has been skipped for CLI options intentionally.</a>
+<span class="sourceLineNo">649</span><a id="line.649">         *</a>
+<span class="sourceLineNo">650</span><a id="line.650">         */</a>
+<span class="sourceLineNo">651</span><a id="line.651">        private static final int CHECKER_THREADS_NUMBER = DEFAULT_THREAD_COUNT;</a>
+<span class="sourceLineNo">652</span><a id="line.652"></a>
+<span class="sourceLineNo">653</span><a id="line.653">        /**</a>
+<span class="sourceLineNo">654</span><a id="line.654">         * The tree walker threads number.</a>
+<span class="sourceLineNo">655</span><a id="line.655">         *</a>
+<span class="sourceLineNo">656</span><a id="line.656">         */</a>
+<span class="sourceLineNo">657</span><a id="line.657">        private static final int TREE_WALKER_THREADS_NUMBER = DEFAULT_THREAD_COUNT;</a>
+<span class="sourceLineNo">658</span><a id="line.658"></a>
+<span class="sourceLineNo">659</span><a id="line.659">        /** List of file to validate. */</a>
+<span class="sourceLineNo">660</span><a id="line.660">        @Parameters(arity = "1..*", description = "One or more source files to verify")</a>
+<span class="sourceLineNo">661</span><a id="line.661">        private List&lt;File&gt; files;</a>
+<span class="sourceLineNo">662</span><a id="line.662"></a>
+<span class="sourceLineNo">663</span><a id="line.663">        /** Config file location. */</a>
+<span class="sourceLineNo">664</span><a id="line.664">        @Option(names = "-c", description = "Specifies the location of the file that defines"</a>
+<span class="sourceLineNo">665</span><a id="line.665">                + " the configuration modules. The location can either be a filesystem location"</a>
+<span class="sourceLineNo">666</span><a id="line.666">                + ", or a name passed to the ClassLoader.getResource() method.")</a>
+<span class="sourceLineNo">667</span><a id="line.667">        private String configurationFile;</a>
+<span class="sourceLineNo">668</span><a id="line.668"></a>
+<span class="sourceLineNo">669</span><a id="line.669">        /** Output file location. */</a>
+<span class="sourceLineNo">670</span><a id="line.670">        @Option(names = "-o", description = "Sets the output file. Defaults to stdout.")</a>
+<span class="sourceLineNo">671</span><a id="line.671">        private Path outputPath;</a>
+<span class="sourceLineNo">672</span><a id="line.672"></a>
+<span class="sourceLineNo">673</span><a id="line.673">        /** Properties file location. */</a>
+<span class="sourceLineNo">674</span><a id="line.674">        @Option(names = "-p", description = "Sets the property files to load.")</a>
+<span class="sourceLineNo">675</span><a id="line.675">        private File propertiesFile;</a>
+<span class="sourceLineNo">676</span><a id="line.676"></a>
+<span class="sourceLineNo">677</span><a id="line.677">        /** LineNo and columnNo for the suppression. */</a>
+<span class="sourceLineNo">678</span><a id="line.678">        @Option(names = "-s",</a>
+<span class="sourceLineNo">679</span><a id="line.679">                description = "Prints xpath suppressions at the file's line and column position. "</a>
+<span class="sourceLineNo">680</span><a id="line.680">                        + "Argument is the line and column number (separated by a : ) in the file "</a>
+<span class="sourceLineNo">681</span><a id="line.681">                        + "that the suppression should be generated for. The option cannot be used "</a>
+<span class="sourceLineNo">682</span><a id="line.682">                        + "with other options and requires exactly one file to run on to be "</a>
+<span class="sourceLineNo">683</span><a id="line.683">                        + "specified. ATTENTION: generated result will have few queries, joined "</a>
+<span class="sourceLineNo">684</span><a id="line.684">                        + "by pipe(|). Together they will match all AST nodes on "</a>
+<span class="sourceLineNo">685</span><a id="line.685">                        + "specified line and column. You need to choose only one and recheck "</a>
+<span class="sourceLineNo">686</span><a id="line.686">                        + "that it works. Usage of all of them is also ok, but might result in "</a>
+<span class="sourceLineNo">687</span><a id="line.687">                        + "undesirable matching and suppress other issues.")</a>
+<span class="sourceLineNo">688</span><a id="line.688">        private String suppressionLineColumnNumber;</a>
+<span class="sourceLineNo">689</span><a id="line.689"></a>
+<span class="sourceLineNo">690</span><a id="line.690">        /**</a>
+<span class="sourceLineNo">691</span><a id="line.691">         * Tab character length.</a>
+<span class="sourceLineNo">692</span><a id="line.692">         *</a>
+<span class="sourceLineNo">693</span><a id="line.693">         * @noinspection CanBeFinal</a>
+<span class="sourceLineNo">694</span><a id="line.694">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
+<span class="sourceLineNo">695</span><a id="line.695">         *      reflection to manage such fields</a>
+<span class="sourceLineNo">696</span><a id="line.696">         */</a>
+<span class="sourceLineNo">697</span><a id="line.697">        @Option(names = {"-w", "--tabWidth"},</a>
+<span class="sourceLineNo">698</span><a id="line.698">                description = "Sets the length of the tab character. "</a>
+<span class="sourceLineNo">699</span><a id="line.699">                + "Used only with -s option. Default value is ${DEFAULT-VALUE}.")</a>
+<span class="sourceLineNo">700</span><a id="line.700">        private int tabWidth = CommonUtil.DEFAULT_TAB_WIDTH;</a>
+<span class="sourceLineNo">701</span><a id="line.701"></a>
+<span class="sourceLineNo">702</span><a id="line.702">        /** Switch whether to generate suppressions file or not. */</a>
+<span class="sourceLineNo">703</span><a id="line.703">        @Option(names = {"-g", "--generate-xpath-suppression"},</a>
+<span class="sourceLineNo">704</span><a id="line.704">                description = "Generates to output a suppression xml to use to suppress all "</a>
+<span class="sourceLineNo">705</span><a id="line.705">                        + "violations from user's config. Instead of printing every violation, "</a>
+<span class="sourceLineNo">706</span><a id="line.706">                        + "all violations will be catched and single suppressions xml file will "</a>
+<span class="sourceLineNo">707</span><a id="line.707">                        + "be printed out. Used only with -c option. Output "</a>
+<span class="sourceLineNo">708</span><a id="line.708">                        + "location can be specified with -o option.")</a>
+<span class="sourceLineNo">709</span><a id="line.709">        private boolean generateXpathSuppressionsFile;</a>
+<span class="sourceLineNo">710</span><a id="line.710"></a>
+<span class="sourceLineNo">711</span><a id="line.711">        /**</a>
+<span class="sourceLineNo">712</span><a id="line.712">         * Output format.</a>
+<span class="sourceLineNo">713</span><a id="line.713">         *</a>
+<span class="sourceLineNo">714</span><a id="line.714">         * @noinspection CanBeFinal</a>
+<span class="sourceLineNo">715</span><a id="line.715">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
+<span class="sourceLineNo">716</span><a id="line.716">         *      reflection to manage such fields</a>
+<span class="sourceLineNo">717</span><a id="line.717">         */</a>
+<span class="sourceLineNo">718</span><a id="line.718">        @Option(names = "-f",</a>
+<span class="sourceLineNo">719</span><a id="line.719">                description = "Specifies the output format. Valid values: "</a>
+<span class="sourceLineNo">720</span><a id="line.720">                + "${COMPLETION-CANDIDATES} for XMLLogger, SarifLogger, "</a>
+<span class="sourceLineNo">721</span><a id="line.721">                + "and DefaultLogger respectively. Defaults to ${DEFAULT-VALUE}.")</a>
+<span class="sourceLineNo">722</span><a id="line.722">        private OutputFormat format = DEFAULT_OUTPUT_FORMAT;</a>
+<span class="sourceLineNo">723</span><a id="line.723"></a>
+<span class="sourceLineNo">724</span><a id="line.724">        /** Option that controls whether to print the AST of the file. */</a>
+<span class="sourceLineNo">725</span><a id="line.725">        @Option(names = {"-t", "--tree"},</a>
+<span class="sourceLineNo">726</span><a id="line.726">                description = "Prints Abstract Syntax Tree(AST) of the checked file. The option "</a>
+<span class="sourceLineNo">727</span><a id="line.727">                        + "cannot be used other options and requires exactly one file to run on "</a>
+<span class="sourceLineNo">728</span><a id="line.728">                        + "to be specified.")</a>
+<span class="sourceLineNo">729</span><a id="line.729">        private boolean printAst;</a>
+<span class="sourceLineNo">730</span><a id="line.730"></a>
+<span class="sourceLineNo">731</span><a id="line.731">        /** Option that controls whether to print the AST of the file including comments. */</a>
+<span class="sourceLineNo">732</span><a id="line.732">        @Option(names = {"-T", "--treeWithComments"},</a>
+<span class="sourceLineNo">733</span><a id="line.733">                description = "Prints Abstract Syntax Tree(AST) with comment nodes "</a>
+<span class="sourceLineNo">734</span><a id="line.734">                        + "of the checked file. The option cannot be used with other options "</a>
+<span class="sourceLineNo">735</span><a id="line.735">                        + "and requires exactly one file to run on to be specified.")</a>
+<span class="sourceLineNo">736</span><a id="line.736">        private boolean printAstWithComments;</a>
+<span class="sourceLineNo">737</span><a id="line.737"></a>
+<span class="sourceLineNo">738</span><a id="line.738">        /** Option that controls whether to print the parse tree of the javadoc comment. */</a>
+<span class="sourceLineNo">739</span><a id="line.739">        @Option(names = {"-j", "--javadocTree"},</a>
+<span class="sourceLineNo">740</span><a id="line.740">                description = "Prints Parse Tree of the Javadoc comment. "</a>
+<span class="sourceLineNo">741</span><a id="line.741">                        + "The file have to contain only Javadoc comment content without "</a>
+<span class="sourceLineNo">742</span><a id="line.742">                        + "including '/**' and '*/' at the beginning and at the end respectively. "</a>
+<span class="sourceLineNo">743</span><a id="line.743">                        + "The option cannot be used other options and requires exactly one file "</a>
+<span class="sourceLineNo">744</span><a id="line.744">                        + "to run on to be specified.")</a>
+<span class="sourceLineNo">745</span><a id="line.745">        private boolean printJavadocTree;</a>
+<span class="sourceLineNo">746</span><a id="line.746"></a>
+<span class="sourceLineNo">747</span><a id="line.747">        /** Option that controls whether to print the full AST of the file. */</a>
+<span class="sourceLineNo">748</span><a id="line.748">        @Option(names = {"-J", "--treeWithJavadoc"},</a>
+<span class="sourceLineNo">749</span><a id="line.749">                description = "Prints Abstract Syntax Tree(AST) with Javadoc nodes "</a>
+<span class="sourceLineNo">750</span><a id="line.750">                        + "and comment nodes of the checked file. Attention that line number and "</a>
+<span class="sourceLineNo">751</span><a id="line.751">                        + "columns will not be the same as it is a file due to the fact that each "</a>
+<span class="sourceLineNo">752</span><a id="line.752">                        + "javadoc comment is parsed separately from java file. The option cannot "</a>
+<span class="sourceLineNo">753</span><a id="line.753">                        + "be used with other options and requires exactly one file to run on to "</a>
+<span class="sourceLineNo">754</span><a id="line.754">                        + "be specified.")</a>
+<span class="sourceLineNo">755</span><a id="line.755">        private boolean printTreeWithJavadoc;</a>
+<span class="sourceLineNo">756</span><a id="line.756"></a>
+<span class="sourceLineNo">757</span><a id="line.757">        /** Option that controls whether to print debug info. */</a>
+<span class="sourceLineNo">758</span><a id="line.758">        @Option(names = {"-d", "--debug"},</a>
+<span class="sourceLineNo">759</span><a id="line.759">                description = "Prints all debug logging of CheckStyle utility.")</a>
+<span class="sourceLineNo">760</span><a id="line.760">        private boolean debug;</a>
+<span class="sourceLineNo">761</span><a id="line.761"></a>
+<span class="sourceLineNo">762</span><a id="line.762">        /**</a>
+<span class="sourceLineNo">763</span><a id="line.763">         * Option that allows users to specify a list of paths to exclude.</a>
+<span class="sourceLineNo">764</span><a id="line.764">         *</a>
+<span class="sourceLineNo">765</span><a id="line.765">         * @noinspection CanBeFinal</a>
+<span class="sourceLineNo">766</span><a id="line.766">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
+<span class="sourceLineNo">767</span><a id="line.767">         *      reflection to manage such fields</a>
+<span class="sourceLineNo">768</span><a id="line.768">         */</a>
+<span class="sourceLineNo">769</span><a id="line.769">        @Option(names = {"-e", "--exclude"},</a>
+<span class="sourceLineNo">770</span><a id="line.770">                description = "Directory/file to exclude from CheckStyle. The path can be the "</a>
+<span class="sourceLineNo">771</span><a id="line.771">                        + "full, absolute path, or relative to the current path. Multiple "</a>
+<span class="sourceLineNo">772</span><a id="line.772">                        + "excludes are allowed.")</a>
+<span class="sourceLineNo">773</span><a id="line.773">        private List&lt;File&gt; exclude = new ArrayList&lt;&gt;();</a>
+<span class="sourceLineNo">774</span><a id="line.774"></a>
+<span class="sourceLineNo">775</span><a id="line.775">        /**</a>
+<span class="sourceLineNo">776</span><a id="line.776">         * Option that allows users to specify a regex of paths to exclude.</a>
+<span class="sourceLineNo">777</span><a id="line.777">         *</a>
+<span class="sourceLineNo">778</span><a id="line.778">         * @noinspection CanBeFinal</a>
+<span class="sourceLineNo">779</span><a id="line.779">         * @noinspectionreason CanBeFinal - we use picocli, and it uses</a>
+<span class="sourceLineNo">780</span><a id="line.780">         *      reflection to manage such fields</a>
+<span class="sourceLineNo">781</span><a id="line.781">         */</a>
+<span class="sourceLineNo">782</span><a id="line.782">        @Option(names = {"-x", "--exclude-regexp"},</a>
+<span class="sourceLineNo">783</span><a id="line.783">                description = "Directory/file pattern to exclude from CheckStyle. Multiple "</a>
+<span class="sourceLineNo">784</span><a id="line.784">                        + "excludes are allowed.")</a>
+<span class="sourceLineNo">785</span><a id="line.785">        private List&lt;Pattern&gt; excludeRegex = new ArrayList&lt;&gt;();</a>
+<span class="sourceLineNo">786</span><a id="line.786"></a>
+<span class="sourceLineNo">787</span><a id="line.787">        /** Switch whether to execute ignored modules or not. */</a>
+<span class="sourceLineNo">788</span><a id="line.788">        @Option(names = {"-E", "--executeIgnoredModules"},</a>
+<span class="sourceLineNo">789</span><a id="line.789">                description = "Allows ignored modules to be run.")</a>
+<span class="sourceLineNo">790</span><a id="line.790">        private boolean executeIgnoredModules;</a>
+<span class="sourceLineNo">791</span><a id="line.791"></a>
+<span class="sourceLineNo">792</span><a id="line.792">        /** Show AST branches that match xpath. */</a>
+<span class="sourceLineNo">793</span><a id="line.793">        @Option(names = {"-b", "--branch-matching-xpath"},</a>
+<span class="sourceLineNo">794</span><a id="line.794">            description = "Shows Abstract Syntax Tree(AST) branches that match given XPath query.")</a>
+<span class="sourceLineNo">795</span><a id="line.795">        private String xpath;</a>
+<span class="sourceLineNo">796</span><a id="line.796"></a>
+<span class="sourceLineNo">797</span><a id="line.797">        /**</a>
+<span class="sourceLineNo">798</span><a id="line.798">         * Gets the list of exclusions provided through the command line arguments.</a>
+<span class="sourceLineNo">799</span><a id="line.799">         *</a>
+<span class="sourceLineNo">800</span><a id="line.800">         * @return List of exclusion patterns.</a>
+<span class="sourceLineNo">801</span><a id="line.801">         */</a>
+<span class="sourceLineNo">802</span><a id="line.802">        private List&lt;Pattern&gt; getExclusions() {</a>
+<span class="sourceLineNo">803</span><a id="line.803">            final List&lt;Pattern&gt; result = exclude.stream()</a>
+<span class="sourceLineNo">804</span><a id="line.804">                    .map(File::getAbsolutePath)</a>
+<span class="sourceLineNo">805</span><a id="line.805">                    .map(Pattern::quote)</a>
+<span class="sourceLineNo">806</span><a id="line.806">                    .map(pattern -&gt; Pattern.compile("^" + pattern + "$"))</a>
+<span class="sourceLineNo">807</span><a id="line.807">                    .collect(Collectors.toCollection(ArrayList::new));</a>
+<span class="sourceLineNo">808</span><a id="line.808">            result.addAll(excludeRegex);</a>
+<span class="sourceLineNo">809</span><a id="line.809">            return result;</a>
+<span class="sourceLineNo">810</span><a id="line.810">        }</a>
+<span class="sourceLineNo">811</span><a id="line.811"></a>
+<span class="sourceLineNo">812</span><a id="line.812">        /**</a>
+<span class="sourceLineNo">813</span><a id="line.813">         * Validates the user-specified command line options.</a>
+<span class="sourceLineNo">814</span><a id="line.814">         *</a>
+<span class="sourceLineNo">815</span><a id="line.815">         * @param parseResult used to verify if the format option was specified on the command line</a>
+<span class="sourceLineNo">816</span><a id="line.816">         * @param filesToProcess the list of files whose style to check</a>
+<span class="sourceLineNo">817</span><a id="line.817">         * @return list of violations</a>
+<span class="sourceLineNo">818</span><a id="line.818">         */</a>
+<span class="sourceLineNo">819</span><a id="line.819">        // -@cs[CyclomaticComplexity] Breaking apart will damage encapsulation</a>
+<span class="sourceLineNo">820</span><a id="line.820">        private List&lt;String&gt; validateCli(ParseResult parseResult, List&lt;File&gt; filesToProcess) {</a>
+<span class="sourceLineNo">821</span><a id="line.821">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</a>
+<span class="sourceLineNo">822</span><a id="line.822">            final boolean hasConfigurationFile = configurationFile != null;</a>
+<span class="sourceLineNo">823</span><a id="line.823">            final boolean hasSuppressionLineColumnNumber = suppressionLineColumnNumber != null;</a>
+<span class="sourceLineNo">824</span><a id="line.824"></a>
+<span class="sourceLineNo">825</span><a id="line.825">            if (filesToProcess.isEmpty()) {</a>
+<span class="sourceLineNo">826</span><a id="line.826">                result.add("Files to process must be specified, found 0.");</a>
+<span class="sourceLineNo">827</span><a id="line.827">            }</a>
+<span class="sourceLineNo">828</span><a id="line.828">            // ensure there is no conflicting options</a>
+<span class="sourceLineNo">829</span><a id="line.829">            else if (printAst || printAstWithComments || printJavadocTree || printTreeWithJavadoc</a>
+<span class="sourceLineNo">830</span><a id="line.830">                || xpath != null) {</a>
+<span class="sourceLineNo">831</span><a id="line.831">                if (suppressionLineColumnNumber != null || configurationFile != null</a>
+<span class="sourceLineNo">832</span><a id="line.832">                        || propertiesFile != null || outputPath != null</a>
+<span class="sourceLineNo">833</span><a id="line.833">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</a>
+<span class="sourceLineNo">834</span><a id="line.834">                    result.add("Option '-t' cannot be used with other options.");</a>
+<span class="sourceLineNo">835</span><a id="line.835">                }</a>
+<span class="sourceLineNo">836</span><a id="line.836">                else if (filesToProcess.size() &gt; 1) {</a>
+<span class="sourceLineNo">837</span><a id="line.837">                    result.add("Printing AST is allowed for only one file.");</a>
+<span class="sourceLineNo">838</span><a id="line.838">                }</a>
+<span class="sourceLineNo">839</span><a id="line.839">            }</a>
+<span class="sourceLineNo">840</span><a id="line.840">            else if (hasSuppressionLineColumnNumber) {</a>
+<span class="sourceLineNo">841</span><a id="line.841">                if (configurationFile != null || propertiesFile != null</a>
+<span class="sourceLineNo">842</span><a id="line.842">                        || outputPath != null</a>
+<span class="sourceLineNo">843</span><a id="line.843">                        || parseResult.hasMatchedOption(OUTPUT_FORMAT_OPTION)) {</a>
+<span class="sourceLineNo">844</span><a id="line.844">                    result.add("Option '-s' cannot be used with other options.");</a>
+<span class="sourceLineNo">845</span><a id="line.845">                }</a>
+<span class="sourceLineNo">846</span><a id="line.846">                else if (filesToProcess.size() &gt; 1) {</a>
+<span class="sourceLineNo">847</span><a id="line.847">                    result.add("Printing xpath suppressions is allowed for only one file.");</a>
+<span class="sourceLineNo">848</span><a id="line.848">                }</a>
+<span class="sourceLineNo">849</span><a id="line.849">            }</a>
+<span class="sourceLineNo">850</span><a id="line.850">            else if (hasConfigurationFile) {</a>
+<span class="sourceLineNo">851</span><a id="line.851">                try {</a>
+<span class="sourceLineNo">852</span><a id="line.852">                    // test location only</a>
+<span class="sourceLineNo">853</span><a id="line.853">                    CommonUtil.getUriByFilename(configurationFile);</a>
+<span class="sourceLineNo">854</span><a id="line.854">                }</a>
+<span class="sourceLineNo">855</span><a id="line.855">                catch (CheckstyleException ignored) {</a>
+<span class="sourceLineNo">856</span><a id="line.856">                    final String msg = "Could not find config XML file '%s'.";</a>
+<span class="sourceLineNo">857</span><a id="line.857">                    result.add(String.format(Locale.ROOT, msg, configurationFile));</a>
+<span class="sourceLineNo">858</span><a id="line.858">                }</a>
+<span class="sourceLineNo">859</span><a id="line.859">                result.addAll(validateOptionalCliParametersIfConfigDefined());</a>
+<span class="sourceLineNo">860</span><a id="line.860">            }</a>
+<span class="sourceLineNo">861</span><a id="line.861">            else {</a>
+<span class="sourceLineNo">862</span><a id="line.862">                result.add("Must specify a config XML file.");</a>
+<span class="sourceLineNo">863</span><a id="line.863">            }</a>
+<span class="sourceLineNo">864</span><a id="line.864"></a>
+<span class="sourceLineNo">865</span><a id="line.865">            return result;</a>
+<span class="sourceLineNo">866</span><a id="line.866">        }</a>
+<span class="sourceLineNo">867</span><a id="line.867"></a>
+<span class="sourceLineNo">868</span><a id="line.868">        /**</a>
+<span class="sourceLineNo">869</span><a id="line.869">         * Validates optional command line parameters that might be used with config file.</a>
+<span class="sourceLineNo">870</span><a id="line.870">         *</a>
+<span class="sourceLineNo">871</span><a id="line.871">         * @return list of violations</a>
+<span class="sourceLineNo">872</span><a id="line.872">         */</a>
+<span class="sourceLineNo">873</span><a id="line.873">        private List&lt;String&gt; validateOptionalCliParametersIfConfigDefined() {</a>
+<span class="sourceLineNo">874</span><a id="line.874">            final List&lt;String&gt; result = new ArrayList&lt;&gt;();</a>
+<span class="sourceLineNo">875</span><a id="line.875">            if (propertiesFile != null &amp;&amp; !propertiesFile.exists()) {</a>
+<span class="sourceLineNo">876</span><a id="line.876">                result.add(String.format(Locale.ROOT,</a>
+<span class="sourceLineNo">877</span><a id="line.877">                        "Could not find file '%s'.", propertiesFile));</a>
+<span class="sourceLineNo">878</span><a id="line.878">            }</a>
+<span class="sourceLineNo">879</span><a id="line.879">            return result;</a>
+<span class="sourceLineNo">880</span><a id="line.880">        }</a>
+<span class="sourceLineNo">881</span><a id="line.881">    }</a>
+<span class="sourceLineNo">882</span><a id="line.882"></a>
+<span class="sourceLineNo">883</span><a id="line.883">}</a>
 
 
 
