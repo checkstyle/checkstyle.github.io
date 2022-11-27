@@ -36,587 +36,588 @@
 <span class="sourceLineNo">027</span><a id="line.27">import java.util.Map;</a>
 <span class="sourceLineNo">028</span><a id="line.28">import java.util.Optional;</a>
 <span class="sourceLineNo">029</span><a id="line.29">import java.util.function.Function;</a>
-<span class="sourceLineNo">030</span><a id="line.30"></a>
-<span class="sourceLineNo">031</span><a id="line.31">import com.puppycrawl.tools.checkstyle.FileStatefulCheck;</a>
-<span class="sourceLineNo">032</span><a id="line.32">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
-<span class="sourceLineNo">033</span><a id="line.33">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
-<span class="sourceLineNo">034</span><a id="line.34">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
-<span class="sourceLineNo">035</span><a id="line.35">import com.puppycrawl.tools.checkstyle.utils.CheckUtil;</a>
-<span class="sourceLineNo">036</span><a id="line.36">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
-<span class="sourceLineNo">037</span><a id="line.37">import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;</a>
-<span class="sourceLineNo">038</span><a id="line.38">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
-<span class="sourceLineNo">039</span><a id="line.39"></a>
-<span class="sourceLineNo">040</span><a id="line.40">/**</a>
-<span class="sourceLineNo">041</span><a id="line.41"> * &lt;p&gt;</a>
-<span class="sourceLineNo">042</span><a id="line.42"> * Checks that a class that has only private constructors and has no descendant</a>
-<span class="sourceLineNo">043</span><a id="line.43"> * classes is declared as final.</a>
-<span class="sourceLineNo">044</span><a id="line.44"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">045</span><a id="line.45"> * &lt;p&gt;</a>
-<span class="sourceLineNo">046</span><a id="line.46"> * To configure the check:</a>
-<span class="sourceLineNo">047</span><a id="line.47"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">048</span><a id="line.48"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">049</span><a id="line.49"> * &amp;lt;module name=&amp;quot;FinalClass&amp;quot;/&amp;gt;</a>
-<span class="sourceLineNo">050</span><a id="line.50"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">051</span><a id="line.51"> * &lt;p&gt;</a>
-<span class="sourceLineNo">052</span><a id="line.52"> * Example:</a>
-<span class="sourceLineNo">053</span><a id="line.53"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">054</span><a id="line.54"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">055</span><a id="line.55"> * final class MyClass {  // OK</a>
-<span class="sourceLineNo">056</span><a id="line.56"> *   private MyClass() { }</a>
-<span class="sourceLineNo">057</span><a id="line.57"> * }</a>
-<span class="sourceLineNo">058</span><a id="line.58"> *</a>
-<span class="sourceLineNo">059</span><a id="line.59"> * class MyClass { // violation, class should be declared final</a>
-<span class="sourceLineNo">060</span><a id="line.60"> *   private MyClass() { }</a>
-<span class="sourceLineNo">061</span><a id="line.61"> * }</a>
-<span class="sourceLineNo">062</span><a id="line.62"> *</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * class MyClass { // OK, since it has a public constructor</a>
-<span class="sourceLineNo">064</span><a id="line.64"> *   int field1;</a>
-<span class="sourceLineNo">065</span><a id="line.65"> *   String field2;</a>
-<span class="sourceLineNo">066</span><a id="line.66"> *   private MyClass(int value) {</a>
-<span class="sourceLineNo">067</span><a id="line.67"> *     this.field1 = value;</a>
-<span class="sourceLineNo">068</span><a id="line.68"> *     this.field2 = " ";</a>
-<span class="sourceLineNo">069</span><a id="line.69"> *   }</a>
-<span class="sourceLineNo">070</span><a id="line.70"> *   public MyClass(String value) {</a>
-<span class="sourceLineNo">071</span><a id="line.71"> *     this.field2 = value;</a>
-<span class="sourceLineNo">072</span><a id="line.72"> *     this.field1 = 0;</a>
-<span class="sourceLineNo">073</span><a id="line.73"> *   }</a>
-<span class="sourceLineNo">074</span><a id="line.74"> * }</a>
-<span class="sourceLineNo">075</span><a id="line.75"> *</a>
-<span class="sourceLineNo">076</span><a id="line.76"> * class TestAnonymousInnerClasses { // OK, class has an anonymous inner class.</a>
-<span class="sourceLineNo">077</span><a id="line.77"> *     public static final TestAnonymousInnerClasses ONE = new TestAnonymousInnerClasses() {</a>
-<span class="sourceLineNo">078</span><a id="line.78"> *</a>
-<span class="sourceLineNo">079</span><a id="line.79"> *     };</a>
-<span class="sourceLineNo">080</span><a id="line.80"> *</a>
-<span class="sourceLineNo">081</span><a id="line.81"> *     private TestAnonymousInnerClasses() {</a>
-<span class="sourceLineNo">082</span><a id="line.82"> *     }</a>
-<span class="sourceLineNo">083</span><a id="line.83"> * }</a>
-<span class="sourceLineNo">084</span><a id="line.84"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">085</span><a id="line.85"> * &lt;p&gt;</a>
-<span class="sourceLineNo">086</span><a id="line.86"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
-<span class="sourceLineNo">087</span><a id="line.87"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">088</span><a id="line.88"> * &lt;p&gt;</a>
-<span class="sourceLineNo">089</span><a id="line.89"> * Violation Message Keys:</a>
-<span class="sourceLineNo">090</span><a id="line.90"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">091</span><a id="line.91"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">092</span><a id="line.92"> * &lt;li&gt;</a>
-<span class="sourceLineNo">093</span><a id="line.93"> * {@code final.class}</a>
-<span class="sourceLineNo">094</span><a id="line.94"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">095</span><a id="line.95"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">096</span><a id="line.96"> *</a>
-<span class="sourceLineNo">097</span><a id="line.97"> * @since 3.1</a>
-<span class="sourceLineNo">098</span><a id="line.98"> */</a>
-<span class="sourceLineNo">099</span><a id="line.99">@FileStatefulCheck</a>
-<span class="sourceLineNo">100</span><a id="line.100">public class FinalClassCheck</a>
-<span class="sourceLineNo">101</span><a id="line.101">    extends AbstractCheck {</a>
-<span class="sourceLineNo">102</span><a id="line.102"></a>
-<span class="sourceLineNo">103</span><a id="line.103">    /**</a>
-<span class="sourceLineNo">104</span><a id="line.104">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">105</span><a id="line.105">     * file.</a>
-<span class="sourceLineNo">106</span><a id="line.106">     */</a>
-<span class="sourceLineNo">107</span><a id="line.107">    public static final String MSG_KEY = "final.class";</a>
-<span class="sourceLineNo">108</span><a id="line.108"></a>
-<span class="sourceLineNo">109</span><a id="line.109">    /**</a>
-<span class="sourceLineNo">110</span><a id="line.110">     * Character separate package names in qualified name of java class.</a>
-<span class="sourceLineNo">111</span><a id="line.111">     */</a>
-<span class="sourceLineNo">112</span><a id="line.112">    private static final String PACKAGE_SEPARATOR = ".";</a>
-<span class="sourceLineNo">113</span><a id="line.113"></a>
-<span class="sourceLineNo">114</span><a id="line.114">    /** Keeps ClassDesc objects for all inner classes. */</a>
-<span class="sourceLineNo">115</span><a id="line.115">    private Map&lt;String, ClassDesc&gt; innerClasses;</a>
-<span class="sourceLineNo">116</span><a id="line.116"></a>
-<span class="sourceLineNo">117</span><a id="line.117">    /**</a>
-<span class="sourceLineNo">118</span><a id="line.118">     * Maps anonymous inner class's {@link TokenTypes#LITERAL_NEW} node to</a>
-<span class="sourceLineNo">119</span><a id="line.119">     * the outer type declaration's fully qualified name.</a>
-<span class="sourceLineNo">120</span><a id="line.120">     */</a>
-<span class="sourceLineNo">121</span><a id="line.121">    private Map&lt;DetailAST, String&gt; anonInnerClassToOuterTypeDecl;</a>
-<span class="sourceLineNo">122</span><a id="line.122"></a>
-<span class="sourceLineNo">123</span><a id="line.123">    /** Keeps TypeDeclarationDescription object for stack of declared type descriptions. */</a>
-<span class="sourceLineNo">124</span><a id="line.124">    private Deque&lt;TypeDeclarationDescription&gt; typeDeclarations;</a>
-<span class="sourceLineNo">125</span><a id="line.125"></a>
-<span class="sourceLineNo">126</span><a id="line.126">    /** Full qualified name of the package. */</a>
-<span class="sourceLineNo">127</span><a id="line.127">    private String packageName;</a>
-<span class="sourceLineNo">128</span><a id="line.128"></a>
-<span class="sourceLineNo">129</span><a id="line.129">    @Override</a>
-<span class="sourceLineNo">130</span><a id="line.130">    public int[] getDefaultTokens() {</a>
-<span class="sourceLineNo">131</span><a id="line.131">        return getRequiredTokens();</a>
-<span class="sourceLineNo">132</span><a id="line.132">    }</a>
-<span class="sourceLineNo">133</span><a id="line.133"></a>
-<span class="sourceLineNo">134</span><a id="line.134">    @Override</a>
-<span class="sourceLineNo">135</span><a id="line.135">    public int[] getAcceptableTokens() {</a>
-<span class="sourceLineNo">136</span><a id="line.136">        return getRequiredTokens();</a>
-<span class="sourceLineNo">137</span><a id="line.137">    }</a>
-<span class="sourceLineNo">138</span><a id="line.138"></a>
-<span class="sourceLineNo">139</span><a id="line.139">    @Override</a>
-<span class="sourceLineNo">140</span><a id="line.140">    public int[] getRequiredTokens() {</a>
-<span class="sourceLineNo">141</span><a id="line.141">        return new int[] {</a>
-<span class="sourceLineNo">142</span><a id="line.142">            TokenTypes.ANNOTATION_DEF,</a>
-<span class="sourceLineNo">143</span><a id="line.143">            TokenTypes.CLASS_DEF,</a>
-<span class="sourceLineNo">144</span><a id="line.144">            TokenTypes.ENUM_DEF,</a>
-<span class="sourceLineNo">145</span><a id="line.145">            TokenTypes.INTERFACE_DEF,</a>
-<span class="sourceLineNo">146</span><a id="line.146">            TokenTypes.RECORD_DEF,</a>
-<span class="sourceLineNo">147</span><a id="line.147">            TokenTypes.CTOR_DEF,</a>
-<span class="sourceLineNo">148</span><a id="line.148">            TokenTypes.PACKAGE_DEF,</a>
-<span class="sourceLineNo">149</span><a id="line.149">            TokenTypes.LITERAL_NEW,</a>
-<span class="sourceLineNo">150</span><a id="line.150">        };</a>
-<span class="sourceLineNo">151</span><a id="line.151">    }</a>
-<span class="sourceLineNo">152</span><a id="line.152"></a>
-<span class="sourceLineNo">153</span><a id="line.153">    @Override</a>
-<span class="sourceLineNo">154</span><a id="line.154">    public void beginTree(DetailAST rootAST) {</a>
-<span class="sourceLineNo">155</span><a id="line.155">        typeDeclarations = new ArrayDeque&lt;&gt;();</a>
-<span class="sourceLineNo">156</span><a id="line.156">        innerClasses = new LinkedHashMap&lt;&gt;();</a>
-<span class="sourceLineNo">157</span><a id="line.157">        anonInnerClassToOuterTypeDecl = new HashMap&lt;&gt;();</a>
-<span class="sourceLineNo">158</span><a id="line.158">        packageName = "";</a>
-<span class="sourceLineNo">159</span><a id="line.159">    }</a>
-<span class="sourceLineNo">160</span><a id="line.160"></a>
-<span class="sourceLineNo">161</span><a id="line.161">    @Override</a>
-<span class="sourceLineNo">162</span><a id="line.162">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">163</span><a id="line.163">        switch (ast.getType()) {</a>
-<span class="sourceLineNo">164</span><a id="line.164">            case TokenTypes.PACKAGE_DEF:</a>
-<span class="sourceLineNo">165</span><a id="line.165">                packageName = CheckUtil.extractQualifiedName(ast.getFirstChild().getNextSibling());</a>
-<span class="sourceLineNo">166</span><a id="line.166">                break;</a>
-<span class="sourceLineNo">167</span><a id="line.167"></a>
-<span class="sourceLineNo">168</span><a id="line.168">            case TokenTypes.ANNOTATION_DEF:</a>
-<span class="sourceLineNo">169</span><a id="line.169">            case TokenTypes.ENUM_DEF:</a>
-<span class="sourceLineNo">170</span><a id="line.170">            case TokenTypes.INTERFACE_DEF:</a>
-<span class="sourceLineNo">171</span><a id="line.171">            case TokenTypes.RECORD_DEF:</a>
-<span class="sourceLineNo">172</span><a id="line.172">                final TypeDeclarationDescription description = new TypeDeclarationDescription(</a>
-<span class="sourceLineNo">173</span><a id="line.173">                    extractQualifiedTypeName(ast), typeDeclarations.size(), ast);</a>
-<span class="sourceLineNo">174</span><a id="line.174">                typeDeclarations.push(description);</a>
-<span class="sourceLineNo">175</span><a id="line.175">                break;</a>
-<span class="sourceLineNo">176</span><a id="line.176"></a>
-<span class="sourceLineNo">177</span><a id="line.177">            case TokenTypes.CLASS_DEF:</a>
-<span class="sourceLineNo">178</span><a id="line.178">                visitClass(ast);</a>
-<span class="sourceLineNo">179</span><a id="line.179">                break;</a>
-<span class="sourceLineNo">180</span><a id="line.180"></a>
-<span class="sourceLineNo">181</span><a id="line.181">            case TokenTypes.CTOR_DEF:</a>
-<span class="sourceLineNo">182</span><a id="line.182">                visitCtor(ast);</a>
-<span class="sourceLineNo">183</span><a id="line.183">                break;</a>
-<span class="sourceLineNo">184</span><a id="line.184"></a>
-<span class="sourceLineNo">185</span><a id="line.185">            case TokenTypes.LITERAL_NEW:</a>
-<span class="sourceLineNo">186</span><a id="line.186">                if (ast.getFirstChild() != null</a>
-<span class="sourceLineNo">187</span><a id="line.187">                        &amp;&amp; ast.getLastChild().getType() == TokenTypes.OBJBLOCK) {</a>
-<span class="sourceLineNo">188</span><a id="line.188">                    anonInnerClassToOuterTypeDecl</a>
-<span class="sourceLineNo">189</span><a id="line.189">                        .put(ast, typeDeclarations.peek().getQualifiedName());</a>
-<span class="sourceLineNo">190</span><a id="line.190">                }</a>
-<span class="sourceLineNo">191</span><a id="line.191">                break;</a>
-<span class="sourceLineNo">192</span><a id="line.192"></a>
-<span class="sourceLineNo">193</span><a id="line.193">            default:</a>
-<span class="sourceLineNo">194</span><a id="line.194">                throw new IllegalStateException(ast.toString());</a>
-<span class="sourceLineNo">195</span><a id="line.195">        }</a>
-<span class="sourceLineNo">196</span><a id="line.196">    }</a>
-<span class="sourceLineNo">197</span><a id="line.197"></a>
-<span class="sourceLineNo">198</span><a id="line.198">    /**</a>
-<span class="sourceLineNo">199</span><a id="line.199">     * Called to process a type definition.</a>
-<span class="sourceLineNo">200</span><a id="line.200">     *</a>
-<span class="sourceLineNo">201</span><a id="line.201">     * @param ast the token to process</a>
-<span class="sourceLineNo">202</span><a id="line.202">     */</a>
-<span class="sourceLineNo">203</span><a id="line.203">    private void visitClass(DetailAST ast) {</a>
-<span class="sourceLineNo">204</span><a id="line.204">        final String qualifiedClassName = extractQualifiedTypeName(ast);</a>
-<span class="sourceLineNo">205</span><a id="line.205">        final ClassDesc currClass = new ClassDesc(qualifiedClassName, typeDeclarations.size(), ast);</a>
-<span class="sourceLineNo">206</span><a id="line.206">        typeDeclarations.push(currClass);</a>
-<span class="sourceLineNo">207</span><a id="line.207">        innerClasses.put(qualifiedClassName, currClass);</a>
-<span class="sourceLineNo">208</span><a id="line.208">    }</a>
-<span class="sourceLineNo">209</span><a id="line.209"></a>
-<span class="sourceLineNo">210</span><a id="line.210">    /**</a>
-<span class="sourceLineNo">211</span><a id="line.211">     * Called to process a constructor definition.</a>
-<span class="sourceLineNo">212</span><a id="line.212">     *</a>
-<span class="sourceLineNo">213</span><a id="line.213">     * @param ast the token to process</a>
-<span class="sourceLineNo">214</span><a id="line.214">     */</a>
-<span class="sourceLineNo">215</span><a id="line.215">    private void visitCtor(DetailAST ast) {</a>
-<span class="sourceLineNo">216</span><a id="line.216">        if (!ScopeUtil.isInEnumBlock(ast) &amp;&amp; !ScopeUtil.isInRecordBlock(ast)) {</a>
-<span class="sourceLineNo">217</span><a id="line.217">            final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</a>
-<span class="sourceLineNo">218</span><a id="line.218">            // Can be only of type ClassDesc, preceding if statements guarantee it.</a>
-<span class="sourceLineNo">219</span><a id="line.219">            final ClassDesc desc = (ClassDesc) typeDeclarations.getFirst();</a>
-<span class="sourceLineNo">220</span><a id="line.220">            if (modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {</a>
-<span class="sourceLineNo">221</span><a id="line.221">                desc.registerNonPrivateCtor();</a>
-<span class="sourceLineNo">222</span><a id="line.222">            }</a>
-<span class="sourceLineNo">223</span><a id="line.223">            else {</a>
-<span class="sourceLineNo">224</span><a id="line.224">                desc.registerPrivateCtor();</a>
-<span class="sourceLineNo">225</span><a id="line.225">            }</a>
-<span class="sourceLineNo">226</span><a id="line.226">        }</a>
-<span class="sourceLineNo">227</span><a id="line.227">    }</a>
-<span class="sourceLineNo">228</span><a id="line.228"></a>
-<span class="sourceLineNo">229</span><a id="line.229">    @Override</a>
-<span class="sourceLineNo">230</span><a id="line.230">    public void leaveToken(DetailAST ast) {</a>
-<span class="sourceLineNo">231</span><a id="line.231">        if (TokenUtil.isTypeDeclaration(ast.getType())) {</a>
-<span class="sourceLineNo">232</span><a id="line.232">            typeDeclarations.pop();</a>
-<span class="sourceLineNo">233</span><a id="line.233">        }</a>
-<span class="sourceLineNo">234</span><a id="line.234">        if (TokenUtil.isRootNode(ast.getParent())) {</a>
-<span class="sourceLineNo">235</span><a id="line.235">            anonInnerClassToOuterTypeDecl.forEach(this::registerAnonymousInnerClassToSuperClass);</a>
-<span class="sourceLineNo">236</span><a id="line.236">            // First pass: mark all classes that have derived inner classes</a>
-<span class="sourceLineNo">237</span><a id="line.237">            innerClasses.forEach(this::registerNestedSubclassToOuterSuperClasses);</a>
-<span class="sourceLineNo">238</span><a id="line.238">            // Second pass: report violation for all classes that should be declared as final</a>
-<span class="sourceLineNo">239</span><a id="line.239">            innerClasses.forEach((qualifiedClassName, classDesc) -&gt; {</a>
-<span class="sourceLineNo">240</span><a id="line.240">                if (shouldBeDeclaredAsFinal(classDesc)) {</a>
-<span class="sourceLineNo">241</span><a id="line.241">                    final String className = CommonUtil.baseClassName(qualifiedClassName);</a>
-<span class="sourceLineNo">242</span><a id="line.242">                    log(classDesc.getTypeDeclarationAst(), MSG_KEY, className);</a>
-<span class="sourceLineNo">243</span><a id="line.243">                }</a>
-<span class="sourceLineNo">244</span><a id="line.244">            });</a>
-<span class="sourceLineNo">245</span><a id="line.245">        }</a>
-<span class="sourceLineNo">246</span><a id="line.246">    }</a>
-<span class="sourceLineNo">247</span><a id="line.247"></a>
-<span class="sourceLineNo">248</span><a id="line.248">    /**</a>
-<span class="sourceLineNo">249</span><a id="line.249">     * Checks whether a class should be declared as final or not.</a>
-<span class="sourceLineNo">250</span><a id="line.250">     *</a>
-<span class="sourceLineNo">251</span><a id="line.251">     * @param desc description of the class</a>
-<span class="sourceLineNo">252</span><a id="line.252">     * @return true if given class should be declared as final otherwise false</a>
-<span class="sourceLineNo">253</span><a id="line.253">     */</a>
-<span class="sourceLineNo">254</span><a id="line.254">    private static boolean shouldBeDeclaredAsFinal(ClassDesc desc) {</a>
-<span class="sourceLineNo">255</span><a id="line.255">        return desc.isWithPrivateCtor()</a>
-<span class="sourceLineNo">256</span><a id="line.256">                &amp;&amp; !(desc.isDeclaredAsAbstract()</a>
-<span class="sourceLineNo">257</span><a id="line.257">                    || desc.isSuperClassOfAnonymousInnerClass())</a>
-<span class="sourceLineNo">258</span><a id="line.258">                &amp;&amp; !desc.isDeclaredAsFinal()</a>
-<span class="sourceLineNo">259</span><a id="line.259">                &amp;&amp; !desc.isWithNonPrivateCtor()</a>
-<span class="sourceLineNo">260</span><a id="line.260">                &amp;&amp; !desc.isWithNestedSubclass();</a>
-<span class="sourceLineNo">261</span><a id="line.261">    }</a>
-<span class="sourceLineNo">262</span><a id="line.262"></a>
-<span class="sourceLineNo">263</span><a id="line.263">    /**</a>
-<span class="sourceLineNo">264</span><a id="line.264">     * Register to outer super class of given classAst that</a>
-<span class="sourceLineNo">265</span><a id="line.265">     * given classAst is extending them.</a>
-<span class="sourceLineNo">266</span><a id="line.266">     *</a>
-<span class="sourceLineNo">267</span><a id="line.267">     * @param qualifiedClassName qualifies class name(with package) of the current class</a>
-<span class="sourceLineNo">268</span><a id="line.268">     * @param currentClass class which outer super class will be informed about nesting subclass</a>
-<span class="sourceLineNo">269</span><a id="line.269">     */</a>
-<span class="sourceLineNo">270</span><a id="line.270">    private void registerNestedSubclassToOuterSuperClasses(String qualifiedClassName,</a>
-<span class="sourceLineNo">271</span><a id="line.271">                                                           ClassDesc currentClass) {</a>
-<span class="sourceLineNo">272</span><a id="line.272">        final String superClassName = getSuperClassName(currentClass.getTypeDeclarationAst());</a>
-<span class="sourceLineNo">273</span><a id="line.273">        if (superClassName != null) {</a>
-<span class="sourceLineNo">274</span><a id="line.274">            final Function&lt;ClassDesc, Integer&gt; nestedClassCountProvider = classDesc -&gt; {</a>
-<span class="sourceLineNo">275</span><a id="line.275">                return CheckUtil.typeDeclarationNameMatchingCount(qualifiedClassName,</a>
-<span class="sourceLineNo">276</span><a id="line.276">                                                                  classDesc.getQualifiedName());</a>
-<span class="sourceLineNo">277</span><a id="line.277">            };</a>
-<span class="sourceLineNo">278</span><a id="line.278">            getNearestClassWithSameName(superClassName, nestedClassCountProvider)</a>
-<span class="sourceLineNo">279</span><a id="line.279">                .or(() -&gt; Optional.ofNullable(innerClasses.get(superClassName)))</a>
-<span class="sourceLineNo">280</span><a id="line.280">                .ifPresent(ClassDesc::registerNestedSubclass);</a>
-<span class="sourceLineNo">281</span><a id="line.281">        }</a>
-<span class="sourceLineNo">282</span><a id="line.282">    }</a>
-<span class="sourceLineNo">283</span><a id="line.283"></a>
-<span class="sourceLineNo">284</span><a id="line.284">    /**</a>
-<span class="sourceLineNo">285</span><a id="line.285">     * Register to the super class of anonymous inner class that the given class is instantiated</a>
-<span class="sourceLineNo">286</span><a id="line.286">     * by an anonymous inner class.</a>
-<span class="sourceLineNo">287</span><a id="line.287">     *</a>
-<span class="sourceLineNo">288</span><a id="line.288">     * @param literalNewAst ast node of {@link TokenTypes#LITERAL_NEW} representing anonymous inner</a>
-<span class="sourceLineNo">289</span><a id="line.289">     *                      class</a>
-<span class="sourceLineNo">290</span><a id="line.290">     * @param outerTypeDeclName Fully qualified name of the outer type declaration of anonymous</a>
-<span class="sourceLineNo">291</span><a id="line.291">     *                          inner class</a>
-<span class="sourceLineNo">292</span><a id="line.292">     */</a>
-<span class="sourceLineNo">293</span><a id="line.293">    private void registerAnonymousInnerClassToSuperClass(DetailAST literalNewAst,</a>
-<span class="sourceLineNo">294</span><a id="line.294">                                                         String outerTypeDeclName) {</a>
-<span class="sourceLineNo">295</span><a id="line.295">        final String superClassName = CheckUtil.getShortNameOfAnonInnerClass(literalNewAst);</a>
-<span class="sourceLineNo">296</span><a id="line.296"></a>
-<span class="sourceLineNo">297</span><a id="line.297">        final Function&lt;ClassDesc, Integer&gt; anonClassCountProvider = classDesc -&gt; {</a>
-<span class="sourceLineNo">298</span><a id="line.298">            return getAnonSuperTypeMatchingCount(outerTypeDeclName, classDesc.getQualifiedName());</a>
-<span class="sourceLineNo">299</span><a id="line.299">        };</a>
-<span class="sourceLineNo">300</span><a id="line.300">        getNearestClassWithSameName(superClassName, anonClassCountProvider)</a>
-<span class="sourceLineNo">301</span><a id="line.301">            .or(() -&gt; Optional.ofNullable(innerClasses.get(superClassName)))</a>
-<span class="sourceLineNo">302</span><a id="line.302">            .ifPresent(ClassDesc::registerSuperClassOfAnonymousInnerClass);</a>
-<span class="sourceLineNo">303</span><a id="line.303">    }</a>
-<span class="sourceLineNo">304</span><a id="line.304"></a>
-<span class="sourceLineNo">305</span><a id="line.305">    /**</a>
-<span class="sourceLineNo">306</span><a id="line.306">     * Get the nearest class with same name.</a>
-<span class="sourceLineNo">307</span><a id="line.307">     *</a>
-<span class="sourceLineNo">308</span><a id="line.308">     * &lt;p&gt;The parameter {@code countProvider} exists because if the class being searched is the</a>
-<span class="sourceLineNo">309</span><a id="line.309">     * super class of anonymous inner class, the rules of evaluation are a bit different,</a>
-<span class="sourceLineNo">310</span><a id="line.310">     * consider the following example-</a>
-<span class="sourceLineNo">311</span><a id="line.311">     * &lt;pre&gt;</a>
-<span class="sourceLineNo">312</span><a id="line.312">     * {@code</a>
-<span class="sourceLineNo">313</span><a id="line.313">     * public class Main {</a>
-<span class="sourceLineNo">314</span><a id="line.314">     *     static class One {</a>
-<span class="sourceLineNo">315</span><a id="line.315">     *         static class Two {</a>
-<span class="sourceLineNo">316</span><a id="line.316">     *         }</a>
-<span class="sourceLineNo">317</span><a id="line.317">     *     }</a>
-<span class="sourceLineNo">318</span><a id="line.318">     *</a>
-<span class="sourceLineNo">319</span><a id="line.319">     *     class Three {</a>
-<span class="sourceLineNo">320</span><a id="line.320">     *         One.Two object = new One.Two() { // Object of Main.Three.One.Two</a>
-<span class="sourceLineNo">321</span><a id="line.321">     *                                          // and not of Main.One.Two</a>
-<span class="sourceLineNo">322</span><a id="line.322">     *         };</a>
-<span class="sourceLineNo">323</span><a id="line.323">     *</a>
-<span class="sourceLineNo">324</span><a id="line.324">     *         static class One {</a>
-<span class="sourceLineNo">325</span><a id="line.325">     *             static class Two {</a>
-<span class="sourceLineNo">326</span><a id="line.326">     *             }</a>
-<span class="sourceLineNo">327</span><a id="line.327">     *         }</a>
-<span class="sourceLineNo">328</span><a id="line.328">     *     }</a>
-<span class="sourceLineNo">329</span><a id="line.329">     * }</a>
+<span class="sourceLineNo">030</span><a id="line.30">import java.util.function.ToIntFunction;</a>
+<span class="sourceLineNo">031</span><a id="line.31"></a>
+<span class="sourceLineNo">032</span><a id="line.32">import com.puppycrawl.tools.checkstyle.FileStatefulCheck;</a>
+<span class="sourceLineNo">033</span><a id="line.33">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
+<span class="sourceLineNo">034</span><a id="line.34">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
+<span class="sourceLineNo">035</span><a id="line.35">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
+<span class="sourceLineNo">036</span><a id="line.36">import com.puppycrawl.tools.checkstyle.utils.CheckUtil;</a>
+<span class="sourceLineNo">037</span><a id="line.37">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
+<span class="sourceLineNo">038</span><a id="line.38">import com.puppycrawl.tools.checkstyle.utils.ScopeUtil;</a>
+<span class="sourceLineNo">039</span><a id="line.39">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
+<span class="sourceLineNo">040</span><a id="line.40"></a>
+<span class="sourceLineNo">041</span><a id="line.41">/**</a>
+<span class="sourceLineNo">042</span><a id="line.42"> * &lt;p&gt;</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * Checks that a class that has only private constructors and has no descendant</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * classes is declared as final.</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">046</span><a id="line.46"> * &lt;p&gt;</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * To configure the check:</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">050</span><a id="line.50"> * &amp;lt;module name=&amp;quot;FinalClass&amp;quot;/&amp;gt;</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">052</span><a id="line.52"> * &lt;p&gt;</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * Example:</a>
+<span class="sourceLineNo">054</span><a id="line.54"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">055</span><a id="line.55"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">056</span><a id="line.56"> * final class MyClass {  // OK</a>
+<span class="sourceLineNo">057</span><a id="line.57"> *   private MyClass() { }</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * }</a>
+<span class="sourceLineNo">059</span><a id="line.59"> *</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * class MyClass { // violation, class should be declared final</a>
+<span class="sourceLineNo">061</span><a id="line.61"> *   private MyClass() { }</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * }</a>
+<span class="sourceLineNo">063</span><a id="line.63"> *</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * class MyClass { // OK, since it has a public constructor</a>
+<span class="sourceLineNo">065</span><a id="line.65"> *   int field1;</a>
+<span class="sourceLineNo">066</span><a id="line.66"> *   String field2;</a>
+<span class="sourceLineNo">067</span><a id="line.67"> *   private MyClass(int value) {</a>
+<span class="sourceLineNo">068</span><a id="line.68"> *     this.field1 = value;</a>
+<span class="sourceLineNo">069</span><a id="line.69"> *     this.field2 = " ";</a>
+<span class="sourceLineNo">070</span><a id="line.70"> *   }</a>
+<span class="sourceLineNo">071</span><a id="line.71"> *   public MyClass(String value) {</a>
+<span class="sourceLineNo">072</span><a id="line.72"> *     this.field2 = value;</a>
+<span class="sourceLineNo">073</span><a id="line.73"> *     this.field1 = 0;</a>
+<span class="sourceLineNo">074</span><a id="line.74"> *   }</a>
+<span class="sourceLineNo">075</span><a id="line.75"> * }</a>
+<span class="sourceLineNo">076</span><a id="line.76"> *</a>
+<span class="sourceLineNo">077</span><a id="line.77"> * class TestAnonymousInnerClasses { // OK, class has an anonymous inner class.</a>
+<span class="sourceLineNo">078</span><a id="line.78"> *     public static final TestAnonymousInnerClasses ONE = new TestAnonymousInnerClasses() {</a>
+<span class="sourceLineNo">079</span><a id="line.79"> *</a>
+<span class="sourceLineNo">080</span><a id="line.80"> *     };</a>
+<span class="sourceLineNo">081</span><a id="line.81"> *</a>
+<span class="sourceLineNo">082</span><a id="line.82"> *     private TestAnonymousInnerClasses() {</a>
+<span class="sourceLineNo">083</span><a id="line.83"> *     }</a>
+<span class="sourceLineNo">084</span><a id="line.84"> * }</a>
+<span class="sourceLineNo">085</span><a id="line.85"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">086</span><a id="line.86"> * &lt;p&gt;</a>
+<span class="sourceLineNo">087</span><a id="line.87"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">088</span><a id="line.88"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">089</span><a id="line.89"> * &lt;p&gt;</a>
+<span class="sourceLineNo">090</span><a id="line.90"> * Violation Message Keys:</a>
+<span class="sourceLineNo">091</span><a id="line.91"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">092</span><a id="line.92"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">093</span><a id="line.93"> * &lt;li&gt;</a>
+<span class="sourceLineNo">094</span><a id="line.94"> * {@code final.class}</a>
+<span class="sourceLineNo">095</span><a id="line.95"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">096</span><a id="line.96"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">097</span><a id="line.97"> *</a>
+<span class="sourceLineNo">098</span><a id="line.98"> * @since 3.1</a>
+<span class="sourceLineNo">099</span><a id="line.99"> */</a>
+<span class="sourceLineNo">100</span><a id="line.100">@FileStatefulCheck</a>
+<span class="sourceLineNo">101</span><a id="line.101">public class FinalClassCheck</a>
+<span class="sourceLineNo">102</span><a id="line.102">    extends AbstractCheck {</a>
+<span class="sourceLineNo">103</span><a id="line.103"></a>
+<span class="sourceLineNo">104</span><a id="line.104">    /**</a>
+<span class="sourceLineNo">105</span><a id="line.105">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">106</span><a id="line.106">     * file.</a>
+<span class="sourceLineNo">107</span><a id="line.107">     */</a>
+<span class="sourceLineNo">108</span><a id="line.108">    public static final String MSG_KEY = "final.class";</a>
+<span class="sourceLineNo">109</span><a id="line.109"></a>
+<span class="sourceLineNo">110</span><a id="line.110">    /**</a>
+<span class="sourceLineNo">111</span><a id="line.111">     * Character separate package names in qualified name of java class.</a>
+<span class="sourceLineNo">112</span><a id="line.112">     */</a>
+<span class="sourceLineNo">113</span><a id="line.113">    private static final String PACKAGE_SEPARATOR = ".";</a>
+<span class="sourceLineNo">114</span><a id="line.114"></a>
+<span class="sourceLineNo">115</span><a id="line.115">    /** Keeps ClassDesc objects for all inner classes. */</a>
+<span class="sourceLineNo">116</span><a id="line.116">    private Map&lt;String, ClassDesc&gt; innerClasses;</a>
+<span class="sourceLineNo">117</span><a id="line.117"></a>
+<span class="sourceLineNo">118</span><a id="line.118">    /**</a>
+<span class="sourceLineNo">119</span><a id="line.119">     * Maps anonymous inner class's {@link TokenTypes#LITERAL_NEW} node to</a>
+<span class="sourceLineNo">120</span><a id="line.120">     * the outer type declaration's fully qualified name.</a>
+<span class="sourceLineNo">121</span><a id="line.121">     */</a>
+<span class="sourceLineNo">122</span><a id="line.122">    private Map&lt;DetailAST, String&gt; anonInnerClassToOuterTypeDecl;</a>
+<span class="sourceLineNo">123</span><a id="line.123"></a>
+<span class="sourceLineNo">124</span><a id="line.124">    /** Keeps TypeDeclarationDescription object for stack of declared type descriptions. */</a>
+<span class="sourceLineNo">125</span><a id="line.125">    private Deque&lt;TypeDeclarationDescription&gt; typeDeclarations;</a>
+<span class="sourceLineNo">126</span><a id="line.126"></a>
+<span class="sourceLineNo">127</span><a id="line.127">    /** Full qualified name of the package. */</a>
+<span class="sourceLineNo">128</span><a id="line.128">    private String packageName;</a>
+<span class="sourceLineNo">129</span><a id="line.129"></a>
+<span class="sourceLineNo">130</span><a id="line.130">    @Override</a>
+<span class="sourceLineNo">131</span><a id="line.131">    public int[] getDefaultTokens() {</a>
+<span class="sourceLineNo">132</span><a id="line.132">        return getRequiredTokens();</a>
+<span class="sourceLineNo">133</span><a id="line.133">    }</a>
+<span class="sourceLineNo">134</span><a id="line.134"></a>
+<span class="sourceLineNo">135</span><a id="line.135">    @Override</a>
+<span class="sourceLineNo">136</span><a id="line.136">    public int[] getAcceptableTokens() {</a>
+<span class="sourceLineNo">137</span><a id="line.137">        return getRequiredTokens();</a>
+<span class="sourceLineNo">138</span><a id="line.138">    }</a>
+<span class="sourceLineNo">139</span><a id="line.139"></a>
+<span class="sourceLineNo">140</span><a id="line.140">    @Override</a>
+<span class="sourceLineNo">141</span><a id="line.141">    public int[] getRequiredTokens() {</a>
+<span class="sourceLineNo">142</span><a id="line.142">        return new int[] {</a>
+<span class="sourceLineNo">143</span><a id="line.143">            TokenTypes.ANNOTATION_DEF,</a>
+<span class="sourceLineNo">144</span><a id="line.144">            TokenTypes.CLASS_DEF,</a>
+<span class="sourceLineNo">145</span><a id="line.145">            TokenTypes.ENUM_DEF,</a>
+<span class="sourceLineNo">146</span><a id="line.146">            TokenTypes.INTERFACE_DEF,</a>
+<span class="sourceLineNo">147</span><a id="line.147">            TokenTypes.RECORD_DEF,</a>
+<span class="sourceLineNo">148</span><a id="line.148">            TokenTypes.CTOR_DEF,</a>
+<span class="sourceLineNo">149</span><a id="line.149">            TokenTypes.PACKAGE_DEF,</a>
+<span class="sourceLineNo">150</span><a id="line.150">            TokenTypes.LITERAL_NEW,</a>
+<span class="sourceLineNo">151</span><a id="line.151">        };</a>
+<span class="sourceLineNo">152</span><a id="line.152">    }</a>
+<span class="sourceLineNo">153</span><a id="line.153"></a>
+<span class="sourceLineNo">154</span><a id="line.154">    @Override</a>
+<span class="sourceLineNo">155</span><a id="line.155">    public void beginTree(DetailAST rootAST) {</a>
+<span class="sourceLineNo">156</span><a id="line.156">        typeDeclarations = new ArrayDeque&lt;&gt;();</a>
+<span class="sourceLineNo">157</span><a id="line.157">        innerClasses = new LinkedHashMap&lt;&gt;();</a>
+<span class="sourceLineNo">158</span><a id="line.158">        anonInnerClassToOuterTypeDecl = new HashMap&lt;&gt;();</a>
+<span class="sourceLineNo">159</span><a id="line.159">        packageName = "";</a>
+<span class="sourceLineNo">160</span><a id="line.160">    }</a>
+<span class="sourceLineNo">161</span><a id="line.161"></a>
+<span class="sourceLineNo">162</span><a id="line.162">    @Override</a>
+<span class="sourceLineNo">163</span><a id="line.163">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">164</span><a id="line.164">        switch (ast.getType()) {</a>
+<span class="sourceLineNo">165</span><a id="line.165">            case TokenTypes.PACKAGE_DEF:</a>
+<span class="sourceLineNo">166</span><a id="line.166">                packageName = CheckUtil.extractQualifiedName(ast.getFirstChild().getNextSibling());</a>
+<span class="sourceLineNo">167</span><a id="line.167">                break;</a>
+<span class="sourceLineNo">168</span><a id="line.168"></a>
+<span class="sourceLineNo">169</span><a id="line.169">            case TokenTypes.ANNOTATION_DEF:</a>
+<span class="sourceLineNo">170</span><a id="line.170">            case TokenTypes.ENUM_DEF:</a>
+<span class="sourceLineNo">171</span><a id="line.171">            case TokenTypes.INTERFACE_DEF:</a>
+<span class="sourceLineNo">172</span><a id="line.172">            case TokenTypes.RECORD_DEF:</a>
+<span class="sourceLineNo">173</span><a id="line.173">                final TypeDeclarationDescription description = new TypeDeclarationDescription(</a>
+<span class="sourceLineNo">174</span><a id="line.174">                    extractQualifiedTypeName(ast), typeDeclarations.size(), ast);</a>
+<span class="sourceLineNo">175</span><a id="line.175">                typeDeclarations.push(description);</a>
+<span class="sourceLineNo">176</span><a id="line.176">                break;</a>
+<span class="sourceLineNo">177</span><a id="line.177"></a>
+<span class="sourceLineNo">178</span><a id="line.178">            case TokenTypes.CLASS_DEF:</a>
+<span class="sourceLineNo">179</span><a id="line.179">                visitClass(ast);</a>
+<span class="sourceLineNo">180</span><a id="line.180">                break;</a>
+<span class="sourceLineNo">181</span><a id="line.181"></a>
+<span class="sourceLineNo">182</span><a id="line.182">            case TokenTypes.CTOR_DEF:</a>
+<span class="sourceLineNo">183</span><a id="line.183">                visitCtor(ast);</a>
+<span class="sourceLineNo">184</span><a id="line.184">                break;</a>
+<span class="sourceLineNo">185</span><a id="line.185"></a>
+<span class="sourceLineNo">186</span><a id="line.186">            case TokenTypes.LITERAL_NEW:</a>
+<span class="sourceLineNo">187</span><a id="line.187">                if (ast.getFirstChild() != null</a>
+<span class="sourceLineNo">188</span><a id="line.188">                        &amp;&amp; ast.getLastChild().getType() == TokenTypes.OBJBLOCK) {</a>
+<span class="sourceLineNo">189</span><a id="line.189">                    anonInnerClassToOuterTypeDecl</a>
+<span class="sourceLineNo">190</span><a id="line.190">                        .put(ast, typeDeclarations.peek().getQualifiedName());</a>
+<span class="sourceLineNo">191</span><a id="line.191">                }</a>
+<span class="sourceLineNo">192</span><a id="line.192">                break;</a>
+<span class="sourceLineNo">193</span><a id="line.193"></a>
+<span class="sourceLineNo">194</span><a id="line.194">            default:</a>
+<span class="sourceLineNo">195</span><a id="line.195">                throw new IllegalStateException(ast.toString());</a>
+<span class="sourceLineNo">196</span><a id="line.196">        }</a>
+<span class="sourceLineNo">197</span><a id="line.197">    }</a>
+<span class="sourceLineNo">198</span><a id="line.198"></a>
+<span class="sourceLineNo">199</span><a id="line.199">    /**</a>
+<span class="sourceLineNo">200</span><a id="line.200">     * Called to process a type definition.</a>
+<span class="sourceLineNo">201</span><a id="line.201">     *</a>
+<span class="sourceLineNo">202</span><a id="line.202">     * @param ast the token to process</a>
+<span class="sourceLineNo">203</span><a id="line.203">     */</a>
+<span class="sourceLineNo">204</span><a id="line.204">    private void visitClass(DetailAST ast) {</a>
+<span class="sourceLineNo">205</span><a id="line.205">        final String qualifiedClassName = extractQualifiedTypeName(ast);</a>
+<span class="sourceLineNo">206</span><a id="line.206">        final ClassDesc currClass = new ClassDesc(qualifiedClassName, typeDeclarations.size(), ast);</a>
+<span class="sourceLineNo">207</span><a id="line.207">        typeDeclarations.push(currClass);</a>
+<span class="sourceLineNo">208</span><a id="line.208">        innerClasses.put(qualifiedClassName, currClass);</a>
+<span class="sourceLineNo">209</span><a id="line.209">    }</a>
+<span class="sourceLineNo">210</span><a id="line.210"></a>
+<span class="sourceLineNo">211</span><a id="line.211">    /**</a>
+<span class="sourceLineNo">212</span><a id="line.212">     * Called to process a constructor definition.</a>
+<span class="sourceLineNo">213</span><a id="line.213">     *</a>
+<span class="sourceLineNo">214</span><a id="line.214">     * @param ast the token to process</a>
+<span class="sourceLineNo">215</span><a id="line.215">     */</a>
+<span class="sourceLineNo">216</span><a id="line.216">    private void visitCtor(DetailAST ast) {</a>
+<span class="sourceLineNo">217</span><a id="line.217">        if (!ScopeUtil.isInEnumBlock(ast) &amp;&amp; !ScopeUtil.isInRecordBlock(ast)) {</a>
+<span class="sourceLineNo">218</span><a id="line.218">            final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</a>
+<span class="sourceLineNo">219</span><a id="line.219">            // Can be only of type ClassDesc, preceding if statements guarantee it.</a>
+<span class="sourceLineNo">220</span><a id="line.220">            final ClassDesc desc = (ClassDesc) typeDeclarations.getFirst();</a>
+<span class="sourceLineNo">221</span><a id="line.221">            if (modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null) {</a>
+<span class="sourceLineNo">222</span><a id="line.222">                desc.registerNonPrivateCtor();</a>
+<span class="sourceLineNo">223</span><a id="line.223">            }</a>
+<span class="sourceLineNo">224</span><a id="line.224">            else {</a>
+<span class="sourceLineNo">225</span><a id="line.225">                desc.registerPrivateCtor();</a>
+<span class="sourceLineNo">226</span><a id="line.226">            }</a>
+<span class="sourceLineNo">227</span><a id="line.227">        }</a>
+<span class="sourceLineNo">228</span><a id="line.228">    }</a>
+<span class="sourceLineNo">229</span><a id="line.229"></a>
+<span class="sourceLineNo">230</span><a id="line.230">    @Override</a>
+<span class="sourceLineNo">231</span><a id="line.231">    public void leaveToken(DetailAST ast) {</a>
+<span class="sourceLineNo">232</span><a id="line.232">        if (TokenUtil.isTypeDeclaration(ast.getType())) {</a>
+<span class="sourceLineNo">233</span><a id="line.233">            typeDeclarations.pop();</a>
+<span class="sourceLineNo">234</span><a id="line.234">        }</a>
+<span class="sourceLineNo">235</span><a id="line.235">        if (TokenUtil.isRootNode(ast.getParent())) {</a>
+<span class="sourceLineNo">236</span><a id="line.236">            anonInnerClassToOuterTypeDecl.forEach(this::registerAnonymousInnerClassToSuperClass);</a>
+<span class="sourceLineNo">237</span><a id="line.237">            // First pass: mark all classes that have derived inner classes</a>
+<span class="sourceLineNo">238</span><a id="line.238">            innerClasses.forEach(this::registerNestedSubclassToOuterSuperClasses);</a>
+<span class="sourceLineNo">239</span><a id="line.239">            // Second pass: report violation for all classes that should be declared as final</a>
+<span class="sourceLineNo">240</span><a id="line.240">            innerClasses.forEach((qualifiedClassName, classDesc) -&gt; {</a>
+<span class="sourceLineNo">241</span><a id="line.241">                if (shouldBeDeclaredAsFinal(classDesc)) {</a>
+<span class="sourceLineNo">242</span><a id="line.242">                    final String className = CommonUtil.baseClassName(qualifiedClassName);</a>
+<span class="sourceLineNo">243</span><a id="line.243">                    log(classDesc.getTypeDeclarationAst(), MSG_KEY, className);</a>
+<span class="sourceLineNo">244</span><a id="line.244">                }</a>
+<span class="sourceLineNo">245</span><a id="line.245">            });</a>
+<span class="sourceLineNo">246</span><a id="line.246">        }</a>
+<span class="sourceLineNo">247</span><a id="line.247">    }</a>
+<span class="sourceLineNo">248</span><a id="line.248"></a>
+<span class="sourceLineNo">249</span><a id="line.249">    /**</a>
+<span class="sourceLineNo">250</span><a id="line.250">     * Checks whether a class should be declared as final or not.</a>
+<span class="sourceLineNo">251</span><a id="line.251">     *</a>
+<span class="sourceLineNo">252</span><a id="line.252">     * @param desc description of the class</a>
+<span class="sourceLineNo">253</span><a id="line.253">     * @return true if given class should be declared as final otherwise false</a>
+<span class="sourceLineNo">254</span><a id="line.254">     */</a>
+<span class="sourceLineNo">255</span><a id="line.255">    private static boolean shouldBeDeclaredAsFinal(ClassDesc desc) {</a>
+<span class="sourceLineNo">256</span><a id="line.256">        return desc.isWithPrivateCtor()</a>
+<span class="sourceLineNo">257</span><a id="line.257">                &amp;&amp; !(desc.isDeclaredAsAbstract()</a>
+<span class="sourceLineNo">258</span><a id="line.258">                    || desc.isSuperClassOfAnonymousInnerClass())</a>
+<span class="sourceLineNo">259</span><a id="line.259">                &amp;&amp; !desc.isDeclaredAsFinal()</a>
+<span class="sourceLineNo">260</span><a id="line.260">                &amp;&amp; !desc.isWithNonPrivateCtor()</a>
+<span class="sourceLineNo">261</span><a id="line.261">                &amp;&amp; !desc.isWithNestedSubclass();</a>
+<span class="sourceLineNo">262</span><a id="line.262">    }</a>
+<span class="sourceLineNo">263</span><a id="line.263"></a>
+<span class="sourceLineNo">264</span><a id="line.264">    /**</a>
+<span class="sourceLineNo">265</span><a id="line.265">     * Register to outer super class of given classAst that</a>
+<span class="sourceLineNo">266</span><a id="line.266">     * given classAst is extending them.</a>
+<span class="sourceLineNo">267</span><a id="line.267">     *</a>
+<span class="sourceLineNo">268</span><a id="line.268">     * @param qualifiedClassName qualifies class name(with package) of the current class</a>
+<span class="sourceLineNo">269</span><a id="line.269">     * @param currentClass class which outer super class will be informed about nesting subclass</a>
+<span class="sourceLineNo">270</span><a id="line.270">     */</a>
+<span class="sourceLineNo">271</span><a id="line.271">    private void registerNestedSubclassToOuterSuperClasses(String qualifiedClassName,</a>
+<span class="sourceLineNo">272</span><a id="line.272">                                                           ClassDesc currentClass) {</a>
+<span class="sourceLineNo">273</span><a id="line.273">        final String superClassName = getSuperClassName(currentClass.getTypeDeclarationAst());</a>
+<span class="sourceLineNo">274</span><a id="line.274">        if (superClassName != null) {</a>
+<span class="sourceLineNo">275</span><a id="line.275">            final ToIntFunction&lt;ClassDesc&gt; nestedClassCountProvider = classDesc -&gt; {</a>
+<span class="sourceLineNo">276</span><a id="line.276">                return CheckUtil.typeDeclarationNameMatchingCount(qualifiedClassName,</a>
+<span class="sourceLineNo">277</span><a id="line.277">                                                                  classDesc.getQualifiedName());</a>
+<span class="sourceLineNo">278</span><a id="line.278">            };</a>
+<span class="sourceLineNo">279</span><a id="line.279">            getNearestClassWithSameName(superClassName, nestedClassCountProvider)</a>
+<span class="sourceLineNo">280</span><a id="line.280">                .or(() -&gt; Optional.ofNullable(innerClasses.get(superClassName)))</a>
+<span class="sourceLineNo">281</span><a id="line.281">                .ifPresent(ClassDesc::registerNestedSubclass);</a>
+<span class="sourceLineNo">282</span><a id="line.282">        }</a>
+<span class="sourceLineNo">283</span><a id="line.283">    }</a>
+<span class="sourceLineNo">284</span><a id="line.284"></a>
+<span class="sourceLineNo">285</span><a id="line.285">    /**</a>
+<span class="sourceLineNo">286</span><a id="line.286">     * Register to the super class of anonymous inner class that the given class is instantiated</a>
+<span class="sourceLineNo">287</span><a id="line.287">     * by an anonymous inner class.</a>
+<span class="sourceLineNo">288</span><a id="line.288">     *</a>
+<span class="sourceLineNo">289</span><a id="line.289">     * @param literalNewAst ast node of {@link TokenTypes#LITERAL_NEW} representing anonymous inner</a>
+<span class="sourceLineNo">290</span><a id="line.290">     *                      class</a>
+<span class="sourceLineNo">291</span><a id="line.291">     * @param outerTypeDeclName Fully qualified name of the outer type declaration of anonymous</a>
+<span class="sourceLineNo">292</span><a id="line.292">     *                          inner class</a>
+<span class="sourceLineNo">293</span><a id="line.293">     */</a>
+<span class="sourceLineNo">294</span><a id="line.294">    private void registerAnonymousInnerClassToSuperClass(DetailAST literalNewAst,</a>
+<span class="sourceLineNo">295</span><a id="line.295">                                                         String outerTypeDeclName) {</a>
+<span class="sourceLineNo">296</span><a id="line.296">        final String superClassName = CheckUtil.getShortNameOfAnonInnerClass(literalNewAst);</a>
+<span class="sourceLineNo">297</span><a id="line.297"></a>
+<span class="sourceLineNo">298</span><a id="line.298">        final ToIntFunction&lt;ClassDesc&gt; anonClassCountProvider = classDesc -&gt; {</a>
+<span class="sourceLineNo">299</span><a id="line.299">            return getAnonSuperTypeMatchingCount(outerTypeDeclName, classDesc.getQualifiedName());</a>
+<span class="sourceLineNo">300</span><a id="line.300">        };</a>
+<span class="sourceLineNo">301</span><a id="line.301">        getNearestClassWithSameName(superClassName, anonClassCountProvider)</a>
+<span class="sourceLineNo">302</span><a id="line.302">            .or(() -&gt; Optional.ofNullable(innerClasses.get(superClassName)))</a>
+<span class="sourceLineNo">303</span><a id="line.303">            .ifPresent(ClassDesc::registerSuperClassOfAnonymousInnerClass);</a>
+<span class="sourceLineNo">304</span><a id="line.304">    }</a>
+<span class="sourceLineNo">305</span><a id="line.305"></a>
+<span class="sourceLineNo">306</span><a id="line.306">    /**</a>
+<span class="sourceLineNo">307</span><a id="line.307">     * Get the nearest class with same name.</a>
+<span class="sourceLineNo">308</span><a id="line.308">     *</a>
+<span class="sourceLineNo">309</span><a id="line.309">     * &lt;p&gt;The parameter {@code countProvider} exists because if the class being searched is the</a>
+<span class="sourceLineNo">310</span><a id="line.310">     * super class of anonymous inner class, the rules of evaluation are a bit different,</a>
+<span class="sourceLineNo">311</span><a id="line.311">     * consider the following example-</a>
+<span class="sourceLineNo">312</span><a id="line.312">     * &lt;pre&gt;</a>
+<span class="sourceLineNo">313</span><a id="line.313">     * {@code</a>
+<span class="sourceLineNo">314</span><a id="line.314">     * public class Main {</a>
+<span class="sourceLineNo">315</span><a id="line.315">     *     static class One {</a>
+<span class="sourceLineNo">316</span><a id="line.316">     *         static class Two {</a>
+<span class="sourceLineNo">317</span><a id="line.317">     *         }</a>
+<span class="sourceLineNo">318</span><a id="line.318">     *     }</a>
+<span class="sourceLineNo">319</span><a id="line.319">     *</a>
+<span class="sourceLineNo">320</span><a id="line.320">     *     class Three {</a>
+<span class="sourceLineNo">321</span><a id="line.321">     *         One.Two object = new One.Two() { // Object of Main.Three.One.Two</a>
+<span class="sourceLineNo">322</span><a id="line.322">     *                                          // and not of Main.One.Two</a>
+<span class="sourceLineNo">323</span><a id="line.323">     *         };</a>
+<span class="sourceLineNo">324</span><a id="line.324">     *</a>
+<span class="sourceLineNo">325</span><a id="line.325">     *         static class One {</a>
+<span class="sourceLineNo">326</span><a id="line.326">     *             static class Two {</a>
+<span class="sourceLineNo">327</span><a id="line.327">     *             }</a>
+<span class="sourceLineNo">328</span><a id="line.328">     *         }</a>
+<span class="sourceLineNo">329</span><a id="line.329">     *     }</a>
 <span class="sourceLineNo">330</span><a id="line.330">     * }</a>
-<span class="sourceLineNo">331</span><a id="line.331">     * &lt;/pre&gt;</a>
-<span class="sourceLineNo">332</span><a id="line.332">     * If the {@link Function} {@code countProvider} hadn't used</a>
-<span class="sourceLineNo">333</span><a id="line.333">     * {@link FinalClassCheck#getAnonSuperTypeMatchingCount} to</a>
-<span class="sourceLineNo">334</span><a id="line.334">     * calculate the matching count then the logic would have falsely evaluated</a>
-<span class="sourceLineNo">335</span><a id="line.335">     * {@code Main.One.Two} to be the super class of the anonymous inner class.</a>
-<span class="sourceLineNo">336</span><a id="line.336">     *</a>
-<span class="sourceLineNo">337</span><a id="line.337">     * @param className name of the class</a>
-<span class="sourceLineNo">338</span><a id="line.338">     * @param countProvider the function to apply to calculate the name matching count</a>
-<span class="sourceLineNo">339</span><a id="line.339">     * @return {@link Optional} of {@link ClassDesc} object of the nearest class with the same name.</a>
-<span class="sourceLineNo">340</span><a id="line.340">     * @noinspection CallToStringConcatCanBeReplacedByOperator</a>
-<span class="sourceLineNo">341</span><a id="line.341">     * @noinspectionreason CallToStringConcatCanBeReplacedByOperator - operator causes</a>
-<span class="sourceLineNo">342</span><a id="line.342">     *      pitest to fail</a>
-<span class="sourceLineNo">343</span><a id="line.343">     */</a>
-<span class="sourceLineNo">344</span><a id="line.344">    private Optional&lt;ClassDesc&gt; getNearestClassWithSameName(String className,</a>
-<span class="sourceLineNo">345</span><a id="line.345">        Function&lt;ClassDesc, Integer&gt; countProvider) {</a>
-<span class="sourceLineNo">346</span><a id="line.346">        final String dotAndClassName = PACKAGE_SEPARATOR.concat(className);</a>
-<span class="sourceLineNo">347</span><a id="line.347">        final Comparator&lt;ClassDesc&gt; longestMatch = Comparator.comparingInt(countProvider::apply);</a>
-<span class="sourceLineNo">348</span><a id="line.348">        return innerClasses.entrySet().stream()</a>
-<span class="sourceLineNo">349</span><a id="line.349">                .filter(entry -&gt; entry.getKey().endsWith(dotAndClassName))</a>
-<span class="sourceLineNo">350</span><a id="line.350">                .map(Map.Entry::getValue)</a>
-<span class="sourceLineNo">351</span><a id="line.351">                .min(longestMatch.reversed().thenComparingInt(ClassDesc::getDepth));</a>
-<span class="sourceLineNo">352</span><a id="line.352">    }</a>
-<span class="sourceLineNo">353</span><a id="line.353"></a>
-<span class="sourceLineNo">354</span><a id="line.354">    /**</a>
-<span class="sourceLineNo">355</span><a id="line.355">     * Extract the qualified type declaration name from given type declaration Ast.</a>
-<span class="sourceLineNo">356</span><a id="line.356">     *</a>
-<span class="sourceLineNo">357</span><a id="line.357">     * @param typeDeclarationAst type declaration for which qualified name is being fetched</a>
-<span class="sourceLineNo">358</span><a id="line.358">     * @return qualified name of a type declaration</a>
-<span class="sourceLineNo">359</span><a id="line.359">     */</a>
-<span class="sourceLineNo">360</span><a id="line.360">    private String extractQualifiedTypeName(DetailAST typeDeclarationAst) {</a>
-<span class="sourceLineNo">361</span><a id="line.361">        final String className = typeDeclarationAst.findFirstToken(TokenTypes.IDENT).getText();</a>
-<span class="sourceLineNo">362</span><a id="line.362">        String outerTypeDeclarationQualifiedName = null;</a>
-<span class="sourceLineNo">363</span><a id="line.363">        if (!typeDeclarations.isEmpty()) {</a>
-<span class="sourceLineNo">364</span><a id="line.364">            outerTypeDeclarationQualifiedName = typeDeclarations.peek().getQualifiedName();</a>
-<span class="sourceLineNo">365</span><a id="line.365">        }</a>
-<span class="sourceLineNo">366</span><a id="line.366">        return CheckUtil.getQualifiedTypeDeclarationName(packageName,</a>
-<span class="sourceLineNo">367</span><a id="line.367">                                                         outerTypeDeclarationQualifiedName,</a>
-<span class="sourceLineNo">368</span><a id="line.368">                                                         className);</a>
-<span class="sourceLineNo">369</span><a id="line.369">    }</a>
-<span class="sourceLineNo">370</span><a id="line.370"></a>
-<span class="sourceLineNo">371</span><a id="line.371">    /**</a>
-<span class="sourceLineNo">372</span><a id="line.372">     * Get super class name of given class.</a>
-<span class="sourceLineNo">373</span><a id="line.373">     *</a>
-<span class="sourceLineNo">374</span><a id="line.374">     * @param classAst class</a>
-<span class="sourceLineNo">375</span><a id="line.375">     * @return super class name or null if super class is not specified</a>
-<span class="sourceLineNo">376</span><a id="line.376">     */</a>
-<span class="sourceLineNo">377</span><a id="line.377">    private static String getSuperClassName(DetailAST classAst) {</a>
-<span class="sourceLineNo">378</span><a id="line.378">        String superClassName = null;</a>
-<span class="sourceLineNo">379</span><a id="line.379">        final DetailAST classExtend = classAst.findFirstToken(TokenTypes.EXTENDS_CLAUSE);</a>
-<span class="sourceLineNo">380</span><a id="line.380">        if (classExtend != null) {</a>
-<span class="sourceLineNo">381</span><a id="line.381">            superClassName = CheckUtil.extractQualifiedName(classExtend.getFirstChild());</a>
-<span class="sourceLineNo">382</span><a id="line.382">        }</a>
-<span class="sourceLineNo">383</span><a id="line.383">        return superClassName;</a>
-<span class="sourceLineNo">384</span><a id="line.384">    }</a>
-<span class="sourceLineNo">385</span><a id="line.385"></a>
-<span class="sourceLineNo">386</span><a id="line.386">    /**</a>
-<span class="sourceLineNo">387</span><a id="line.387">     * Calculates and returns the type declaration matching count when {@code classToBeMatched} is</a>
-<span class="sourceLineNo">388</span><a id="line.388">     * considered to be super class of an anonymous inner class.</a>
-<span class="sourceLineNo">389</span><a id="line.389">     *</a>
-<span class="sourceLineNo">390</span><a id="line.390">     * &lt;p&gt;</a>
-<span class="sourceLineNo">391</span><a id="line.391">     * Suppose our pattern class is {@code Main.ClassOne} and class to be matched is</a>
-<span class="sourceLineNo">392</span><a id="line.392">     * {@code Main.ClassOne.ClassTwo.ClassThree} then type declaration name matching count would</a>
-<span class="sourceLineNo">393</span><a id="line.393">     * be calculated by comparing every character, and updating main counter when we hit "." or</a>
-<span class="sourceLineNo">394</span><a id="line.394">     * when it is the last character of the pattern class and certain conditions are met. This is</a>
-<span class="sourceLineNo">395</span><a id="line.395">     * done so that matching count is 13 instead of 5. This is due to the fact that pattern class</a>
-<span class="sourceLineNo">396</span><a id="line.396">     * can contain anonymous inner class object of a nested class which isn't true in case of</a>
-<span class="sourceLineNo">397</span><a id="line.397">     * extending classes as you can't extend nested classes.</a>
-<span class="sourceLineNo">398</span><a id="line.398">     * &lt;/p&gt;</a>
-<span class="sourceLineNo">399</span><a id="line.399">     *</a>
-<span class="sourceLineNo">400</span><a id="line.400">     * @param patternTypeDeclaration type declaration against which the given type declaration has</a>
-<span class="sourceLineNo">401</span><a id="line.401">     *                               to be matched</a>
-<span class="sourceLineNo">402</span><a id="line.402">     * @param typeDeclarationToBeMatched type declaration to be matched</a>
-<span class="sourceLineNo">403</span><a id="line.403">     * @return type declaration matching count</a>
-<span class="sourceLineNo">404</span><a id="line.404">     */</a>
-<span class="sourceLineNo">405</span><a id="line.405">    private static int getAnonSuperTypeMatchingCount(String patternTypeDeclaration,</a>
-<span class="sourceLineNo">406</span><a id="line.406">                                                    String typeDeclarationToBeMatched) {</a>
-<span class="sourceLineNo">407</span><a id="line.407">        final int typeDeclarationToBeMatchedLength = typeDeclarationToBeMatched.length();</a>
-<span class="sourceLineNo">408</span><a id="line.408">        final int minLength = Math</a>
-<span class="sourceLineNo">409</span><a id="line.409">            .min(typeDeclarationToBeMatchedLength, patternTypeDeclaration.length());</a>
-<span class="sourceLineNo">410</span><a id="line.410">        final char packageSeparator = PACKAGE_SEPARATOR.charAt(0);</a>
-<span class="sourceLineNo">411</span><a id="line.411">        final boolean shouldCountBeUpdatedAtLastCharacter =</a>
-<span class="sourceLineNo">412</span><a id="line.412">            typeDeclarationToBeMatchedLength &gt; minLength</a>
-<span class="sourceLineNo">413</span><a id="line.413">                &amp;&amp; typeDeclarationToBeMatched.charAt(minLength) == packageSeparator;</a>
-<span class="sourceLineNo">414</span><a id="line.414"></a>
-<span class="sourceLineNo">415</span><a id="line.415">        int result = 0;</a>
-<span class="sourceLineNo">416</span><a id="line.416">        for (int idx = 0;</a>
-<span class="sourceLineNo">417</span><a id="line.417">             idx &lt; minLength</a>
-<span class="sourceLineNo">418</span><a id="line.418">                 &amp;&amp; patternTypeDeclaration.charAt(idx) == typeDeclarationToBeMatched.charAt(idx);</a>
-<span class="sourceLineNo">419</span><a id="line.419">             idx++) {</a>
-<span class="sourceLineNo">420</span><a id="line.420"></a>
-<span class="sourceLineNo">421</span><a id="line.421">            if (idx == minLength - 1 &amp;&amp; shouldCountBeUpdatedAtLastCharacter</a>
-<span class="sourceLineNo">422</span><a id="line.422">                || patternTypeDeclaration.charAt(idx) == packageSeparator) {</a>
-<span class="sourceLineNo">423</span><a id="line.423">                result = idx;</a>
-<span class="sourceLineNo">424</span><a id="line.424">            }</a>
-<span class="sourceLineNo">425</span><a id="line.425">        }</a>
-<span class="sourceLineNo">426</span><a id="line.426">        return result;</a>
-<span class="sourceLineNo">427</span><a id="line.427">    }</a>
-<span class="sourceLineNo">428</span><a id="line.428"></a>
-<span class="sourceLineNo">429</span><a id="line.429">    /**</a>
-<span class="sourceLineNo">430</span><a id="line.430">     * Maintains information about the type of declaration.</a>
-<span class="sourceLineNo">431</span><a id="line.431">     * Any ast node of type {@link TokenTypes#CLASS_DEF} or {@link TokenTypes#INTERFACE_DEF}</a>
-<span class="sourceLineNo">432</span><a id="line.432">     * or {@link TokenTypes#ENUM_DEF} or {@link TokenTypes#ANNOTATION_DEF}</a>
-<span class="sourceLineNo">433</span><a id="line.433">     * or {@link TokenTypes#RECORD_DEF} is considered as a type declaration.</a>
-<span class="sourceLineNo">434</span><a id="line.434">     * It does not maintain information about classes, a subclass called {@link ClassDesc}</a>
-<span class="sourceLineNo">435</span><a id="line.435">     * does that job.</a>
-<span class="sourceLineNo">436</span><a id="line.436">     */</a>
-<span class="sourceLineNo">437</span><a id="line.437">    private static class TypeDeclarationDescription {</a>
-<span class="sourceLineNo">438</span><a id="line.438"></a>
-<span class="sourceLineNo">439</span><a id="line.439">        /**</a>
-<span class="sourceLineNo">440</span><a id="line.440">         * Complete type declaration name with package name and outer type declaration name.</a>
-<span class="sourceLineNo">441</span><a id="line.441">         */</a>
-<span class="sourceLineNo">442</span><a id="line.442">        private final String qualifiedName;</a>
-<span class="sourceLineNo">443</span><a id="line.443"></a>
-<span class="sourceLineNo">444</span><a id="line.444">        /**</a>
-<span class="sourceLineNo">445</span><a id="line.445">         * Depth of nesting of type declaration.</a>
-<span class="sourceLineNo">446</span><a id="line.446">         */</a>
-<span class="sourceLineNo">447</span><a id="line.447">        private final int depth;</a>
-<span class="sourceLineNo">448</span><a id="line.448"></a>
-<span class="sourceLineNo">449</span><a id="line.449">        /**</a>
-<span class="sourceLineNo">450</span><a id="line.450">         * Type declaration ast node.</a>
-<span class="sourceLineNo">451</span><a id="line.451">         */</a>
-<span class="sourceLineNo">452</span><a id="line.452">        private final DetailAST typeDeclarationAst;</a>
-<span class="sourceLineNo">453</span><a id="line.453"></a>
-<span class="sourceLineNo">454</span><a id="line.454">        /**</a>
-<span class="sourceLineNo">455</span><a id="line.455">         * Create an instance of TypeDeclarationDescription.</a>
-<span class="sourceLineNo">456</span><a id="line.456">         *</a>
-<span class="sourceLineNo">457</span><a id="line.457">         * @param qualifiedName Complete type declaration name with package name and outer type</a>
-<span class="sourceLineNo">458</span><a id="line.458">         *                      declaration name.</a>
-<span class="sourceLineNo">459</span><a id="line.459">         * @param depth Depth of nesting of type declaration</a>
-<span class="sourceLineNo">460</span><a id="line.460">         * @param typeDeclarationAst Type declaration ast node</a>
-<span class="sourceLineNo">461</span><a id="line.461">         */</a>
-<span class="sourceLineNo">462</span><a id="line.462">        private TypeDeclarationDescription(String qualifiedName, int depth,</a>
-<span class="sourceLineNo">463</span><a id="line.463">                                          DetailAST typeDeclarationAst) {</a>
-<span class="sourceLineNo">464</span><a id="line.464">            this.qualifiedName = qualifiedName;</a>
-<span class="sourceLineNo">465</span><a id="line.465">            this.depth = depth;</a>
-<span class="sourceLineNo">466</span><a id="line.466">            this.typeDeclarationAst = typeDeclarationAst;</a>
-<span class="sourceLineNo">467</span><a id="line.467">        }</a>
-<span class="sourceLineNo">468</span><a id="line.468"></a>
-<span class="sourceLineNo">469</span><a id="line.469">        /**</a>
-<span class="sourceLineNo">470</span><a id="line.470">         * Get the complete type declaration name i.e. type declaration name with package name</a>
-<span class="sourceLineNo">471</span><a id="line.471">         * and outer type declaration name.</a>
-<span class="sourceLineNo">472</span><a id="line.472">         *</a>
-<span class="sourceLineNo">473</span><a id="line.473">         * @return qualified class name</a>
-<span class="sourceLineNo">474</span><a id="line.474">         */</a>
-<span class="sourceLineNo">475</span><a id="line.475">        protected String getQualifiedName() {</a>
-<span class="sourceLineNo">476</span><a id="line.476">            return qualifiedName;</a>
-<span class="sourceLineNo">477</span><a id="line.477">        }</a>
-<span class="sourceLineNo">478</span><a id="line.478"></a>
-<span class="sourceLineNo">479</span><a id="line.479">        /**</a>
-<span class="sourceLineNo">480</span><a id="line.480">         * Get the depth of type declaration.</a>
-<span class="sourceLineNo">481</span><a id="line.481">         *</a>
-<span class="sourceLineNo">482</span><a id="line.482">         * @return the depth of nesting of type declaration</a>
-<span class="sourceLineNo">483</span><a id="line.483">         */</a>
-<span class="sourceLineNo">484</span><a id="line.484">        protected int getDepth() {</a>
-<span class="sourceLineNo">485</span><a id="line.485">            return depth;</a>
-<span class="sourceLineNo">486</span><a id="line.486">        }</a>
-<span class="sourceLineNo">487</span><a id="line.487"></a>
-<span class="sourceLineNo">488</span><a id="line.488">        /**</a>
-<span class="sourceLineNo">489</span><a id="line.489">         * Get the type declaration ast node.</a>
-<span class="sourceLineNo">490</span><a id="line.490">         *</a>
-<span class="sourceLineNo">491</span><a id="line.491">         * @return ast node of the type declaration</a>
-<span class="sourceLineNo">492</span><a id="line.492">         */</a>
-<span class="sourceLineNo">493</span><a id="line.493">        protected DetailAST getTypeDeclarationAst() {</a>
-<span class="sourceLineNo">494</span><a id="line.494">            return typeDeclarationAst;</a>
-<span class="sourceLineNo">495</span><a id="line.495">        }</a>
-<span class="sourceLineNo">496</span><a id="line.496">    }</a>
-<span class="sourceLineNo">497</span><a id="line.497"></a>
-<span class="sourceLineNo">498</span><a id="line.498">    /**</a>
-<span class="sourceLineNo">499</span><a id="line.499">     * Maintains information about the class.</a>
-<span class="sourceLineNo">500</span><a id="line.500">     */</a>
-<span class="sourceLineNo">501</span><a id="line.501">    private static final class ClassDesc extends TypeDeclarationDescription {</a>
-<span class="sourceLineNo">502</span><a id="line.502"></a>
-<span class="sourceLineNo">503</span><a id="line.503">        /** Is class declared as final. */</a>
-<span class="sourceLineNo">504</span><a id="line.504">        private final boolean declaredAsFinal;</a>
-<span class="sourceLineNo">505</span><a id="line.505"></a>
-<span class="sourceLineNo">506</span><a id="line.506">        /** Is class declared as abstract. */</a>
-<span class="sourceLineNo">507</span><a id="line.507">        private final boolean declaredAsAbstract;</a>
-<span class="sourceLineNo">508</span><a id="line.508"></a>
-<span class="sourceLineNo">509</span><a id="line.509">        /** Does class have non-private ctors. */</a>
-<span class="sourceLineNo">510</span><a id="line.510">        private boolean withNonPrivateCtor;</a>
-<span class="sourceLineNo">511</span><a id="line.511"></a>
-<span class="sourceLineNo">512</span><a id="line.512">        /** Does class have private ctors. */</a>
-<span class="sourceLineNo">513</span><a id="line.513">        private boolean withPrivateCtor;</a>
-<span class="sourceLineNo">514</span><a id="line.514"></a>
-<span class="sourceLineNo">515</span><a id="line.515">        /** Does class have nested subclass. */</a>
-<span class="sourceLineNo">516</span><a id="line.516">        private boolean withNestedSubclass;</a>
-<span class="sourceLineNo">517</span><a id="line.517"></a>
-<span class="sourceLineNo">518</span><a id="line.518">        /** Whether the class is the super class of an anonymous inner class. */</a>
-<span class="sourceLineNo">519</span><a id="line.519">        private boolean superClassOfAnonymousInnerClass;</a>
-<span class="sourceLineNo">520</span><a id="line.520"></a>
-<span class="sourceLineNo">521</span><a id="line.521">        /**</a>
-<span class="sourceLineNo">522</span><a id="line.522">         *  Create a new ClassDesc instance.</a>
-<span class="sourceLineNo">523</span><a id="line.523">         *</a>
-<span class="sourceLineNo">524</span><a id="line.524">         *  @param qualifiedName qualified class name(with package)</a>
-<span class="sourceLineNo">525</span><a id="line.525">         *  @param depth class nesting level</a>
-<span class="sourceLineNo">526</span><a id="line.526">         *  @param classAst classAst node</a>
-<span class="sourceLineNo">527</span><a id="line.527">         */</a>
-<span class="sourceLineNo">528</span><a id="line.528">        private ClassDesc(String qualifiedName, int depth, DetailAST classAst) {</a>
-<span class="sourceLineNo">529</span><a id="line.529">            super(qualifiedName, depth, classAst);</a>
-<span class="sourceLineNo">530</span><a id="line.530">            final DetailAST modifiers = classAst.findFirstToken(TokenTypes.MODIFIERS);</a>
-<span class="sourceLineNo">531</span><a id="line.531">            declaredAsFinal = modifiers.findFirstToken(TokenTypes.FINAL) != null;</a>
-<span class="sourceLineNo">532</span><a id="line.532">            declaredAsAbstract = modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</a>
-<span class="sourceLineNo">533</span><a id="line.533">        }</a>
-<span class="sourceLineNo">534</span><a id="line.534"></a>
-<span class="sourceLineNo">535</span><a id="line.535">        /** Adds private ctor. */</a>
-<span class="sourceLineNo">536</span><a id="line.536">        private void registerPrivateCtor() {</a>
-<span class="sourceLineNo">537</span><a id="line.537">            withPrivateCtor = true;</a>
-<span class="sourceLineNo">538</span><a id="line.538">        }</a>
-<span class="sourceLineNo">539</span><a id="line.539"></a>
-<span class="sourceLineNo">540</span><a id="line.540">        /** Adds non-private ctor. */</a>
-<span class="sourceLineNo">541</span><a id="line.541">        private void registerNonPrivateCtor() {</a>
-<span class="sourceLineNo">542</span><a id="line.542">            withNonPrivateCtor = true;</a>
-<span class="sourceLineNo">543</span><a id="line.543">        }</a>
-<span class="sourceLineNo">544</span><a id="line.544"></a>
-<span class="sourceLineNo">545</span><a id="line.545">        /** Adds nested subclass. */</a>
-<span class="sourceLineNo">546</span><a id="line.546">        private void registerNestedSubclass() {</a>
-<span class="sourceLineNo">547</span><a id="line.547">            withNestedSubclass = true;</a>
-<span class="sourceLineNo">548</span><a id="line.548">        }</a>
-<span class="sourceLineNo">549</span><a id="line.549"></a>
-<span class="sourceLineNo">550</span><a id="line.550">        /** Adds anonymous inner class. */</a>
-<span class="sourceLineNo">551</span><a id="line.551">        private void registerSuperClassOfAnonymousInnerClass() {</a>
-<span class="sourceLineNo">552</span><a id="line.552">            superClassOfAnonymousInnerClass = true;</a>
-<span class="sourceLineNo">553</span><a id="line.553">        }</a>
-<span class="sourceLineNo">554</span><a id="line.554"></a>
-<span class="sourceLineNo">555</span><a id="line.555">        /**</a>
-<span class="sourceLineNo">556</span><a id="line.556">         *  Does class have private ctors.</a>
-<span class="sourceLineNo">557</span><a id="line.557">         *</a>
-<span class="sourceLineNo">558</span><a id="line.558">         *  @return true if class has private ctors</a>
-<span class="sourceLineNo">559</span><a id="line.559">         */</a>
-<span class="sourceLineNo">560</span><a id="line.560">        private boolean isWithPrivateCtor() {</a>
-<span class="sourceLineNo">561</span><a id="line.561">            return withPrivateCtor;</a>
-<span class="sourceLineNo">562</span><a id="line.562">        }</a>
-<span class="sourceLineNo">563</span><a id="line.563"></a>
-<span class="sourceLineNo">564</span><a id="line.564">        /**</a>
-<span class="sourceLineNo">565</span><a id="line.565">         *  Does class have non-private ctors.</a>
-<span class="sourceLineNo">566</span><a id="line.566">         *</a>
-<span class="sourceLineNo">567</span><a id="line.567">         *  @return true if class has non-private ctors</a>
-<span class="sourceLineNo">568</span><a id="line.568">         */</a>
-<span class="sourceLineNo">569</span><a id="line.569">        private boolean isWithNonPrivateCtor() {</a>
-<span class="sourceLineNo">570</span><a id="line.570">            return withNonPrivateCtor;</a>
-<span class="sourceLineNo">571</span><a id="line.571">        }</a>
-<span class="sourceLineNo">572</span><a id="line.572"></a>
-<span class="sourceLineNo">573</span><a id="line.573">        /**</a>
-<span class="sourceLineNo">574</span><a id="line.574">         * Does class have nested subclass.</a>
-<span class="sourceLineNo">575</span><a id="line.575">         *</a>
-<span class="sourceLineNo">576</span><a id="line.576">         * @return true if class has nested subclass</a>
-<span class="sourceLineNo">577</span><a id="line.577">         */</a>
-<span class="sourceLineNo">578</span><a id="line.578">        private boolean isWithNestedSubclass() {</a>
-<span class="sourceLineNo">579</span><a id="line.579">            return withNestedSubclass;</a>
-<span class="sourceLineNo">580</span><a id="line.580">        }</a>
-<span class="sourceLineNo">581</span><a id="line.581"></a>
-<span class="sourceLineNo">582</span><a id="line.582">        /**</a>
-<span class="sourceLineNo">583</span><a id="line.583">         *  Is class declared as final.</a>
-<span class="sourceLineNo">584</span><a id="line.584">         *</a>
-<span class="sourceLineNo">585</span><a id="line.585">         *  @return true if class is declared as final</a>
-<span class="sourceLineNo">586</span><a id="line.586">         */</a>
-<span class="sourceLineNo">587</span><a id="line.587">        private boolean isDeclaredAsFinal() {</a>
-<span class="sourceLineNo">588</span><a id="line.588">            return declaredAsFinal;</a>
-<span class="sourceLineNo">589</span><a id="line.589">        }</a>
-<span class="sourceLineNo">590</span><a id="line.590"></a>
-<span class="sourceLineNo">591</span><a id="line.591">        /**</a>
-<span class="sourceLineNo">592</span><a id="line.592">         *  Is class declared as abstract.</a>
-<span class="sourceLineNo">593</span><a id="line.593">         *</a>
-<span class="sourceLineNo">594</span><a id="line.594">         *  @return true if class is declared as final</a>
-<span class="sourceLineNo">595</span><a id="line.595">         */</a>
-<span class="sourceLineNo">596</span><a id="line.596">        private boolean isDeclaredAsAbstract() {</a>
-<span class="sourceLineNo">597</span><a id="line.597">            return declaredAsAbstract;</a>
-<span class="sourceLineNo">598</span><a id="line.598">        }</a>
-<span class="sourceLineNo">599</span><a id="line.599"></a>
-<span class="sourceLineNo">600</span><a id="line.600">        /**</a>
-<span class="sourceLineNo">601</span><a id="line.601">         * Whether the class is the super class of an anonymous inner class.</a>
-<span class="sourceLineNo">602</span><a id="line.602">         *</a>
-<span class="sourceLineNo">603</span><a id="line.603">         * @return {@code true} if the class is the super class of an anonymous inner class.</a>
-<span class="sourceLineNo">604</span><a id="line.604">         */</a>
-<span class="sourceLineNo">605</span><a id="line.605">        private boolean isSuperClassOfAnonymousInnerClass() {</a>
-<span class="sourceLineNo">606</span><a id="line.606">            return superClassOfAnonymousInnerClass;</a>
-<span class="sourceLineNo">607</span><a id="line.607">        }</a>
-<span class="sourceLineNo">608</span><a id="line.608"></a>
-<span class="sourceLineNo">609</span><a id="line.609">    }</a>
-<span class="sourceLineNo">610</span><a id="line.610">}</a>
+<span class="sourceLineNo">331</span><a id="line.331">     * }</a>
+<span class="sourceLineNo">332</span><a id="line.332">     * &lt;/pre&gt;</a>
+<span class="sourceLineNo">333</span><a id="line.333">     * If the {@link Function} {@code countProvider} hadn't used</a>
+<span class="sourceLineNo">334</span><a id="line.334">     * {@link FinalClassCheck#getAnonSuperTypeMatchingCount} to</a>
+<span class="sourceLineNo">335</span><a id="line.335">     * calculate the matching count then the logic would have falsely evaluated</a>
+<span class="sourceLineNo">336</span><a id="line.336">     * {@code Main.One.Two} to be the super class of the anonymous inner class.</a>
+<span class="sourceLineNo">337</span><a id="line.337">     *</a>
+<span class="sourceLineNo">338</span><a id="line.338">     * @param className name of the class</a>
+<span class="sourceLineNo">339</span><a id="line.339">     * @param countProvider the function to apply to calculate the name matching count</a>
+<span class="sourceLineNo">340</span><a id="line.340">     * @return {@link Optional} of {@link ClassDesc} object of the nearest class with the same name.</a>
+<span class="sourceLineNo">341</span><a id="line.341">     * @noinspection CallToStringConcatCanBeReplacedByOperator</a>
+<span class="sourceLineNo">342</span><a id="line.342">     * @noinspectionreason CallToStringConcatCanBeReplacedByOperator - operator causes</a>
+<span class="sourceLineNo">343</span><a id="line.343">     *      pitest to fail</a>
+<span class="sourceLineNo">344</span><a id="line.344">     */</a>
+<span class="sourceLineNo">345</span><a id="line.345">    private Optional&lt;ClassDesc&gt; getNearestClassWithSameName(String className,</a>
+<span class="sourceLineNo">346</span><a id="line.346">        ToIntFunction&lt;ClassDesc&gt; countProvider) {</a>
+<span class="sourceLineNo">347</span><a id="line.347">        final String dotAndClassName = PACKAGE_SEPARATOR.concat(className);</a>
+<span class="sourceLineNo">348</span><a id="line.348">        final Comparator&lt;ClassDesc&gt; longestMatch = Comparator.comparingInt(countProvider);</a>
+<span class="sourceLineNo">349</span><a id="line.349">        return innerClasses.entrySet().stream()</a>
+<span class="sourceLineNo">350</span><a id="line.350">                .filter(entry -&gt; entry.getKey().endsWith(dotAndClassName))</a>
+<span class="sourceLineNo">351</span><a id="line.351">                .map(Map.Entry::getValue)</a>
+<span class="sourceLineNo">352</span><a id="line.352">                .min(longestMatch.reversed().thenComparingInt(ClassDesc::getDepth));</a>
+<span class="sourceLineNo">353</span><a id="line.353">    }</a>
+<span class="sourceLineNo">354</span><a id="line.354"></a>
+<span class="sourceLineNo">355</span><a id="line.355">    /**</a>
+<span class="sourceLineNo">356</span><a id="line.356">     * Extract the qualified type declaration name from given type declaration Ast.</a>
+<span class="sourceLineNo">357</span><a id="line.357">     *</a>
+<span class="sourceLineNo">358</span><a id="line.358">     * @param typeDeclarationAst type declaration for which qualified name is being fetched</a>
+<span class="sourceLineNo">359</span><a id="line.359">     * @return qualified name of a type declaration</a>
+<span class="sourceLineNo">360</span><a id="line.360">     */</a>
+<span class="sourceLineNo">361</span><a id="line.361">    private String extractQualifiedTypeName(DetailAST typeDeclarationAst) {</a>
+<span class="sourceLineNo">362</span><a id="line.362">        final String className = typeDeclarationAst.findFirstToken(TokenTypes.IDENT).getText();</a>
+<span class="sourceLineNo">363</span><a id="line.363">        String outerTypeDeclarationQualifiedName = null;</a>
+<span class="sourceLineNo">364</span><a id="line.364">        if (!typeDeclarations.isEmpty()) {</a>
+<span class="sourceLineNo">365</span><a id="line.365">            outerTypeDeclarationQualifiedName = typeDeclarations.peek().getQualifiedName();</a>
+<span class="sourceLineNo">366</span><a id="line.366">        }</a>
+<span class="sourceLineNo">367</span><a id="line.367">        return CheckUtil.getQualifiedTypeDeclarationName(packageName,</a>
+<span class="sourceLineNo">368</span><a id="line.368">                                                         outerTypeDeclarationQualifiedName,</a>
+<span class="sourceLineNo">369</span><a id="line.369">                                                         className);</a>
+<span class="sourceLineNo">370</span><a id="line.370">    }</a>
+<span class="sourceLineNo">371</span><a id="line.371"></a>
+<span class="sourceLineNo">372</span><a id="line.372">    /**</a>
+<span class="sourceLineNo">373</span><a id="line.373">     * Get super class name of given class.</a>
+<span class="sourceLineNo">374</span><a id="line.374">     *</a>
+<span class="sourceLineNo">375</span><a id="line.375">     * @param classAst class</a>
+<span class="sourceLineNo">376</span><a id="line.376">     * @return super class name or null if super class is not specified</a>
+<span class="sourceLineNo">377</span><a id="line.377">     */</a>
+<span class="sourceLineNo">378</span><a id="line.378">    private static String getSuperClassName(DetailAST classAst) {</a>
+<span class="sourceLineNo">379</span><a id="line.379">        String superClassName = null;</a>
+<span class="sourceLineNo">380</span><a id="line.380">        final DetailAST classExtend = classAst.findFirstToken(TokenTypes.EXTENDS_CLAUSE);</a>
+<span class="sourceLineNo">381</span><a id="line.381">        if (classExtend != null) {</a>
+<span class="sourceLineNo">382</span><a id="line.382">            superClassName = CheckUtil.extractQualifiedName(classExtend.getFirstChild());</a>
+<span class="sourceLineNo">383</span><a id="line.383">        }</a>
+<span class="sourceLineNo">384</span><a id="line.384">        return superClassName;</a>
+<span class="sourceLineNo">385</span><a id="line.385">    }</a>
+<span class="sourceLineNo">386</span><a id="line.386"></a>
+<span class="sourceLineNo">387</span><a id="line.387">    /**</a>
+<span class="sourceLineNo">388</span><a id="line.388">     * Calculates and returns the type declaration matching count when {@code classToBeMatched} is</a>
+<span class="sourceLineNo">389</span><a id="line.389">     * considered to be super class of an anonymous inner class.</a>
+<span class="sourceLineNo">390</span><a id="line.390">     *</a>
+<span class="sourceLineNo">391</span><a id="line.391">     * &lt;p&gt;</a>
+<span class="sourceLineNo">392</span><a id="line.392">     * Suppose our pattern class is {@code Main.ClassOne} and class to be matched is</a>
+<span class="sourceLineNo">393</span><a id="line.393">     * {@code Main.ClassOne.ClassTwo.ClassThree} then type declaration name matching count would</a>
+<span class="sourceLineNo">394</span><a id="line.394">     * be calculated by comparing every character, and updating main counter when we hit "." or</a>
+<span class="sourceLineNo">395</span><a id="line.395">     * when it is the last character of the pattern class and certain conditions are met. This is</a>
+<span class="sourceLineNo">396</span><a id="line.396">     * done so that matching count is 13 instead of 5. This is due to the fact that pattern class</a>
+<span class="sourceLineNo">397</span><a id="line.397">     * can contain anonymous inner class object of a nested class which isn't true in case of</a>
+<span class="sourceLineNo">398</span><a id="line.398">     * extending classes as you can't extend nested classes.</a>
+<span class="sourceLineNo">399</span><a id="line.399">     * &lt;/p&gt;</a>
+<span class="sourceLineNo">400</span><a id="line.400">     *</a>
+<span class="sourceLineNo">401</span><a id="line.401">     * @param patternTypeDeclaration type declaration against which the given type declaration has</a>
+<span class="sourceLineNo">402</span><a id="line.402">     *                               to be matched</a>
+<span class="sourceLineNo">403</span><a id="line.403">     * @param typeDeclarationToBeMatched type declaration to be matched</a>
+<span class="sourceLineNo">404</span><a id="line.404">     * @return type declaration matching count</a>
+<span class="sourceLineNo">405</span><a id="line.405">     */</a>
+<span class="sourceLineNo">406</span><a id="line.406">    private static int getAnonSuperTypeMatchingCount(String patternTypeDeclaration,</a>
+<span class="sourceLineNo">407</span><a id="line.407">                                                    String typeDeclarationToBeMatched) {</a>
+<span class="sourceLineNo">408</span><a id="line.408">        final int typeDeclarationToBeMatchedLength = typeDeclarationToBeMatched.length();</a>
+<span class="sourceLineNo">409</span><a id="line.409">        final int minLength = Math</a>
+<span class="sourceLineNo">410</span><a id="line.410">            .min(typeDeclarationToBeMatchedLength, patternTypeDeclaration.length());</a>
+<span class="sourceLineNo">411</span><a id="line.411">        final char packageSeparator = PACKAGE_SEPARATOR.charAt(0);</a>
+<span class="sourceLineNo">412</span><a id="line.412">        final boolean shouldCountBeUpdatedAtLastCharacter =</a>
+<span class="sourceLineNo">413</span><a id="line.413">            typeDeclarationToBeMatchedLength &gt; minLength</a>
+<span class="sourceLineNo">414</span><a id="line.414">                &amp;&amp; typeDeclarationToBeMatched.charAt(minLength) == packageSeparator;</a>
+<span class="sourceLineNo">415</span><a id="line.415"></a>
+<span class="sourceLineNo">416</span><a id="line.416">        int result = 0;</a>
+<span class="sourceLineNo">417</span><a id="line.417">        for (int idx = 0;</a>
+<span class="sourceLineNo">418</span><a id="line.418">             idx &lt; minLength</a>
+<span class="sourceLineNo">419</span><a id="line.419">                 &amp;&amp; patternTypeDeclaration.charAt(idx) == typeDeclarationToBeMatched.charAt(idx);</a>
+<span class="sourceLineNo">420</span><a id="line.420">             idx++) {</a>
+<span class="sourceLineNo">421</span><a id="line.421"></a>
+<span class="sourceLineNo">422</span><a id="line.422">            if (idx == minLength - 1 &amp;&amp; shouldCountBeUpdatedAtLastCharacter</a>
+<span class="sourceLineNo">423</span><a id="line.423">                || patternTypeDeclaration.charAt(idx) == packageSeparator) {</a>
+<span class="sourceLineNo">424</span><a id="line.424">                result = idx;</a>
+<span class="sourceLineNo">425</span><a id="line.425">            }</a>
+<span class="sourceLineNo">426</span><a id="line.426">        }</a>
+<span class="sourceLineNo">427</span><a id="line.427">        return result;</a>
+<span class="sourceLineNo">428</span><a id="line.428">    }</a>
+<span class="sourceLineNo">429</span><a id="line.429"></a>
+<span class="sourceLineNo">430</span><a id="line.430">    /**</a>
+<span class="sourceLineNo">431</span><a id="line.431">     * Maintains information about the type of declaration.</a>
+<span class="sourceLineNo">432</span><a id="line.432">     * Any ast node of type {@link TokenTypes#CLASS_DEF} or {@link TokenTypes#INTERFACE_DEF}</a>
+<span class="sourceLineNo">433</span><a id="line.433">     * or {@link TokenTypes#ENUM_DEF} or {@link TokenTypes#ANNOTATION_DEF}</a>
+<span class="sourceLineNo">434</span><a id="line.434">     * or {@link TokenTypes#RECORD_DEF} is considered as a type declaration.</a>
+<span class="sourceLineNo">435</span><a id="line.435">     * It does not maintain information about classes, a subclass called {@link ClassDesc}</a>
+<span class="sourceLineNo">436</span><a id="line.436">     * does that job.</a>
+<span class="sourceLineNo">437</span><a id="line.437">     */</a>
+<span class="sourceLineNo">438</span><a id="line.438">    private static class TypeDeclarationDescription {</a>
+<span class="sourceLineNo">439</span><a id="line.439"></a>
+<span class="sourceLineNo">440</span><a id="line.440">        /**</a>
+<span class="sourceLineNo">441</span><a id="line.441">         * Complete type declaration name with package name and outer type declaration name.</a>
+<span class="sourceLineNo">442</span><a id="line.442">         */</a>
+<span class="sourceLineNo">443</span><a id="line.443">        private final String qualifiedName;</a>
+<span class="sourceLineNo">444</span><a id="line.444"></a>
+<span class="sourceLineNo">445</span><a id="line.445">        /**</a>
+<span class="sourceLineNo">446</span><a id="line.446">         * Depth of nesting of type declaration.</a>
+<span class="sourceLineNo">447</span><a id="line.447">         */</a>
+<span class="sourceLineNo">448</span><a id="line.448">        private final int depth;</a>
+<span class="sourceLineNo">449</span><a id="line.449"></a>
+<span class="sourceLineNo">450</span><a id="line.450">        /**</a>
+<span class="sourceLineNo">451</span><a id="line.451">         * Type declaration ast node.</a>
+<span class="sourceLineNo">452</span><a id="line.452">         */</a>
+<span class="sourceLineNo">453</span><a id="line.453">        private final DetailAST typeDeclarationAst;</a>
+<span class="sourceLineNo">454</span><a id="line.454"></a>
+<span class="sourceLineNo">455</span><a id="line.455">        /**</a>
+<span class="sourceLineNo">456</span><a id="line.456">         * Create an instance of TypeDeclarationDescription.</a>
+<span class="sourceLineNo">457</span><a id="line.457">         *</a>
+<span class="sourceLineNo">458</span><a id="line.458">         * @param qualifiedName Complete type declaration name with package name and outer type</a>
+<span class="sourceLineNo">459</span><a id="line.459">         *                      declaration name.</a>
+<span class="sourceLineNo">460</span><a id="line.460">         * @param depth Depth of nesting of type declaration</a>
+<span class="sourceLineNo">461</span><a id="line.461">         * @param typeDeclarationAst Type declaration ast node</a>
+<span class="sourceLineNo">462</span><a id="line.462">         */</a>
+<span class="sourceLineNo">463</span><a id="line.463">        private TypeDeclarationDescription(String qualifiedName, int depth,</a>
+<span class="sourceLineNo">464</span><a id="line.464">                                          DetailAST typeDeclarationAst) {</a>
+<span class="sourceLineNo">465</span><a id="line.465">            this.qualifiedName = qualifiedName;</a>
+<span class="sourceLineNo">466</span><a id="line.466">            this.depth = depth;</a>
+<span class="sourceLineNo">467</span><a id="line.467">            this.typeDeclarationAst = typeDeclarationAst;</a>
+<span class="sourceLineNo">468</span><a id="line.468">        }</a>
+<span class="sourceLineNo">469</span><a id="line.469"></a>
+<span class="sourceLineNo">470</span><a id="line.470">        /**</a>
+<span class="sourceLineNo">471</span><a id="line.471">         * Get the complete type declaration name i.e. type declaration name with package name</a>
+<span class="sourceLineNo">472</span><a id="line.472">         * and outer type declaration name.</a>
+<span class="sourceLineNo">473</span><a id="line.473">         *</a>
+<span class="sourceLineNo">474</span><a id="line.474">         * @return qualified class name</a>
+<span class="sourceLineNo">475</span><a id="line.475">         */</a>
+<span class="sourceLineNo">476</span><a id="line.476">        protected String getQualifiedName() {</a>
+<span class="sourceLineNo">477</span><a id="line.477">            return qualifiedName;</a>
+<span class="sourceLineNo">478</span><a id="line.478">        }</a>
+<span class="sourceLineNo">479</span><a id="line.479"></a>
+<span class="sourceLineNo">480</span><a id="line.480">        /**</a>
+<span class="sourceLineNo">481</span><a id="line.481">         * Get the depth of type declaration.</a>
+<span class="sourceLineNo">482</span><a id="line.482">         *</a>
+<span class="sourceLineNo">483</span><a id="line.483">         * @return the depth of nesting of type declaration</a>
+<span class="sourceLineNo">484</span><a id="line.484">         */</a>
+<span class="sourceLineNo">485</span><a id="line.485">        protected int getDepth() {</a>
+<span class="sourceLineNo">486</span><a id="line.486">            return depth;</a>
+<span class="sourceLineNo">487</span><a id="line.487">        }</a>
+<span class="sourceLineNo">488</span><a id="line.488"></a>
+<span class="sourceLineNo">489</span><a id="line.489">        /**</a>
+<span class="sourceLineNo">490</span><a id="line.490">         * Get the type declaration ast node.</a>
+<span class="sourceLineNo">491</span><a id="line.491">         *</a>
+<span class="sourceLineNo">492</span><a id="line.492">         * @return ast node of the type declaration</a>
+<span class="sourceLineNo">493</span><a id="line.493">         */</a>
+<span class="sourceLineNo">494</span><a id="line.494">        protected DetailAST getTypeDeclarationAst() {</a>
+<span class="sourceLineNo">495</span><a id="line.495">            return typeDeclarationAst;</a>
+<span class="sourceLineNo">496</span><a id="line.496">        }</a>
+<span class="sourceLineNo">497</span><a id="line.497">    }</a>
+<span class="sourceLineNo">498</span><a id="line.498"></a>
+<span class="sourceLineNo">499</span><a id="line.499">    /**</a>
+<span class="sourceLineNo">500</span><a id="line.500">     * Maintains information about the class.</a>
+<span class="sourceLineNo">501</span><a id="line.501">     */</a>
+<span class="sourceLineNo">502</span><a id="line.502">    private static final class ClassDesc extends TypeDeclarationDescription {</a>
+<span class="sourceLineNo">503</span><a id="line.503"></a>
+<span class="sourceLineNo">504</span><a id="line.504">        /** Is class declared as final. */</a>
+<span class="sourceLineNo">505</span><a id="line.505">        private final boolean declaredAsFinal;</a>
+<span class="sourceLineNo">506</span><a id="line.506"></a>
+<span class="sourceLineNo">507</span><a id="line.507">        /** Is class declared as abstract. */</a>
+<span class="sourceLineNo">508</span><a id="line.508">        private final boolean declaredAsAbstract;</a>
+<span class="sourceLineNo">509</span><a id="line.509"></a>
+<span class="sourceLineNo">510</span><a id="line.510">        /** Does class have non-private ctors. */</a>
+<span class="sourceLineNo">511</span><a id="line.511">        private boolean withNonPrivateCtor;</a>
+<span class="sourceLineNo">512</span><a id="line.512"></a>
+<span class="sourceLineNo">513</span><a id="line.513">        /** Does class have private ctors. */</a>
+<span class="sourceLineNo">514</span><a id="line.514">        private boolean withPrivateCtor;</a>
+<span class="sourceLineNo">515</span><a id="line.515"></a>
+<span class="sourceLineNo">516</span><a id="line.516">        /** Does class have nested subclass. */</a>
+<span class="sourceLineNo">517</span><a id="line.517">        private boolean withNestedSubclass;</a>
+<span class="sourceLineNo">518</span><a id="line.518"></a>
+<span class="sourceLineNo">519</span><a id="line.519">        /** Whether the class is the super class of an anonymous inner class. */</a>
+<span class="sourceLineNo">520</span><a id="line.520">        private boolean superClassOfAnonymousInnerClass;</a>
+<span class="sourceLineNo">521</span><a id="line.521"></a>
+<span class="sourceLineNo">522</span><a id="line.522">        /**</a>
+<span class="sourceLineNo">523</span><a id="line.523">         *  Create a new ClassDesc instance.</a>
+<span class="sourceLineNo">524</span><a id="line.524">         *</a>
+<span class="sourceLineNo">525</span><a id="line.525">         *  @param qualifiedName qualified class name(with package)</a>
+<span class="sourceLineNo">526</span><a id="line.526">         *  @param depth class nesting level</a>
+<span class="sourceLineNo">527</span><a id="line.527">         *  @param classAst classAst node</a>
+<span class="sourceLineNo">528</span><a id="line.528">         */</a>
+<span class="sourceLineNo">529</span><a id="line.529">        private ClassDesc(String qualifiedName, int depth, DetailAST classAst) {</a>
+<span class="sourceLineNo">530</span><a id="line.530">            super(qualifiedName, depth, classAst);</a>
+<span class="sourceLineNo">531</span><a id="line.531">            final DetailAST modifiers = classAst.findFirstToken(TokenTypes.MODIFIERS);</a>
+<span class="sourceLineNo">532</span><a id="line.532">            declaredAsFinal = modifiers.findFirstToken(TokenTypes.FINAL) != null;</a>
+<span class="sourceLineNo">533</span><a id="line.533">            declaredAsAbstract = modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</a>
+<span class="sourceLineNo">534</span><a id="line.534">        }</a>
+<span class="sourceLineNo">535</span><a id="line.535"></a>
+<span class="sourceLineNo">536</span><a id="line.536">        /** Adds private ctor. */</a>
+<span class="sourceLineNo">537</span><a id="line.537">        private void registerPrivateCtor() {</a>
+<span class="sourceLineNo">538</span><a id="line.538">            withPrivateCtor = true;</a>
+<span class="sourceLineNo">539</span><a id="line.539">        }</a>
+<span class="sourceLineNo">540</span><a id="line.540"></a>
+<span class="sourceLineNo">541</span><a id="line.541">        /** Adds non-private ctor. */</a>
+<span class="sourceLineNo">542</span><a id="line.542">        private void registerNonPrivateCtor() {</a>
+<span class="sourceLineNo">543</span><a id="line.543">            withNonPrivateCtor = true;</a>
+<span class="sourceLineNo">544</span><a id="line.544">        }</a>
+<span class="sourceLineNo">545</span><a id="line.545"></a>
+<span class="sourceLineNo">546</span><a id="line.546">        /** Adds nested subclass. */</a>
+<span class="sourceLineNo">547</span><a id="line.547">        private void registerNestedSubclass() {</a>
+<span class="sourceLineNo">548</span><a id="line.548">            withNestedSubclass = true;</a>
+<span class="sourceLineNo">549</span><a id="line.549">        }</a>
+<span class="sourceLineNo">550</span><a id="line.550"></a>
+<span class="sourceLineNo">551</span><a id="line.551">        /** Adds anonymous inner class. */</a>
+<span class="sourceLineNo">552</span><a id="line.552">        private void registerSuperClassOfAnonymousInnerClass() {</a>
+<span class="sourceLineNo">553</span><a id="line.553">            superClassOfAnonymousInnerClass = true;</a>
+<span class="sourceLineNo">554</span><a id="line.554">        }</a>
+<span class="sourceLineNo">555</span><a id="line.555"></a>
+<span class="sourceLineNo">556</span><a id="line.556">        /**</a>
+<span class="sourceLineNo">557</span><a id="line.557">         *  Does class have private ctors.</a>
+<span class="sourceLineNo">558</span><a id="line.558">         *</a>
+<span class="sourceLineNo">559</span><a id="line.559">         *  @return true if class has private ctors</a>
+<span class="sourceLineNo">560</span><a id="line.560">         */</a>
+<span class="sourceLineNo">561</span><a id="line.561">        private boolean isWithPrivateCtor() {</a>
+<span class="sourceLineNo">562</span><a id="line.562">            return withPrivateCtor;</a>
+<span class="sourceLineNo">563</span><a id="line.563">        }</a>
+<span class="sourceLineNo">564</span><a id="line.564"></a>
+<span class="sourceLineNo">565</span><a id="line.565">        /**</a>
+<span class="sourceLineNo">566</span><a id="line.566">         *  Does class have non-private ctors.</a>
+<span class="sourceLineNo">567</span><a id="line.567">         *</a>
+<span class="sourceLineNo">568</span><a id="line.568">         *  @return true if class has non-private ctors</a>
+<span class="sourceLineNo">569</span><a id="line.569">         */</a>
+<span class="sourceLineNo">570</span><a id="line.570">        private boolean isWithNonPrivateCtor() {</a>
+<span class="sourceLineNo">571</span><a id="line.571">            return withNonPrivateCtor;</a>
+<span class="sourceLineNo">572</span><a id="line.572">        }</a>
+<span class="sourceLineNo">573</span><a id="line.573"></a>
+<span class="sourceLineNo">574</span><a id="line.574">        /**</a>
+<span class="sourceLineNo">575</span><a id="line.575">         * Does class have nested subclass.</a>
+<span class="sourceLineNo">576</span><a id="line.576">         *</a>
+<span class="sourceLineNo">577</span><a id="line.577">         * @return true if class has nested subclass</a>
+<span class="sourceLineNo">578</span><a id="line.578">         */</a>
+<span class="sourceLineNo">579</span><a id="line.579">        private boolean isWithNestedSubclass() {</a>
+<span class="sourceLineNo">580</span><a id="line.580">            return withNestedSubclass;</a>
+<span class="sourceLineNo">581</span><a id="line.581">        }</a>
+<span class="sourceLineNo">582</span><a id="line.582"></a>
+<span class="sourceLineNo">583</span><a id="line.583">        /**</a>
+<span class="sourceLineNo">584</span><a id="line.584">         *  Is class declared as final.</a>
+<span class="sourceLineNo">585</span><a id="line.585">         *</a>
+<span class="sourceLineNo">586</span><a id="line.586">         *  @return true if class is declared as final</a>
+<span class="sourceLineNo">587</span><a id="line.587">         */</a>
+<span class="sourceLineNo">588</span><a id="line.588">        private boolean isDeclaredAsFinal() {</a>
+<span class="sourceLineNo">589</span><a id="line.589">            return declaredAsFinal;</a>
+<span class="sourceLineNo">590</span><a id="line.590">        }</a>
+<span class="sourceLineNo">591</span><a id="line.591"></a>
+<span class="sourceLineNo">592</span><a id="line.592">        /**</a>
+<span class="sourceLineNo">593</span><a id="line.593">         *  Is class declared as abstract.</a>
+<span class="sourceLineNo">594</span><a id="line.594">         *</a>
+<span class="sourceLineNo">595</span><a id="line.595">         *  @return true if class is declared as final</a>
+<span class="sourceLineNo">596</span><a id="line.596">         */</a>
+<span class="sourceLineNo">597</span><a id="line.597">        private boolean isDeclaredAsAbstract() {</a>
+<span class="sourceLineNo">598</span><a id="line.598">            return declaredAsAbstract;</a>
+<span class="sourceLineNo">599</span><a id="line.599">        }</a>
+<span class="sourceLineNo">600</span><a id="line.600"></a>
+<span class="sourceLineNo">601</span><a id="line.601">        /**</a>
+<span class="sourceLineNo">602</span><a id="line.602">         * Whether the class is the super class of an anonymous inner class.</a>
+<span class="sourceLineNo">603</span><a id="line.603">         *</a>
+<span class="sourceLineNo">604</span><a id="line.604">         * @return {@code true} if the class is the super class of an anonymous inner class.</a>
+<span class="sourceLineNo">605</span><a id="line.605">         */</a>
+<span class="sourceLineNo">606</span><a id="line.606">        private boolean isSuperClassOfAnonymousInnerClass() {</a>
+<span class="sourceLineNo">607</span><a id="line.607">            return superClassOfAnonymousInnerClass;</a>
+<span class="sourceLineNo">608</span><a id="line.608">        }</a>
+<span class="sourceLineNo">609</span><a id="line.609"></a>
+<span class="sourceLineNo">610</span><a id="line.610">    }</a>
+<span class="sourceLineNo">611</span><a id="line.611">}</a>
 
 
 
