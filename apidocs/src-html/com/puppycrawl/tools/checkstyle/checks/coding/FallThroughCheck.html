@@ -28,14 +28,14 @@
 <span class="sourceLineNo">019</span><a id="line.19"></a>
 <span class="sourceLineNo">020</span><a id="line.20">package com.puppycrawl.tools.checkstyle.checks.coding;</a>
 <span class="sourceLineNo">021</span><a id="line.21"></a>
-<span class="sourceLineNo">022</span><a id="line.22">import java.util.regex.Matcher;</a>
+<span class="sourceLineNo">022</span><a id="line.22">import java.util.Optional;</a>
 <span class="sourceLineNo">023</span><a id="line.23">import java.util.regex.Pattern;</a>
 <span class="sourceLineNo">024</span><a id="line.24"></a>
 <span class="sourceLineNo">025</span><a id="line.25">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
 <span class="sourceLineNo">026</span><a id="line.26">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
 <span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
 <span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
-<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.utils.CodePointUtil;</a>
+<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
 <span class="sourceLineNo">030</span><a id="line.30"></a>
 <span class="sourceLineNo">031</span><a id="line.31">/**</a>
 <span class="sourceLineNo">032</span><a id="line.32"> * &lt;p&gt;</a>
@@ -125,298 +125,309 @@
 <span class="sourceLineNo">116</span><a id="line.116">        return getRequiredTokens();</a>
 <span class="sourceLineNo">117</span><a id="line.117">    }</a>
 <span class="sourceLineNo">118</span><a id="line.118"></a>
-<span class="sourceLineNo">119</span><a id="line.119">    /**</a>
-<span class="sourceLineNo">120</span><a id="line.120">     * Setter to define the RegExp to match the relief comment that suppresses</a>
-<span class="sourceLineNo">121</span><a id="line.121">     * the warning about a fall through.</a>
-<span class="sourceLineNo">122</span><a id="line.122">     *</a>
-<span class="sourceLineNo">123</span><a id="line.123">     * @param pattern</a>
-<span class="sourceLineNo">124</span><a id="line.124">     *            The regular expression pattern.</a>
-<span class="sourceLineNo">125</span><a id="line.125">     * @since 4.0</a>
-<span class="sourceLineNo">126</span><a id="line.126">     */</a>
-<span class="sourceLineNo">127</span><a id="line.127">    public void setReliefPattern(Pattern pattern) {</a>
-<span class="sourceLineNo">128</span><a id="line.128">        reliefPattern = pattern;</a>
-<span class="sourceLineNo">129</span><a id="line.129">    }</a>
-<span class="sourceLineNo">130</span><a id="line.130"></a>
-<span class="sourceLineNo">131</span><a id="line.131">    /**</a>
-<span class="sourceLineNo">132</span><a id="line.132">     * Setter to control whether the last case group must be checked.</a>
-<span class="sourceLineNo">133</span><a id="line.133">     *</a>
-<span class="sourceLineNo">134</span><a id="line.134">     * @param value new value of the property.</a>
-<span class="sourceLineNo">135</span><a id="line.135">     * @since 4.0</a>
-<span class="sourceLineNo">136</span><a id="line.136">     */</a>
-<span class="sourceLineNo">137</span><a id="line.137">    public void setCheckLastCaseGroup(boolean value) {</a>
-<span class="sourceLineNo">138</span><a id="line.138">        checkLastCaseGroup = value;</a>
-<span class="sourceLineNo">139</span><a id="line.139">    }</a>
-<span class="sourceLineNo">140</span><a id="line.140"></a>
-<span class="sourceLineNo">141</span><a id="line.141">    @Override</a>
-<span class="sourceLineNo">142</span><a id="line.142">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">143</span><a id="line.143">        final DetailAST nextGroup = ast.getNextSibling();</a>
-<span class="sourceLineNo">144</span><a id="line.144">        final boolean isLastGroup = nextGroup.getType() != TokenTypes.CASE_GROUP;</a>
-<span class="sourceLineNo">145</span><a id="line.145">        if (!isLastGroup || checkLastCaseGroup) {</a>
-<span class="sourceLineNo">146</span><a id="line.146">            final DetailAST slist = ast.findFirstToken(TokenTypes.SLIST);</a>
-<span class="sourceLineNo">147</span><a id="line.147"></a>
-<span class="sourceLineNo">148</span><a id="line.148">            if (slist != null &amp;&amp; !isTerminated(slist, true, true)</a>
-<span class="sourceLineNo">149</span><a id="line.149">                &amp;&amp; !hasFallThroughComment(ast, nextGroup)) {</a>
-<span class="sourceLineNo">150</span><a id="line.150">                if (isLastGroup) {</a>
-<span class="sourceLineNo">151</span><a id="line.151">                    log(ast, MSG_FALL_THROUGH_LAST);</a>
-<span class="sourceLineNo">152</span><a id="line.152">                }</a>
-<span class="sourceLineNo">153</span><a id="line.153">                else {</a>
-<span class="sourceLineNo">154</span><a id="line.154">                    log(nextGroup, MSG_FALL_THROUGH);</a>
-<span class="sourceLineNo">155</span><a id="line.155">                }</a>
-<span class="sourceLineNo">156</span><a id="line.156">            }</a>
-<span class="sourceLineNo">157</span><a id="line.157">        }</a>
-<span class="sourceLineNo">158</span><a id="line.158">    }</a>
-<span class="sourceLineNo">159</span><a id="line.159"></a>
-<span class="sourceLineNo">160</span><a id="line.160">    /**</a>
-<span class="sourceLineNo">161</span><a id="line.161">     * Checks if a given subtree terminated by return, throw or,</a>
-<span class="sourceLineNo">162</span><a id="line.162">     * if allowed break, continue.</a>
-<span class="sourceLineNo">163</span><a id="line.163">     *</a>
-<span class="sourceLineNo">164</span><a id="line.164">     * @param ast root of given subtree</a>
-<span class="sourceLineNo">165</span><a id="line.165">     * @param useBreak should we consider break as terminator</a>
-<span class="sourceLineNo">166</span><a id="line.166">     * @param useContinue should we consider continue as terminator</a>
-<span class="sourceLineNo">167</span><a id="line.167">     * @return true if the subtree is terminated.</a>
-<span class="sourceLineNo">168</span><a id="line.168">     */</a>
-<span class="sourceLineNo">169</span><a id="line.169">    private boolean isTerminated(final DetailAST ast, boolean useBreak,</a>
-<span class="sourceLineNo">170</span><a id="line.170">                                 boolean useContinue) {</a>
-<span class="sourceLineNo">171</span><a id="line.171">        final boolean terminated;</a>
-<span class="sourceLineNo">172</span><a id="line.172"></a>
-<span class="sourceLineNo">173</span><a id="line.173">        switch (ast.getType()) {</a>
-<span class="sourceLineNo">174</span><a id="line.174">            case TokenTypes.LITERAL_RETURN:</a>
-<span class="sourceLineNo">175</span><a id="line.175">            case TokenTypes.LITERAL_YIELD:</a>
-<span class="sourceLineNo">176</span><a id="line.176">            case TokenTypes.LITERAL_THROW:</a>
-<span class="sourceLineNo">177</span><a id="line.177">                terminated = true;</a>
-<span class="sourceLineNo">178</span><a id="line.178">                break;</a>
-<span class="sourceLineNo">179</span><a id="line.179">            case TokenTypes.LITERAL_BREAK:</a>
-<span class="sourceLineNo">180</span><a id="line.180">                terminated = useBreak;</a>
-<span class="sourceLineNo">181</span><a id="line.181">                break;</a>
-<span class="sourceLineNo">182</span><a id="line.182">            case TokenTypes.LITERAL_CONTINUE:</a>
-<span class="sourceLineNo">183</span><a id="line.183">                terminated = useContinue;</a>
-<span class="sourceLineNo">184</span><a id="line.184">                break;</a>
-<span class="sourceLineNo">185</span><a id="line.185">            case TokenTypes.SLIST:</a>
-<span class="sourceLineNo">186</span><a id="line.186">                terminated = checkSlist(ast, useBreak, useContinue);</a>
-<span class="sourceLineNo">187</span><a id="line.187">                break;</a>
-<span class="sourceLineNo">188</span><a id="line.188">            case TokenTypes.LITERAL_IF:</a>
-<span class="sourceLineNo">189</span><a id="line.189">                terminated = checkIf(ast, useBreak, useContinue);</a>
-<span class="sourceLineNo">190</span><a id="line.190">                break;</a>
-<span class="sourceLineNo">191</span><a id="line.191">            case TokenTypes.LITERAL_FOR:</a>
-<span class="sourceLineNo">192</span><a id="line.192">            case TokenTypes.LITERAL_WHILE:</a>
-<span class="sourceLineNo">193</span><a id="line.193">            case TokenTypes.LITERAL_DO:</a>
-<span class="sourceLineNo">194</span><a id="line.194">                terminated = checkLoop(ast);</a>
+<span class="sourceLineNo">119</span><a id="line.119">    @Override</a>
+<span class="sourceLineNo">120</span><a id="line.120">    public boolean isCommentNodesRequired() {</a>
+<span class="sourceLineNo">121</span><a id="line.121">        return true;</a>
+<span class="sourceLineNo">122</span><a id="line.122">    }</a>
+<span class="sourceLineNo">123</span><a id="line.123"></a>
+<span class="sourceLineNo">124</span><a id="line.124">    /**</a>
+<span class="sourceLineNo">125</span><a id="line.125">     * Setter to define the RegExp to match the relief comment that suppresses</a>
+<span class="sourceLineNo">126</span><a id="line.126">     * the warning about a fall through.</a>
+<span class="sourceLineNo">127</span><a id="line.127">     *</a>
+<span class="sourceLineNo">128</span><a id="line.128">     * @param pattern</a>
+<span class="sourceLineNo">129</span><a id="line.129">     *            The regular expression pattern.</a>
+<span class="sourceLineNo">130</span><a id="line.130">     * @since 4.0</a>
+<span class="sourceLineNo">131</span><a id="line.131">     */</a>
+<span class="sourceLineNo">132</span><a id="line.132">    public void setReliefPattern(Pattern pattern) {</a>
+<span class="sourceLineNo">133</span><a id="line.133">        reliefPattern = pattern;</a>
+<span class="sourceLineNo">134</span><a id="line.134">    }</a>
+<span class="sourceLineNo">135</span><a id="line.135"></a>
+<span class="sourceLineNo">136</span><a id="line.136">    /**</a>
+<span class="sourceLineNo">137</span><a id="line.137">     * Setter to control whether the last case group must be checked.</a>
+<span class="sourceLineNo">138</span><a id="line.138">     *</a>
+<span class="sourceLineNo">139</span><a id="line.139">     * @param value new value of the property.</a>
+<span class="sourceLineNo">140</span><a id="line.140">     * @since 4.0</a>
+<span class="sourceLineNo">141</span><a id="line.141">     */</a>
+<span class="sourceLineNo">142</span><a id="line.142">    public void setCheckLastCaseGroup(boolean value) {</a>
+<span class="sourceLineNo">143</span><a id="line.143">        checkLastCaseGroup = value;</a>
+<span class="sourceLineNo">144</span><a id="line.144">    }</a>
+<span class="sourceLineNo">145</span><a id="line.145"></a>
+<span class="sourceLineNo">146</span><a id="line.146">    @Override</a>
+<span class="sourceLineNo">147</span><a id="line.147">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">148</span><a id="line.148">        final DetailAST nextGroup = ast.getNextSibling();</a>
+<span class="sourceLineNo">149</span><a id="line.149">        final boolean isLastGroup = nextGroup.getType() != TokenTypes.CASE_GROUP;</a>
+<span class="sourceLineNo">150</span><a id="line.150">        if (!isLastGroup || checkLastCaseGroup) {</a>
+<span class="sourceLineNo">151</span><a id="line.151">            final DetailAST slist = ast.findFirstToken(TokenTypes.SLIST);</a>
+<span class="sourceLineNo">152</span><a id="line.152"></a>
+<span class="sourceLineNo">153</span><a id="line.153">            if (slist != null &amp;&amp; !isTerminated(slist, true, true)</a>
+<span class="sourceLineNo">154</span><a id="line.154">                &amp;&amp; !hasFallThroughComment(ast)) {</a>
+<span class="sourceLineNo">155</span><a id="line.155">                if (isLastGroup) {</a>
+<span class="sourceLineNo">156</span><a id="line.156">                    log(ast, MSG_FALL_THROUGH_LAST);</a>
+<span class="sourceLineNo">157</span><a id="line.157">                }</a>
+<span class="sourceLineNo">158</span><a id="line.158">                else {</a>
+<span class="sourceLineNo">159</span><a id="line.159">                    log(nextGroup, MSG_FALL_THROUGH);</a>
+<span class="sourceLineNo">160</span><a id="line.160">                }</a>
+<span class="sourceLineNo">161</span><a id="line.161">            }</a>
+<span class="sourceLineNo">162</span><a id="line.162">        }</a>
+<span class="sourceLineNo">163</span><a id="line.163">    }</a>
+<span class="sourceLineNo">164</span><a id="line.164"></a>
+<span class="sourceLineNo">165</span><a id="line.165">    /**</a>
+<span class="sourceLineNo">166</span><a id="line.166">     * Checks if a given subtree terminated by return, throw or,</a>
+<span class="sourceLineNo">167</span><a id="line.167">     * if allowed break, continue.</a>
+<span class="sourceLineNo">168</span><a id="line.168">     *</a>
+<span class="sourceLineNo">169</span><a id="line.169">     * @param ast root of given subtree</a>
+<span class="sourceLineNo">170</span><a id="line.170">     * @param useBreak should we consider break as terminator</a>
+<span class="sourceLineNo">171</span><a id="line.171">     * @param useContinue should we consider continue as terminator</a>
+<span class="sourceLineNo">172</span><a id="line.172">     * @return true if the subtree is terminated.</a>
+<span class="sourceLineNo">173</span><a id="line.173">     */</a>
+<span class="sourceLineNo">174</span><a id="line.174">    private boolean isTerminated(final DetailAST ast, boolean useBreak,</a>
+<span class="sourceLineNo">175</span><a id="line.175">                                 boolean useContinue) {</a>
+<span class="sourceLineNo">176</span><a id="line.176">        final boolean terminated;</a>
+<span class="sourceLineNo">177</span><a id="line.177"></a>
+<span class="sourceLineNo">178</span><a id="line.178">        switch (ast.getType()) {</a>
+<span class="sourceLineNo">179</span><a id="line.179">            case TokenTypes.LITERAL_RETURN:</a>
+<span class="sourceLineNo">180</span><a id="line.180">            case TokenTypes.LITERAL_YIELD:</a>
+<span class="sourceLineNo">181</span><a id="line.181">            case TokenTypes.LITERAL_THROW:</a>
+<span class="sourceLineNo">182</span><a id="line.182">                terminated = true;</a>
+<span class="sourceLineNo">183</span><a id="line.183">                break;</a>
+<span class="sourceLineNo">184</span><a id="line.184">            case TokenTypes.LITERAL_BREAK:</a>
+<span class="sourceLineNo">185</span><a id="line.185">                terminated = useBreak;</a>
+<span class="sourceLineNo">186</span><a id="line.186">                break;</a>
+<span class="sourceLineNo">187</span><a id="line.187">            case TokenTypes.LITERAL_CONTINUE:</a>
+<span class="sourceLineNo">188</span><a id="line.188">                terminated = useContinue;</a>
+<span class="sourceLineNo">189</span><a id="line.189">                break;</a>
+<span class="sourceLineNo">190</span><a id="line.190">            case TokenTypes.SLIST:</a>
+<span class="sourceLineNo">191</span><a id="line.191">                terminated = checkSlist(ast, useBreak, useContinue);</a>
+<span class="sourceLineNo">192</span><a id="line.192">                break;</a>
+<span class="sourceLineNo">193</span><a id="line.193">            case TokenTypes.LITERAL_IF:</a>
+<span class="sourceLineNo">194</span><a id="line.194">                terminated = checkIf(ast, useBreak, useContinue);</a>
 <span class="sourceLineNo">195</span><a id="line.195">                break;</a>
-<span class="sourceLineNo">196</span><a id="line.196">            case TokenTypes.LITERAL_TRY:</a>
-<span class="sourceLineNo">197</span><a id="line.197">                terminated = checkTry(ast, useBreak, useContinue);</a>
-<span class="sourceLineNo">198</span><a id="line.198">                break;</a>
-<span class="sourceLineNo">199</span><a id="line.199">            case TokenTypes.LITERAL_SWITCH:</a>
-<span class="sourceLineNo">200</span><a id="line.200">                terminated = checkSwitch(ast, useContinue);</a>
-<span class="sourceLineNo">201</span><a id="line.201">                break;</a>
-<span class="sourceLineNo">202</span><a id="line.202">            case TokenTypes.LITERAL_SYNCHRONIZED:</a>
-<span class="sourceLineNo">203</span><a id="line.203">                terminated = checkSynchronized(ast, useBreak, useContinue);</a>
-<span class="sourceLineNo">204</span><a id="line.204">                break;</a>
-<span class="sourceLineNo">205</span><a id="line.205">            default:</a>
-<span class="sourceLineNo">206</span><a id="line.206">                terminated = false;</a>
-<span class="sourceLineNo">207</span><a id="line.207">        }</a>
-<span class="sourceLineNo">208</span><a id="line.208">        return terminated;</a>
-<span class="sourceLineNo">209</span><a id="line.209">    }</a>
-<span class="sourceLineNo">210</span><a id="line.210"></a>
-<span class="sourceLineNo">211</span><a id="line.211">    /**</a>
-<span class="sourceLineNo">212</span><a id="line.212">     * Checks if a given SLIST terminated by return, throw or,</a>
-<span class="sourceLineNo">213</span><a id="line.213">     * if allowed break, continue.</a>
-<span class="sourceLineNo">214</span><a id="line.214">     *</a>
-<span class="sourceLineNo">215</span><a id="line.215">     * @param slistAst SLIST to check</a>
-<span class="sourceLineNo">216</span><a id="line.216">     * @param useBreak should we consider break as terminator</a>
-<span class="sourceLineNo">217</span><a id="line.217">     * @param useContinue should we consider continue as terminator</a>
-<span class="sourceLineNo">218</span><a id="line.218">     * @return true if SLIST is terminated.</a>
-<span class="sourceLineNo">219</span><a id="line.219">     */</a>
-<span class="sourceLineNo">220</span><a id="line.220">    private boolean checkSlist(final DetailAST slistAst, boolean useBreak,</a>
-<span class="sourceLineNo">221</span><a id="line.221">                               boolean useContinue) {</a>
-<span class="sourceLineNo">222</span><a id="line.222">        DetailAST lastStmt = slistAst.getLastChild();</a>
-<span class="sourceLineNo">223</span><a id="line.223"></a>
-<span class="sourceLineNo">224</span><a id="line.224">        if (lastStmt.getType() == TokenTypes.RCURLY) {</a>
-<span class="sourceLineNo">225</span><a id="line.225">            lastStmt = lastStmt.getPreviousSibling();</a>
-<span class="sourceLineNo">226</span><a id="line.226">        }</a>
-<span class="sourceLineNo">227</span><a id="line.227"></a>
-<span class="sourceLineNo">228</span><a id="line.228">        return lastStmt != null</a>
-<span class="sourceLineNo">229</span><a id="line.229">            &amp;&amp; isTerminated(lastStmt, useBreak, useContinue);</a>
-<span class="sourceLineNo">230</span><a id="line.230">    }</a>
-<span class="sourceLineNo">231</span><a id="line.231"></a>
-<span class="sourceLineNo">232</span><a id="line.232">    /**</a>
-<span class="sourceLineNo">233</span><a id="line.233">     * Checks if a given IF terminated by return, throw or,</a>
-<span class="sourceLineNo">234</span><a id="line.234">     * if allowed break, continue.</a>
-<span class="sourceLineNo">235</span><a id="line.235">     *</a>
-<span class="sourceLineNo">236</span><a id="line.236">     * @param ast IF to check</a>
-<span class="sourceLineNo">237</span><a id="line.237">     * @param useBreak should we consider break as terminator</a>
-<span class="sourceLineNo">238</span><a id="line.238">     * @param useContinue should we consider continue as terminator</a>
-<span class="sourceLineNo">239</span><a id="line.239">     * @return true if IF is terminated.</a>
-<span class="sourceLineNo">240</span><a id="line.240">     */</a>
-<span class="sourceLineNo">241</span><a id="line.241">    private boolean checkIf(final DetailAST ast, boolean useBreak,</a>
-<span class="sourceLineNo">242</span><a id="line.242">                            boolean useContinue) {</a>
-<span class="sourceLineNo">243</span><a id="line.243">        final DetailAST thenStmt = ast.findFirstToken(TokenTypes.RPAREN)</a>
-<span class="sourceLineNo">244</span><a id="line.244">                .getNextSibling();</a>
-<span class="sourceLineNo">245</span><a id="line.245">        final DetailAST elseStmt = thenStmt.getNextSibling();</a>
-<span class="sourceLineNo">246</span><a id="line.246"></a>
-<span class="sourceLineNo">247</span><a id="line.247">        return elseStmt != null</a>
-<span class="sourceLineNo">248</span><a id="line.248">                &amp;&amp; isTerminated(thenStmt, useBreak, useContinue)</a>
-<span class="sourceLineNo">249</span><a id="line.249">                &amp;&amp; isTerminated(elseStmt.getFirstChild(), useBreak, useContinue);</a>
-<span class="sourceLineNo">250</span><a id="line.250">    }</a>
-<span class="sourceLineNo">251</span><a id="line.251"></a>
-<span class="sourceLineNo">252</span><a id="line.252">    /**</a>
-<span class="sourceLineNo">253</span><a id="line.253">     * Checks if a given loop terminated by return, throw or,</a>
-<span class="sourceLineNo">254</span><a id="line.254">     * if allowed break, continue.</a>
-<span class="sourceLineNo">255</span><a id="line.255">     *</a>
-<span class="sourceLineNo">256</span><a id="line.256">     * @param ast loop to check</a>
-<span class="sourceLineNo">257</span><a id="line.257">     * @return true if loop is terminated.</a>
-<span class="sourceLineNo">258</span><a id="line.258">     */</a>
-<span class="sourceLineNo">259</span><a id="line.259">    private boolean checkLoop(final DetailAST ast) {</a>
-<span class="sourceLineNo">260</span><a id="line.260">        final DetailAST loopBody;</a>
-<span class="sourceLineNo">261</span><a id="line.261">        if (ast.getType() == TokenTypes.LITERAL_DO) {</a>
-<span class="sourceLineNo">262</span><a id="line.262">            final DetailAST lparen = ast.findFirstToken(TokenTypes.DO_WHILE);</a>
-<span class="sourceLineNo">263</span><a id="line.263">            loopBody = lparen.getPreviousSibling();</a>
-<span class="sourceLineNo">264</span><a id="line.264">        }</a>
-<span class="sourceLineNo">265</span><a id="line.265">        else {</a>
-<span class="sourceLineNo">266</span><a id="line.266">            final DetailAST rparen = ast.findFirstToken(TokenTypes.RPAREN);</a>
-<span class="sourceLineNo">267</span><a id="line.267">            loopBody = rparen.getNextSibling();</a>
-<span class="sourceLineNo">268</span><a id="line.268">        }</a>
-<span class="sourceLineNo">269</span><a id="line.269">        return isTerminated(loopBody, false, false);</a>
-<span class="sourceLineNo">270</span><a id="line.270">    }</a>
-<span class="sourceLineNo">271</span><a id="line.271"></a>
-<span class="sourceLineNo">272</span><a id="line.272">    /**</a>
-<span class="sourceLineNo">273</span><a id="line.273">     * Checks if a given try/catch/finally block terminated by return, throw or,</a>
-<span class="sourceLineNo">274</span><a id="line.274">     * if allowed break, continue.</a>
-<span class="sourceLineNo">275</span><a id="line.275">     *</a>
-<span class="sourceLineNo">276</span><a id="line.276">     * @param ast loop to check</a>
-<span class="sourceLineNo">277</span><a id="line.277">     * @param useBreak should we consider break as terminator</a>
-<span class="sourceLineNo">278</span><a id="line.278">     * @param useContinue should we consider continue as terminator</a>
-<span class="sourceLineNo">279</span><a id="line.279">     * @return true if try/catch/finally block is terminated</a>
-<span class="sourceLineNo">280</span><a id="line.280">     */</a>
-<span class="sourceLineNo">281</span><a id="line.281">    private boolean checkTry(final DetailAST ast, boolean useBreak,</a>
-<span class="sourceLineNo">282</span><a id="line.282">                             boolean useContinue) {</a>
-<span class="sourceLineNo">283</span><a id="line.283">        final DetailAST finalStmt = ast.getLastChild();</a>
-<span class="sourceLineNo">284</span><a id="line.284">        boolean isTerminated = finalStmt.getType() == TokenTypes.LITERAL_FINALLY</a>
-<span class="sourceLineNo">285</span><a id="line.285">                &amp;&amp; isTerminated(finalStmt.findFirstToken(TokenTypes.SLIST), useBreak, useContinue);</a>
-<span class="sourceLineNo">286</span><a id="line.286"></a>
-<span class="sourceLineNo">287</span><a id="line.287">        if (!isTerminated) {</a>
-<span class="sourceLineNo">288</span><a id="line.288">            DetailAST firstChild = ast.getFirstChild();</a>
-<span class="sourceLineNo">289</span><a id="line.289"></a>
-<span class="sourceLineNo">290</span><a id="line.290">            if (firstChild.getType() == TokenTypes.RESOURCE_SPECIFICATION) {</a>
-<span class="sourceLineNo">291</span><a id="line.291">                firstChild = firstChild.getNextSibling();</a>
-<span class="sourceLineNo">292</span><a id="line.292">            }</a>
-<span class="sourceLineNo">293</span><a id="line.293"></a>
-<span class="sourceLineNo">294</span><a id="line.294">            isTerminated = isTerminated(firstChild,</a>
-<span class="sourceLineNo">295</span><a id="line.295">                    useBreak, useContinue);</a>
+<span class="sourceLineNo">196</span><a id="line.196">            case TokenTypes.LITERAL_FOR:</a>
+<span class="sourceLineNo">197</span><a id="line.197">            case TokenTypes.LITERAL_WHILE:</a>
+<span class="sourceLineNo">198</span><a id="line.198">            case TokenTypes.LITERAL_DO:</a>
+<span class="sourceLineNo">199</span><a id="line.199">                terminated = checkLoop(ast);</a>
+<span class="sourceLineNo">200</span><a id="line.200">                break;</a>
+<span class="sourceLineNo">201</span><a id="line.201">            case TokenTypes.LITERAL_TRY:</a>
+<span class="sourceLineNo">202</span><a id="line.202">                terminated = checkTry(ast, useBreak, useContinue);</a>
+<span class="sourceLineNo">203</span><a id="line.203">                break;</a>
+<span class="sourceLineNo">204</span><a id="line.204">            case TokenTypes.LITERAL_SWITCH:</a>
+<span class="sourceLineNo">205</span><a id="line.205">                terminated = checkSwitch(ast, useContinue);</a>
+<span class="sourceLineNo">206</span><a id="line.206">                break;</a>
+<span class="sourceLineNo">207</span><a id="line.207">            case TokenTypes.LITERAL_SYNCHRONIZED:</a>
+<span class="sourceLineNo">208</span><a id="line.208">                terminated = checkSynchronized(ast, useBreak, useContinue);</a>
+<span class="sourceLineNo">209</span><a id="line.209">                break;</a>
+<span class="sourceLineNo">210</span><a id="line.210">            default:</a>
+<span class="sourceLineNo">211</span><a id="line.211">                terminated = false;</a>
+<span class="sourceLineNo">212</span><a id="line.212">        }</a>
+<span class="sourceLineNo">213</span><a id="line.213">        return terminated;</a>
+<span class="sourceLineNo">214</span><a id="line.214">    }</a>
+<span class="sourceLineNo">215</span><a id="line.215"></a>
+<span class="sourceLineNo">216</span><a id="line.216">    /**</a>
+<span class="sourceLineNo">217</span><a id="line.217">     * Checks if a given SLIST terminated by return, throw or,</a>
+<span class="sourceLineNo">218</span><a id="line.218">     * if allowed break, continue.</a>
+<span class="sourceLineNo">219</span><a id="line.219">     *</a>
+<span class="sourceLineNo">220</span><a id="line.220">     * @param slistAst SLIST to check</a>
+<span class="sourceLineNo">221</span><a id="line.221">     * @param useBreak should we consider break as terminator</a>
+<span class="sourceLineNo">222</span><a id="line.222">     * @param useContinue should we consider continue as terminator</a>
+<span class="sourceLineNo">223</span><a id="line.223">     * @return true if SLIST is terminated.</a>
+<span class="sourceLineNo">224</span><a id="line.224">     */</a>
+<span class="sourceLineNo">225</span><a id="line.225">    private boolean checkSlist(final DetailAST slistAst, boolean useBreak,</a>
+<span class="sourceLineNo">226</span><a id="line.226">                               boolean useContinue) {</a>
+<span class="sourceLineNo">227</span><a id="line.227">        DetailAST lastStmt = slistAst.getLastChild();</a>
+<span class="sourceLineNo">228</span><a id="line.228"></a>
+<span class="sourceLineNo">229</span><a id="line.229">        if (lastStmt.getType() == TokenTypes.RCURLY) {</a>
+<span class="sourceLineNo">230</span><a id="line.230">            lastStmt = lastStmt.getPreviousSibling();</a>
+<span class="sourceLineNo">231</span><a id="line.231">        }</a>
+<span class="sourceLineNo">232</span><a id="line.232"></a>
+<span class="sourceLineNo">233</span><a id="line.233">        while (TokenUtil.isOfType(lastStmt, TokenTypes.SINGLE_LINE_COMMENT,</a>
+<span class="sourceLineNo">234</span><a id="line.234">                TokenTypes.BLOCK_COMMENT_BEGIN)) {</a>
+<span class="sourceLineNo">235</span><a id="line.235">            lastStmt = lastStmt.getPreviousSibling();</a>
+<span class="sourceLineNo">236</span><a id="line.236">        }</a>
+<span class="sourceLineNo">237</span><a id="line.237"></a>
+<span class="sourceLineNo">238</span><a id="line.238">        return lastStmt != null</a>
+<span class="sourceLineNo">239</span><a id="line.239">            &amp;&amp; isTerminated(lastStmt, useBreak, useContinue);</a>
+<span class="sourceLineNo">240</span><a id="line.240">    }</a>
+<span class="sourceLineNo">241</span><a id="line.241"></a>
+<span class="sourceLineNo">242</span><a id="line.242">    /**</a>
+<span class="sourceLineNo">243</span><a id="line.243">     * Checks if a given IF terminated by return, throw or,</a>
+<span class="sourceLineNo">244</span><a id="line.244">     * if allowed break, continue.</a>
+<span class="sourceLineNo">245</span><a id="line.245">     *</a>
+<span class="sourceLineNo">246</span><a id="line.246">     * @param ast IF to check</a>
+<span class="sourceLineNo">247</span><a id="line.247">     * @param useBreak should we consider break as terminator</a>
+<span class="sourceLineNo">248</span><a id="line.248">     * @param useContinue should we consider continue as terminator</a>
+<span class="sourceLineNo">249</span><a id="line.249">     * @return true if IF is terminated.</a>
+<span class="sourceLineNo">250</span><a id="line.250">     */</a>
+<span class="sourceLineNo">251</span><a id="line.251">    private boolean checkIf(final DetailAST ast, boolean useBreak,</a>
+<span class="sourceLineNo">252</span><a id="line.252">                            boolean useContinue) {</a>
+<span class="sourceLineNo">253</span><a id="line.253">        final DetailAST thenStmt = getNextNonCommentAst(ast.findFirstToken(TokenTypes.RPAREN));</a>
+<span class="sourceLineNo">254</span><a id="line.254"></a>
+<span class="sourceLineNo">255</span><a id="line.255">        final DetailAST elseStmt = getNextNonCommentAst(thenStmt);</a>
+<span class="sourceLineNo">256</span><a id="line.256"></a>
+<span class="sourceLineNo">257</span><a id="line.257">        return elseStmt != null</a>
+<span class="sourceLineNo">258</span><a id="line.258">                &amp;&amp; isTerminated(thenStmt, useBreak, useContinue)</a>
+<span class="sourceLineNo">259</span><a id="line.259">                &amp;&amp; isTerminated(elseStmt.getLastChild(), useBreak, useContinue);</a>
+<span class="sourceLineNo">260</span><a id="line.260">    }</a>
+<span class="sourceLineNo">261</span><a id="line.261"></a>
+<span class="sourceLineNo">262</span><a id="line.262">    /**</a>
+<span class="sourceLineNo">263</span><a id="line.263">     * This method will skip the comment content while finding the next ast of current ast.</a>
+<span class="sourceLineNo">264</span><a id="line.264">     *</a>
+<span class="sourceLineNo">265</span><a id="line.265">     * @param ast current ast</a>
+<span class="sourceLineNo">266</span><a id="line.266">     * @return next ast after skipping comment</a>
+<span class="sourceLineNo">267</span><a id="line.267">     */</a>
+<span class="sourceLineNo">268</span><a id="line.268">    private static DetailAST getNextNonCommentAst(DetailAST ast) {</a>
+<span class="sourceLineNo">269</span><a id="line.269">        DetailAST nextSibling = ast.getNextSibling();</a>
+<span class="sourceLineNo">270</span><a id="line.270">        while (TokenUtil.isOfType(nextSibling, TokenTypes.SINGLE_LINE_COMMENT,</a>
+<span class="sourceLineNo">271</span><a id="line.271">                TokenTypes.BLOCK_COMMENT_BEGIN)) {</a>
+<span class="sourceLineNo">272</span><a id="line.272">            nextSibling = nextSibling.getNextSibling();</a>
+<span class="sourceLineNo">273</span><a id="line.273">        }</a>
+<span class="sourceLineNo">274</span><a id="line.274">        return nextSibling;</a>
+<span class="sourceLineNo">275</span><a id="line.275">    }</a>
+<span class="sourceLineNo">276</span><a id="line.276"></a>
+<span class="sourceLineNo">277</span><a id="line.277">    /**</a>
+<span class="sourceLineNo">278</span><a id="line.278">     * Checks if a given loop terminated by return, throw or,</a>
+<span class="sourceLineNo">279</span><a id="line.279">     * if allowed break, continue.</a>
+<span class="sourceLineNo">280</span><a id="line.280">     *</a>
+<span class="sourceLineNo">281</span><a id="line.281">     * @param ast loop to check</a>
+<span class="sourceLineNo">282</span><a id="line.282">     * @return true if loop is terminated.</a>
+<span class="sourceLineNo">283</span><a id="line.283">     */</a>
+<span class="sourceLineNo">284</span><a id="line.284">    private boolean checkLoop(final DetailAST ast) {</a>
+<span class="sourceLineNo">285</span><a id="line.285">        final DetailAST loopBody;</a>
+<span class="sourceLineNo">286</span><a id="line.286">        if (ast.getType() == TokenTypes.LITERAL_DO) {</a>
+<span class="sourceLineNo">287</span><a id="line.287">            final DetailAST lparen = ast.findFirstToken(TokenTypes.DO_WHILE);</a>
+<span class="sourceLineNo">288</span><a id="line.288">            loopBody = lparen.getPreviousSibling();</a>
+<span class="sourceLineNo">289</span><a id="line.289">        }</a>
+<span class="sourceLineNo">290</span><a id="line.290">        else {</a>
+<span class="sourceLineNo">291</span><a id="line.291">            final DetailAST rparen = ast.findFirstToken(TokenTypes.RPAREN);</a>
+<span class="sourceLineNo">292</span><a id="line.292">            loopBody = rparen.getNextSibling();</a>
+<span class="sourceLineNo">293</span><a id="line.293">        }</a>
+<span class="sourceLineNo">294</span><a id="line.294">        return isTerminated(loopBody, false, false);</a>
+<span class="sourceLineNo">295</span><a id="line.295">    }</a>
 <span class="sourceLineNo">296</span><a id="line.296"></a>
-<span class="sourceLineNo">297</span><a id="line.297">            DetailAST catchStmt = ast.findFirstToken(TokenTypes.LITERAL_CATCH);</a>
-<span class="sourceLineNo">298</span><a id="line.298">            while (catchStmt != null</a>
-<span class="sourceLineNo">299</span><a id="line.299">                    &amp;&amp; isTerminated</a>
-<span class="sourceLineNo">300</span><a id="line.300">                    &amp;&amp; catchStmt.getType() == TokenTypes.LITERAL_CATCH) {</a>
-<span class="sourceLineNo">301</span><a id="line.301">                final DetailAST catchBody =</a>
-<span class="sourceLineNo">302</span><a id="line.302">                        catchStmt.findFirstToken(TokenTypes.SLIST);</a>
-<span class="sourceLineNo">303</span><a id="line.303">                isTerminated = isTerminated(catchBody, useBreak, useContinue);</a>
-<span class="sourceLineNo">304</span><a id="line.304">                catchStmt = catchStmt.getNextSibling();</a>
-<span class="sourceLineNo">305</span><a id="line.305">            }</a>
-<span class="sourceLineNo">306</span><a id="line.306">        }</a>
-<span class="sourceLineNo">307</span><a id="line.307">        return isTerminated;</a>
-<span class="sourceLineNo">308</span><a id="line.308">    }</a>
-<span class="sourceLineNo">309</span><a id="line.309"></a>
-<span class="sourceLineNo">310</span><a id="line.310">    /**</a>
-<span class="sourceLineNo">311</span><a id="line.311">     * Checks if a given switch terminated by return, throw or,</a>
-<span class="sourceLineNo">312</span><a id="line.312">     * if allowed break, continue.</a>
-<span class="sourceLineNo">313</span><a id="line.313">     *</a>
-<span class="sourceLineNo">314</span><a id="line.314">     * @param literalSwitchAst loop to check</a>
-<span class="sourceLineNo">315</span><a id="line.315">     * @param useContinue should we consider continue as terminator</a>
-<span class="sourceLineNo">316</span><a id="line.316">     * @return true if switch is terminated</a>
-<span class="sourceLineNo">317</span><a id="line.317">     */</a>
-<span class="sourceLineNo">318</span><a id="line.318">    private boolean checkSwitch(final DetailAST literalSwitchAst, boolean useContinue) {</a>
-<span class="sourceLineNo">319</span><a id="line.319">        DetailAST caseGroup = literalSwitchAst.findFirstToken(TokenTypes.CASE_GROUP);</a>
-<span class="sourceLineNo">320</span><a id="line.320">        boolean isTerminated = caseGroup != null;</a>
-<span class="sourceLineNo">321</span><a id="line.321">        while (isTerminated &amp;&amp; caseGroup.getType() != TokenTypes.RCURLY) {</a>
-<span class="sourceLineNo">322</span><a id="line.322">            final DetailAST caseBody =</a>
-<span class="sourceLineNo">323</span><a id="line.323">                caseGroup.findFirstToken(TokenTypes.SLIST);</a>
-<span class="sourceLineNo">324</span><a id="line.324">            isTerminated = caseBody != null &amp;&amp; isTerminated(caseBody, false, useContinue);</a>
-<span class="sourceLineNo">325</span><a id="line.325">            caseGroup = caseGroup.getNextSibling();</a>
-<span class="sourceLineNo">326</span><a id="line.326">        }</a>
-<span class="sourceLineNo">327</span><a id="line.327">        return isTerminated;</a>
-<span class="sourceLineNo">328</span><a id="line.328">    }</a>
-<span class="sourceLineNo">329</span><a id="line.329"></a>
-<span class="sourceLineNo">330</span><a id="line.330">    /**</a>
-<span class="sourceLineNo">331</span><a id="line.331">     * Checks if a given synchronized block terminated by return, throw or,</a>
-<span class="sourceLineNo">332</span><a id="line.332">     * if allowed break, continue.</a>
-<span class="sourceLineNo">333</span><a id="line.333">     *</a>
-<span class="sourceLineNo">334</span><a id="line.334">     * @param synchronizedAst synchronized block to check.</a>
-<span class="sourceLineNo">335</span><a id="line.335">     * @param useBreak should we consider break as terminator</a>
-<span class="sourceLineNo">336</span><a id="line.336">     * @param useContinue should we consider continue as terminator</a>
-<span class="sourceLineNo">337</span><a id="line.337">     * @return true if synchronized block is terminated</a>
-<span class="sourceLineNo">338</span><a id="line.338">     */</a>
-<span class="sourceLineNo">339</span><a id="line.339">    private boolean checkSynchronized(final DetailAST synchronizedAst, boolean useBreak,</a>
-<span class="sourceLineNo">340</span><a id="line.340">                                      boolean useContinue) {</a>
-<span class="sourceLineNo">341</span><a id="line.341">        return isTerminated(</a>
-<span class="sourceLineNo">342</span><a id="line.342">            synchronizedAst.findFirstToken(TokenTypes.SLIST), useBreak, useContinue);</a>
-<span class="sourceLineNo">343</span><a id="line.343">    }</a>
-<span class="sourceLineNo">344</span><a id="line.344"></a>
-<span class="sourceLineNo">345</span><a id="line.345">    /**</a>
-<span class="sourceLineNo">346</span><a id="line.346">     * Determines if the fall through case between {@code currentCase} and</a>
-<span class="sourceLineNo">347</span><a id="line.347">     * {@code nextCase} is relieved by an appropriate comment.</a>
-<span class="sourceLineNo">348</span><a id="line.348">     *</a>
-<span class="sourceLineNo">349</span><a id="line.349">     * &lt;p&gt;Handles&lt;/p&gt;</a>
-<span class="sourceLineNo">350</span><a id="line.350">     * &lt;pre&gt;</a>
-<span class="sourceLineNo">351</span><a id="line.351">     * case 1:</a>
-<span class="sourceLineNo">352</span><a id="line.352">     * /&amp;#42; FALLTHRU &amp;#42;/ case 2:</a>
-<span class="sourceLineNo">353</span><a id="line.353">     *</a>
-<span class="sourceLineNo">354</span><a id="line.354">     * switch(i) {</a>
-<span class="sourceLineNo">355</span><a id="line.355">     * default:</a>
-<span class="sourceLineNo">356</span><a id="line.356">     * /&amp;#42; FALLTHRU &amp;#42;/}</a>
-<span class="sourceLineNo">357</span><a id="line.357">     *</a>
-<span class="sourceLineNo">358</span><a id="line.358">     * case 1:</a>
-<span class="sourceLineNo">359</span><a id="line.359">     * // FALLTHRU</a>
-<span class="sourceLineNo">360</span><a id="line.360">     * case 2:</a>
-<span class="sourceLineNo">361</span><a id="line.361">     *</a>
-<span class="sourceLineNo">362</span><a id="line.362">     * switch(i) {</a>
-<span class="sourceLineNo">363</span><a id="line.363">     * default:</a>
-<span class="sourceLineNo">364</span><a id="line.364">     * // FALLTHRU</a>
-<span class="sourceLineNo">365</span><a id="line.365">     * &lt;/pre&gt;</a>
-<span class="sourceLineNo">366</span><a id="line.366">     *</a>
-<span class="sourceLineNo">367</span><a id="line.367">     * @param currentCase AST of the case that falls through to the next case.</a>
-<span class="sourceLineNo">368</span><a id="line.368">     * @param nextCase AST of the next case.</a>
-<span class="sourceLineNo">369</span><a id="line.369">     * @return True if a relief comment was found</a>
-<span class="sourceLineNo">370</span><a id="line.370">     */</a>
-<span class="sourceLineNo">371</span><a id="line.371">    private boolean hasFallThroughComment(DetailAST currentCase, DetailAST nextCase) {</a>
-<span class="sourceLineNo">372</span><a id="line.372">        boolean allThroughComment = false;</a>
-<span class="sourceLineNo">373</span><a id="line.373">        final int endLineNo = nextCase.getLineNo();</a>
-<span class="sourceLineNo">374</span><a id="line.374"></a>
-<span class="sourceLineNo">375</span><a id="line.375">        if (matchesComment(reliefPattern, endLineNo)) {</a>
-<span class="sourceLineNo">376</span><a id="line.376">            allThroughComment = true;</a>
-<span class="sourceLineNo">377</span><a id="line.377">        }</a>
-<span class="sourceLineNo">378</span><a id="line.378">        else {</a>
-<span class="sourceLineNo">379</span><a id="line.379">            final int startLineNo = currentCase.getLineNo();</a>
-<span class="sourceLineNo">380</span><a id="line.380">            for (int i = endLineNo - 2; i &gt; startLineNo - 1; i--) {</a>
-<span class="sourceLineNo">381</span><a id="line.381">                final int[] line = getLineCodePoints(i);</a>
-<span class="sourceLineNo">382</span><a id="line.382">                if (!CodePointUtil.isBlank(line)) {</a>
-<span class="sourceLineNo">383</span><a id="line.383">                    allThroughComment = matchesComment(reliefPattern, i + 1);</a>
-<span class="sourceLineNo">384</span><a id="line.384">                    break;</a>
-<span class="sourceLineNo">385</span><a id="line.385">                }</a>
-<span class="sourceLineNo">386</span><a id="line.386">            }</a>
-<span class="sourceLineNo">387</span><a id="line.387">        }</a>
-<span class="sourceLineNo">388</span><a id="line.388">        return allThroughComment;</a>
-<span class="sourceLineNo">389</span><a id="line.389">    }</a>
-<span class="sourceLineNo">390</span><a id="line.390"></a>
-<span class="sourceLineNo">391</span><a id="line.391">    /**</a>
-<span class="sourceLineNo">392</span><a id="line.392">     * Does a regular expression match on the given line and checks that a</a>
-<span class="sourceLineNo">393</span><a id="line.393">     * possible match is within a comment.</a>
-<span class="sourceLineNo">394</span><a id="line.394">     *</a>
-<span class="sourceLineNo">395</span><a id="line.395">     * @param pattern The regular expression pattern to use.</a>
-<span class="sourceLineNo">396</span><a id="line.396">     * @param lineNo The line number in the file.</a>
-<span class="sourceLineNo">397</span><a id="line.397">     * @return True if a match was found inside a comment.</a>
-<span class="sourceLineNo">398</span><a id="line.398">     */</a>
-<span class="sourceLineNo">399</span><a id="line.399">    // suppress deprecation until https://github.com/checkstyle/checkstyle/issues/11166</a>
-<span class="sourceLineNo">400</span><a id="line.400">    @SuppressWarnings("deprecation")</a>
-<span class="sourceLineNo">401</span><a id="line.401">    private boolean matchesComment(Pattern pattern, int lineNo) {</a>
-<span class="sourceLineNo">402</span><a id="line.402">        final String line = getLine(lineNo - 1);</a>
-<span class="sourceLineNo">403</span><a id="line.403"></a>
-<span class="sourceLineNo">404</span><a id="line.404">        final Matcher matcher = pattern.matcher(line);</a>
-<span class="sourceLineNo">405</span><a id="line.405">        return matcher.find()</a>
-<span class="sourceLineNo">406</span><a id="line.406">                &amp;&amp; getFileContents().hasIntersectionWithComment(</a>
-<span class="sourceLineNo">407</span><a id="line.407">                        lineNo, matcher.start(), lineNo, matcher.end());</a>
-<span class="sourceLineNo">408</span><a id="line.408">    }</a>
-<span class="sourceLineNo">409</span><a id="line.409"></a>
-<span class="sourceLineNo">410</span><a id="line.410">}</a>
+<span class="sourceLineNo">297</span><a id="line.297">    /**</a>
+<span class="sourceLineNo">298</span><a id="line.298">     * Checks if a given try/catch/finally block terminated by return, throw or,</a>
+<span class="sourceLineNo">299</span><a id="line.299">     * if allowed break, continue.</a>
+<span class="sourceLineNo">300</span><a id="line.300">     *</a>
+<span class="sourceLineNo">301</span><a id="line.301">     * @param ast loop to check</a>
+<span class="sourceLineNo">302</span><a id="line.302">     * @param useBreak should we consider break as terminator</a>
+<span class="sourceLineNo">303</span><a id="line.303">     * @param useContinue should we consider continue as terminator</a>
+<span class="sourceLineNo">304</span><a id="line.304">     * @return true if try/catch/finally block is terminated</a>
+<span class="sourceLineNo">305</span><a id="line.305">     */</a>
+<span class="sourceLineNo">306</span><a id="line.306">    private boolean checkTry(final DetailAST ast, boolean useBreak,</a>
+<span class="sourceLineNo">307</span><a id="line.307">                             boolean useContinue) {</a>
+<span class="sourceLineNo">308</span><a id="line.308">        final DetailAST finalStmt = ast.getLastChild();</a>
+<span class="sourceLineNo">309</span><a id="line.309">        boolean isTerminated = finalStmt.getType() == TokenTypes.LITERAL_FINALLY</a>
+<span class="sourceLineNo">310</span><a id="line.310">                &amp;&amp; isTerminated(finalStmt.findFirstToken(TokenTypes.SLIST), useBreak, useContinue);</a>
+<span class="sourceLineNo">311</span><a id="line.311"></a>
+<span class="sourceLineNo">312</span><a id="line.312">        if (!isTerminated) {</a>
+<span class="sourceLineNo">313</span><a id="line.313">            DetailAST firstChild = ast.getFirstChild();</a>
+<span class="sourceLineNo">314</span><a id="line.314"></a>
+<span class="sourceLineNo">315</span><a id="line.315">            if (firstChild.getType() == TokenTypes.RESOURCE_SPECIFICATION) {</a>
+<span class="sourceLineNo">316</span><a id="line.316">                firstChild = firstChild.getNextSibling();</a>
+<span class="sourceLineNo">317</span><a id="line.317">            }</a>
+<span class="sourceLineNo">318</span><a id="line.318"></a>
+<span class="sourceLineNo">319</span><a id="line.319">            isTerminated = isTerminated(firstChild,</a>
+<span class="sourceLineNo">320</span><a id="line.320">                    useBreak, useContinue);</a>
+<span class="sourceLineNo">321</span><a id="line.321"></a>
+<span class="sourceLineNo">322</span><a id="line.322">            DetailAST catchStmt = ast.findFirstToken(TokenTypes.LITERAL_CATCH);</a>
+<span class="sourceLineNo">323</span><a id="line.323">            while (catchStmt != null</a>
+<span class="sourceLineNo">324</span><a id="line.324">                    &amp;&amp; isTerminated</a>
+<span class="sourceLineNo">325</span><a id="line.325">                    &amp;&amp; catchStmt.getType() == TokenTypes.LITERAL_CATCH) {</a>
+<span class="sourceLineNo">326</span><a id="line.326">                final DetailAST catchBody =</a>
+<span class="sourceLineNo">327</span><a id="line.327">                        catchStmt.findFirstToken(TokenTypes.SLIST);</a>
+<span class="sourceLineNo">328</span><a id="line.328">                isTerminated = isTerminated(catchBody, useBreak, useContinue);</a>
+<span class="sourceLineNo">329</span><a id="line.329">                catchStmt = catchStmt.getNextSibling();</a>
+<span class="sourceLineNo">330</span><a id="line.330">            }</a>
+<span class="sourceLineNo">331</span><a id="line.331">        }</a>
+<span class="sourceLineNo">332</span><a id="line.332">        return isTerminated;</a>
+<span class="sourceLineNo">333</span><a id="line.333">    }</a>
+<span class="sourceLineNo">334</span><a id="line.334"></a>
+<span class="sourceLineNo">335</span><a id="line.335">    /**</a>
+<span class="sourceLineNo">336</span><a id="line.336">     * Checks if a given switch terminated by return, throw or,</a>
+<span class="sourceLineNo">337</span><a id="line.337">     * if allowed break, continue.</a>
+<span class="sourceLineNo">338</span><a id="line.338">     *</a>
+<span class="sourceLineNo">339</span><a id="line.339">     * @param literalSwitchAst loop to check</a>
+<span class="sourceLineNo">340</span><a id="line.340">     * @param useContinue should we consider continue as terminator</a>
+<span class="sourceLineNo">341</span><a id="line.341">     * @return true if switch is terminated</a>
+<span class="sourceLineNo">342</span><a id="line.342">     */</a>
+<span class="sourceLineNo">343</span><a id="line.343">    private boolean checkSwitch(final DetailAST literalSwitchAst, boolean useContinue) {</a>
+<span class="sourceLineNo">344</span><a id="line.344">        DetailAST caseGroup = literalSwitchAst.findFirstToken(TokenTypes.CASE_GROUP);</a>
+<span class="sourceLineNo">345</span><a id="line.345">        boolean isTerminated = caseGroup != null;</a>
+<span class="sourceLineNo">346</span><a id="line.346">        while (isTerminated &amp;&amp; caseGroup.getType() != TokenTypes.RCURLY) {</a>
+<span class="sourceLineNo">347</span><a id="line.347">            final DetailAST caseBody =</a>
+<span class="sourceLineNo">348</span><a id="line.348">                caseGroup.findFirstToken(TokenTypes.SLIST);</a>
+<span class="sourceLineNo">349</span><a id="line.349">            isTerminated = caseBody != null &amp;&amp; isTerminated(caseBody, false, useContinue);</a>
+<span class="sourceLineNo">350</span><a id="line.350">            caseGroup = caseGroup.getNextSibling();</a>
+<span class="sourceLineNo">351</span><a id="line.351">        }</a>
+<span class="sourceLineNo">352</span><a id="line.352">        return isTerminated;</a>
+<span class="sourceLineNo">353</span><a id="line.353">    }</a>
+<span class="sourceLineNo">354</span><a id="line.354"></a>
+<span class="sourceLineNo">355</span><a id="line.355">    /**</a>
+<span class="sourceLineNo">356</span><a id="line.356">     * Checks if a given synchronized block terminated by return, throw or,</a>
+<span class="sourceLineNo">357</span><a id="line.357">     * if allowed break, continue.</a>
+<span class="sourceLineNo">358</span><a id="line.358">     *</a>
+<span class="sourceLineNo">359</span><a id="line.359">     * @param synchronizedAst synchronized block to check.</a>
+<span class="sourceLineNo">360</span><a id="line.360">     * @param useBreak should we consider break as terminator</a>
+<span class="sourceLineNo">361</span><a id="line.361">     * @param useContinue should we consider continue as terminator</a>
+<span class="sourceLineNo">362</span><a id="line.362">     * @return true if synchronized block is terminated</a>
+<span class="sourceLineNo">363</span><a id="line.363">     */</a>
+<span class="sourceLineNo">364</span><a id="line.364">    private boolean checkSynchronized(final DetailAST synchronizedAst, boolean useBreak,</a>
+<span class="sourceLineNo">365</span><a id="line.365">                                      boolean useContinue) {</a>
+<span class="sourceLineNo">366</span><a id="line.366">        return isTerminated(</a>
+<span class="sourceLineNo">367</span><a id="line.367">            synchronizedAst.findFirstToken(TokenTypes.SLIST), useBreak, useContinue);</a>
+<span class="sourceLineNo">368</span><a id="line.368">    }</a>
+<span class="sourceLineNo">369</span><a id="line.369"></a>
+<span class="sourceLineNo">370</span><a id="line.370">    /**</a>
+<span class="sourceLineNo">371</span><a id="line.371">     * Determines if the fall through case between {@code currentCase} and</a>
+<span class="sourceLineNo">372</span><a id="line.372">     * {@code nextCase} is relieved by an appropriate comment.</a>
+<span class="sourceLineNo">373</span><a id="line.373">     *</a>
+<span class="sourceLineNo">374</span><a id="line.374">     * &lt;p&gt;Handles&lt;/p&gt;</a>
+<span class="sourceLineNo">375</span><a id="line.375">     * &lt;pre&gt;</a>
+<span class="sourceLineNo">376</span><a id="line.376">     * case 1:</a>
+<span class="sourceLineNo">377</span><a id="line.377">     * /&amp;#42; FALLTHRU &amp;#42;/ case 2:</a>
+<span class="sourceLineNo">378</span><a id="line.378">     *</a>
+<span class="sourceLineNo">379</span><a id="line.379">     * switch(i) {</a>
+<span class="sourceLineNo">380</span><a id="line.380">     * default:</a>
+<span class="sourceLineNo">381</span><a id="line.381">     * /&amp;#42; FALLTHRU &amp;#42;/}</a>
+<span class="sourceLineNo">382</span><a id="line.382">     *</a>
+<span class="sourceLineNo">383</span><a id="line.383">     * case 1:</a>
+<span class="sourceLineNo">384</span><a id="line.384">     * // FALLTHRU</a>
+<span class="sourceLineNo">385</span><a id="line.385">     * case 2:</a>
+<span class="sourceLineNo">386</span><a id="line.386">     *</a>
+<span class="sourceLineNo">387</span><a id="line.387">     * switch(i) {</a>
+<span class="sourceLineNo">388</span><a id="line.388">     * default:</a>
+<span class="sourceLineNo">389</span><a id="line.389">     * // FALLTHRU</a>
+<span class="sourceLineNo">390</span><a id="line.390">     * &lt;/pre&gt;</a>
+<span class="sourceLineNo">391</span><a id="line.391">     *</a>
+<span class="sourceLineNo">392</span><a id="line.392">     * @param currentCase AST of the case that falls through to the next case.</a>
+<span class="sourceLineNo">393</span><a id="line.393">     * @return True if a relief comment was found</a>
+<span class="sourceLineNo">394</span><a id="line.394">     */</a>
+<span class="sourceLineNo">395</span><a id="line.395">    private boolean hasFallThroughComment(DetailAST currentCase) {</a>
+<span class="sourceLineNo">396</span><a id="line.396">        final DetailAST nextSibling = currentCase.getNextSibling();</a>
+<span class="sourceLineNo">397</span><a id="line.397">        final DetailAST ast;</a>
+<span class="sourceLineNo">398</span><a id="line.398">        if (nextSibling.getType() == TokenTypes.CASE_GROUP) {</a>
+<span class="sourceLineNo">399</span><a id="line.399">            ast = nextSibling.getFirstChild();</a>
+<span class="sourceLineNo">400</span><a id="line.400">        }</a>
+<span class="sourceLineNo">401</span><a id="line.401">        else {</a>
+<span class="sourceLineNo">402</span><a id="line.402">            ast = currentCase;</a>
+<span class="sourceLineNo">403</span><a id="line.403">        }</a>
+<span class="sourceLineNo">404</span><a id="line.404">        return hasReliefComment(ast);</a>
+<span class="sourceLineNo">405</span><a id="line.405">    }</a>
+<span class="sourceLineNo">406</span><a id="line.406"></a>
+<span class="sourceLineNo">407</span><a id="line.407">    /**</a>
+<span class="sourceLineNo">408</span><a id="line.408">     * Check if there is any fall through comment.</a>
+<span class="sourceLineNo">409</span><a id="line.409">     *</a>
+<span class="sourceLineNo">410</span><a id="line.410">     * @param ast ast to check</a>
+<span class="sourceLineNo">411</span><a id="line.411">     * @return true if relief comment found</a>
+<span class="sourceLineNo">412</span><a id="line.412">     */</a>
+<span class="sourceLineNo">413</span><a id="line.413">    private boolean hasReliefComment(DetailAST ast) {</a>
+<span class="sourceLineNo">414</span><a id="line.414">        return Optional.ofNullable(getNextNonCommentAst(ast))</a>
+<span class="sourceLineNo">415</span><a id="line.415">                .map(DetailAST::getPreviousSibling)</a>
+<span class="sourceLineNo">416</span><a id="line.416">                .map(previous -&gt; previous.getFirstChild().getText())</a>
+<span class="sourceLineNo">417</span><a id="line.417">                .map(text -&gt; reliefPattern.matcher(text).find())</a>
+<span class="sourceLineNo">418</span><a id="line.418">                .orElse(Boolean.FALSE);</a>
+<span class="sourceLineNo">419</span><a id="line.419">    }</a>
+<span class="sourceLineNo">420</span><a id="line.420"></a>
+<span class="sourceLineNo">421</span><a id="line.421">}</a>
 
 
 
