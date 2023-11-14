@@ -81,355 +81,361 @@
 <span class="sourceLineNo">072</span><a id="line.72">            JavadocDetailNodeParser.MSG_JAVADOC_PARSE_RULE_ERROR;</a>
 <span class="sourceLineNo">073</span><a id="line.73"></a>
 <span class="sourceLineNo">074</span><a id="line.74">    /**</a>
-<span class="sourceLineNo">075</span><a id="line.75">     * Key is "line:column". Value is {@link DetailNode} tree. Map is stored in {@link ThreadLocal}</a>
-<span class="sourceLineNo">076</span><a id="line.76">     * to guarantee basic thread safety and avoid shared, mutable state when not necessary.</a>
-<span class="sourceLineNo">077</span><a id="line.77">     */</a>
-<span class="sourceLineNo">078</span><a id="line.78">    private static final ThreadLocal&lt;Map&lt;LineColumn, ParseStatus&gt;&gt; TREE_CACHE =</a>
-<span class="sourceLineNo">079</span><a id="line.79">            ThreadLocal.withInitial(HashMap::new);</a>
-<span class="sourceLineNo">080</span><a id="line.80"></a>
-<span class="sourceLineNo">081</span><a id="line.81">    /**</a>
-<span class="sourceLineNo">082</span><a id="line.82">     * The file context.</a>
-<span class="sourceLineNo">083</span><a id="line.83">     *</a>
-<span class="sourceLineNo">084</span><a id="line.84">     * @noinspection ThreadLocalNotStaticFinal</a>
-<span class="sourceLineNo">085</span><a id="line.85">     * @noinspectionreason ThreadLocalNotStaticFinal - static context is</a>
-<span class="sourceLineNo">086</span><a id="line.86">     *       problematic for multithreading</a>
-<span class="sourceLineNo">087</span><a id="line.87">     */</a>
-<span class="sourceLineNo">088</span><a id="line.88">    private final ThreadLocal&lt;FileContext&gt; context = ThreadLocal.withInitial(FileContext::new);</a>
-<span class="sourceLineNo">089</span><a id="line.89"></a>
-<span class="sourceLineNo">090</span><a id="line.90">    /** The javadoc tokens the check is interested in. */</a>
-<span class="sourceLineNo">091</span><a id="line.91">    private final Set&lt;Integer&gt; javadocTokens = new HashSet&lt;&gt;();</a>
-<span class="sourceLineNo">092</span><a id="line.92"></a>
-<span class="sourceLineNo">093</span><a id="line.93">    /**</a>
-<span class="sourceLineNo">094</span><a id="line.94">     * This property determines if a check should log a violation upon encountering javadoc with</a>
-<span class="sourceLineNo">095</span><a id="line.95">     * non-tight html. The default return value for this method is set to false since checks</a>
-<span class="sourceLineNo">096</span><a id="line.96">     * generally tend to be fine with non-tight html. It can be set through config file if a check</a>
-<span class="sourceLineNo">097</span><a id="line.97">     * is to log violation upon encountering non-tight HTML in javadoc.</a>
-<span class="sourceLineNo">098</span><a id="line.98">     *</a>
-<span class="sourceLineNo">099</span><a id="line.99">     * @see ParseStatus#isNonTight()</a>
-<span class="sourceLineNo">100</span><a id="line.100">     * @see &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;</a>
-<span class="sourceLineNo">101</span><a id="line.101">     *     Tight HTML rules&lt;/a&gt;</a>
-<span class="sourceLineNo">102</span><a id="line.102">     */</a>
-<span class="sourceLineNo">103</span><a id="line.103">    private boolean violateExecutionOnNonTightHtml;</a>
-<span class="sourceLineNo">104</span><a id="line.104"></a>
-<span class="sourceLineNo">105</span><a id="line.105">    /**</a>
-<span class="sourceLineNo">106</span><a id="line.106">     * Returns the default javadoc token types a check is interested in.</a>
-<span class="sourceLineNo">107</span><a id="line.107">     *</a>
-<span class="sourceLineNo">108</span><a id="line.108">     * @return the default javadoc token types</a>
-<span class="sourceLineNo">109</span><a id="line.109">     * @see JavadocTokenTypes</a>
-<span class="sourceLineNo">110</span><a id="line.110">     */</a>
-<span class="sourceLineNo">111</span><a id="line.111">    public abstract int[] getDefaultJavadocTokens();</a>
-<span class="sourceLineNo">112</span><a id="line.112"></a>
-<span class="sourceLineNo">113</span><a id="line.113">    /**</a>
-<span class="sourceLineNo">114</span><a id="line.114">     * Called to process a Javadoc token.</a>
-<span class="sourceLineNo">115</span><a id="line.115">     *</a>
-<span class="sourceLineNo">116</span><a id="line.116">     * @param ast</a>
-<span class="sourceLineNo">117</span><a id="line.117">     *        the token to process</a>
-<span class="sourceLineNo">118</span><a id="line.118">     */</a>
-<span class="sourceLineNo">119</span><a id="line.119">    public abstract void visitJavadocToken(DetailNode ast);</a>
-<span class="sourceLineNo">120</span><a id="line.120"></a>
-<span class="sourceLineNo">121</span><a id="line.121">    /**</a>
-<span class="sourceLineNo">122</span><a id="line.122">     * The configurable javadoc token set.</a>
-<span class="sourceLineNo">123</span><a id="line.123">     * Used to protect Checks against malicious users who specify an</a>
-<span class="sourceLineNo">124</span><a id="line.124">     * unacceptable javadoc token set in the configuration file.</a>
-<span class="sourceLineNo">125</span><a id="line.125">     * The default implementation returns the check's default javadoc tokens.</a>
-<span class="sourceLineNo">126</span><a id="line.126">     *</a>
-<span class="sourceLineNo">127</span><a id="line.127">     * @return the javadoc token set this check is designed for.</a>
-<span class="sourceLineNo">128</span><a id="line.128">     * @see JavadocTokenTypes</a>
-<span class="sourceLineNo">129</span><a id="line.129">     */</a>
-<span class="sourceLineNo">130</span><a id="line.130">    public int[] getAcceptableJavadocTokens() {</a>
-<span class="sourceLineNo">131</span><a id="line.131">        final int[] defaultJavadocTokens = getDefaultJavadocTokens();</a>
-<span class="sourceLineNo">132</span><a id="line.132">        final int[] copy = new int[defaultJavadocTokens.length];</a>
-<span class="sourceLineNo">133</span><a id="line.133">        System.arraycopy(defaultJavadocTokens, 0, copy, 0, defaultJavadocTokens.length);</a>
-<span class="sourceLineNo">134</span><a id="line.134">        return copy;</a>
-<span class="sourceLineNo">135</span><a id="line.135">    }</a>
-<span class="sourceLineNo">136</span><a id="line.136"></a>
-<span class="sourceLineNo">137</span><a id="line.137">    /**</a>
-<span class="sourceLineNo">138</span><a id="line.138">     * The javadoc tokens that this check must be registered for.</a>
-<span class="sourceLineNo">139</span><a id="line.139">     *</a>
-<span class="sourceLineNo">140</span><a id="line.140">     * @return the javadoc token set this must be registered for.</a>
-<span class="sourceLineNo">141</span><a id="line.141">     * @see JavadocTokenTypes</a>
-<span class="sourceLineNo">142</span><a id="line.142">     */</a>
-<span class="sourceLineNo">143</span><a id="line.143">    public int[] getRequiredJavadocTokens() {</a>
-<span class="sourceLineNo">144</span><a id="line.144">        return CommonUtil.EMPTY_INT_ARRAY;</a>
-<span class="sourceLineNo">145</span><a id="line.145">    }</a>
-<span class="sourceLineNo">146</span><a id="line.146"></a>
-<span class="sourceLineNo">147</span><a id="line.147">    /**</a>
-<span class="sourceLineNo">148</span><a id="line.148">     * This method determines if a check should process javadoc containing non-tight html tags.</a>
-<span class="sourceLineNo">149</span><a id="line.149">     * This method must be overridden in checks extending {@code AbstractJavadocCheck} which</a>
-<span class="sourceLineNo">150</span><a id="line.150">     * are not supposed to process javadoc containing non-tight html tags.</a>
-<span class="sourceLineNo">151</span><a id="line.151">     *</a>
-<span class="sourceLineNo">152</span><a id="line.152">     * @return true if the check should or can process javadoc containing non-tight html tags;</a>
-<span class="sourceLineNo">153</span><a id="line.153">     *     false otherwise</a>
-<span class="sourceLineNo">154</span><a id="line.154">     * @see ParseStatus#isNonTight()</a>
-<span class="sourceLineNo">155</span><a id="line.155">     * @see &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;</a>
-<span class="sourceLineNo">156</span><a id="line.156">     *     Tight HTML rules&lt;/a&gt;</a>
-<span class="sourceLineNo">157</span><a id="line.157">     */</a>
-<span class="sourceLineNo">158</span><a id="line.158">    public boolean acceptJavadocWithNonTightHtml() {</a>
-<span class="sourceLineNo">159</span><a id="line.159">        return true;</a>
-<span class="sourceLineNo">160</span><a id="line.160">    }</a>
-<span class="sourceLineNo">161</span><a id="line.161"></a>
-<span class="sourceLineNo">162</span><a id="line.162">    /**</a>
-<span class="sourceLineNo">163</span><a id="line.163">     * Setter to control when to print violations if the Javadoc being examined by this check</a>
-<span class="sourceLineNo">164</span><a id="line.164">     * violates the tight html rules defined at</a>
-<span class="sourceLineNo">165</span><a id="line.165">     * &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;</a>
-<span class="sourceLineNo">166</span><a id="line.166">     *     Tight-HTML Rules&lt;/a&gt;.</a>
-<span class="sourceLineNo">167</span><a id="line.167">     *</a>
-<span class="sourceLineNo">168</span><a id="line.168">     * @param shouldReportViolation value to which the field shall be set to</a>
-<span class="sourceLineNo">169</span><a id="line.169">     */</a>
-<span class="sourceLineNo">170</span><a id="line.170">    public final void setViolateExecutionOnNonTightHtml(boolean shouldReportViolation) {</a>
-<span class="sourceLineNo">171</span><a id="line.171">        violateExecutionOnNonTightHtml = shouldReportViolation;</a>
-<span class="sourceLineNo">172</span><a id="line.172">    }</a>
-<span class="sourceLineNo">173</span><a id="line.173"></a>
-<span class="sourceLineNo">174</span><a id="line.174">    /**</a>
-<span class="sourceLineNo">175</span><a id="line.175">     * Adds a set of tokens the check is interested in.</a>
-<span class="sourceLineNo">176</span><a id="line.176">     *</a>
-<span class="sourceLineNo">177</span><a id="line.177">     * @param strRep the string representation of the tokens interested in</a>
-<span class="sourceLineNo">178</span><a id="line.178">     */</a>
-<span class="sourceLineNo">179</span><a id="line.179">    public final void setJavadocTokens(String... strRep) {</a>
-<span class="sourceLineNo">180</span><a id="line.180">        for (String str : strRep) {</a>
-<span class="sourceLineNo">181</span><a id="line.181">            javadocTokens.add(JavadocUtil.getTokenId(str));</a>
-<span class="sourceLineNo">182</span><a id="line.182">        }</a>
-<span class="sourceLineNo">183</span><a id="line.183">    }</a>
-<span class="sourceLineNo">184</span><a id="line.184"></a>
-<span class="sourceLineNo">185</span><a id="line.185">    @Override</a>
-<span class="sourceLineNo">186</span><a id="line.186">    public void init() {</a>
-<span class="sourceLineNo">187</span><a id="line.187">        validateDefaultJavadocTokens();</a>
-<span class="sourceLineNo">188</span><a id="line.188">        if (javadocTokens.isEmpty()) {</a>
-<span class="sourceLineNo">189</span><a id="line.189">            javadocTokens.addAll(</a>
-<span class="sourceLineNo">190</span><a id="line.190">                    Arrays.stream(getDefaultJavadocTokens()).boxed().collect(Collectors.toList()));</a>
-<span class="sourceLineNo">191</span><a id="line.191">        }</a>
-<span class="sourceLineNo">192</span><a id="line.192">        else {</a>
-<span class="sourceLineNo">193</span><a id="line.193">            final int[] acceptableJavadocTokens = getAcceptableJavadocTokens();</a>
-<span class="sourceLineNo">194</span><a id="line.194">            Arrays.sort(acceptableJavadocTokens);</a>
-<span class="sourceLineNo">195</span><a id="line.195">            for (Integer javadocTokenId : javadocTokens) {</a>
-<span class="sourceLineNo">196</span><a id="line.196">                if (Arrays.binarySearch(acceptableJavadocTokens, javadocTokenId) &lt; 0) {</a>
-<span class="sourceLineNo">197</span><a id="line.197">                    final String message = String.format(Locale.ROOT, "Javadoc Token \"%s\" was "</a>
-<span class="sourceLineNo">198</span><a id="line.198">                            + "not found in Acceptable javadoc tokens list in check %s",</a>
-<span class="sourceLineNo">199</span><a id="line.199">                            JavadocUtil.getTokenName(javadocTokenId), getClass().getName());</a>
-<span class="sourceLineNo">200</span><a id="line.200">                    throw new IllegalStateException(message);</a>
-<span class="sourceLineNo">201</span><a id="line.201">                }</a>
-<span class="sourceLineNo">202</span><a id="line.202">            }</a>
-<span class="sourceLineNo">203</span><a id="line.203">        }</a>
-<span class="sourceLineNo">204</span><a id="line.204">    }</a>
-<span class="sourceLineNo">205</span><a id="line.205"></a>
-<span class="sourceLineNo">206</span><a id="line.206">    /**</a>
-<span class="sourceLineNo">207</span><a id="line.207">     * Validates that check's required javadoc tokens are subset of default javadoc tokens.</a>
-<span class="sourceLineNo">208</span><a id="line.208">     *</a>
-<span class="sourceLineNo">209</span><a id="line.209">     * @throws IllegalStateException when validation of default javadoc tokens fails</a>
-<span class="sourceLineNo">210</span><a id="line.210">     */</a>
-<span class="sourceLineNo">211</span><a id="line.211">    private void validateDefaultJavadocTokens() {</a>
-<span class="sourceLineNo">212</span><a id="line.212">        if (getRequiredJavadocTokens().length != 0) {</a>
-<span class="sourceLineNo">213</span><a id="line.213">            final int[] defaultJavadocTokens = getDefaultJavadocTokens();</a>
-<span class="sourceLineNo">214</span><a id="line.214">            Arrays.sort(defaultJavadocTokens);</a>
-<span class="sourceLineNo">215</span><a id="line.215">            for (final int javadocToken : getRequiredJavadocTokens()) {</a>
-<span class="sourceLineNo">216</span><a id="line.216">                if (Arrays.binarySearch(defaultJavadocTokens, javadocToken) &lt; 0) {</a>
-<span class="sourceLineNo">217</span><a id="line.217">                    final String message = String.format(Locale.ROOT,</a>
-<span class="sourceLineNo">218</span><a id="line.218">                            "Javadoc Token \"%s\" from required javadoc "</a>
-<span class="sourceLineNo">219</span><a id="line.219">                                + "tokens was not found in default "</a>
-<span class="sourceLineNo">220</span><a id="line.220">                                + "javadoc tokens list in check %s",</a>
-<span class="sourceLineNo">221</span><a id="line.221">                            javadocToken, getClass().getName());</a>
-<span class="sourceLineNo">222</span><a id="line.222">                    throw new IllegalStateException(message);</a>
-<span class="sourceLineNo">223</span><a id="line.223">                }</a>
-<span class="sourceLineNo">224</span><a id="line.224">            }</a>
-<span class="sourceLineNo">225</span><a id="line.225">        }</a>
-<span class="sourceLineNo">226</span><a id="line.226">    }</a>
-<span class="sourceLineNo">227</span><a id="line.227"></a>
-<span class="sourceLineNo">228</span><a id="line.228">    /**</a>
-<span class="sourceLineNo">229</span><a id="line.229">     * Called before the starting to process a tree.</a>
-<span class="sourceLineNo">230</span><a id="line.230">     *</a>
-<span class="sourceLineNo">231</span><a id="line.231">     * @param rootAst</a>
-<span class="sourceLineNo">232</span><a id="line.232">     *        the root of the tree</a>
-<span class="sourceLineNo">233</span><a id="line.233">     * @noinspection WeakerAccess</a>
-<span class="sourceLineNo">234</span><a id="line.234">     * @noinspectionreason WeakerAccess - we avoid 'protected' when possible</a>
-<span class="sourceLineNo">235</span><a id="line.235">     */</a>
-<span class="sourceLineNo">236</span><a id="line.236">    public void beginJavadocTree(DetailNode rootAst) {</a>
-<span class="sourceLineNo">237</span><a id="line.237">        // No code by default, should be overridden only by demand at subclasses</a>
-<span class="sourceLineNo">238</span><a id="line.238">    }</a>
-<span class="sourceLineNo">239</span><a id="line.239"></a>
-<span class="sourceLineNo">240</span><a id="line.240">    /**</a>
-<span class="sourceLineNo">241</span><a id="line.241">     * Called after finished processing a tree.</a>
-<span class="sourceLineNo">242</span><a id="line.242">     *</a>
-<span class="sourceLineNo">243</span><a id="line.243">     * @param rootAst</a>
-<span class="sourceLineNo">244</span><a id="line.244">     *        the root of the tree</a>
-<span class="sourceLineNo">245</span><a id="line.245">     * @noinspection WeakerAccess</a>
-<span class="sourceLineNo">246</span><a id="line.246">     * @noinspectionreason WeakerAccess - we avoid 'protected' when possible</a>
-<span class="sourceLineNo">247</span><a id="line.247">     */</a>
-<span class="sourceLineNo">248</span><a id="line.248">    public void finishJavadocTree(DetailNode rootAst) {</a>
-<span class="sourceLineNo">249</span><a id="line.249">        // No code by default, should be overridden only by demand at subclasses</a>
-<span class="sourceLineNo">250</span><a id="line.250">    }</a>
-<span class="sourceLineNo">251</span><a id="line.251"></a>
-<span class="sourceLineNo">252</span><a id="line.252">    /**</a>
-<span class="sourceLineNo">253</span><a id="line.253">     * Called after all the child nodes have been process.</a>
-<span class="sourceLineNo">254</span><a id="line.254">     *</a>
-<span class="sourceLineNo">255</span><a id="line.255">     * @param ast</a>
-<span class="sourceLineNo">256</span><a id="line.256">     *        the token leaving</a>
-<span class="sourceLineNo">257</span><a id="line.257">     */</a>
-<span class="sourceLineNo">258</span><a id="line.258">    public void leaveJavadocToken(DetailNode ast) {</a>
-<span class="sourceLineNo">259</span><a id="line.259">        // No code by default, should be overridden only by demand at subclasses</a>
-<span class="sourceLineNo">260</span><a id="line.260">    }</a>
-<span class="sourceLineNo">261</span><a id="line.261"></a>
-<span class="sourceLineNo">262</span><a id="line.262">    /**</a>
-<span class="sourceLineNo">263</span><a id="line.263">     * Defined final to not allow JavadocChecks to change default tokens.</a>
-<span class="sourceLineNo">264</span><a id="line.264">     *</a>
-<span class="sourceLineNo">265</span><a id="line.265">     * @return default tokens</a>
-<span class="sourceLineNo">266</span><a id="line.266">     */</a>
-<span class="sourceLineNo">267</span><a id="line.267">    @Override</a>
-<span class="sourceLineNo">268</span><a id="line.268">    public final int[] getDefaultTokens() {</a>
-<span class="sourceLineNo">269</span><a id="line.269">        return getRequiredTokens();</a>
-<span class="sourceLineNo">270</span><a id="line.270">    }</a>
-<span class="sourceLineNo">271</span><a id="line.271"></a>
-<span class="sourceLineNo">272</span><a id="line.272">    @Override</a>
-<span class="sourceLineNo">273</span><a id="line.273">    public final int[] getAcceptableTokens() {</a>
-<span class="sourceLineNo">274</span><a id="line.274">        return getRequiredTokens();</a>
-<span class="sourceLineNo">275</span><a id="line.275">    }</a>
-<span class="sourceLineNo">276</span><a id="line.276"></a>
-<span class="sourceLineNo">277</span><a id="line.277">    @Override</a>
-<span class="sourceLineNo">278</span><a id="line.278">    public final int[] getRequiredTokens() {</a>
-<span class="sourceLineNo">279</span><a id="line.279">        return new int[] {TokenTypes.BLOCK_COMMENT_BEGIN };</a>
-<span class="sourceLineNo">280</span><a id="line.280">    }</a>
-<span class="sourceLineNo">281</span><a id="line.281"></a>
-<span class="sourceLineNo">282</span><a id="line.282">    /**</a>
-<span class="sourceLineNo">283</span><a id="line.283">     * Defined final because all JavadocChecks require comment nodes.</a>
-<span class="sourceLineNo">284</span><a id="line.284">     *</a>
-<span class="sourceLineNo">285</span><a id="line.285">     * @return true</a>
-<span class="sourceLineNo">286</span><a id="line.286">     */</a>
-<span class="sourceLineNo">287</span><a id="line.287">    @Override</a>
-<span class="sourceLineNo">288</span><a id="line.288">    public final boolean isCommentNodesRequired() {</a>
-<span class="sourceLineNo">289</span><a id="line.289">        return true;</a>
-<span class="sourceLineNo">290</span><a id="line.290">    }</a>
-<span class="sourceLineNo">291</span><a id="line.291"></a>
-<span class="sourceLineNo">292</span><a id="line.292">    @Override</a>
-<span class="sourceLineNo">293</span><a id="line.293">    public final void beginTree(DetailAST rootAST) {</a>
-<span class="sourceLineNo">294</span><a id="line.294">        TREE_CACHE.get().clear();</a>
-<span class="sourceLineNo">295</span><a id="line.295">    }</a>
-<span class="sourceLineNo">296</span><a id="line.296"></a>
-<span class="sourceLineNo">297</span><a id="line.297">    @Override</a>
-<span class="sourceLineNo">298</span><a id="line.298">    public final void finishTree(DetailAST rootAST) {</a>
-<span class="sourceLineNo">299</span><a id="line.299">        // No code, prevent override in subclasses</a>
-<span class="sourceLineNo">300</span><a id="line.300">    }</a>
-<span class="sourceLineNo">301</span><a id="line.301"></a>
-<span class="sourceLineNo">302</span><a id="line.302">    @Override</a>
-<span class="sourceLineNo">303</span><a id="line.303">    public final void visitToken(DetailAST blockCommentNode) {</a>
-<span class="sourceLineNo">304</span><a id="line.304">        if (JavadocUtil.isJavadocComment(blockCommentNode)) {</a>
-<span class="sourceLineNo">305</span><a id="line.305">            // store as field, to share with child Checks</a>
-<span class="sourceLineNo">306</span><a id="line.306">            context.get().blockCommentAst = blockCommentNode;</a>
+<span class="sourceLineNo">075</span><a id="line.75">     * Message key of error message.</a>
+<span class="sourceLineNo">076</span><a id="line.76">     */</a>
+<span class="sourceLineNo">077</span><a id="line.77">    public static final String MSG_KEY_UNCLOSED_HTML_TAG =</a>
+<span class="sourceLineNo">078</span><a id="line.78">            JavadocDetailNodeParser.MSG_UNCLOSED_HTML_TAG;</a>
+<span class="sourceLineNo">079</span><a id="line.79"></a>
+<span class="sourceLineNo">080</span><a id="line.80">    /**</a>
+<span class="sourceLineNo">081</span><a id="line.81">     * Key is "line:column". Value is {@link DetailNode} tree. Map is stored in {@link ThreadLocal}</a>
+<span class="sourceLineNo">082</span><a id="line.82">     * to guarantee basic thread safety and avoid shared, mutable state when not necessary.</a>
+<span class="sourceLineNo">083</span><a id="line.83">     */</a>
+<span class="sourceLineNo">084</span><a id="line.84">    private static final ThreadLocal&lt;Map&lt;LineColumn, ParseStatus&gt;&gt; TREE_CACHE =</a>
+<span class="sourceLineNo">085</span><a id="line.85">            ThreadLocal.withInitial(HashMap::new);</a>
+<span class="sourceLineNo">086</span><a id="line.86"></a>
+<span class="sourceLineNo">087</span><a id="line.87">    /**</a>
+<span class="sourceLineNo">088</span><a id="line.88">     * The file context.</a>
+<span class="sourceLineNo">089</span><a id="line.89">     *</a>
+<span class="sourceLineNo">090</span><a id="line.90">     * @noinspection ThreadLocalNotStaticFinal</a>
+<span class="sourceLineNo">091</span><a id="line.91">     * @noinspectionreason ThreadLocalNotStaticFinal - static context is</a>
+<span class="sourceLineNo">092</span><a id="line.92">     *       problematic for multithreading</a>
+<span class="sourceLineNo">093</span><a id="line.93">     */</a>
+<span class="sourceLineNo">094</span><a id="line.94">    private final ThreadLocal&lt;FileContext&gt; context = ThreadLocal.withInitial(FileContext::new);</a>
+<span class="sourceLineNo">095</span><a id="line.95"></a>
+<span class="sourceLineNo">096</span><a id="line.96">    /** The javadoc tokens the check is interested in. */</a>
+<span class="sourceLineNo">097</span><a id="line.97">    private final Set&lt;Integer&gt; javadocTokens = new HashSet&lt;&gt;();</a>
+<span class="sourceLineNo">098</span><a id="line.98"></a>
+<span class="sourceLineNo">099</span><a id="line.99">    /**</a>
+<span class="sourceLineNo">100</span><a id="line.100">     * This property determines if a check should log a violation upon encountering javadoc with</a>
+<span class="sourceLineNo">101</span><a id="line.101">     * non-tight html. The default return value for this method is set to false since checks</a>
+<span class="sourceLineNo">102</span><a id="line.102">     * generally tend to be fine with non-tight html. It can be set through config file if a check</a>
+<span class="sourceLineNo">103</span><a id="line.103">     * is to log violation upon encountering non-tight HTML in javadoc.</a>
+<span class="sourceLineNo">104</span><a id="line.104">     *</a>
+<span class="sourceLineNo">105</span><a id="line.105">     * @see ParseStatus#isNonTight()</a>
+<span class="sourceLineNo">106</span><a id="line.106">     * @see &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;</a>
+<span class="sourceLineNo">107</span><a id="line.107">     *     Tight HTML rules&lt;/a&gt;</a>
+<span class="sourceLineNo">108</span><a id="line.108">     */</a>
+<span class="sourceLineNo">109</span><a id="line.109">    private boolean violateExecutionOnNonTightHtml;</a>
+<span class="sourceLineNo">110</span><a id="line.110"></a>
+<span class="sourceLineNo">111</span><a id="line.111">    /**</a>
+<span class="sourceLineNo">112</span><a id="line.112">     * Returns the default javadoc token types a check is interested in.</a>
+<span class="sourceLineNo">113</span><a id="line.113">     *</a>
+<span class="sourceLineNo">114</span><a id="line.114">     * @return the default javadoc token types</a>
+<span class="sourceLineNo">115</span><a id="line.115">     * @see JavadocTokenTypes</a>
+<span class="sourceLineNo">116</span><a id="line.116">     */</a>
+<span class="sourceLineNo">117</span><a id="line.117">    public abstract int[] getDefaultJavadocTokens();</a>
+<span class="sourceLineNo">118</span><a id="line.118"></a>
+<span class="sourceLineNo">119</span><a id="line.119">    /**</a>
+<span class="sourceLineNo">120</span><a id="line.120">     * Called to process a Javadoc token.</a>
+<span class="sourceLineNo">121</span><a id="line.121">     *</a>
+<span class="sourceLineNo">122</span><a id="line.122">     * @param ast</a>
+<span class="sourceLineNo">123</span><a id="line.123">     *        the token to process</a>
+<span class="sourceLineNo">124</span><a id="line.124">     */</a>
+<span class="sourceLineNo">125</span><a id="line.125">    public abstract void visitJavadocToken(DetailNode ast);</a>
+<span class="sourceLineNo">126</span><a id="line.126"></a>
+<span class="sourceLineNo">127</span><a id="line.127">    /**</a>
+<span class="sourceLineNo">128</span><a id="line.128">     * The configurable javadoc token set.</a>
+<span class="sourceLineNo">129</span><a id="line.129">     * Used to protect Checks against malicious users who specify an</a>
+<span class="sourceLineNo">130</span><a id="line.130">     * unacceptable javadoc token set in the configuration file.</a>
+<span class="sourceLineNo">131</span><a id="line.131">     * The default implementation returns the check's default javadoc tokens.</a>
+<span class="sourceLineNo">132</span><a id="line.132">     *</a>
+<span class="sourceLineNo">133</span><a id="line.133">     * @return the javadoc token set this check is designed for.</a>
+<span class="sourceLineNo">134</span><a id="line.134">     * @see JavadocTokenTypes</a>
+<span class="sourceLineNo">135</span><a id="line.135">     */</a>
+<span class="sourceLineNo">136</span><a id="line.136">    public int[] getAcceptableJavadocTokens() {</a>
+<span class="sourceLineNo">137</span><a id="line.137">        final int[] defaultJavadocTokens = getDefaultJavadocTokens();</a>
+<span class="sourceLineNo">138</span><a id="line.138">        final int[] copy = new int[defaultJavadocTokens.length];</a>
+<span class="sourceLineNo">139</span><a id="line.139">        System.arraycopy(defaultJavadocTokens, 0, copy, 0, defaultJavadocTokens.length);</a>
+<span class="sourceLineNo">140</span><a id="line.140">        return copy;</a>
+<span class="sourceLineNo">141</span><a id="line.141">    }</a>
+<span class="sourceLineNo">142</span><a id="line.142"></a>
+<span class="sourceLineNo">143</span><a id="line.143">    /**</a>
+<span class="sourceLineNo">144</span><a id="line.144">     * The javadoc tokens that this check must be registered for.</a>
+<span class="sourceLineNo">145</span><a id="line.145">     *</a>
+<span class="sourceLineNo">146</span><a id="line.146">     * @return the javadoc token set this must be registered for.</a>
+<span class="sourceLineNo">147</span><a id="line.147">     * @see JavadocTokenTypes</a>
+<span class="sourceLineNo">148</span><a id="line.148">     */</a>
+<span class="sourceLineNo">149</span><a id="line.149">    public int[] getRequiredJavadocTokens() {</a>
+<span class="sourceLineNo">150</span><a id="line.150">        return CommonUtil.EMPTY_INT_ARRAY;</a>
+<span class="sourceLineNo">151</span><a id="line.151">    }</a>
+<span class="sourceLineNo">152</span><a id="line.152"></a>
+<span class="sourceLineNo">153</span><a id="line.153">    /**</a>
+<span class="sourceLineNo">154</span><a id="line.154">     * This method determines if a check should process javadoc containing non-tight html tags.</a>
+<span class="sourceLineNo">155</span><a id="line.155">     * This method must be overridden in checks extending {@code AbstractJavadocCheck} which</a>
+<span class="sourceLineNo">156</span><a id="line.156">     * are not supposed to process javadoc containing non-tight html tags.</a>
+<span class="sourceLineNo">157</span><a id="line.157">     *</a>
+<span class="sourceLineNo">158</span><a id="line.158">     * @return true if the check should or can process javadoc containing non-tight html tags;</a>
+<span class="sourceLineNo">159</span><a id="line.159">     *     false otherwise</a>
+<span class="sourceLineNo">160</span><a id="line.160">     * @see ParseStatus#isNonTight()</a>
+<span class="sourceLineNo">161</span><a id="line.161">     * @see &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;</a>
+<span class="sourceLineNo">162</span><a id="line.162">     *     Tight HTML rules&lt;/a&gt;</a>
+<span class="sourceLineNo">163</span><a id="line.163">     */</a>
+<span class="sourceLineNo">164</span><a id="line.164">    public boolean acceptJavadocWithNonTightHtml() {</a>
+<span class="sourceLineNo">165</span><a id="line.165">        return true;</a>
+<span class="sourceLineNo">166</span><a id="line.166">    }</a>
+<span class="sourceLineNo">167</span><a id="line.167"></a>
+<span class="sourceLineNo">168</span><a id="line.168">    /**</a>
+<span class="sourceLineNo">169</span><a id="line.169">     * Setter to control when to print violations if the Javadoc being examined by this check</a>
+<span class="sourceLineNo">170</span><a id="line.170">     * violates the tight html rules defined at</a>
+<span class="sourceLineNo">171</span><a id="line.171">     * &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;</a>
+<span class="sourceLineNo">172</span><a id="line.172">     *     Tight-HTML Rules&lt;/a&gt;.</a>
+<span class="sourceLineNo">173</span><a id="line.173">     *</a>
+<span class="sourceLineNo">174</span><a id="line.174">     * @param shouldReportViolation value to which the field shall be set to</a>
+<span class="sourceLineNo">175</span><a id="line.175">     */</a>
+<span class="sourceLineNo">176</span><a id="line.176">    public final void setViolateExecutionOnNonTightHtml(boolean shouldReportViolation) {</a>
+<span class="sourceLineNo">177</span><a id="line.177">        violateExecutionOnNonTightHtml = shouldReportViolation;</a>
+<span class="sourceLineNo">178</span><a id="line.178">    }</a>
+<span class="sourceLineNo">179</span><a id="line.179"></a>
+<span class="sourceLineNo">180</span><a id="line.180">    /**</a>
+<span class="sourceLineNo">181</span><a id="line.181">     * Adds a set of tokens the check is interested in.</a>
+<span class="sourceLineNo">182</span><a id="line.182">     *</a>
+<span class="sourceLineNo">183</span><a id="line.183">     * @param strRep the string representation of the tokens interested in</a>
+<span class="sourceLineNo">184</span><a id="line.184">     */</a>
+<span class="sourceLineNo">185</span><a id="line.185">    public final void setJavadocTokens(String... strRep) {</a>
+<span class="sourceLineNo">186</span><a id="line.186">        for (String str : strRep) {</a>
+<span class="sourceLineNo">187</span><a id="line.187">            javadocTokens.add(JavadocUtil.getTokenId(str));</a>
+<span class="sourceLineNo">188</span><a id="line.188">        }</a>
+<span class="sourceLineNo">189</span><a id="line.189">    }</a>
+<span class="sourceLineNo">190</span><a id="line.190"></a>
+<span class="sourceLineNo">191</span><a id="line.191">    @Override</a>
+<span class="sourceLineNo">192</span><a id="line.192">    public void init() {</a>
+<span class="sourceLineNo">193</span><a id="line.193">        validateDefaultJavadocTokens();</a>
+<span class="sourceLineNo">194</span><a id="line.194">        if (javadocTokens.isEmpty()) {</a>
+<span class="sourceLineNo">195</span><a id="line.195">            javadocTokens.addAll(</a>
+<span class="sourceLineNo">196</span><a id="line.196">                    Arrays.stream(getDefaultJavadocTokens()).boxed().collect(Collectors.toList()));</a>
+<span class="sourceLineNo">197</span><a id="line.197">        }</a>
+<span class="sourceLineNo">198</span><a id="line.198">        else {</a>
+<span class="sourceLineNo">199</span><a id="line.199">            final int[] acceptableJavadocTokens = getAcceptableJavadocTokens();</a>
+<span class="sourceLineNo">200</span><a id="line.200">            Arrays.sort(acceptableJavadocTokens);</a>
+<span class="sourceLineNo">201</span><a id="line.201">            for (Integer javadocTokenId : javadocTokens) {</a>
+<span class="sourceLineNo">202</span><a id="line.202">                if (Arrays.binarySearch(acceptableJavadocTokens, javadocTokenId) &lt; 0) {</a>
+<span class="sourceLineNo">203</span><a id="line.203">                    final String message = String.format(Locale.ROOT, "Javadoc Token \"%s\" was "</a>
+<span class="sourceLineNo">204</span><a id="line.204">                            + "not found in Acceptable javadoc tokens list in check %s",</a>
+<span class="sourceLineNo">205</span><a id="line.205">                            JavadocUtil.getTokenName(javadocTokenId), getClass().getName());</a>
+<span class="sourceLineNo">206</span><a id="line.206">                    throw new IllegalStateException(message);</a>
+<span class="sourceLineNo">207</span><a id="line.207">                }</a>
+<span class="sourceLineNo">208</span><a id="line.208">            }</a>
+<span class="sourceLineNo">209</span><a id="line.209">        }</a>
+<span class="sourceLineNo">210</span><a id="line.210">    }</a>
+<span class="sourceLineNo">211</span><a id="line.211"></a>
+<span class="sourceLineNo">212</span><a id="line.212">    /**</a>
+<span class="sourceLineNo">213</span><a id="line.213">     * Validates that check's required javadoc tokens are subset of default javadoc tokens.</a>
+<span class="sourceLineNo">214</span><a id="line.214">     *</a>
+<span class="sourceLineNo">215</span><a id="line.215">     * @throws IllegalStateException when validation of default javadoc tokens fails</a>
+<span class="sourceLineNo">216</span><a id="line.216">     */</a>
+<span class="sourceLineNo">217</span><a id="line.217">    private void validateDefaultJavadocTokens() {</a>
+<span class="sourceLineNo">218</span><a id="line.218">        if (getRequiredJavadocTokens().length != 0) {</a>
+<span class="sourceLineNo">219</span><a id="line.219">            final int[] defaultJavadocTokens = getDefaultJavadocTokens();</a>
+<span class="sourceLineNo">220</span><a id="line.220">            Arrays.sort(defaultJavadocTokens);</a>
+<span class="sourceLineNo">221</span><a id="line.221">            for (final int javadocToken : getRequiredJavadocTokens()) {</a>
+<span class="sourceLineNo">222</span><a id="line.222">                if (Arrays.binarySearch(defaultJavadocTokens, javadocToken) &lt; 0) {</a>
+<span class="sourceLineNo">223</span><a id="line.223">                    final String message = String.format(Locale.ROOT,</a>
+<span class="sourceLineNo">224</span><a id="line.224">                            "Javadoc Token \"%s\" from required javadoc "</a>
+<span class="sourceLineNo">225</span><a id="line.225">                                + "tokens was not found in default "</a>
+<span class="sourceLineNo">226</span><a id="line.226">                                + "javadoc tokens list in check %s",</a>
+<span class="sourceLineNo">227</span><a id="line.227">                            javadocToken, getClass().getName());</a>
+<span class="sourceLineNo">228</span><a id="line.228">                    throw new IllegalStateException(message);</a>
+<span class="sourceLineNo">229</span><a id="line.229">                }</a>
+<span class="sourceLineNo">230</span><a id="line.230">            }</a>
+<span class="sourceLineNo">231</span><a id="line.231">        }</a>
+<span class="sourceLineNo">232</span><a id="line.232">    }</a>
+<span class="sourceLineNo">233</span><a id="line.233"></a>
+<span class="sourceLineNo">234</span><a id="line.234">    /**</a>
+<span class="sourceLineNo">235</span><a id="line.235">     * Called before the starting to process a tree.</a>
+<span class="sourceLineNo">236</span><a id="line.236">     *</a>
+<span class="sourceLineNo">237</span><a id="line.237">     * @param rootAst</a>
+<span class="sourceLineNo">238</span><a id="line.238">     *        the root of the tree</a>
+<span class="sourceLineNo">239</span><a id="line.239">     * @noinspection WeakerAccess</a>
+<span class="sourceLineNo">240</span><a id="line.240">     * @noinspectionreason WeakerAccess - we avoid 'protected' when possible</a>
+<span class="sourceLineNo">241</span><a id="line.241">     */</a>
+<span class="sourceLineNo">242</span><a id="line.242">    public void beginJavadocTree(DetailNode rootAst) {</a>
+<span class="sourceLineNo">243</span><a id="line.243">        // No code by default, should be overridden only by demand at subclasses</a>
+<span class="sourceLineNo">244</span><a id="line.244">    }</a>
+<span class="sourceLineNo">245</span><a id="line.245"></a>
+<span class="sourceLineNo">246</span><a id="line.246">    /**</a>
+<span class="sourceLineNo">247</span><a id="line.247">     * Called after finished processing a tree.</a>
+<span class="sourceLineNo">248</span><a id="line.248">     *</a>
+<span class="sourceLineNo">249</span><a id="line.249">     * @param rootAst</a>
+<span class="sourceLineNo">250</span><a id="line.250">     *        the root of the tree</a>
+<span class="sourceLineNo">251</span><a id="line.251">     * @noinspection WeakerAccess</a>
+<span class="sourceLineNo">252</span><a id="line.252">     * @noinspectionreason WeakerAccess - we avoid 'protected' when possible</a>
+<span class="sourceLineNo">253</span><a id="line.253">     */</a>
+<span class="sourceLineNo">254</span><a id="line.254">    public void finishJavadocTree(DetailNode rootAst) {</a>
+<span class="sourceLineNo">255</span><a id="line.255">        // No code by default, should be overridden only by demand at subclasses</a>
+<span class="sourceLineNo">256</span><a id="line.256">    }</a>
+<span class="sourceLineNo">257</span><a id="line.257"></a>
+<span class="sourceLineNo">258</span><a id="line.258">    /**</a>
+<span class="sourceLineNo">259</span><a id="line.259">     * Called after all the child nodes have been process.</a>
+<span class="sourceLineNo">260</span><a id="line.260">     *</a>
+<span class="sourceLineNo">261</span><a id="line.261">     * @param ast</a>
+<span class="sourceLineNo">262</span><a id="line.262">     *        the token leaving</a>
+<span class="sourceLineNo">263</span><a id="line.263">     */</a>
+<span class="sourceLineNo">264</span><a id="line.264">    public void leaveJavadocToken(DetailNode ast) {</a>
+<span class="sourceLineNo">265</span><a id="line.265">        // No code by default, should be overridden only by demand at subclasses</a>
+<span class="sourceLineNo">266</span><a id="line.266">    }</a>
+<span class="sourceLineNo">267</span><a id="line.267"></a>
+<span class="sourceLineNo">268</span><a id="line.268">    /**</a>
+<span class="sourceLineNo">269</span><a id="line.269">     * Defined final to not allow JavadocChecks to change default tokens.</a>
+<span class="sourceLineNo">270</span><a id="line.270">     *</a>
+<span class="sourceLineNo">271</span><a id="line.271">     * @return default tokens</a>
+<span class="sourceLineNo">272</span><a id="line.272">     */</a>
+<span class="sourceLineNo">273</span><a id="line.273">    @Override</a>
+<span class="sourceLineNo">274</span><a id="line.274">    public final int[] getDefaultTokens() {</a>
+<span class="sourceLineNo">275</span><a id="line.275">        return getRequiredTokens();</a>
+<span class="sourceLineNo">276</span><a id="line.276">    }</a>
+<span class="sourceLineNo">277</span><a id="line.277"></a>
+<span class="sourceLineNo">278</span><a id="line.278">    @Override</a>
+<span class="sourceLineNo">279</span><a id="line.279">    public final int[] getAcceptableTokens() {</a>
+<span class="sourceLineNo">280</span><a id="line.280">        return getRequiredTokens();</a>
+<span class="sourceLineNo">281</span><a id="line.281">    }</a>
+<span class="sourceLineNo">282</span><a id="line.282"></a>
+<span class="sourceLineNo">283</span><a id="line.283">    @Override</a>
+<span class="sourceLineNo">284</span><a id="line.284">    public final int[] getRequiredTokens() {</a>
+<span class="sourceLineNo">285</span><a id="line.285">        return new int[] {TokenTypes.BLOCK_COMMENT_BEGIN };</a>
+<span class="sourceLineNo">286</span><a id="line.286">    }</a>
+<span class="sourceLineNo">287</span><a id="line.287"></a>
+<span class="sourceLineNo">288</span><a id="line.288">    /**</a>
+<span class="sourceLineNo">289</span><a id="line.289">     * Defined final because all JavadocChecks require comment nodes.</a>
+<span class="sourceLineNo">290</span><a id="line.290">     *</a>
+<span class="sourceLineNo">291</span><a id="line.291">     * @return true</a>
+<span class="sourceLineNo">292</span><a id="line.292">     */</a>
+<span class="sourceLineNo">293</span><a id="line.293">    @Override</a>
+<span class="sourceLineNo">294</span><a id="line.294">    public final boolean isCommentNodesRequired() {</a>
+<span class="sourceLineNo">295</span><a id="line.295">        return true;</a>
+<span class="sourceLineNo">296</span><a id="line.296">    }</a>
+<span class="sourceLineNo">297</span><a id="line.297"></a>
+<span class="sourceLineNo">298</span><a id="line.298">    @Override</a>
+<span class="sourceLineNo">299</span><a id="line.299">    public final void beginTree(DetailAST rootAST) {</a>
+<span class="sourceLineNo">300</span><a id="line.300">        TREE_CACHE.get().clear();</a>
+<span class="sourceLineNo">301</span><a id="line.301">    }</a>
+<span class="sourceLineNo">302</span><a id="line.302"></a>
+<span class="sourceLineNo">303</span><a id="line.303">    @Override</a>
+<span class="sourceLineNo">304</span><a id="line.304">    public final void finishTree(DetailAST rootAST) {</a>
+<span class="sourceLineNo">305</span><a id="line.305">        // No code, prevent override in subclasses</a>
+<span class="sourceLineNo">306</span><a id="line.306">    }</a>
 <span class="sourceLineNo">307</span><a id="line.307"></a>
-<span class="sourceLineNo">308</span><a id="line.308">            final LineColumn treeCacheKey = new LineColumn(blockCommentNode.getLineNo(),</a>
-<span class="sourceLineNo">309</span><a id="line.309">                    blockCommentNode.getColumnNo());</a>
-<span class="sourceLineNo">310</span><a id="line.310"></a>
-<span class="sourceLineNo">311</span><a id="line.311">            final ParseStatus result = TREE_CACHE.get().computeIfAbsent(treeCacheKey, key -&gt; {</a>
-<span class="sourceLineNo">312</span><a id="line.312">                return context.get().parser.parseJavadocAsDetailNode(blockCommentNode);</a>
-<span class="sourceLineNo">313</span><a id="line.313">            });</a>
-<span class="sourceLineNo">314</span><a id="line.314"></a>
-<span class="sourceLineNo">315</span><a id="line.315">            if (result.getParseErrorMessage() == null) {</a>
-<span class="sourceLineNo">316</span><a id="line.316">                if (acceptJavadocWithNonTightHtml() || !result.isNonTight()) {</a>
-<span class="sourceLineNo">317</span><a id="line.317">                    processTree(result.getTree());</a>
-<span class="sourceLineNo">318</span><a id="line.318">                }</a>
-<span class="sourceLineNo">319</span><a id="line.319"></a>
-<span class="sourceLineNo">320</span><a id="line.320">                if (violateExecutionOnNonTightHtml &amp;&amp; result.isNonTight()) {</a>
-<span class="sourceLineNo">321</span><a id="line.321">                    log(result.getFirstNonTightHtmlTag().getLine(),</a>
-<span class="sourceLineNo">322</span><a id="line.322">                            JavadocDetailNodeParser.MSG_UNCLOSED_HTML_TAG,</a>
-<span class="sourceLineNo">323</span><a id="line.323">                            result.getFirstNonTightHtmlTag().getText());</a>
+<span class="sourceLineNo">308</span><a id="line.308">    @Override</a>
+<span class="sourceLineNo">309</span><a id="line.309">    public final void visitToken(DetailAST blockCommentNode) {</a>
+<span class="sourceLineNo">310</span><a id="line.310">        if (JavadocUtil.isJavadocComment(blockCommentNode)) {</a>
+<span class="sourceLineNo">311</span><a id="line.311">            // store as field, to share with child Checks</a>
+<span class="sourceLineNo">312</span><a id="line.312">            context.get().blockCommentAst = blockCommentNode;</a>
+<span class="sourceLineNo">313</span><a id="line.313"></a>
+<span class="sourceLineNo">314</span><a id="line.314">            final LineColumn treeCacheKey = new LineColumn(blockCommentNode.getLineNo(),</a>
+<span class="sourceLineNo">315</span><a id="line.315">                    blockCommentNode.getColumnNo());</a>
+<span class="sourceLineNo">316</span><a id="line.316"></a>
+<span class="sourceLineNo">317</span><a id="line.317">            final ParseStatus result = TREE_CACHE.get().computeIfAbsent(treeCacheKey, key -&gt; {</a>
+<span class="sourceLineNo">318</span><a id="line.318">                return context.get().parser.parseJavadocAsDetailNode(blockCommentNode);</a>
+<span class="sourceLineNo">319</span><a id="line.319">            });</a>
+<span class="sourceLineNo">320</span><a id="line.320"></a>
+<span class="sourceLineNo">321</span><a id="line.321">            if (result.getParseErrorMessage() == null) {</a>
+<span class="sourceLineNo">322</span><a id="line.322">                if (acceptJavadocWithNonTightHtml() || !result.isNonTight()) {</a>
+<span class="sourceLineNo">323</span><a id="line.323">                    processTree(result.getTree());</a>
 <span class="sourceLineNo">324</span><a id="line.324">                }</a>
-<span class="sourceLineNo">325</span><a id="line.325">            }</a>
-<span class="sourceLineNo">326</span><a id="line.326">            else {</a>
-<span class="sourceLineNo">327</span><a id="line.327">                final ParseErrorMessage parseErrorMessage = result.getParseErrorMessage();</a>
-<span class="sourceLineNo">328</span><a id="line.328">                log(parseErrorMessage.getLineNumber(),</a>
-<span class="sourceLineNo">329</span><a id="line.329">                        parseErrorMessage.getMessageKey(),</a>
-<span class="sourceLineNo">330</span><a id="line.330">                        parseErrorMessage.getMessageArguments());</a>
+<span class="sourceLineNo">325</span><a id="line.325"></a>
+<span class="sourceLineNo">326</span><a id="line.326">                if (violateExecutionOnNonTightHtml &amp;&amp; result.isNonTight()) {</a>
+<span class="sourceLineNo">327</span><a id="line.327">                    log(result.getFirstNonTightHtmlTag().getLine(),</a>
+<span class="sourceLineNo">328</span><a id="line.328">                            MSG_KEY_UNCLOSED_HTML_TAG,</a>
+<span class="sourceLineNo">329</span><a id="line.329">                            result.getFirstNonTightHtmlTag().getText());</a>
+<span class="sourceLineNo">330</span><a id="line.330">                }</a>
 <span class="sourceLineNo">331</span><a id="line.331">            }</a>
-<span class="sourceLineNo">332</span><a id="line.332">        }</a>
-<span class="sourceLineNo">333</span><a id="line.333">    }</a>
-<span class="sourceLineNo">334</span><a id="line.334"></a>
-<span class="sourceLineNo">335</span><a id="line.335">    /**</a>
-<span class="sourceLineNo">336</span><a id="line.336">     * Getter for block comment in Java language syntax tree.</a>
-<span class="sourceLineNo">337</span><a id="line.337">     *</a>
-<span class="sourceLineNo">338</span><a id="line.338">     * @return A block comment in the syntax tree.</a>
-<span class="sourceLineNo">339</span><a id="line.339">     */</a>
-<span class="sourceLineNo">340</span><a id="line.340">    protected DetailAST getBlockCommentAst() {</a>
-<span class="sourceLineNo">341</span><a id="line.341">        return context.get().blockCommentAst;</a>
-<span class="sourceLineNo">342</span><a id="line.342">    }</a>
-<span class="sourceLineNo">343</span><a id="line.343"></a>
-<span class="sourceLineNo">344</span><a id="line.344">    /**</a>
-<span class="sourceLineNo">345</span><a id="line.345">     * Processes JavadocAST tree notifying Check.</a>
-<span class="sourceLineNo">346</span><a id="line.346">     *</a>
-<span class="sourceLineNo">347</span><a id="line.347">     * @param root</a>
-<span class="sourceLineNo">348</span><a id="line.348">     *        root of JavadocAST tree.</a>
-<span class="sourceLineNo">349</span><a id="line.349">     */</a>
-<span class="sourceLineNo">350</span><a id="line.350">    private void processTree(DetailNode root) {</a>
-<span class="sourceLineNo">351</span><a id="line.351">        beginJavadocTree(root);</a>
-<span class="sourceLineNo">352</span><a id="line.352">        walk(root);</a>
-<span class="sourceLineNo">353</span><a id="line.353">        finishJavadocTree(root);</a>
-<span class="sourceLineNo">354</span><a id="line.354">    }</a>
-<span class="sourceLineNo">355</span><a id="line.355"></a>
-<span class="sourceLineNo">356</span><a id="line.356">    /**</a>
-<span class="sourceLineNo">357</span><a id="line.357">     * Processes a node calling Check at interested nodes.</a>
-<span class="sourceLineNo">358</span><a id="line.358">     *</a>
-<span class="sourceLineNo">359</span><a id="line.359">     * @param root</a>
-<span class="sourceLineNo">360</span><a id="line.360">     *        the root of tree for process</a>
-<span class="sourceLineNo">361</span><a id="line.361">     */</a>
-<span class="sourceLineNo">362</span><a id="line.362">    private void walk(DetailNode root) {</a>
-<span class="sourceLineNo">363</span><a id="line.363">        DetailNode curNode = root;</a>
-<span class="sourceLineNo">364</span><a id="line.364">        while (curNode != null) {</a>
-<span class="sourceLineNo">365</span><a id="line.365">            boolean waitsForProcessing = shouldBeProcessed(curNode);</a>
-<span class="sourceLineNo">366</span><a id="line.366"></a>
-<span class="sourceLineNo">367</span><a id="line.367">            if (waitsForProcessing) {</a>
-<span class="sourceLineNo">368</span><a id="line.368">                visitJavadocToken(curNode);</a>
-<span class="sourceLineNo">369</span><a id="line.369">            }</a>
-<span class="sourceLineNo">370</span><a id="line.370">            DetailNode toVisit = JavadocUtil.getFirstChild(curNode);</a>
-<span class="sourceLineNo">371</span><a id="line.371">            while (curNode != null &amp;&amp; toVisit == null) {</a>
-<span class="sourceLineNo">372</span><a id="line.372">                if (waitsForProcessing) {</a>
-<span class="sourceLineNo">373</span><a id="line.373">                    leaveJavadocToken(curNode);</a>
-<span class="sourceLineNo">374</span><a id="line.374">                }</a>
-<span class="sourceLineNo">375</span><a id="line.375"></a>
-<span class="sourceLineNo">376</span><a id="line.376">                toVisit = JavadocUtil.getNextSibling(curNode);</a>
-<span class="sourceLineNo">377</span><a id="line.377">                if (toVisit == null) {</a>
-<span class="sourceLineNo">378</span><a id="line.378">                    curNode = curNode.getParent();</a>
-<span class="sourceLineNo">379</span><a id="line.379">                    if (curNode != null) {</a>
-<span class="sourceLineNo">380</span><a id="line.380">                        waitsForProcessing = shouldBeProcessed(curNode);</a>
-<span class="sourceLineNo">381</span><a id="line.381">                    }</a>
-<span class="sourceLineNo">382</span><a id="line.382">                }</a>
-<span class="sourceLineNo">383</span><a id="line.383">            }</a>
-<span class="sourceLineNo">384</span><a id="line.384">            curNode = toVisit;</a>
-<span class="sourceLineNo">385</span><a id="line.385">        }</a>
-<span class="sourceLineNo">386</span><a id="line.386">    }</a>
-<span class="sourceLineNo">387</span><a id="line.387"></a>
-<span class="sourceLineNo">388</span><a id="line.388">    /**</a>
-<span class="sourceLineNo">389</span><a id="line.389">     * Checks whether the current node should be processed by the check.</a>
-<span class="sourceLineNo">390</span><a id="line.390">     *</a>
-<span class="sourceLineNo">391</span><a id="line.391">     * @param curNode current node.</a>
-<span class="sourceLineNo">392</span><a id="line.392">     * @return true if the current node should be processed by the check.</a>
-<span class="sourceLineNo">393</span><a id="line.393">     */</a>
-<span class="sourceLineNo">394</span><a id="line.394">    private boolean shouldBeProcessed(DetailNode curNode) {</a>
-<span class="sourceLineNo">395</span><a id="line.395">        return javadocTokens.contains(curNode.getType());</a>
-<span class="sourceLineNo">396</span><a id="line.396">    }</a>
-<span class="sourceLineNo">397</span><a id="line.397"></a>
-<span class="sourceLineNo">398</span><a id="line.398">    @Override</a>
-<span class="sourceLineNo">399</span><a id="line.399">    public void destroy() {</a>
-<span class="sourceLineNo">400</span><a id="line.400">        super.destroy();</a>
-<span class="sourceLineNo">401</span><a id="line.401">        context.remove();</a>
-<span class="sourceLineNo">402</span><a id="line.402">        TREE_CACHE.remove();</a>
-<span class="sourceLineNo">403</span><a id="line.403">    }</a>
-<span class="sourceLineNo">404</span><a id="line.404"></a>
-<span class="sourceLineNo">405</span><a id="line.405">    /**</a>
-<span class="sourceLineNo">406</span><a id="line.406">     * The file context holder.</a>
-<span class="sourceLineNo">407</span><a id="line.407">     */</a>
-<span class="sourceLineNo">408</span><a id="line.408">    private static final class FileContext {</a>
-<span class="sourceLineNo">409</span><a id="line.409"></a>
-<span class="sourceLineNo">410</span><a id="line.410">        /**</a>
-<span class="sourceLineNo">411</span><a id="line.411">         * Parses content of Javadoc comment as DetailNode tree.</a>
-<span class="sourceLineNo">412</span><a id="line.412">         */</a>
-<span class="sourceLineNo">413</span><a id="line.413">        private final JavadocDetailNodeParser parser = new JavadocDetailNodeParser();</a>
-<span class="sourceLineNo">414</span><a id="line.414"></a>
-<span class="sourceLineNo">415</span><a id="line.415">        /**</a>
-<span class="sourceLineNo">416</span><a id="line.416">         * DetailAST node of considered Javadoc comment that is just a block comment</a>
-<span class="sourceLineNo">417</span><a id="line.417">         * in Java language syntax tree.</a>
+<span class="sourceLineNo">332</span><a id="line.332">            else {</a>
+<span class="sourceLineNo">333</span><a id="line.333">                final ParseErrorMessage parseErrorMessage = result.getParseErrorMessage();</a>
+<span class="sourceLineNo">334</span><a id="line.334">                log(parseErrorMessage.getLineNumber(),</a>
+<span class="sourceLineNo">335</span><a id="line.335">                        parseErrorMessage.getMessageKey(),</a>
+<span class="sourceLineNo">336</span><a id="line.336">                        parseErrorMessage.getMessageArguments());</a>
+<span class="sourceLineNo">337</span><a id="line.337">            }</a>
+<span class="sourceLineNo">338</span><a id="line.338">        }</a>
+<span class="sourceLineNo">339</span><a id="line.339">    }</a>
+<span class="sourceLineNo">340</span><a id="line.340"></a>
+<span class="sourceLineNo">341</span><a id="line.341">    /**</a>
+<span class="sourceLineNo">342</span><a id="line.342">     * Getter for block comment in Java language syntax tree.</a>
+<span class="sourceLineNo">343</span><a id="line.343">     *</a>
+<span class="sourceLineNo">344</span><a id="line.344">     * @return A block comment in the syntax tree.</a>
+<span class="sourceLineNo">345</span><a id="line.345">     */</a>
+<span class="sourceLineNo">346</span><a id="line.346">    protected DetailAST getBlockCommentAst() {</a>
+<span class="sourceLineNo">347</span><a id="line.347">        return context.get().blockCommentAst;</a>
+<span class="sourceLineNo">348</span><a id="line.348">    }</a>
+<span class="sourceLineNo">349</span><a id="line.349"></a>
+<span class="sourceLineNo">350</span><a id="line.350">    /**</a>
+<span class="sourceLineNo">351</span><a id="line.351">     * Processes JavadocAST tree notifying Check.</a>
+<span class="sourceLineNo">352</span><a id="line.352">     *</a>
+<span class="sourceLineNo">353</span><a id="line.353">     * @param root</a>
+<span class="sourceLineNo">354</span><a id="line.354">     *        root of JavadocAST tree.</a>
+<span class="sourceLineNo">355</span><a id="line.355">     */</a>
+<span class="sourceLineNo">356</span><a id="line.356">    private void processTree(DetailNode root) {</a>
+<span class="sourceLineNo">357</span><a id="line.357">        beginJavadocTree(root);</a>
+<span class="sourceLineNo">358</span><a id="line.358">        walk(root);</a>
+<span class="sourceLineNo">359</span><a id="line.359">        finishJavadocTree(root);</a>
+<span class="sourceLineNo">360</span><a id="line.360">    }</a>
+<span class="sourceLineNo">361</span><a id="line.361"></a>
+<span class="sourceLineNo">362</span><a id="line.362">    /**</a>
+<span class="sourceLineNo">363</span><a id="line.363">     * Processes a node calling Check at interested nodes.</a>
+<span class="sourceLineNo">364</span><a id="line.364">     *</a>
+<span class="sourceLineNo">365</span><a id="line.365">     * @param root</a>
+<span class="sourceLineNo">366</span><a id="line.366">     *        the root of tree for process</a>
+<span class="sourceLineNo">367</span><a id="line.367">     */</a>
+<span class="sourceLineNo">368</span><a id="line.368">    private void walk(DetailNode root) {</a>
+<span class="sourceLineNo">369</span><a id="line.369">        DetailNode curNode = root;</a>
+<span class="sourceLineNo">370</span><a id="line.370">        while (curNode != null) {</a>
+<span class="sourceLineNo">371</span><a id="line.371">            boolean waitsForProcessing = shouldBeProcessed(curNode);</a>
+<span class="sourceLineNo">372</span><a id="line.372"></a>
+<span class="sourceLineNo">373</span><a id="line.373">            if (waitsForProcessing) {</a>
+<span class="sourceLineNo">374</span><a id="line.374">                visitJavadocToken(curNode);</a>
+<span class="sourceLineNo">375</span><a id="line.375">            }</a>
+<span class="sourceLineNo">376</span><a id="line.376">            DetailNode toVisit = JavadocUtil.getFirstChild(curNode);</a>
+<span class="sourceLineNo">377</span><a id="line.377">            while (curNode != null &amp;&amp; toVisit == null) {</a>
+<span class="sourceLineNo">378</span><a id="line.378">                if (waitsForProcessing) {</a>
+<span class="sourceLineNo">379</span><a id="line.379">                    leaveJavadocToken(curNode);</a>
+<span class="sourceLineNo">380</span><a id="line.380">                }</a>
+<span class="sourceLineNo">381</span><a id="line.381"></a>
+<span class="sourceLineNo">382</span><a id="line.382">                toVisit = JavadocUtil.getNextSibling(curNode);</a>
+<span class="sourceLineNo">383</span><a id="line.383">                if (toVisit == null) {</a>
+<span class="sourceLineNo">384</span><a id="line.384">                    curNode = curNode.getParent();</a>
+<span class="sourceLineNo">385</span><a id="line.385">                    if (curNode != null) {</a>
+<span class="sourceLineNo">386</span><a id="line.386">                        waitsForProcessing = shouldBeProcessed(curNode);</a>
+<span class="sourceLineNo">387</span><a id="line.387">                    }</a>
+<span class="sourceLineNo">388</span><a id="line.388">                }</a>
+<span class="sourceLineNo">389</span><a id="line.389">            }</a>
+<span class="sourceLineNo">390</span><a id="line.390">            curNode = toVisit;</a>
+<span class="sourceLineNo">391</span><a id="line.391">        }</a>
+<span class="sourceLineNo">392</span><a id="line.392">    }</a>
+<span class="sourceLineNo">393</span><a id="line.393"></a>
+<span class="sourceLineNo">394</span><a id="line.394">    /**</a>
+<span class="sourceLineNo">395</span><a id="line.395">     * Checks whether the current node should be processed by the check.</a>
+<span class="sourceLineNo">396</span><a id="line.396">     *</a>
+<span class="sourceLineNo">397</span><a id="line.397">     * @param curNode current node.</a>
+<span class="sourceLineNo">398</span><a id="line.398">     * @return true if the current node should be processed by the check.</a>
+<span class="sourceLineNo">399</span><a id="line.399">     */</a>
+<span class="sourceLineNo">400</span><a id="line.400">    private boolean shouldBeProcessed(DetailNode curNode) {</a>
+<span class="sourceLineNo">401</span><a id="line.401">        return javadocTokens.contains(curNode.getType());</a>
+<span class="sourceLineNo">402</span><a id="line.402">    }</a>
+<span class="sourceLineNo">403</span><a id="line.403"></a>
+<span class="sourceLineNo">404</span><a id="line.404">    @Override</a>
+<span class="sourceLineNo">405</span><a id="line.405">    public void destroy() {</a>
+<span class="sourceLineNo">406</span><a id="line.406">        super.destroy();</a>
+<span class="sourceLineNo">407</span><a id="line.407">        context.remove();</a>
+<span class="sourceLineNo">408</span><a id="line.408">        TREE_CACHE.remove();</a>
+<span class="sourceLineNo">409</span><a id="line.409">    }</a>
+<span class="sourceLineNo">410</span><a id="line.410"></a>
+<span class="sourceLineNo">411</span><a id="line.411">    /**</a>
+<span class="sourceLineNo">412</span><a id="line.412">     * The file context holder.</a>
+<span class="sourceLineNo">413</span><a id="line.413">     */</a>
+<span class="sourceLineNo">414</span><a id="line.414">    private static final class FileContext {</a>
+<span class="sourceLineNo">415</span><a id="line.415"></a>
+<span class="sourceLineNo">416</span><a id="line.416">        /**</a>
+<span class="sourceLineNo">417</span><a id="line.417">         * Parses content of Javadoc comment as DetailNode tree.</a>
 <span class="sourceLineNo">418</span><a id="line.418">         */</a>
-<span class="sourceLineNo">419</span><a id="line.419">        private DetailAST blockCommentAst;</a>
+<span class="sourceLineNo">419</span><a id="line.419">        private final JavadocDetailNodeParser parser = new JavadocDetailNodeParser();</a>
 <span class="sourceLineNo">420</span><a id="line.420"></a>
-<span class="sourceLineNo">421</span><a id="line.421">    }</a>
-<span class="sourceLineNo">422</span><a id="line.422"></a>
-<span class="sourceLineNo">423</span><a id="line.423">}</a>
+<span class="sourceLineNo">421</span><a id="line.421">        /**</a>
+<span class="sourceLineNo">422</span><a id="line.422">         * DetailAST node of considered Javadoc comment that is just a block comment</a>
+<span class="sourceLineNo">423</span><a id="line.423">         * in Java language syntax tree.</a>
+<span class="sourceLineNo">424</span><a id="line.424">         */</a>
+<span class="sourceLineNo">425</span><a id="line.425">        private DetailAST blockCommentAst;</a>
+<span class="sourceLineNo">426</span><a id="line.426"></a>
+<span class="sourceLineNo">427</span><a id="line.427">    }</a>
+<span class="sourceLineNo">428</span><a id="line.428"></a>
+<span class="sourceLineNo">429</span><a id="line.429">}</a>
 
 
 
