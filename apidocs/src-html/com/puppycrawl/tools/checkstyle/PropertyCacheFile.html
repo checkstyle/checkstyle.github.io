@@ -9,7 +9,7 @@
 <div class="sourceContainer">
 <pre><span class="sourceLineNo">001</span><a id="line.1">///////////////////////////////////////////////////////////////////////////////////////////////</a>
 <span class="sourceLineNo">002</span><a id="line.2">// checkstyle: Checks Java source code and other text files for adherence to a set of rules.</a>
-<span class="sourceLineNo">003</span><a id="line.3">// Copyright (C) 2001-2023 the original author or authors.</a>
+<span class="sourceLineNo">003</span><a id="line.3">// Copyright (C) 2001-2024 the original author or authors.</a>
 <span class="sourceLineNo">004</span><a id="line.4">//</a>
 <span class="sourceLineNo">005</span><a id="line.5">// This library is free software; you can redistribute it and/or</a>
 <span class="sourceLineNo">006</span><a id="line.6">// modify it under the terms of the GNU Lesser General Public</a>
@@ -50,365 +50,367 @@
 <span class="sourceLineNo">041</span><a id="line.41">import com.puppycrawl.tools.checkstyle.api.CheckstyleException;</a>
 <span class="sourceLineNo">042</span><a id="line.42">import com.puppycrawl.tools.checkstyle.api.Configuration;</a>
 <span class="sourceLineNo">043</span><a id="line.43">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
-<span class="sourceLineNo">044</span><a id="line.44"></a>
-<span class="sourceLineNo">045</span><a id="line.45">/**</a>
-<span class="sourceLineNo">046</span><a id="line.46"> * This class maintains a persistent(on file-system) store of the files</a>
-<span class="sourceLineNo">047</span><a id="line.47"> * that have checked ok(no validation events) and their associated</a>
-<span class="sourceLineNo">048</span><a id="line.48"> * timestamp. It is used to optimize Checkstyle between few launches.</a>
-<span class="sourceLineNo">049</span><a id="line.49"> * It is mostly useful for plugin and extensions of Checkstyle.</a>
-<span class="sourceLineNo">050</span><a id="line.50"> * It uses a property file</a>
-<span class="sourceLineNo">051</span><a id="line.51"> * for storage.  A hashcode of the Configuration is stored in the</a>
-<span class="sourceLineNo">052</span><a id="line.52"> * cache file to ensure the cache is invalidated when the</a>
-<span class="sourceLineNo">053</span><a id="line.53"> * configuration has changed.</a>
-<span class="sourceLineNo">054</span><a id="line.54"> *</a>
-<span class="sourceLineNo">055</span><a id="line.55"> */</a>
-<span class="sourceLineNo">056</span><a id="line.56">public final class PropertyCacheFile {</a>
-<span class="sourceLineNo">057</span><a id="line.57"></a>
-<span class="sourceLineNo">058</span><a id="line.58">    /**</a>
-<span class="sourceLineNo">059</span><a id="line.59">     * The property key to use for storing the hashcode of the</a>
-<span class="sourceLineNo">060</span><a id="line.60">     * configuration. To avoid name clashes with the files that are</a>
-<span class="sourceLineNo">061</span><a id="line.61">     * checked the key is chosen in such a way that it cannot be a</a>
-<span class="sourceLineNo">062</span><a id="line.62">     * valid file name.</a>
-<span class="sourceLineNo">063</span><a id="line.63">     */</a>
-<span class="sourceLineNo">064</span><a id="line.64">    public static final String CONFIG_HASH_KEY = "configuration*?";</a>
-<span class="sourceLineNo">065</span><a id="line.65"></a>
-<span class="sourceLineNo">066</span><a id="line.66">    /**</a>
-<span class="sourceLineNo">067</span><a id="line.67">     * The property prefix to use for storing the hashcode of an</a>
-<span class="sourceLineNo">068</span><a id="line.68">     * external resource. To avoid name clashes with the files that are</a>
-<span class="sourceLineNo">069</span><a id="line.69">     * checked the prefix is chosen in such a way that it cannot be a</a>
-<span class="sourceLineNo">070</span><a id="line.70">     * valid file name and makes it clear it is a resource.</a>
-<span class="sourceLineNo">071</span><a id="line.71">     */</a>
-<span class="sourceLineNo">072</span><a id="line.72">    public static final String EXTERNAL_RESOURCE_KEY_PREFIX = "module-resource*?:";</a>
-<span class="sourceLineNo">073</span><a id="line.73"></a>
-<span class="sourceLineNo">074</span><a id="line.74">    /** Size of default byte array for buffer. */</a>
-<span class="sourceLineNo">075</span><a id="line.75">    private static final int BUFFER_SIZE = 1024;</a>
-<span class="sourceLineNo">076</span><a id="line.76"></a>
-<span class="sourceLineNo">077</span><a id="line.77">    /** Default buffer for reading from streams. */</a>
-<span class="sourceLineNo">078</span><a id="line.78">    private static final byte[] BUFFER = new byte[BUFFER_SIZE];</a>
-<span class="sourceLineNo">079</span><a id="line.79"></a>
-<span class="sourceLineNo">080</span><a id="line.80">    /** Default number for base 16 encoding. */</a>
-<span class="sourceLineNo">081</span><a id="line.81">    private static final int BASE_16 = 16;</a>
-<span class="sourceLineNo">082</span><a id="line.82"></a>
-<span class="sourceLineNo">083</span><a id="line.83">    /** The details on files. **/</a>
-<span class="sourceLineNo">084</span><a id="line.84">    private final Properties details = new Properties();</a>
-<span class="sourceLineNo">085</span><a id="line.85"></a>
-<span class="sourceLineNo">086</span><a id="line.86">    /** Configuration object. **/</a>
-<span class="sourceLineNo">087</span><a id="line.87">    private final Configuration config;</a>
-<span class="sourceLineNo">088</span><a id="line.88"></a>
-<span class="sourceLineNo">089</span><a id="line.89">    /** File name of cache. **/</a>
-<span class="sourceLineNo">090</span><a id="line.90">    private final String fileName;</a>
-<span class="sourceLineNo">091</span><a id="line.91"></a>
-<span class="sourceLineNo">092</span><a id="line.92">    /** Generated configuration hash. **/</a>
-<span class="sourceLineNo">093</span><a id="line.93">    private String configHash;</a>
-<span class="sourceLineNo">094</span><a id="line.94"></a>
-<span class="sourceLineNo">095</span><a id="line.95">    /**</a>
-<span class="sourceLineNo">096</span><a id="line.96">     * Creates a new {@code PropertyCacheFile} instance.</a>
-<span class="sourceLineNo">097</span><a id="line.97">     *</a>
-<span class="sourceLineNo">098</span><a id="line.98">     * @param config the current configuration, not null</a>
-<span class="sourceLineNo">099</span><a id="line.99">     * @param fileName the cache file</a>
-<span class="sourceLineNo">100</span><a id="line.100">     * @throws IllegalArgumentException when either arguments are null</a>
-<span class="sourceLineNo">101</span><a id="line.101">     */</a>
-<span class="sourceLineNo">102</span><a id="line.102">    public PropertyCacheFile(Configuration config, String fileName) {</a>
-<span class="sourceLineNo">103</span><a id="line.103">        if (config == null) {</a>
-<span class="sourceLineNo">104</span><a id="line.104">            throw new IllegalArgumentException("config can not be null");</a>
-<span class="sourceLineNo">105</span><a id="line.105">        }</a>
-<span class="sourceLineNo">106</span><a id="line.106">        if (fileName == null) {</a>
-<span class="sourceLineNo">107</span><a id="line.107">            throw new IllegalArgumentException("fileName can not be null");</a>
-<span class="sourceLineNo">108</span><a id="line.108">        }</a>
-<span class="sourceLineNo">109</span><a id="line.109">        this.config = config;</a>
-<span class="sourceLineNo">110</span><a id="line.110">        this.fileName = fileName;</a>
-<span class="sourceLineNo">111</span><a id="line.111">    }</a>
-<span class="sourceLineNo">112</span><a id="line.112"></a>
-<span class="sourceLineNo">113</span><a id="line.113">    /**</a>
-<span class="sourceLineNo">114</span><a id="line.114">     * Load cached values from file.</a>
-<span class="sourceLineNo">115</span><a id="line.115">     *</a>
-<span class="sourceLineNo">116</span><a id="line.116">     * @throws IOException when there is a problems with file read</a>
-<span class="sourceLineNo">117</span><a id="line.117">     */</a>
-<span class="sourceLineNo">118</span><a id="line.118">    public void load() throws IOException {</a>
-<span class="sourceLineNo">119</span><a id="line.119">        // get the current config so if the file isn't found</a>
-<span class="sourceLineNo">120</span><a id="line.120">        // the first time the hash will be added to output file</a>
-<span class="sourceLineNo">121</span><a id="line.121">        configHash = getHashCodeBasedOnObjectContent(config);</a>
-<span class="sourceLineNo">122</span><a id="line.122">        final Path path = Path.of(fileName);</a>
-<span class="sourceLineNo">123</span><a id="line.123">        if (Files.exists(path)) {</a>
-<span class="sourceLineNo">124</span><a id="line.124">            try (InputStream inStream = Files.newInputStream(path)) {</a>
-<span class="sourceLineNo">125</span><a id="line.125">                details.load(inStream);</a>
-<span class="sourceLineNo">126</span><a id="line.126">                final String cachedConfigHash = details.getProperty(CONFIG_HASH_KEY);</a>
-<span class="sourceLineNo">127</span><a id="line.127">                if (!configHash.equals(cachedConfigHash)) {</a>
-<span class="sourceLineNo">128</span><a id="line.128">                    // Detected configuration change - clear cache</a>
-<span class="sourceLineNo">129</span><a id="line.129">                    reset();</a>
-<span class="sourceLineNo">130</span><a id="line.130">                }</a>
-<span class="sourceLineNo">131</span><a id="line.131">            }</a>
-<span class="sourceLineNo">132</span><a id="line.132">        }</a>
-<span class="sourceLineNo">133</span><a id="line.133">        else {</a>
-<span class="sourceLineNo">134</span><a id="line.134">            // put the hash in the file if the file is going to be created</a>
-<span class="sourceLineNo">135</span><a id="line.135">            reset();</a>
-<span class="sourceLineNo">136</span><a id="line.136">        }</a>
-<span class="sourceLineNo">137</span><a id="line.137">    }</a>
-<span class="sourceLineNo">138</span><a id="line.138"></a>
-<span class="sourceLineNo">139</span><a id="line.139">    /**</a>
-<span class="sourceLineNo">140</span><a id="line.140">     * Cleans up the object and updates the cache file.</a>
-<span class="sourceLineNo">141</span><a id="line.141">     *</a>
-<span class="sourceLineNo">142</span><a id="line.142">     * @throws IOException  when there is a problems with file save</a>
-<span class="sourceLineNo">143</span><a id="line.143">     */</a>
-<span class="sourceLineNo">144</span><a id="line.144">    public void persist() throws IOException {</a>
-<span class="sourceLineNo">145</span><a id="line.145">        final Path path = Paths.get(fileName);</a>
-<span class="sourceLineNo">146</span><a id="line.146">        final Path directory = path.getParent();</a>
-<span class="sourceLineNo">147</span><a id="line.147">        if (directory != null) {</a>
-<span class="sourceLineNo">148</span><a id="line.148">            Files.createDirectories(directory);</a>
-<span class="sourceLineNo">149</span><a id="line.149">        }</a>
-<span class="sourceLineNo">150</span><a id="line.150">        try (OutputStream out = Files.newOutputStream(path)) {</a>
-<span class="sourceLineNo">151</span><a id="line.151">            details.store(out, null);</a>
-<span class="sourceLineNo">152</span><a id="line.152">        }</a>
-<span class="sourceLineNo">153</span><a id="line.153">    }</a>
-<span class="sourceLineNo">154</span><a id="line.154"></a>
-<span class="sourceLineNo">155</span><a id="line.155">    /**</a>
-<span class="sourceLineNo">156</span><a id="line.156">     * Resets the cache to be empty except for the configuration hash.</a>
-<span class="sourceLineNo">157</span><a id="line.157">     */</a>
-<span class="sourceLineNo">158</span><a id="line.158">    public void reset() {</a>
-<span class="sourceLineNo">159</span><a id="line.159">        details.clear();</a>
-<span class="sourceLineNo">160</span><a id="line.160">        details.setProperty(CONFIG_HASH_KEY, configHash);</a>
-<span class="sourceLineNo">161</span><a id="line.161">    }</a>
-<span class="sourceLineNo">162</span><a id="line.162"></a>
-<span class="sourceLineNo">163</span><a id="line.163">    /**</a>
-<span class="sourceLineNo">164</span><a id="line.164">     * Checks that file is in cache.</a>
-<span class="sourceLineNo">165</span><a id="line.165">     *</a>
-<span class="sourceLineNo">166</span><a id="line.166">     * @param uncheckedFileName the file to check</a>
-<span class="sourceLineNo">167</span><a id="line.167">     * @param timestamp the timestamp of the file to check</a>
-<span class="sourceLineNo">168</span><a id="line.168">     * @return whether the specified file has already been checked ok</a>
-<span class="sourceLineNo">169</span><a id="line.169">     */</a>
-<span class="sourceLineNo">170</span><a id="line.170">    public boolean isInCache(String uncheckedFileName, long timestamp) {</a>
-<span class="sourceLineNo">171</span><a id="line.171">        final String lastChecked = details.getProperty(uncheckedFileName);</a>
-<span class="sourceLineNo">172</span><a id="line.172">        return Objects.equals(lastChecked, Long.toString(timestamp));</a>
-<span class="sourceLineNo">173</span><a id="line.173">    }</a>
-<span class="sourceLineNo">174</span><a id="line.174"></a>
-<span class="sourceLineNo">175</span><a id="line.175">    /**</a>
-<span class="sourceLineNo">176</span><a id="line.176">     * Records that a file checked ok.</a>
-<span class="sourceLineNo">177</span><a id="line.177">     *</a>
-<span class="sourceLineNo">178</span><a id="line.178">     * @param checkedFileName name of the file that checked ok</a>
-<span class="sourceLineNo">179</span><a id="line.179">     * @param timestamp the timestamp of the file</a>
-<span class="sourceLineNo">180</span><a id="line.180">     */</a>
-<span class="sourceLineNo">181</span><a id="line.181">    public void put(String checkedFileName, long timestamp) {</a>
-<span class="sourceLineNo">182</span><a id="line.182">        details.setProperty(checkedFileName, Long.toString(timestamp));</a>
-<span class="sourceLineNo">183</span><a id="line.183">    }</a>
-<span class="sourceLineNo">184</span><a id="line.184"></a>
-<span class="sourceLineNo">185</span><a id="line.185">    /**</a>
-<span class="sourceLineNo">186</span><a id="line.186">     * Retrieves the hash of a specific file.</a>
-<span class="sourceLineNo">187</span><a id="line.187">     *</a>
-<span class="sourceLineNo">188</span><a id="line.188">     * @param name The name of the file to retrieve.</a>
-<span class="sourceLineNo">189</span><a id="line.189">     * @return The has of the file or {@code null}.</a>
-<span class="sourceLineNo">190</span><a id="line.190">     */</a>
-<span class="sourceLineNo">191</span><a id="line.191">    public String get(String name) {</a>
-<span class="sourceLineNo">192</span><a id="line.192">        return details.getProperty(name);</a>
-<span class="sourceLineNo">193</span><a id="line.193">    }</a>
-<span class="sourceLineNo">194</span><a id="line.194"></a>
-<span class="sourceLineNo">195</span><a id="line.195">    /**</a>
-<span class="sourceLineNo">196</span><a id="line.196">     * Removed a specific file from the cache.</a>
-<span class="sourceLineNo">197</span><a id="line.197">     *</a>
-<span class="sourceLineNo">198</span><a id="line.198">     * @param checkedFileName The name of the file to remove.</a>
-<span class="sourceLineNo">199</span><a id="line.199">     */</a>
-<span class="sourceLineNo">200</span><a id="line.200">    public void remove(String checkedFileName) {</a>
-<span class="sourceLineNo">201</span><a id="line.201">        details.remove(checkedFileName);</a>
-<span class="sourceLineNo">202</span><a id="line.202">    }</a>
-<span class="sourceLineNo">203</span><a id="line.203"></a>
-<span class="sourceLineNo">204</span><a id="line.204">    /**</a>
-<span class="sourceLineNo">205</span><a id="line.205">     * Calculates the hashcode for the serializable object based on its content.</a>
-<span class="sourceLineNo">206</span><a id="line.206">     *</a>
-<span class="sourceLineNo">207</span><a id="line.207">     * @param object serializable object.</a>
-<span class="sourceLineNo">208</span><a id="line.208">     * @return the hashcode for serializable object.</a>
-<span class="sourceLineNo">209</span><a id="line.209">     * @throws IllegalStateException when some unexpected happened.</a>
-<span class="sourceLineNo">210</span><a id="line.210">     */</a>
-<span class="sourceLineNo">211</span><a id="line.211">    private static String getHashCodeBasedOnObjectContent(Serializable object) {</a>
-<span class="sourceLineNo">212</span><a id="line.212">        try {</a>
-<span class="sourceLineNo">213</span><a id="line.213">            final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();</a>
-<span class="sourceLineNo">214</span><a id="line.214">            // in-memory serialization of Configuration</a>
-<span class="sourceLineNo">215</span><a id="line.215">            serialize(object, outputStream);</a>
-<span class="sourceLineNo">216</span><a id="line.216">            // Instead of hexEncoding outputStream.toByteArray() directly we</a>
-<span class="sourceLineNo">217</span><a id="line.217">            // use a message digest here to keep the length of the</a>
-<span class="sourceLineNo">218</span><a id="line.218">            // hashcode reasonable</a>
-<span class="sourceLineNo">219</span><a id="line.219"></a>
-<span class="sourceLineNo">220</span><a id="line.220">            final MessageDigest digest = MessageDigest.getInstance("SHA-1");</a>
-<span class="sourceLineNo">221</span><a id="line.221">            digest.update(outputStream.toByteArray());</a>
-<span class="sourceLineNo">222</span><a id="line.222"></a>
-<span class="sourceLineNo">223</span><a id="line.223">            return new BigInteger(1, digest.digest()).toString(BASE_16).toUpperCase(Locale.ROOT);</a>
-<span class="sourceLineNo">224</span><a id="line.224">        }</a>
-<span class="sourceLineNo">225</span><a id="line.225">        catch (final IOException | NoSuchAlgorithmException ex) {</a>
-<span class="sourceLineNo">226</span><a id="line.226">            // rethrow as unchecked exception</a>
-<span class="sourceLineNo">227</span><a id="line.227">            throw new IllegalStateException("Unable to calculate hashcode.", ex);</a>
-<span class="sourceLineNo">228</span><a id="line.228">        }</a>
-<span class="sourceLineNo">229</span><a id="line.229">    }</a>
-<span class="sourceLineNo">230</span><a id="line.230"></a>
-<span class="sourceLineNo">231</span><a id="line.231">    /**</a>
-<span class="sourceLineNo">232</span><a id="line.232">     * Serializes object to output stream.</a>
-<span class="sourceLineNo">233</span><a id="line.233">     *</a>
-<span class="sourceLineNo">234</span><a id="line.234">     * @param object object to be serialized</a>
-<span class="sourceLineNo">235</span><a id="line.235">     * @param outputStream serialization stream</a>
-<span class="sourceLineNo">236</span><a id="line.236">     * @throws IOException if an error occurs</a>
-<span class="sourceLineNo">237</span><a id="line.237">     */</a>
-<span class="sourceLineNo">238</span><a id="line.238">    private static void serialize(Serializable object,</a>
-<span class="sourceLineNo">239</span><a id="line.239">                                  OutputStream outputStream) throws IOException {</a>
-<span class="sourceLineNo">240</span><a id="line.240">        try (ObjectOutputStream oos = new ObjectOutputStream(outputStream)) {</a>
-<span class="sourceLineNo">241</span><a id="line.241">            oos.writeObject(object);</a>
-<span class="sourceLineNo">242</span><a id="line.242">        }</a>
-<span class="sourceLineNo">243</span><a id="line.243">    }</a>
-<span class="sourceLineNo">244</span><a id="line.244"></a>
-<span class="sourceLineNo">245</span><a id="line.245">    /**</a>
-<span class="sourceLineNo">246</span><a id="line.246">     * Puts external resources in cache.</a>
-<span class="sourceLineNo">247</span><a id="line.247">     * If at least one external resource changed, clears the cache.</a>
-<span class="sourceLineNo">248</span><a id="line.248">     *</a>
-<span class="sourceLineNo">249</span><a id="line.249">     * @param locations locations of external resources.</a>
-<span class="sourceLineNo">250</span><a id="line.250">     */</a>
-<span class="sourceLineNo">251</span><a id="line.251">    public void putExternalResources(Set&lt;String&gt; locations) {</a>
-<span class="sourceLineNo">252</span><a id="line.252">        final Set&lt;ExternalResource&gt; resources = loadExternalResources(locations);</a>
-<span class="sourceLineNo">253</span><a id="line.253">        if (areExternalResourcesChanged(resources)) {</a>
-<span class="sourceLineNo">254</span><a id="line.254">            reset();</a>
-<span class="sourceLineNo">255</span><a id="line.255">            fillCacheWithExternalResources(resources);</a>
-<span class="sourceLineNo">256</span><a id="line.256">        }</a>
-<span class="sourceLineNo">257</span><a id="line.257">    }</a>
-<span class="sourceLineNo">258</span><a id="line.258"></a>
-<span class="sourceLineNo">259</span><a id="line.259">    /**</a>
-<span class="sourceLineNo">260</span><a id="line.260">     * Loads a set of {@link ExternalResource} based on their locations.</a>
-<span class="sourceLineNo">261</span><a id="line.261">     *</a>
-<span class="sourceLineNo">262</span><a id="line.262">     * @param resourceLocations locations of external configuration resources.</a>
-<span class="sourceLineNo">263</span><a id="line.263">     * @return a set of {@link ExternalResource}.</a>
-<span class="sourceLineNo">264</span><a id="line.264">     */</a>
-<span class="sourceLineNo">265</span><a id="line.265">    private static Set&lt;ExternalResource&gt; loadExternalResources(Set&lt;String&gt; resourceLocations) {</a>
-<span class="sourceLineNo">266</span><a id="line.266">        final Set&lt;ExternalResource&gt; resources = new HashSet&lt;&gt;();</a>
-<span class="sourceLineNo">267</span><a id="line.267">        for (String location : resourceLocations) {</a>
-<span class="sourceLineNo">268</span><a id="line.268">            try {</a>
-<span class="sourceLineNo">269</span><a id="line.269">                final byte[] content = loadExternalResource(location);</a>
-<span class="sourceLineNo">270</span><a id="line.270">                final String contentHashSum = getHashCodeBasedOnObjectContent(content);</a>
-<span class="sourceLineNo">271</span><a id="line.271">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</a>
-<span class="sourceLineNo">272</span><a id="line.272">                        contentHashSum));</a>
-<span class="sourceLineNo">273</span><a id="line.273">            }</a>
-<span class="sourceLineNo">274</span><a id="line.274">            catch (CheckstyleException | IOException ex) {</a>
-<span class="sourceLineNo">275</span><a id="line.275">                // if exception happened (configuration resource was not found, connection is not</a>
-<span class="sourceLineNo">276</span><a id="line.276">                // available, resource is broken, etc.), we need to calculate hash sum based on</a>
-<span class="sourceLineNo">277</span><a id="line.277">                // exception object content in order to check whether problem is resolved later</a>
-<span class="sourceLineNo">278</span><a id="line.278">                // and/or the configuration is changed.</a>
-<span class="sourceLineNo">279</span><a id="line.279">                final String contentHashSum = getHashCodeBasedOnObjectContent(ex);</a>
-<span class="sourceLineNo">280</span><a id="line.280">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</a>
-<span class="sourceLineNo">281</span><a id="line.281">                        contentHashSum));</a>
-<span class="sourceLineNo">282</span><a id="line.282">            }</a>
-<span class="sourceLineNo">283</span><a id="line.283">        }</a>
-<span class="sourceLineNo">284</span><a id="line.284">        return resources;</a>
-<span class="sourceLineNo">285</span><a id="line.285">    }</a>
-<span class="sourceLineNo">286</span><a id="line.286"></a>
-<span class="sourceLineNo">287</span><a id="line.287">    /**</a>
-<span class="sourceLineNo">288</span><a id="line.288">     * Loads the content of external resource.</a>
-<span class="sourceLineNo">289</span><a id="line.289">     *</a>
-<span class="sourceLineNo">290</span><a id="line.290">     * @param location external resource location.</a>
-<span class="sourceLineNo">291</span><a id="line.291">     * @return array of bytes which represents the content of external resource in binary form.</a>
-<span class="sourceLineNo">292</span><a id="line.292">     * @throws IOException if error while loading occurs.</a>
-<span class="sourceLineNo">293</span><a id="line.293">     * @throws CheckstyleException if error while loading occurs.</a>
-<span class="sourceLineNo">294</span><a id="line.294">     */</a>
-<span class="sourceLineNo">295</span><a id="line.295">    private static byte[] loadExternalResource(String location)</a>
-<span class="sourceLineNo">296</span><a id="line.296">            throws IOException, CheckstyleException {</a>
-<span class="sourceLineNo">297</span><a id="line.297">        final URI uri = CommonUtil.getUriByFilename(location);</a>
-<span class="sourceLineNo">298</span><a id="line.298"></a>
-<span class="sourceLineNo">299</span><a id="line.299">        try (InputStream is = uri.toURL().openStream()) {</a>
-<span class="sourceLineNo">300</span><a id="line.300">            return toByteArray(is);</a>
-<span class="sourceLineNo">301</span><a id="line.301">        }</a>
-<span class="sourceLineNo">302</span><a id="line.302">    }</a>
-<span class="sourceLineNo">303</span><a id="line.303"></a>
-<span class="sourceLineNo">304</span><a id="line.304">    /**</a>
-<span class="sourceLineNo">305</span><a id="line.305">     * Reads all the contents of an input stream and returns it as a byte array.</a>
-<span class="sourceLineNo">306</span><a id="line.306">     *</a>
-<span class="sourceLineNo">307</span><a id="line.307">     * @param stream The input stream to read from.</a>
-<span class="sourceLineNo">308</span><a id="line.308">     * @return The resulting byte array of the stream.</a>
-<span class="sourceLineNo">309</span><a id="line.309">     * @throws IOException if there is an error reading the input stream.</a>
-<span class="sourceLineNo">310</span><a id="line.310">     */</a>
-<span class="sourceLineNo">311</span><a id="line.311">    private static byte[] toByteArray(InputStream stream) throws IOException {</a>
-<span class="sourceLineNo">312</span><a id="line.312">        final ByteArrayOutputStream content = new ByteArrayOutputStream();</a>
-<span class="sourceLineNo">313</span><a id="line.313"></a>
-<span class="sourceLineNo">314</span><a id="line.314">        while (true) {</a>
-<span class="sourceLineNo">315</span><a id="line.315">            final int size = stream.read(BUFFER);</a>
-<span class="sourceLineNo">316</span><a id="line.316">            if (size == -1) {</a>
-<span class="sourceLineNo">317</span><a id="line.317">                break;</a>
-<span class="sourceLineNo">318</span><a id="line.318">            }</a>
-<span class="sourceLineNo">319</span><a id="line.319"></a>
-<span class="sourceLineNo">320</span><a id="line.320">            content.write(BUFFER, 0, size);</a>
-<span class="sourceLineNo">321</span><a id="line.321">        }</a>
-<span class="sourceLineNo">322</span><a id="line.322"></a>
-<span class="sourceLineNo">323</span><a id="line.323">        return content.toByteArray();</a>
-<span class="sourceLineNo">324</span><a id="line.324">    }</a>
-<span class="sourceLineNo">325</span><a id="line.325"></a>
-<span class="sourceLineNo">326</span><a id="line.326">    /**</a>
-<span class="sourceLineNo">327</span><a id="line.327">     * Checks whether the contents of external configuration resources were changed.</a>
-<span class="sourceLineNo">328</span><a id="line.328">     *</a>
-<span class="sourceLineNo">329</span><a id="line.329">     * @param resources a set of {@link ExternalResource}.</a>
-<span class="sourceLineNo">330</span><a id="line.330">     * @return true if the contents of external configuration resources were changed.</a>
-<span class="sourceLineNo">331</span><a id="line.331">     */</a>
-<span class="sourceLineNo">332</span><a id="line.332">    private boolean areExternalResourcesChanged(Set&lt;ExternalResource&gt; resources) {</a>
-<span class="sourceLineNo">333</span><a id="line.333">        return resources.stream().anyMatch(this::isResourceChanged);</a>
-<span class="sourceLineNo">334</span><a id="line.334">    }</a>
-<span class="sourceLineNo">335</span><a id="line.335"></a>
-<span class="sourceLineNo">336</span><a id="line.336">    /**</a>
-<span class="sourceLineNo">337</span><a id="line.337">     * Checks whether the resource is changed.</a>
-<span class="sourceLineNo">338</span><a id="line.338">     *</a>
-<span class="sourceLineNo">339</span><a id="line.339">     * @param resource resource to check.</a>
-<span class="sourceLineNo">340</span><a id="line.340">     * @return true if resource is changed.</a>
-<span class="sourceLineNo">341</span><a id="line.341">     */</a>
-<span class="sourceLineNo">342</span><a id="line.342">    private boolean isResourceChanged(ExternalResource resource) {</a>
-<span class="sourceLineNo">343</span><a id="line.343">        boolean changed = false;</a>
-<span class="sourceLineNo">344</span><a id="line.344">        if (isResourceLocationInCache(resource.location)) {</a>
-<span class="sourceLineNo">345</span><a id="line.345">            final String contentHashSum = resource.contentHashSum;</a>
-<span class="sourceLineNo">346</span><a id="line.346">            final String cachedHashSum = details.getProperty(resource.location);</a>
-<span class="sourceLineNo">347</span><a id="line.347">            if (!cachedHashSum.equals(contentHashSum)) {</a>
-<span class="sourceLineNo">348</span><a id="line.348">                changed = true;</a>
-<span class="sourceLineNo">349</span><a id="line.349">            }</a>
-<span class="sourceLineNo">350</span><a id="line.350">        }</a>
-<span class="sourceLineNo">351</span><a id="line.351">        else {</a>
-<span class="sourceLineNo">352</span><a id="line.352">            changed = true;</a>
-<span class="sourceLineNo">353</span><a id="line.353">        }</a>
-<span class="sourceLineNo">354</span><a id="line.354">        return changed;</a>
-<span class="sourceLineNo">355</span><a id="line.355">    }</a>
-<span class="sourceLineNo">356</span><a id="line.356"></a>
-<span class="sourceLineNo">357</span><a id="line.357">    /**</a>
-<span class="sourceLineNo">358</span><a id="line.358">     * Fills cache with a set of {@link ExternalResource}.</a>
-<span class="sourceLineNo">359</span><a id="line.359">     * If external resource from the set is already in cache, it will be skipped.</a>
-<span class="sourceLineNo">360</span><a id="line.360">     *</a>
-<span class="sourceLineNo">361</span><a id="line.361">     * @param externalResources a set of {@link ExternalResource}.</a>
-<span class="sourceLineNo">362</span><a id="line.362">     */</a>
-<span class="sourceLineNo">363</span><a id="line.363">    private void fillCacheWithExternalResources(Set&lt;ExternalResource&gt; externalResources) {</a>
-<span class="sourceLineNo">364</span><a id="line.364">        externalResources</a>
-<span class="sourceLineNo">365</span><a id="line.365">            .forEach(resource -&gt; details.setProperty(resource.location, resource.contentHashSum));</a>
-<span class="sourceLineNo">366</span><a id="line.366">    }</a>
-<span class="sourceLineNo">367</span><a id="line.367"></a>
-<span class="sourceLineNo">368</span><a id="line.368">    /**</a>
-<span class="sourceLineNo">369</span><a id="line.369">     * Checks whether resource location is in cache.</a>
-<span class="sourceLineNo">370</span><a id="line.370">     *</a>
-<span class="sourceLineNo">371</span><a id="line.371">     * @param location resource location.</a>
-<span class="sourceLineNo">372</span><a id="line.372">     * @return true if resource location is in cache.</a>
-<span class="sourceLineNo">373</span><a id="line.373">     */</a>
-<span class="sourceLineNo">374</span><a id="line.374">    private boolean isResourceLocationInCache(String location) {</a>
-<span class="sourceLineNo">375</span><a id="line.375">        final String cachedHashSum = details.getProperty(location);</a>
-<span class="sourceLineNo">376</span><a id="line.376">        return cachedHashSum != null;</a>
-<span class="sourceLineNo">377</span><a id="line.377">    }</a>
-<span class="sourceLineNo">378</span><a id="line.378"></a>
-<span class="sourceLineNo">379</span><a id="line.379">    /**</a>
-<span class="sourceLineNo">380</span><a id="line.380">     * Class which represents external resource.</a>
-<span class="sourceLineNo">381</span><a id="line.381">     */</a>
-<span class="sourceLineNo">382</span><a id="line.382">    private static final class ExternalResource {</a>
-<span class="sourceLineNo">383</span><a id="line.383"></a>
-<span class="sourceLineNo">384</span><a id="line.384">        /** Location of resource. */</a>
-<span class="sourceLineNo">385</span><a id="line.385">        private final String location;</a>
-<span class="sourceLineNo">386</span><a id="line.386">        /** Hash sum which is calculated based on resource content. */</a>
-<span class="sourceLineNo">387</span><a id="line.387">        private final String contentHashSum;</a>
-<span class="sourceLineNo">388</span><a id="line.388"></a>
-<span class="sourceLineNo">389</span><a id="line.389">        /**</a>
-<span class="sourceLineNo">390</span><a id="line.390">         * Creates an instance.</a>
-<span class="sourceLineNo">391</span><a id="line.391">         *</a>
-<span class="sourceLineNo">392</span><a id="line.392">         * @param location resource location.</a>
-<span class="sourceLineNo">393</span><a id="line.393">         * @param contentHashSum content hash sum.</a>
-<span class="sourceLineNo">394</span><a id="line.394">         */</a>
-<span class="sourceLineNo">395</span><a id="line.395">        private ExternalResource(String location, String contentHashSum) {</a>
-<span class="sourceLineNo">396</span><a id="line.396">            this.location = location;</a>
-<span class="sourceLineNo">397</span><a id="line.397">            this.contentHashSum = contentHashSum;</a>
-<span class="sourceLineNo">398</span><a id="line.398">        }</a>
-<span class="sourceLineNo">399</span><a id="line.399"></a>
-<span class="sourceLineNo">400</span><a id="line.400">    }</a>
+<span class="sourceLineNo">044</span><a id="line.44">import com.puppycrawl.tools.checkstyle.utils.OsSpecificUtil;</a>
+<span class="sourceLineNo">045</span><a id="line.45"></a>
+<span class="sourceLineNo">046</span><a id="line.46">/**</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * This class maintains a persistent(on file-system) store of the files</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * that have checked ok(no validation events) and their associated</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * timestamp. It is used to optimize Checkstyle between few launches.</a>
+<span class="sourceLineNo">050</span><a id="line.50"> * It is mostly useful for plugin and extensions of Checkstyle.</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * It uses a property file</a>
+<span class="sourceLineNo">052</span><a id="line.52"> * for storage.  A hashcode of the Configuration is stored in the</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * cache file to ensure the cache is invalidated when the</a>
+<span class="sourceLineNo">054</span><a id="line.54"> * configuration has changed.</a>
+<span class="sourceLineNo">055</span><a id="line.55"> *</a>
+<span class="sourceLineNo">056</span><a id="line.56"> */</a>
+<span class="sourceLineNo">057</span><a id="line.57">public final class PropertyCacheFile {</a>
+<span class="sourceLineNo">058</span><a id="line.58"></a>
+<span class="sourceLineNo">059</span><a id="line.59">    /**</a>
+<span class="sourceLineNo">060</span><a id="line.60">     * The property key to use for storing the hashcode of the</a>
+<span class="sourceLineNo">061</span><a id="line.61">     * configuration. To avoid name clashes with the files that are</a>
+<span class="sourceLineNo">062</span><a id="line.62">     * checked the key is chosen in such a way that it cannot be a</a>
+<span class="sourceLineNo">063</span><a id="line.63">     * valid file name.</a>
+<span class="sourceLineNo">064</span><a id="line.64">     */</a>
+<span class="sourceLineNo">065</span><a id="line.65">    public static final String CONFIG_HASH_KEY = "configuration*?";</a>
+<span class="sourceLineNo">066</span><a id="line.66"></a>
+<span class="sourceLineNo">067</span><a id="line.67">    /**</a>
+<span class="sourceLineNo">068</span><a id="line.68">     * The property prefix to use for storing the hashcode of an</a>
+<span class="sourceLineNo">069</span><a id="line.69">     * external resource. To avoid name clashes with the files that are</a>
+<span class="sourceLineNo">070</span><a id="line.70">     * checked the prefix is chosen in such a way that it cannot be a</a>
+<span class="sourceLineNo">071</span><a id="line.71">     * valid file name and makes it clear it is a resource.</a>
+<span class="sourceLineNo">072</span><a id="line.72">     */</a>
+<span class="sourceLineNo">073</span><a id="line.73">    public static final String EXTERNAL_RESOURCE_KEY_PREFIX = "module-resource*?:";</a>
+<span class="sourceLineNo">074</span><a id="line.74"></a>
+<span class="sourceLineNo">075</span><a id="line.75">    /** Size of default byte array for buffer. */</a>
+<span class="sourceLineNo">076</span><a id="line.76">    private static final int BUFFER_SIZE = 1024;</a>
+<span class="sourceLineNo">077</span><a id="line.77"></a>
+<span class="sourceLineNo">078</span><a id="line.78">    /** Default buffer for reading from streams. */</a>
+<span class="sourceLineNo">079</span><a id="line.79">    private static final byte[] BUFFER = new byte[BUFFER_SIZE];</a>
+<span class="sourceLineNo">080</span><a id="line.80"></a>
+<span class="sourceLineNo">081</span><a id="line.81">    /** Default number for base 16 encoding. */</a>
+<span class="sourceLineNo">082</span><a id="line.82">    private static final int BASE_16 = 16;</a>
+<span class="sourceLineNo">083</span><a id="line.83"></a>
+<span class="sourceLineNo">084</span><a id="line.84">    /** The details on files. **/</a>
+<span class="sourceLineNo">085</span><a id="line.85">    private final Properties details = new Properties();</a>
+<span class="sourceLineNo">086</span><a id="line.86"></a>
+<span class="sourceLineNo">087</span><a id="line.87">    /** Configuration object. **/</a>
+<span class="sourceLineNo">088</span><a id="line.88">    private final Configuration config;</a>
+<span class="sourceLineNo">089</span><a id="line.89"></a>
+<span class="sourceLineNo">090</span><a id="line.90">    /** File name of cache. **/</a>
+<span class="sourceLineNo">091</span><a id="line.91">    private final String fileName;</a>
+<span class="sourceLineNo">092</span><a id="line.92"></a>
+<span class="sourceLineNo">093</span><a id="line.93">    /** Generated configuration hash. **/</a>
+<span class="sourceLineNo">094</span><a id="line.94">    private String configHash;</a>
+<span class="sourceLineNo">095</span><a id="line.95"></a>
+<span class="sourceLineNo">096</span><a id="line.96">    /**</a>
+<span class="sourceLineNo">097</span><a id="line.97">     * Creates a new {@code PropertyCacheFile} instance.</a>
+<span class="sourceLineNo">098</span><a id="line.98">     *</a>
+<span class="sourceLineNo">099</span><a id="line.99">     * @param config the current configuration, not null</a>
+<span class="sourceLineNo">100</span><a id="line.100">     * @param fileName the cache file</a>
+<span class="sourceLineNo">101</span><a id="line.101">     * @throws IllegalArgumentException when either arguments are null</a>
+<span class="sourceLineNo">102</span><a id="line.102">     */</a>
+<span class="sourceLineNo">103</span><a id="line.103">    public PropertyCacheFile(Configuration config, String fileName) {</a>
+<span class="sourceLineNo">104</span><a id="line.104">        if (config == null) {</a>
+<span class="sourceLineNo">105</span><a id="line.105">            throw new IllegalArgumentException("config can not be null");</a>
+<span class="sourceLineNo">106</span><a id="line.106">        }</a>
+<span class="sourceLineNo">107</span><a id="line.107">        if (fileName == null) {</a>
+<span class="sourceLineNo">108</span><a id="line.108">            throw new IllegalArgumentException("fileName can not be null");</a>
+<span class="sourceLineNo">109</span><a id="line.109">        }</a>
+<span class="sourceLineNo">110</span><a id="line.110">        this.config = config;</a>
+<span class="sourceLineNo">111</span><a id="line.111">        this.fileName = fileName;</a>
+<span class="sourceLineNo">112</span><a id="line.112">    }</a>
+<span class="sourceLineNo">113</span><a id="line.113"></a>
+<span class="sourceLineNo">114</span><a id="line.114">    /**</a>
+<span class="sourceLineNo">115</span><a id="line.115">     * Load cached values from file.</a>
+<span class="sourceLineNo">116</span><a id="line.116">     *</a>
+<span class="sourceLineNo">117</span><a id="line.117">     * @throws IOException when there is a problems with file read</a>
+<span class="sourceLineNo">118</span><a id="line.118">     */</a>
+<span class="sourceLineNo">119</span><a id="line.119">    public void load() throws IOException {</a>
+<span class="sourceLineNo">120</span><a id="line.120">        // get the current config so if the file isn't found</a>
+<span class="sourceLineNo">121</span><a id="line.121">        // the first time the hash will be added to output file</a>
+<span class="sourceLineNo">122</span><a id="line.122">        configHash = getHashCodeBasedOnObjectContent(config);</a>
+<span class="sourceLineNo">123</span><a id="line.123">        final Path path = Path.of(fileName);</a>
+<span class="sourceLineNo">124</span><a id="line.124">        if (Files.exists(path)) {</a>
+<span class="sourceLineNo">125</span><a id="line.125">            try (InputStream inStream = Files.newInputStream(path)) {</a>
+<span class="sourceLineNo">126</span><a id="line.126">                details.load(inStream);</a>
+<span class="sourceLineNo">127</span><a id="line.127">                final String cachedConfigHash = details.getProperty(CONFIG_HASH_KEY);</a>
+<span class="sourceLineNo">128</span><a id="line.128">                if (!configHash.equals(cachedConfigHash)) {</a>
+<span class="sourceLineNo">129</span><a id="line.129">                    // Detected configuration change - clear cache</a>
+<span class="sourceLineNo">130</span><a id="line.130">                    reset();</a>
+<span class="sourceLineNo">131</span><a id="line.131">                }</a>
+<span class="sourceLineNo">132</span><a id="line.132">            }</a>
+<span class="sourceLineNo">133</span><a id="line.133">        }</a>
+<span class="sourceLineNo">134</span><a id="line.134">        else {</a>
+<span class="sourceLineNo">135</span><a id="line.135">            // put the hash in the file if the file is going to be created</a>
+<span class="sourceLineNo">136</span><a id="line.136">            reset();</a>
+<span class="sourceLineNo">137</span><a id="line.137">        }</a>
+<span class="sourceLineNo">138</span><a id="line.138">    }</a>
+<span class="sourceLineNo">139</span><a id="line.139"></a>
+<span class="sourceLineNo">140</span><a id="line.140">    /**</a>
+<span class="sourceLineNo">141</span><a id="line.141">     * Cleans up the object and updates the cache file.</a>
+<span class="sourceLineNo">142</span><a id="line.142">     *</a>
+<span class="sourceLineNo">143</span><a id="line.143">     * @throws IOException  when there is a problems with file save</a>
+<span class="sourceLineNo">144</span><a id="line.144">     */</a>
+<span class="sourceLineNo">145</span><a id="line.145">    public void persist() throws IOException {</a>
+<span class="sourceLineNo">146</span><a id="line.146">        final Path path = Paths.get(fileName);</a>
+<span class="sourceLineNo">147</span><a id="line.147">        final Path directory = path.getParent();</a>
+<span class="sourceLineNo">148</span><a id="line.148"></a>
+<span class="sourceLineNo">149</span><a id="line.149">        if (directory != null) {</a>
+<span class="sourceLineNo">150</span><a id="line.150">            OsSpecificUtil.updateDirectory(directory);</a>
+<span class="sourceLineNo">151</span><a id="line.151">        }</a>
+<span class="sourceLineNo">152</span><a id="line.152">        try (OutputStream out = Files.newOutputStream(path)) {</a>
+<span class="sourceLineNo">153</span><a id="line.153">            details.store(out, null);</a>
+<span class="sourceLineNo">154</span><a id="line.154">        }</a>
+<span class="sourceLineNo">155</span><a id="line.155">    }</a>
+<span class="sourceLineNo">156</span><a id="line.156"></a>
+<span class="sourceLineNo">157</span><a id="line.157">    /**</a>
+<span class="sourceLineNo">158</span><a id="line.158">     * Resets the cache to be empty except for the configuration hash.</a>
+<span class="sourceLineNo">159</span><a id="line.159">     */</a>
+<span class="sourceLineNo">160</span><a id="line.160">    public void reset() {</a>
+<span class="sourceLineNo">161</span><a id="line.161">        details.clear();</a>
+<span class="sourceLineNo">162</span><a id="line.162">        details.setProperty(CONFIG_HASH_KEY, configHash);</a>
+<span class="sourceLineNo">163</span><a id="line.163">    }</a>
+<span class="sourceLineNo">164</span><a id="line.164"></a>
+<span class="sourceLineNo">165</span><a id="line.165">    /**</a>
+<span class="sourceLineNo">166</span><a id="line.166">     * Checks that file is in cache.</a>
+<span class="sourceLineNo">167</span><a id="line.167">     *</a>
+<span class="sourceLineNo">168</span><a id="line.168">     * @param uncheckedFileName the file to check</a>
+<span class="sourceLineNo">169</span><a id="line.169">     * @param timestamp the timestamp of the file to check</a>
+<span class="sourceLineNo">170</span><a id="line.170">     * @return whether the specified file has already been checked ok</a>
+<span class="sourceLineNo">171</span><a id="line.171">     */</a>
+<span class="sourceLineNo">172</span><a id="line.172">    public boolean isInCache(String uncheckedFileName, long timestamp) {</a>
+<span class="sourceLineNo">173</span><a id="line.173">        final String lastChecked = details.getProperty(uncheckedFileName);</a>
+<span class="sourceLineNo">174</span><a id="line.174">        return Objects.equals(lastChecked, Long.toString(timestamp));</a>
+<span class="sourceLineNo">175</span><a id="line.175">    }</a>
+<span class="sourceLineNo">176</span><a id="line.176"></a>
+<span class="sourceLineNo">177</span><a id="line.177">    /**</a>
+<span class="sourceLineNo">178</span><a id="line.178">     * Records that a file checked ok.</a>
+<span class="sourceLineNo">179</span><a id="line.179">     *</a>
+<span class="sourceLineNo">180</span><a id="line.180">     * @param checkedFileName name of the file that checked ok</a>
+<span class="sourceLineNo">181</span><a id="line.181">     * @param timestamp the timestamp of the file</a>
+<span class="sourceLineNo">182</span><a id="line.182">     */</a>
+<span class="sourceLineNo">183</span><a id="line.183">    public void put(String checkedFileName, long timestamp) {</a>
+<span class="sourceLineNo">184</span><a id="line.184">        details.setProperty(checkedFileName, Long.toString(timestamp));</a>
+<span class="sourceLineNo">185</span><a id="line.185">    }</a>
+<span class="sourceLineNo">186</span><a id="line.186"></a>
+<span class="sourceLineNo">187</span><a id="line.187">    /**</a>
+<span class="sourceLineNo">188</span><a id="line.188">     * Retrieves the hash of a specific file.</a>
+<span class="sourceLineNo">189</span><a id="line.189">     *</a>
+<span class="sourceLineNo">190</span><a id="line.190">     * @param name The name of the file to retrieve.</a>
+<span class="sourceLineNo">191</span><a id="line.191">     * @return The has of the file or {@code null}.</a>
+<span class="sourceLineNo">192</span><a id="line.192">     */</a>
+<span class="sourceLineNo">193</span><a id="line.193">    public String get(String name) {</a>
+<span class="sourceLineNo">194</span><a id="line.194">        return details.getProperty(name);</a>
+<span class="sourceLineNo">195</span><a id="line.195">    }</a>
+<span class="sourceLineNo">196</span><a id="line.196"></a>
+<span class="sourceLineNo">197</span><a id="line.197">    /**</a>
+<span class="sourceLineNo">198</span><a id="line.198">     * Removed a specific file from the cache.</a>
+<span class="sourceLineNo">199</span><a id="line.199">     *</a>
+<span class="sourceLineNo">200</span><a id="line.200">     * @param checkedFileName The name of the file to remove.</a>
+<span class="sourceLineNo">201</span><a id="line.201">     */</a>
+<span class="sourceLineNo">202</span><a id="line.202">    public void remove(String checkedFileName) {</a>
+<span class="sourceLineNo">203</span><a id="line.203">        details.remove(checkedFileName);</a>
+<span class="sourceLineNo">204</span><a id="line.204">    }</a>
+<span class="sourceLineNo">205</span><a id="line.205"></a>
+<span class="sourceLineNo">206</span><a id="line.206">    /**</a>
+<span class="sourceLineNo">207</span><a id="line.207">     * Calculates the hashcode for the serializable object based on its content.</a>
+<span class="sourceLineNo">208</span><a id="line.208">     *</a>
+<span class="sourceLineNo">209</span><a id="line.209">     * @param object serializable object.</a>
+<span class="sourceLineNo">210</span><a id="line.210">     * @return the hashcode for serializable object.</a>
+<span class="sourceLineNo">211</span><a id="line.211">     * @throws IllegalStateException when some unexpected happened.</a>
+<span class="sourceLineNo">212</span><a id="line.212">     */</a>
+<span class="sourceLineNo">213</span><a id="line.213">    private static String getHashCodeBasedOnObjectContent(Serializable object) {</a>
+<span class="sourceLineNo">214</span><a id="line.214">        try {</a>
+<span class="sourceLineNo">215</span><a id="line.215">            final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();</a>
+<span class="sourceLineNo">216</span><a id="line.216">            // in-memory serialization of Configuration</a>
+<span class="sourceLineNo">217</span><a id="line.217">            serialize(object, outputStream);</a>
+<span class="sourceLineNo">218</span><a id="line.218">            // Instead of hexEncoding outputStream.toByteArray() directly we</a>
+<span class="sourceLineNo">219</span><a id="line.219">            // use a message digest here to keep the length of the</a>
+<span class="sourceLineNo">220</span><a id="line.220">            // hashcode reasonable</a>
+<span class="sourceLineNo">221</span><a id="line.221"></a>
+<span class="sourceLineNo">222</span><a id="line.222">            final MessageDigest digest = MessageDigest.getInstance("SHA-1");</a>
+<span class="sourceLineNo">223</span><a id="line.223">            digest.update(outputStream.toByteArray());</a>
+<span class="sourceLineNo">224</span><a id="line.224"></a>
+<span class="sourceLineNo">225</span><a id="line.225">            return new BigInteger(1, digest.digest()).toString(BASE_16).toUpperCase(Locale.ROOT);</a>
+<span class="sourceLineNo">226</span><a id="line.226">        }</a>
+<span class="sourceLineNo">227</span><a id="line.227">        catch (final IOException | NoSuchAlgorithmException ex) {</a>
+<span class="sourceLineNo">228</span><a id="line.228">            // rethrow as unchecked exception</a>
+<span class="sourceLineNo">229</span><a id="line.229">            throw new IllegalStateException("Unable to calculate hashcode.", ex);</a>
+<span class="sourceLineNo">230</span><a id="line.230">        }</a>
+<span class="sourceLineNo">231</span><a id="line.231">    }</a>
+<span class="sourceLineNo">232</span><a id="line.232"></a>
+<span class="sourceLineNo">233</span><a id="line.233">    /**</a>
+<span class="sourceLineNo">234</span><a id="line.234">     * Serializes object to output stream.</a>
+<span class="sourceLineNo">235</span><a id="line.235">     *</a>
+<span class="sourceLineNo">236</span><a id="line.236">     * @param object object to be serialized</a>
+<span class="sourceLineNo">237</span><a id="line.237">     * @param outputStream serialization stream</a>
+<span class="sourceLineNo">238</span><a id="line.238">     * @throws IOException if an error occurs</a>
+<span class="sourceLineNo">239</span><a id="line.239">     */</a>
+<span class="sourceLineNo">240</span><a id="line.240">    private static void serialize(Serializable object,</a>
+<span class="sourceLineNo">241</span><a id="line.241">                                  OutputStream outputStream) throws IOException {</a>
+<span class="sourceLineNo">242</span><a id="line.242">        try (ObjectOutputStream oos = new ObjectOutputStream(outputStream)) {</a>
+<span class="sourceLineNo">243</span><a id="line.243">            oos.writeObject(object);</a>
+<span class="sourceLineNo">244</span><a id="line.244">        }</a>
+<span class="sourceLineNo">245</span><a id="line.245">    }</a>
+<span class="sourceLineNo">246</span><a id="line.246"></a>
+<span class="sourceLineNo">247</span><a id="line.247">    /**</a>
+<span class="sourceLineNo">248</span><a id="line.248">     * Puts external resources in cache.</a>
+<span class="sourceLineNo">249</span><a id="line.249">     * If at least one external resource changed, clears the cache.</a>
+<span class="sourceLineNo">250</span><a id="line.250">     *</a>
+<span class="sourceLineNo">251</span><a id="line.251">     * @param locations locations of external resources.</a>
+<span class="sourceLineNo">252</span><a id="line.252">     */</a>
+<span class="sourceLineNo">253</span><a id="line.253">    public void putExternalResources(Set&lt;String&gt; locations) {</a>
+<span class="sourceLineNo">254</span><a id="line.254">        final Set&lt;ExternalResource&gt; resources = loadExternalResources(locations);</a>
+<span class="sourceLineNo">255</span><a id="line.255">        if (areExternalResourcesChanged(resources)) {</a>
+<span class="sourceLineNo">256</span><a id="line.256">            reset();</a>
+<span class="sourceLineNo">257</span><a id="line.257">            fillCacheWithExternalResources(resources);</a>
+<span class="sourceLineNo">258</span><a id="line.258">        }</a>
+<span class="sourceLineNo">259</span><a id="line.259">    }</a>
+<span class="sourceLineNo">260</span><a id="line.260"></a>
+<span class="sourceLineNo">261</span><a id="line.261">    /**</a>
+<span class="sourceLineNo">262</span><a id="line.262">     * Loads a set of {@link ExternalResource} based on their locations.</a>
+<span class="sourceLineNo">263</span><a id="line.263">     *</a>
+<span class="sourceLineNo">264</span><a id="line.264">     * @param resourceLocations locations of external configuration resources.</a>
+<span class="sourceLineNo">265</span><a id="line.265">     * @return a set of {@link ExternalResource}.</a>
+<span class="sourceLineNo">266</span><a id="line.266">     */</a>
+<span class="sourceLineNo">267</span><a id="line.267">    private static Set&lt;ExternalResource&gt; loadExternalResources(Set&lt;String&gt; resourceLocations) {</a>
+<span class="sourceLineNo">268</span><a id="line.268">        final Set&lt;ExternalResource&gt; resources = new HashSet&lt;&gt;();</a>
+<span class="sourceLineNo">269</span><a id="line.269">        for (String location : resourceLocations) {</a>
+<span class="sourceLineNo">270</span><a id="line.270">            try {</a>
+<span class="sourceLineNo">271</span><a id="line.271">                final byte[] content = loadExternalResource(location);</a>
+<span class="sourceLineNo">272</span><a id="line.272">                final String contentHashSum = getHashCodeBasedOnObjectContent(content);</a>
+<span class="sourceLineNo">273</span><a id="line.273">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</a>
+<span class="sourceLineNo">274</span><a id="line.274">                        contentHashSum));</a>
+<span class="sourceLineNo">275</span><a id="line.275">            }</a>
+<span class="sourceLineNo">276</span><a id="line.276">            catch (CheckstyleException | IOException ex) {</a>
+<span class="sourceLineNo">277</span><a id="line.277">                // if exception happened (configuration resource was not found, connection is not</a>
+<span class="sourceLineNo">278</span><a id="line.278">                // available, resource is broken, etc.), we need to calculate hash sum based on</a>
+<span class="sourceLineNo">279</span><a id="line.279">                // exception object content in order to check whether problem is resolved later</a>
+<span class="sourceLineNo">280</span><a id="line.280">                // and/or the configuration is changed.</a>
+<span class="sourceLineNo">281</span><a id="line.281">                final String contentHashSum = getHashCodeBasedOnObjectContent(ex);</a>
+<span class="sourceLineNo">282</span><a id="line.282">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</a>
+<span class="sourceLineNo">283</span><a id="line.283">                        contentHashSum));</a>
+<span class="sourceLineNo">284</span><a id="line.284">            }</a>
+<span class="sourceLineNo">285</span><a id="line.285">        }</a>
+<span class="sourceLineNo">286</span><a id="line.286">        return resources;</a>
+<span class="sourceLineNo">287</span><a id="line.287">    }</a>
+<span class="sourceLineNo">288</span><a id="line.288"></a>
+<span class="sourceLineNo">289</span><a id="line.289">    /**</a>
+<span class="sourceLineNo">290</span><a id="line.290">     * Loads the content of external resource.</a>
+<span class="sourceLineNo">291</span><a id="line.291">     *</a>
+<span class="sourceLineNo">292</span><a id="line.292">     * @param location external resource location.</a>
+<span class="sourceLineNo">293</span><a id="line.293">     * @return array of bytes which represents the content of external resource in binary form.</a>
+<span class="sourceLineNo">294</span><a id="line.294">     * @throws IOException if error while loading occurs.</a>
+<span class="sourceLineNo">295</span><a id="line.295">     * @throws CheckstyleException if error while loading occurs.</a>
+<span class="sourceLineNo">296</span><a id="line.296">     */</a>
+<span class="sourceLineNo">297</span><a id="line.297">    private static byte[] loadExternalResource(String location)</a>
+<span class="sourceLineNo">298</span><a id="line.298">            throws IOException, CheckstyleException {</a>
+<span class="sourceLineNo">299</span><a id="line.299">        final URI uri = CommonUtil.getUriByFilename(location);</a>
+<span class="sourceLineNo">300</span><a id="line.300"></a>
+<span class="sourceLineNo">301</span><a id="line.301">        try (InputStream is = uri.toURL().openStream()) {</a>
+<span class="sourceLineNo">302</span><a id="line.302">            return toByteArray(is);</a>
+<span class="sourceLineNo">303</span><a id="line.303">        }</a>
+<span class="sourceLineNo">304</span><a id="line.304">    }</a>
+<span class="sourceLineNo">305</span><a id="line.305"></a>
+<span class="sourceLineNo">306</span><a id="line.306">    /**</a>
+<span class="sourceLineNo">307</span><a id="line.307">     * Reads all the contents of an input stream and returns it as a byte array.</a>
+<span class="sourceLineNo">308</span><a id="line.308">     *</a>
+<span class="sourceLineNo">309</span><a id="line.309">     * @param stream The input stream to read from.</a>
+<span class="sourceLineNo">310</span><a id="line.310">     * @return The resulting byte array of the stream.</a>
+<span class="sourceLineNo">311</span><a id="line.311">     * @throws IOException if there is an error reading the input stream.</a>
+<span class="sourceLineNo">312</span><a id="line.312">     */</a>
+<span class="sourceLineNo">313</span><a id="line.313">    private static byte[] toByteArray(InputStream stream) throws IOException {</a>
+<span class="sourceLineNo">314</span><a id="line.314">        final ByteArrayOutputStream content = new ByteArrayOutputStream();</a>
+<span class="sourceLineNo">315</span><a id="line.315"></a>
+<span class="sourceLineNo">316</span><a id="line.316">        while (true) {</a>
+<span class="sourceLineNo">317</span><a id="line.317">            final int size = stream.read(BUFFER);</a>
+<span class="sourceLineNo">318</span><a id="line.318">            if (size == -1) {</a>
+<span class="sourceLineNo">319</span><a id="line.319">                break;</a>
+<span class="sourceLineNo">320</span><a id="line.320">            }</a>
+<span class="sourceLineNo">321</span><a id="line.321"></a>
+<span class="sourceLineNo">322</span><a id="line.322">            content.write(BUFFER, 0, size);</a>
+<span class="sourceLineNo">323</span><a id="line.323">        }</a>
+<span class="sourceLineNo">324</span><a id="line.324"></a>
+<span class="sourceLineNo">325</span><a id="line.325">        return content.toByteArray();</a>
+<span class="sourceLineNo">326</span><a id="line.326">    }</a>
+<span class="sourceLineNo">327</span><a id="line.327"></a>
+<span class="sourceLineNo">328</span><a id="line.328">    /**</a>
+<span class="sourceLineNo">329</span><a id="line.329">     * Checks whether the contents of external configuration resources were changed.</a>
+<span class="sourceLineNo">330</span><a id="line.330">     *</a>
+<span class="sourceLineNo">331</span><a id="line.331">     * @param resources a set of {@link ExternalResource}.</a>
+<span class="sourceLineNo">332</span><a id="line.332">     * @return true if the contents of external configuration resources were changed.</a>
+<span class="sourceLineNo">333</span><a id="line.333">     */</a>
+<span class="sourceLineNo">334</span><a id="line.334">    private boolean areExternalResourcesChanged(Set&lt;ExternalResource&gt; resources) {</a>
+<span class="sourceLineNo">335</span><a id="line.335">        return resources.stream().anyMatch(this::isResourceChanged);</a>
+<span class="sourceLineNo">336</span><a id="line.336">    }</a>
+<span class="sourceLineNo">337</span><a id="line.337"></a>
+<span class="sourceLineNo">338</span><a id="line.338">    /**</a>
+<span class="sourceLineNo">339</span><a id="line.339">     * Checks whether the resource is changed.</a>
+<span class="sourceLineNo">340</span><a id="line.340">     *</a>
+<span class="sourceLineNo">341</span><a id="line.341">     * @param resource resource to check.</a>
+<span class="sourceLineNo">342</span><a id="line.342">     * @return true if resource is changed.</a>
+<span class="sourceLineNo">343</span><a id="line.343">     */</a>
+<span class="sourceLineNo">344</span><a id="line.344">    private boolean isResourceChanged(ExternalResource resource) {</a>
+<span class="sourceLineNo">345</span><a id="line.345">        boolean changed = false;</a>
+<span class="sourceLineNo">346</span><a id="line.346">        if (isResourceLocationInCache(resource.location)) {</a>
+<span class="sourceLineNo">347</span><a id="line.347">            final String contentHashSum = resource.contentHashSum;</a>
+<span class="sourceLineNo">348</span><a id="line.348">            final String cachedHashSum = details.getProperty(resource.location);</a>
+<span class="sourceLineNo">349</span><a id="line.349">            if (!cachedHashSum.equals(contentHashSum)) {</a>
+<span class="sourceLineNo">350</span><a id="line.350">                changed = true;</a>
+<span class="sourceLineNo">351</span><a id="line.351">            }</a>
+<span class="sourceLineNo">352</span><a id="line.352">        }</a>
+<span class="sourceLineNo">353</span><a id="line.353">        else {</a>
+<span class="sourceLineNo">354</span><a id="line.354">            changed = true;</a>
+<span class="sourceLineNo">355</span><a id="line.355">        }</a>
+<span class="sourceLineNo">356</span><a id="line.356">        return changed;</a>
+<span class="sourceLineNo">357</span><a id="line.357">    }</a>
+<span class="sourceLineNo">358</span><a id="line.358"></a>
+<span class="sourceLineNo">359</span><a id="line.359">    /**</a>
+<span class="sourceLineNo">360</span><a id="line.360">     * Fills cache with a set of {@link ExternalResource}.</a>
+<span class="sourceLineNo">361</span><a id="line.361">     * If external resource from the set is already in cache, it will be skipped.</a>
+<span class="sourceLineNo">362</span><a id="line.362">     *</a>
+<span class="sourceLineNo">363</span><a id="line.363">     * @param externalResources a set of {@link ExternalResource}.</a>
+<span class="sourceLineNo">364</span><a id="line.364">     */</a>
+<span class="sourceLineNo">365</span><a id="line.365">    private void fillCacheWithExternalResources(Set&lt;ExternalResource&gt; externalResources) {</a>
+<span class="sourceLineNo">366</span><a id="line.366">        externalResources</a>
+<span class="sourceLineNo">367</span><a id="line.367">            .forEach(resource -&gt; details.setProperty(resource.location, resource.contentHashSum));</a>
+<span class="sourceLineNo">368</span><a id="line.368">    }</a>
+<span class="sourceLineNo">369</span><a id="line.369"></a>
+<span class="sourceLineNo">370</span><a id="line.370">    /**</a>
+<span class="sourceLineNo">371</span><a id="line.371">     * Checks whether resource location is in cache.</a>
+<span class="sourceLineNo">372</span><a id="line.372">     *</a>
+<span class="sourceLineNo">373</span><a id="line.373">     * @param location resource location.</a>
+<span class="sourceLineNo">374</span><a id="line.374">     * @return true if resource location is in cache.</a>
+<span class="sourceLineNo">375</span><a id="line.375">     */</a>
+<span class="sourceLineNo">376</span><a id="line.376">    private boolean isResourceLocationInCache(String location) {</a>
+<span class="sourceLineNo">377</span><a id="line.377">        final String cachedHashSum = details.getProperty(location);</a>
+<span class="sourceLineNo">378</span><a id="line.378">        return cachedHashSum != null;</a>
+<span class="sourceLineNo">379</span><a id="line.379">    }</a>
+<span class="sourceLineNo">380</span><a id="line.380"></a>
+<span class="sourceLineNo">381</span><a id="line.381">    /**</a>
+<span class="sourceLineNo">382</span><a id="line.382">     * Class which represents external resource.</a>
+<span class="sourceLineNo">383</span><a id="line.383">     */</a>
+<span class="sourceLineNo">384</span><a id="line.384">    private static final class ExternalResource {</a>
+<span class="sourceLineNo">385</span><a id="line.385"></a>
+<span class="sourceLineNo">386</span><a id="line.386">        /** Location of resource. */</a>
+<span class="sourceLineNo">387</span><a id="line.387">        private final String location;</a>
+<span class="sourceLineNo">388</span><a id="line.388">        /** Hash sum which is calculated based on resource content. */</a>
+<span class="sourceLineNo">389</span><a id="line.389">        private final String contentHashSum;</a>
+<span class="sourceLineNo">390</span><a id="line.390"></a>
+<span class="sourceLineNo">391</span><a id="line.391">        /**</a>
+<span class="sourceLineNo">392</span><a id="line.392">         * Creates an instance.</a>
+<span class="sourceLineNo">393</span><a id="line.393">         *</a>
+<span class="sourceLineNo">394</span><a id="line.394">         * @param location resource location.</a>
+<span class="sourceLineNo">395</span><a id="line.395">         * @param contentHashSum content hash sum.</a>
+<span class="sourceLineNo">396</span><a id="line.396">         */</a>
+<span class="sourceLineNo">397</span><a id="line.397">        private ExternalResource(String location, String contentHashSum) {</a>
+<span class="sourceLineNo">398</span><a id="line.398">            this.location = location;</a>
+<span class="sourceLineNo">399</span><a id="line.399">            this.contentHashSum = contentHashSum;</a>
+<span class="sourceLineNo">400</span><a id="line.400">        }</a>
 <span class="sourceLineNo">401</span><a id="line.401"></a>
-<span class="sourceLineNo">402</span><a id="line.402">}</a>
+<span class="sourceLineNo">402</span><a id="line.402">    }</a>
+<span class="sourceLineNo">403</span><a id="line.403"></a>
+<span class="sourceLineNo">404</span><a id="line.404">}</a>
 
 
 
