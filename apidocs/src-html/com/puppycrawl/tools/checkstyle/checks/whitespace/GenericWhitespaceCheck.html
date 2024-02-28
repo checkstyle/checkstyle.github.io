@@ -228,7 +228,7 @@
 <span class="sourceLineNo">219</span><a id="line.219">     */</a>
 <span class="sourceLineNo">220</span><a id="line.220">    private void processSingleGeneric(DetailAST ast, int[] line, int after) {</a>
 <span class="sourceLineNo">221</span><a id="line.221">        final char charAfter = Character.toChars(line[after])[0];</a>
-<span class="sourceLineNo">222</span><a id="line.222">        if (isGenericBeforeMethod(ast) || isGenericBeforeCtor(ast)) {</a>
+<span class="sourceLineNo">222</span><a id="line.222">        if (isGenericBeforeMethod(ast) || isGenericBeforeCtorInvocation(ast)) {</a>
 <span class="sourceLineNo">223</span><a id="line.223">            if (Character.isWhitespace(charAfter)) {</a>
 <span class="sourceLineNo">224</span><a id="line.224">                log(ast, MSG_WS_FOLLOWED, CLOSE_ANGLE_BRACKET);</a>
 <span class="sourceLineNo">225</span><a id="line.225">            }</a>
@@ -239,128 +239,154 @@
 <span class="sourceLineNo">230</span><a id="line.230">    }</a>
 <span class="sourceLineNo">231</span><a id="line.231"></a>
 <span class="sourceLineNo">232</span><a id="line.232">    /**</a>
-<span class="sourceLineNo">233</span><a id="line.233">     * Checks if generic is before constructor invocation.</a>
-<span class="sourceLineNo">234</span><a id="line.234">     *</a>
-<span class="sourceLineNo">235</span><a id="line.235">     * @param ast ast</a>
-<span class="sourceLineNo">236</span><a id="line.236">     * @return true if generic before a constructor invocation</a>
-<span class="sourceLineNo">237</span><a id="line.237">     */</a>
-<span class="sourceLineNo">238</span><a id="line.238">    private static boolean isGenericBeforeCtor(DetailAST ast) {</a>
-<span class="sourceLineNo">239</span><a id="line.239">        final DetailAST parent = ast.getParent();</a>
-<span class="sourceLineNo">240</span><a id="line.240">        return parent.getParent().getType() == TokenTypes.LITERAL_NEW</a>
-<span class="sourceLineNo">241</span><a id="line.241">                &amp;&amp; (parent.getNextSibling().getType() == TokenTypes.IDENT</a>
-<span class="sourceLineNo">242</span><a id="line.242">                    || parent.getNextSibling().getType() == TokenTypes.DOT);</a>
-<span class="sourceLineNo">243</span><a id="line.243">    }</a>
-<span class="sourceLineNo">244</span><a id="line.244"></a>
-<span class="sourceLineNo">245</span><a id="line.245">    /**</a>
-<span class="sourceLineNo">246</span><a id="line.246">     * Is generic before method reference.</a>
-<span class="sourceLineNo">247</span><a id="line.247">     *</a>
-<span class="sourceLineNo">248</span><a id="line.248">     * @param ast ast</a>
-<span class="sourceLineNo">249</span><a id="line.249">     * @return true if generic before a method ref</a>
-<span class="sourceLineNo">250</span><a id="line.250">     */</a>
-<span class="sourceLineNo">251</span><a id="line.251">    private static boolean isGenericBeforeMethod(DetailAST ast) {</a>
-<span class="sourceLineNo">252</span><a id="line.252">        return ast.getParent().getParent().getParent().getType() == TokenTypes.METHOD_CALL</a>
-<span class="sourceLineNo">253</span><a id="line.253">                || isAfterMethodReference(ast);</a>
-<span class="sourceLineNo">254</span><a id="line.254">    }</a>
-<span class="sourceLineNo">255</span><a id="line.255"></a>
-<span class="sourceLineNo">256</span><a id="line.256">    /**</a>
-<span class="sourceLineNo">257</span><a id="line.257">     * Checks if current generic end ('&amp;gt;') is located after</a>
-<span class="sourceLineNo">258</span><a id="line.258">     * {@link TokenTypes#METHOD_REF method reference operator}.</a>
-<span class="sourceLineNo">259</span><a id="line.259">     *</a>
-<span class="sourceLineNo">260</span><a id="line.260">     * @param genericEnd {@link TokenTypes#GENERIC_END}</a>
-<span class="sourceLineNo">261</span><a id="line.261">     * @return true if '&amp;gt;' follows after method reference.</a>
-<span class="sourceLineNo">262</span><a id="line.262">     */</a>
-<span class="sourceLineNo">263</span><a id="line.263">    private static boolean isAfterMethodReference(DetailAST genericEnd) {</a>
-<span class="sourceLineNo">264</span><a id="line.264">        return genericEnd.getParent().getParent().getType() == TokenTypes.METHOD_REF;</a>
+<span class="sourceLineNo">233</span><a id="line.233">     * Checks if generic is before constructor invocation. Identifies two cases:</a>
+<span class="sourceLineNo">234</span><a id="line.234">     * &lt;ol&gt;</a>
+<span class="sourceLineNo">235</span><a id="line.235">     *     &lt;li&gt;{@code new ArrayList&lt;&gt;();}&lt;/li&gt;</a>
+<span class="sourceLineNo">236</span><a id="line.236">     *     &lt;li&gt;{@code new Outer.Inner&lt;&gt;();}&lt;/li&gt;</a>
+<span class="sourceLineNo">237</span><a id="line.237">     * &lt;/ol&gt;</a>
+<span class="sourceLineNo">238</span><a id="line.238">     *</a>
+<span class="sourceLineNo">239</span><a id="line.239">     * @param ast ast</a>
+<span class="sourceLineNo">240</span><a id="line.240">     * @return true if generic is before constructor invocation</a>
+<span class="sourceLineNo">241</span><a id="line.241">     */</a>
+<span class="sourceLineNo">242</span><a id="line.242">    private static boolean isGenericBeforeCtorInvocation(DetailAST ast) {</a>
+<span class="sourceLineNo">243</span><a id="line.243">        final DetailAST grandParent = ast.getParent().getParent();</a>
+<span class="sourceLineNo">244</span><a id="line.244">        return grandParent.getType() == TokenTypes.LITERAL_NEW</a>
+<span class="sourceLineNo">245</span><a id="line.245">                || grandParent.getParent().getType() == TokenTypes.LITERAL_NEW;</a>
+<span class="sourceLineNo">246</span><a id="line.246">    }</a>
+<span class="sourceLineNo">247</span><a id="line.247"></a>
+<span class="sourceLineNo">248</span><a id="line.248">    /**</a>
+<span class="sourceLineNo">249</span><a id="line.249">     * Checks if generic is after {@code LITERAL_NEW}. Identifies three cases:</a>
+<span class="sourceLineNo">250</span><a id="line.250">     * &lt;ol&gt;</a>
+<span class="sourceLineNo">251</span><a id="line.251">     *     &lt;li&gt;{@code new &lt;String&gt;Object();}&lt;/li&gt;</a>
+<span class="sourceLineNo">252</span><a id="line.252">     *     &lt;li&gt;{@code new &lt;String&gt;Outer.Inner();}&lt;/li&gt;</a>
+<span class="sourceLineNo">253</span><a id="line.253">     *     &lt;li&gt;{@code new &lt;@A Outer&gt;@B Inner();}&lt;/li&gt;</a>
+<span class="sourceLineNo">254</span><a id="line.254">     * &lt;/ol&gt;</a>
+<span class="sourceLineNo">255</span><a id="line.255">     *</a>
+<span class="sourceLineNo">256</span><a id="line.256">     * @param ast ast</a>
+<span class="sourceLineNo">257</span><a id="line.257">     * @return true if generic after {@code LITERAL_NEW}</a>
+<span class="sourceLineNo">258</span><a id="line.258">     */</a>
+<span class="sourceLineNo">259</span><a id="line.259">    private static boolean isGenericAfterNew(DetailAST ast) {</a>
+<span class="sourceLineNo">260</span><a id="line.260">        final DetailAST parent = ast.getParent();</a>
+<span class="sourceLineNo">261</span><a id="line.261">        return parent.getParent().getType() == TokenTypes.LITERAL_NEW</a>
+<span class="sourceLineNo">262</span><a id="line.262">                &amp;&amp; (parent.getNextSibling().getType() == TokenTypes.IDENT</a>
+<span class="sourceLineNo">263</span><a id="line.263">                    || parent.getNextSibling().getType() == TokenTypes.DOT</a>
+<span class="sourceLineNo">264</span><a id="line.264">                    || parent.getNextSibling().getType() == TokenTypes.ANNOTATIONS);</a>
 <span class="sourceLineNo">265</span><a id="line.265">    }</a>
 <span class="sourceLineNo">266</span><a id="line.266"></a>
 <span class="sourceLineNo">267</span><a id="line.267">    /**</a>
-<span class="sourceLineNo">268</span><a id="line.268">     * Checks the token for the start of Generics.</a>
+<span class="sourceLineNo">268</span><a id="line.268">     * Is generic before method reference.</a>
 <span class="sourceLineNo">269</span><a id="line.269">     *</a>
-<span class="sourceLineNo">270</span><a id="line.270">     * @param ast the token to check</a>
-<span class="sourceLineNo">271</span><a id="line.271">     */</a>
-<span class="sourceLineNo">272</span><a id="line.272">    private void processStart(DetailAST ast) {</a>
-<span class="sourceLineNo">273</span><a id="line.273">        final int[] line = getLineCodePoints(ast.getLineNo() - 1);</a>
-<span class="sourceLineNo">274</span><a id="line.274">        final int before = ast.getColumnNo() - 1;</a>
-<span class="sourceLineNo">275</span><a id="line.275">        final int after = ast.getColumnNo() + 1;</a>
-<span class="sourceLineNo">276</span><a id="line.276"></a>
-<span class="sourceLineNo">277</span><a id="line.277">        // Need to handle two cases as in:</a>
-<span class="sourceLineNo">278</span><a id="line.278">        //</a>
-<span class="sourceLineNo">279</span><a id="line.279">        //   public static &lt;T&gt; Callable&lt;T&gt; callable(Runnable task, T result)</a>
-<span class="sourceLineNo">280</span><a id="line.280">        //                 ^           ^</a>
-<span class="sourceLineNo">281</span><a id="line.281">        //      ws reqd ---+           +--- whitespace NOT required</a>
-<span class="sourceLineNo">282</span><a id="line.282">        //</a>
-<span class="sourceLineNo">283</span><a id="line.283">        if (before &gt;= 0) {</a>
-<span class="sourceLineNo">284</span><a id="line.284">            // Detect if the first case</a>
-<span class="sourceLineNo">285</span><a id="line.285">            final DetailAST parent = ast.getParent();</a>
-<span class="sourceLineNo">286</span><a id="line.286">            final DetailAST grandparent = parent.getParent();</a>
-<span class="sourceLineNo">287</span><a id="line.287">            if (grandparent.getType() == TokenTypes.CTOR_DEF</a>
-<span class="sourceLineNo">288</span><a id="line.288">                    || grandparent.getType() == TokenTypes.METHOD_DEF</a>
-<span class="sourceLineNo">289</span><a id="line.289">                    || isGenericBeforeCtor(ast)) {</a>
-<span class="sourceLineNo">290</span><a id="line.290">                // Require whitespace</a>
-<span class="sourceLineNo">291</span><a id="line.291">                if (!CommonUtil.isCodePointWhitespace(line, before)) {</a>
-<span class="sourceLineNo">292</span><a id="line.292">                    log(ast, MSG_WS_NOT_PRECEDED, OPEN_ANGLE_BRACKET);</a>
-<span class="sourceLineNo">293</span><a id="line.293">                }</a>
-<span class="sourceLineNo">294</span><a id="line.294">            }</a>
-<span class="sourceLineNo">295</span><a id="line.295">            // Whitespace not required</a>
-<span class="sourceLineNo">296</span><a id="line.296">            else if (CommonUtil.isCodePointWhitespace(line, before)</a>
-<span class="sourceLineNo">297</span><a id="line.297">                &amp;&amp; !containsWhitespaceBefore(before, line)) {</a>
-<span class="sourceLineNo">298</span><a id="line.298">                log(ast, MSG_WS_PRECEDED, OPEN_ANGLE_BRACKET);</a>
-<span class="sourceLineNo">299</span><a id="line.299">            }</a>
-<span class="sourceLineNo">300</span><a id="line.300">        }</a>
-<span class="sourceLineNo">301</span><a id="line.301"></a>
-<span class="sourceLineNo">302</span><a id="line.302">        if (after &lt; line.length</a>
-<span class="sourceLineNo">303</span><a id="line.303">                &amp;&amp; CommonUtil.isCodePointWhitespace(line, after)) {</a>
-<span class="sourceLineNo">304</span><a id="line.304">            log(ast, MSG_WS_FOLLOWED, OPEN_ANGLE_BRACKET);</a>
-<span class="sourceLineNo">305</span><a id="line.305">        }</a>
-<span class="sourceLineNo">306</span><a id="line.306">    }</a>
-<span class="sourceLineNo">307</span><a id="line.307"></a>
-<span class="sourceLineNo">308</span><a id="line.308">    /**</a>
-<span class="sourceLineNo">309</span><a id="line.309">     * Returns whether the specified string contains only whitespace between</a>
-<span class="sourceLineNo">310</span><a id="line.310">     * specified indices.</a>
-<span class="sourceLineNo">311</span><a id="line.311">     *</a>
-<span class="sourceLineNo">312</span><a id="line.312">     * @param fromIndex the index to start the search from. Inclusive</a>
-<span class="sourceLineNo">313</span><a id="line.313">     * @param toIndex the index to finish the search. Exclusive</a>
-<span class="sourceLineNo">314</span><a id="line.314">     * @param line the unicode code points array of line to check</a>
-<span class="sourceLineNo">315</span><a id="line.315">     * @return whether there are only whitespaces (or nothing)</a>
-<span class="sourceLineNo">316</span><a id="line.316">     */</a>
-<span class="sourceLineNo">317</span><a id="line.317">    private static boolean containsWhitespaceBetween(int fromIndex, int toIndex, int... line) {</a>
-<span class="sourceLineNo">318</span><a id="line.318">        boolean result = true;</a>
-<span class="sourceLineNo">319</span><a id="line.319">        for (int i = fromIndex; i &lt; toIndex; i++) {</a>
-<span class="sourceLineNo">320</span><a id="line.320">            if (!CommonUtil.isCodePointWhitespace(line, i)) {</a>
-<span class="sourceLineNo">321</span><a id="line.321">                result = false;</a>
-<span class="sourceLineNo">322</span><a id="line.322">                break;</a>
-<span class="sourceLineNo">323</span><a id="line.323">            }</a>
-<span class="sourceLineNo">324</span><a id="line.324">        }</a>
-<span class="sourceLineNo">325</span><a id="line.325">        return result;</a>
-<span class="sourceLineNo">326</span><a id="line.326">    }</a>
+<span class="sourceLineNo">270</span><a id="line.270">     * @param ast ast</a>
+<span class="sourceLineNo">271</span><a id="line.271">     * @return true if generic before a method ref</a>
+<span class="sourceLineNo">272</span><a id="line.272">     */</a>
+<span class="sourceLineNo">273</span><a id="line.273">    private static boolean isGenericBeforeMethod(DetailAST ast) {</a>
+<span class="sourceLineNo">274</span><a id="line.274">        return ast.getParent().getParent().getParent().getType() == TokenTypes.METHOD_CALL</a>
+<span class="sourceLineNo">275</span><a id="line.275">                || isAfterMethodReference(ast);</a>
+<span class="sourceLineNo">276</span><a id="line.276">    }</a>
+<span class="sourceLineNo">277</span><a id="line.277"></a>
+<span class="sourceLineNo">278</span><a id="line.278">    /**</a>
+<span class="sourceLineNo">279</span><a id="line.279">     * Checks if current generic end ('&amp;gt;') is located after</a>
+<span class="sourceLineNo">280</span><a id="line.280">     * {@link TokenTypes#METHOD_REF method reference operator}.</a>
+<span class="sourceLineNo">281</span><a id="line.281">     *</a>
+<span class="sourceLineNo">282</span><a id="line.282">     * @param genericEnd {@link TokenTypes#GENERIC_END}</a>
+<span class="sourceLineNo">283</span><a id="line.283">     * @return true if '&amp;gt;' follows after method reference.</a>
+<span class="sourceLineNo">284</span><a id="line.284">     */</a>
+<span class="sourceLineNo">285</span><a id="line.285">    private static boolean isAfterMethodReference(DetailAST genericEnd) {</a>
+<span class="sourceLineNo">286</span><a id="line.286">        return genericEnd.getParent().getParent().getType() == TokenTypes.METHOD_REF;</a>
+<span class="sourceLineNo">287</span><a id="line.287">    }</a>
+<span class="sourceLineNo">288</span><a id="line.288"></a>
+<span class="sourceLineNo">289</span><a id="line.289">    /**</a>
+<span class="sourceLineNo">290</span><a id="line.290">     * Checks the token for the start of Generics.</a>
+<span class="sourceLineNo">291</span><a id="line.291">     *</a>
+<span class="sourceLineNo">292</span><a id="line.292">     * @param ast the token to check</a>
+<span class="sourceLineNo">293</span><a id="line.293">     */</a>
+<span class="sourceLineNo">294</span><a id="line.294">    private void processStart(DetailAST ast) {</a>
+<span class="sourceLineNo">295</span><a id="line.295">        final int[] line = getLineCodePoints(ast.getLineNo() - 1);</a>
+<span class="sourceLineNo">296</span><a id="line.296">        final int before = ast.getColumnNo() - 1;</a>
+<span class="sourceLineNo">297</span><a id="line.297">        final int after = ast.getColumnNo() + 1;</a>
+<span class="sourceLineNo">298</span><a id="line.298"></a>
+<span class="sourceLineNo">299</span><a id="line.299">        // Checks if generic needs to be preceded by a whitespace or not.</a>
+<span class="sourceLineNo">300</span><a id="line.300">        // Handles 3 cases as in:</a>
+<span class="sourceLineNo">301</span><a id="line.301">        //</a>
+<span class="sourceLineNo">302</span><a id="line.302">        //   public static &lt;T&gt; Callable&lt;T&gt; callable(Runnable task, T result)</a>
+<span class="sourceLineNo">303</span><a id="line.303">        //                 ^           ^</a>
+<span class="sourceLineNo">304</span><a id="line.304">        //   1. ws reqd ---+        2. +--- whitespace NOT required</a>
+<span class="sourceLineNo">305</span><a id="line.305">        //</a>
+<span class="sourceLineNo">306</span><a id="line.306">        //   new &lt;String&gt;Object()</a>
+<span class="sourceLineNo">307</span><a id="line.307">        //       ^</a>
+<span class="sourceLineNo">308</span><a id="line.308">        //    3. +--- ws required</a>
+<span class="sourceLineNo">309</span><a id="line.309">        if (before &gt;= 0) {</a>
+<span class="sourceLineNo">310</span><a id="line.310">            final DetailAST parent = ast.getParent();</a>
+<span class="sourceLineNo">311</span><a id="line.311">            final DetailAST grandparent = parent.getParent();</a>
+<span class="sourceLineNo">312</span><a id="line.312">            // cases (1, 3) where whitespace is required:</a>
+<span class="sourceLineNo">313</span><a id="line.313">            if (grandparent.getType() == TokenTypes.CTOR_DEF</a>
+<span class="sourceLineNo">314</span><a id="line.314">                    || grandparent.getType() == TokenTypes.METHOD_DEF</a>
+<span class="sourceLineNo">315</span><a id="line.315">                    || isGenericAfterNew(ast)) {</a>
+<span class="sourceLineNo">316</span><a id="line.316"></a>
+<span class="sourceLineNo">317</span><a id="line.317">                if (!CommonUtil.isCodePointWhitespace(line, before)) {</a>
+<span class="sourceLineNo">318</span><a id="line.318">                    log(ast, MSG_WS_NOT_PRECEDED, OPEN_ANGLE_BRACKET);</a>
+<span class="sourceLineNo">319</span><a id="line.319">                }</a>
+<span class="sourceLineNo">320</span><a id="line.320">            }</a>
+<span class="sourceLineNo">321</span><a id="line.321">            // case 2 where whitespace is not required:</a>
+<span class="sourceLineNo">322</span><a id="line.322">            else if (CommonUtil.isCodePointWhitespace(line, before)</a>
+<span class="sourceLineNo">323</span><a id="line.323">                &amp;&amp; !containsWhitespaceBefore(before, line)) {</a>
+<span class="sourceLineNo">324</span><a id="line.324">                log(ast, MSG_WS_PRECEDED, OPEN_ANGLE_BRACKET);</a>
+<span class="sourceLineNo">325</span><a id="line.325">            }</a>
+<span class="sourceLineNo">326</span><a id="line.326">        }</a>
 <span class="sourceLineNo">327</span><a id="line.327"></a>
-<span class="sourceLineNo">328</span><a id="line.328">    /**</a>
-<span class="sourceLineNo">329</span><a id="line.329">     * Returns whether the specified string contains only whitespace up to specified index.</a>
-<span class="sourceLineNo">330</span><a id="line.330">     *</a>
-<span class="sourceLineNo">331</span><a id="line.331">     * @param before the index to finish the search. Exclusive</a>
-<span class="sourceLineNo">332</span><a id="line.332">     * @param line   the unicode code points array of line to check</a>
-<span class="sourceLineNo">333</span><a id="line.333">     * @return {@code true} if there are only whitespaces,</a>
-<span class="sourceLineNo">334</span><a id="line.334">     *     false if there is nothing before or some other characters</a>
-<span class="sourceLineNo">335</span><a id="line.335">     */</a>
-<span class="sourceLineNo">336</span><a id="line.336">    private static boolean containsWhitespaceBefore(int before, int... line) {</a>
-<span class="sourceLineNo">337</span><a id="line.337">        return before != 0 &amp;&amp; CodePointUtil.hasWhitespaceBefore(before, line);</a>
-<span class="sourceLineNo">338</span><a id="line.338">    }</a>
-<span class="sourceLineNo">339</span><a id="line.339"></a>
-<span class="sourceLineNo">340</span><a id="line.340">    /**</a>
-<span class="sourceLineNo">341</span><a id="line.341">     * Checks whether given character is valid to be right after generic ends.</a>
-<span class="sourceLineNo">342</span><a id="line.342">     *</a>
-<span class="sourceLineNo">343</span><a id="line.343">     * @param charAfter character to check</a>
-<span class="sourceLineNo">344</span><a id="line.344">     * @return checks if given character is valid</a>
-<span class="sourceLineNo">345</span><a id="line.345">     */</a>
-<span class="sourceLineNo">346</span><a id="line.346">    private static boolean isCharacterValidAfterGenericEnd(char charAfter) {</a>
-<span class="sourceLineNo">347</span><a id="line.347">        return charAfter == '(' || charAfter == ')'</a>
-<span class="sourceLineNo">348</span><a id="line.348">            || charAfter == ',' || charAfter == '['</a>
-<span class="sourceLineNo">349</span><a id="line.349">            || charAfter == '.' || charAfter == ':'</a>
-<span class="sourceLineNo">350</span><a id="line.350">            || charAfter == ';'</a>
-<span class="sourceLineNo">351</span><a id="line.351">            || Character.isWhitespace(charAfter);</a>
+<span class="sourceLineNo">328</span><a id="line.328">        if (after &lt; line.length</a>
+<span class="sourceLineNo">329</span><a id="line.329">                &amp;&amp; CommonUtil.isCodePointWhitespace(line, after)) {</a>
+<span class="sourceLineNo">330</span><a id="line.330">            log(ast, MSG_WS_FOLLOWED, OPEN_ANGLE_BRACKET);</a>
+<span class="sourceLineNo">331</span><a id="line.331">        }</a>
+<span class="sourceLineNo">332</span><a id="line.332">    }</a>
+<span class="sourceLineNo">333</span><a id="line.333"></a>
+<span class="sourceLineNo">334</span><a id="line.334">    /**</a>
+<span class="sourceLineNo">335</span><a id="line.335">     * Returns whether the specified string contains only whitespace between</a>
+<span class="sourceLineNo">336</span><a id="line.336">     * specified indices.</a>
+<span class="sourceLineNo">337</span><a id="line.337">     *</a>
+<span class="sourceLineNo">338</span><a id="line.338">     * @param fromIndex the index to start the search from. Inclusive</a>
+<span class="sourceLineNo">339</span><a id="line.339">     * @param toIndex the index to finish the search. Exclusive</a>
+<span class="sourceLineNo">340</span><a id="line.340">     * @param line the unicode code points array of line to check</a>
+<span class="sourceLineNo">341</span><a id="line.341">     * @return whether there are only whitespaces (or nothing)</a>
+<span class="sourceLineNo">342</span><a id="line.342">     */</a>
+<span class="sourceLineNo">343</span><a id="line.343">    private static boolean containsWhitespaceBetween(int fromIndex, int toIndex, int... line) {</a>
+<span class="sourceLineNo">344</span><a id="line.344">        boolean result = true;</a>
+<span class="sourceLineNo">345</span><a id="line.345">        for (int i = fromIndex; i &lt; toIndex; i++) {</a>
+<span class="sourceLineNo">346</span><a id="line.346">            if (!CommonUtil.isCodePointWhitespace(line, i)) {</a>
+<span class="sourceLineNo">347</span><a id="line.347">                result = false;</a>
+<span class="sourceLineNo">348</span><a id="line.348">                break;</a>
+<span class="sourceLineNo">349</span><a id="line.349">            }</a>
+<span class="sourceLineNo">350</span><a id="line.350">        }</a>
+<span class="sourceLineNo">351</span><a id="line.351">        return result;</a>
 <span class="sourceLineNo">352</span><a id="line.352">    }</a>
 <span class="sourceLineNo">353</span><a id="line.353"></a>
-<span class="sourceLineNo">354</span><a id="line.354">}</a>
+<span class="sourceLineNo">354</span><a id="line.354">    /**</a>
+<span class="sourceLineNo">355</span><a id="line.355">     * Returns whether the specified string contains only whitespace up to specified index.</a>
+<span class="sourceLineNo">356</span><a id="line.356">     *</a>
+<span class="sourceLineNo">357</span><a id="line.357">     * @param before the index to finish the search. Exclusive</a>
+<span class="sourceLineNo">358</span><a id="line.358">     * @param line   the unicode code points array of line to check</a>
+<span class="sourceLineNo">359</span><a id="line.359">     * @return {@code true} if there are only whitespaces,</a>
+<span class="sourceLineNo">360</span><a id="line.360">     *     false if there is nothing before or some other characters</a>
+<span class="sourceLineNo">361</span><a id="line.361">     */</a>
+<span class="sourceLineNo">362</span><a id="line.362">    private static boolean containsWhitespaceBefore(int before, int... line) {</a>
+<span class="sourceLineNo">363</span><a id="line.363">        return before != 0 &amp;&amp; CodePointUtil.hasWhitespaceBefore(before, line);</a>
+<span class="sourceLineNo">364</span><a id="line.364">    }</a>
+<span class="sourceLineNo">365</span><a id="line.365"></a>
+<span class="sourceLineNo">366</span><a id="line.366">    /**</a>
+<span class="sourceLineNo">367</span><a id="line.367">     * Checks whether given character is valid to be right after generic ends.</a>
+<span class="sourceLineNo">368</span><a id="line.368">     *</a>
+<span class="sourceLineNo">369</span><a id="line.369">     * @param charAfter character to check</a>
+<span class="sourceLineNo">370</span><a id="line.370">     * @return checks if given character is valid</a>
+<span class="sourceLineNo">371</span><a id="line.371">     */</a>
+<span class="sourceLineNo">372</span><a id="line.372">    private static boolean isCharacterValidAfterGenericEnd(char charAfter) {</a>
+<span class="sourceLineNo">373</span><a id="line.373">        return charAfter == '(' || charAfter == ')'</a>
+<span class="sourceLineNo">374</span><a id="line.374">            || charAfter == ',' || charAfter == '['</a>
+<span class="sourceLineNo">375</span><a id="line.375">            || charAfter == '.' || charAfter == ':'</a>
+<span class="sourceLineNo">376</span><a id="line.376">            || charAfter == ';'</a>
+<span class="sourceLineNo">377</span><a id="line.377">            || Character.isWhitespace(charAfter);</a>
+<span class="sourceLineNo">378</span><a id="line.378">    }</a>
+<span class="sourceLineNo">379</span><a id="line.379"></a>
+<span class="sourceLineNo">380</span><a id="line.380">}</a>
 
 
 
