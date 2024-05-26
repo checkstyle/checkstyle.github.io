@@ -165,342 +165,340 @@
 <span class="sourceLineNo">156</span><a id="line.156">     *</a>
 <span class="sourceLineNo">157</span><a id="line.157">     * @param from array representing regular expressions of classes to ignore.</a>
 <span class="sourceLineNo">158</span><a id="line.158">     */</a>
-<span class="sourceLineNo">159</span><a id="line.159">    public void setExcludeClassesRegexps(String... from) {</a>
-<span class="sourceLineNo">160</span><a id="line.160">        Arrays.stream(from)</a>
-<span class="sourceLineNo">161</span><a id="line.161">                .map(CommonUtil::createPattern)</a>
-<span class="sourceLineNo">162</span><a id="line.162">                .forEach(excludeClassesRegexps::add);</a>
-<span class="sourceLineNo">163</span><a id="line.163">    }</a>
-<span class="sourceLineNo">164</span><a id="line.164"></a>
-<span class="sourceLineNo">165</span><a id="line.165">    /**</a>
-<span class="sourceLineNo">166</span><a id="line.166">     * Setter to specify user-configured packages to ignore.</a>
-<span class="sourceLineNo">167</span><a id="line.167">     *</a>
-<span class="sourceLineNo">168</span><a id="line.168">     * @param excludedPackages packages to ignore.</a>
-<span class="sourceLineNo">169</span><a id="line.169">     * @throws IllegalArgumentException if there are invalid identifiers among the packages.</a>
-<span class="sourceLineNo">170</span><a id="line.170">     */</a>
-<span class="sourceLineNo">171</span><a id="line.171">    public final void setExcludedPackages(String... excludedPackages) {</a>
-<span class="sourceLineNo">172</span><a id="line.172">        final List&lt;String&gt; invalidIdentifiers = Arrays.stream(excludedPackages)</a>
-<span class="sourceLineNo">173</span><a id="line.173">            .filter(Predicate.not(CommonUtil::isName))</a>
-<span class="sourceLineNo">174</span><a id="line.174">            .collect(Collectors.toUnmodifiableList());</a>
-<span class="sourceLineNo">175</span><a id="line.175">        if (!invalidIdentifiers.isEmpty()) {</a>
-<span class="sourceLineNo">176</span><a id="line.176">            throw new IllegalArgumentException(</a>
-<span class="sourceLineNo">177</span><a id="line.177">                "the following values are not valid identifiers: " + invalidIdentifiers);</a>
-<span class="sourceLineNo">178</span><a id="line.178">        }</a>
-<span class="sourceLineNo">179</span><a id="line.179"></a>
-<span class="sourceLineNo">180</span><a id="line.180">        this.excludedPackages = Set.of(excludedPackages);</a>
-<span class="sourceLineNo">181</span><a id="line.181">    }</a>
-<span class="sourceLineNo">182</span><a id="line.182"></a>
-<span class="sourceLineNo">183</span><a id="line.183">    @Override</a>
-<span class="sourceLineNo">184</span><a id="line.184">    public final void beginTree(DetailAST ast) {</a>
-<span class="sourceLineNo">185</span><a id="line.185">        importedClassPackages.clear();</a>
-<span class="sourceLineNo">186</span><a id="line.186">        classesContexts.clear();</a>
-<span class="sourceLineNo">187</span><a id="line.187">        classesContexts.push(new ClassContext("", null));</a>
-<span class="sourceLineNo">188</span><a id="line.188">        packageName = "";</a>
-<span class="sourceLineNo">189</span><a id="line.189">    }</a>
-<span class="sourceLineNo">190</span><a id="line.190"></a>
-<span class="sourceLineNo">191</span><a id="line.191">    @Override</a>
-<span class="sourceLineNo">192</span><a id="line.192">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">193</span><a id="line.193">        switch (ast.getType()) {</a>
-<span class="sourceLineNo">194</span><a id="line.194">            case TokenTypes.PACKAGE_DEF:</a>
-<span class="sourceLineNo">195</span><a id="line.195">                visitPackageDef(ast);</a>
-<span class="sourceLineNo">196</span><a id="line.196">                break;</a>
-<span class="sourceLineNo">197</span><a id="line.197">            case TokenTypes.IMPORT:</a>
-<span class="sourceLineNo">198</span><a id="line.198">                registerImport(ast);</a>
-<span class="sourceLineNo">199</span><a id="line.199">                break;</a>
-<span class="sourceLineNo">200</span><a id="line.200">            case TokenTypes.CLASS_DEF:</a>
-<span class="sourceLineNo">201</span><a id="line.201">            case TokenTypes.INTERFACE_DEF:</a>
-<span class="sourceLineNo">202</span><a id="line.202">            case TokenTypes.ANNOTATION_DEF:</a>
-<span class="sourceLineNo">203</span><a id="line.203">            case TokenTypes.ENUM_DEF:</a>
-<span class="sourceLineNo">204</span><a id="line.204">            case TokenTypes.RECORD_DEF:</a>
-<span class="sourceLineNo">205</span><a id="line.205">                visitClassDef(ast);</a>
-<span class="sourceLineNo">206</span><a id="line.206">                break;</a>
-<span class="sourceLineNo">207</span><a id="line.207">            case TokenTypes.EXTENDS_CLAUSE:</a>
-<span class="sourceLineNo">208</span><a id="line.208">            case TokenTypes.IMPLEMENTS_CLAUSE:</a>
-<span class="sourceLineNo">209</span><a id="line.209">            case TokenTypes.TYPE:</a>
-<span class="sourceLineNo">210</span><a id="line.210">                visitType(ast);</a>
-<span class="sourceLineNo">211</span><a id="line.211">                break;</a>
-<span class="sourceLineNo">212</span><a id="line.212">            case TokenTypes.LITERAL_NEW:</a>
-<span class="sourceLineNo">213</span><a id="line.213">                visitLiteralNew(ast);</a>
-<span class="sourceLineNo">214</span><a id="line.214">                break;</a>
-<span class="sourceLineNo">215</span><a id="line.215">            case TokenTypes.LITERAL_THROWS:</a>
-<span class="sourceLineNo">216</span><a id="line.216">                visitLiteralThrows(ast);</a>
-<span class="sourceLineNo">217</span><a id="line.217">                break;</a>
-<span class="sourceLineNo">218</span><a id="line.218">            case TokenTypes.ANNOTATION:</a>
-<span class="sourceLineNo">219</span><a id="line.219">                visitAnnotationType(ast);</a>
-<span class="sourceLineNo">220</span><a id="line.220">                break;</a>
-<span class="sourceLineNo">221</span><a id="line.221">            default:</a>
-<span class="sourceLineNo">222</span><a id="line.222">                throw new IllegalArgumentException("Unknown type: " + ast);</a>
-<span class="sourceLineNo">223</span><a id="line.223">        }</a>
-<span class="sourceLineNo">224</span><a id="line.224">    }</a>
-<span class="sourceLineNo">225</span><a id="line.225"></a>
-<span class="sourceLineNo">226</span><a id="line.226">    @Override</a>
-<span class="sourceLineNo">227</span><a id="line.227">    public void leaveToken(DetailAST ast) {</a>
-<span class="sourceLineNo">228</span><a id="line.228">        if (TokenUtil.isTypeDeclaration(ast.getType())) {</a>
-<span class="sourceLineNo">229</span><a id="line.229">            leaveClassDef();</a>
-<span class="sourceLineNo">230</span><a id="line.230">        }</a>
-<span class="sourceLineNo">231</span><a id="line.231">    }</a>
-<span class="sourceLineNo">232</span><a id="line.232"></a>
-<span class="sourceLineNo">233</span><a id="line.233">    /**</a>
-<span class="sourceLineNo">234</span><a id="line.234">     * Stores package of current class we check.</a>
-<span class="sourceLineNo">235</span><a id="line.235">     *</a>
-<span class="sourceLineNo">236</span><a id="line.236">     * @param pkg package definition.</a>
-<span class="sourceLineNo">237</span><a id="line.237">     */</a>
-<span class="sourceLineNo">238</span><a id="line.238">    private void visitPackageDef(DetailAST pkg) {</a>
-<span class="sourceLineNo">239</span><a id="line.239">        final FullIdent ident = FullIdent.createFullIdent(pkg.getLastChild().getPreviousSibling());</a>
-<span class="sourceLineNo">240</span><a id="line.240">        packageName = ident.getText();</a>
-<span class="sourceLineNo">241</span><a id="line.241">    }</a>
-<span class="sourceLineNo">242</span><a id="line.242"></a>
-<span class="sourceLineNo">243</span><a id="line.243">    /**</a>
-<span class="sourceLineNo">244</span><a id="line.244">     * Creates new context for a given class.</a>
-<span class="sourceLineNo">245</span><a id="line.245">     *</a>
-<span class="sourceLineNo">246</span><a id="line.246">     * @param classDef class definition node.</a>
-<span class="sourceLineNo">247</span><a id="line.247">     */</a>
-<span class="sourceLineNo">248</span><a id="line.248">    private void visitClassDef(DetailAST classDef) {</a>
-<span class="sourceLineNo">249</span><a id="line.249">        final String className = classDef.findFirstToken(TokenTypes.IDENT).getText();</a>
-<span class="sourceLineNo">250</span><a id="line.250">        createNewClassContext(className, classDef);</a>
-<span class="sourceLineNo">251</span><a id="line.251">    }</a>
-<span class="sourceLineNo">252</span><a id="line.252"></a>
-<span class="sourceLineNo">253</span><a id="line.253">    /** Restores previous context. */</a>
-<span class="sourceLineNo">254</span><a id="line.254">    private void leaveClassDef() {</a>
-<span class="sourceLineNo">255</span><a id="line.255">        checkCurrentClassAndRestorePrevious();</a>
-<span class="sourceLineNo">256</span><a id="line.256">    }</a>
-<span class="sourceLineNo">257</span><a id="line.257"></a>
-<span class="sourceLineNo">258</span><a id="line.258">    /**</a>
-<span class="sourceLineNo">259</span><a id="line.259">     * Registers given import. This allows us to track imported classes.</a>
-<span class="sourceLineNo">260</span><a id="line.260">     *</a>
-<span class="sourceLineNo">261</span><a id="line.261">     * @param imp import definition.</a>
-<span class="sourceLineNo">262</span><a id="line.262">     */</a>
-<span class="sourceLineNo">263</span><a id="line.263">    private void registerImport(DetailAST imp) {</a>
-<span class="sourceLineNo">264</span><a id="line.264">        final FullIdent ident = FullIdent.createFullIdent(</a>
-<span class="sourceLineNo">265</span><a id="line.265">            imp.getLastChild().getPreviousSibling());</a>
-<span class="sourceLineNo">266</span><a id="line.266">        final String fullName = ident.getText();</a>
-<span class="sourceLineNo">267</span><a id="line.267">        final int lastDot = fullName.lastIndexOf(DOT);</a>
-<span class="sourceLineNo">268</span><a id="line.268">        importedClassPackages.put(fullName.substring(lastDot + 1), fullName);</a>
-<span class="sourceLineNo">269</span><a id="line.269">    }</a>
-<span class="sourceLineNo">270</span><a id="line.270"></a>
-<span class="sourceLineNo">271</span><a id="line.271">    /**</a>
-<span class="sourceLineNo">272</span><a id="line.272">     * Creates new inner class context with given name and location.</a>
-<span class="sourceLineNo">273</span><a id="line.273">     *</a>
-<span class="sourceLineNo">274</span><a id="line.274">     * @param className The class name.</a>
-<span class="sourceLineNo">275</span><a id="line.275">     * @param ast The class ast.</a>
-<span class="sourceLineNo">276</span><a id="line.276">     */</a>
-<span class="sourceLineNo">277</span><a id="line.277">    private void createNewClassContext(String className, DetailAST ast) {</a>
-<span class="sourceLineNo">278</span><a id="line.278">        classesContexts.push(new ClassContext(className, ast));</a>
-<span class="sourceLineNo">279</span><a id="line.279">    }</a>
-<span class="sourceLineNo">280</span><a id="line.280"></a>
-<span class="sourceLineNo">281</span><a id="line.281">    /** Restores previous context. */</a>
-<span class="sourceLineNo">282</span><a id="line.282">    private void checkCurrentClassAndRestorePrevious() {</a>
-<span class="sourceLineNo">283</span><a id="line.283">        classesContexts.pop().checkCoupling();</a>
-<span class="sourceLineNo">284</span><a id="line.284">    }</a>
-<span class="sourceLineNo">285</span><a id="line.285"></a>
-<span class="sourceLineNo">286</span><a id="line.286">    /**</a>
-<span class="sourceLineNo">287</span><a id="line.287">     * Visits type token for the current class context.</a>
-<span class="sourceLineNo">288</span><a id="line.288">     *</a>
-<span class="sourceLineNo">289</span><a id="line.289">     * @param ast TYPE token.</a>
-<span class="sourceLineNo">290</span><a id="line.290">     */</a>
-<span class="sourceLineNo">291</span><a id="line.291">    private void visitType(DetailAST ast) {</a>
-<span class="sourceLineNo">292</span><a id="line.292">        classesContexts.peek().visitType(ast);</a>
-<span class="sourceLineNo">293</span><a id="line.293">    }</a>
-<span class="sourceLineNo">294</span><a id="line.294"></a>
-<span class="sourceLineNo">295</span><a id="line.295">    /**</a>
-<span class="sourceLineNo">296</span><a id="line.296">     * Visits NEW token for the current class context.</a>
-<span class="sourceLineNo">297</span><a id="line.297">     *</a>
-<span class="sourceLineNo">298</span><a id="line.298">     * @param ast NEW token.</a>
-<span class="sourceLineNo">299</span><a id="line.299">     */</a>
-<span class="sourceLineNo">300</span><a id="line.300">    private void visitLiteralNew(DetailAST ast) {</a>
-<span class="sourceLineNo">301</span><a id="line.301">        classesContexts.peek().visitLiteralNew(ast);</a>
-<span class="sourceLineNo">302</span><a id="line.302">    }</a>
-<span class="sourceLineNo">303</span><a id="line.303"></a>
-<span class="sourceLineNo">304</span><a id="line.304">    /**</a>
-<span class="sourceLineNo">305</span><a id="line.305">     * Visits THROWS token for the current class context.</a>
-<span class="sourceLineNo">306</span><a id="line.306">     *</a>
-<span class="sourceLineNo">307</span><a id="line.307">     * @param ast THROWS token.</a>
-<span class="sourceLineNo">308</span><a id="line.308">     */</a>
-<span class="sourceLineNo">309</span><a id="line.309">    private void visitLiteralThrows(DetailAST ast) {</a>
-<span class="sourceLineNo">310</span><a id="line.310">        classesContexts.peek().visitLiteralThrows(ast);</a>
-<span class="sourceLineNo">311</span><a id="line.311">    }</a>
-<span class="sourceLineNo">312</span><a id="line.312"></a>
-<span class="sourceLineNo">313</span><a id="line.313">    /**</a>
-<span class="sourceLineNo">314</span><a id="line.314">     * Visit ANNOTATION literal and get its type to referenced classes of context.</a>
-<span class="sourceLineNo">315</span><a id="line.315">     *</a>
-<span class="sourceLineNo">316</span><a id="line.316">     * @param annotationAST Annotation ast.</a>
-<span class="sourceLineNo">317</span><a id="line.317">     */</a>
-<span class="sourceLineNo">318</span><a id="line.318">    private void visitAnnotationType(DetailAST annotationAST) {</a>
-<span class="sourceLineNo">319</span><a id="line.319">        final DetailAST children = annotationAST.getFirstChild();</a>
-<span class="sourceLineNo">320</span><a id="line.320">        final DetailAST type = children.getNextSibling();</a>
-<span class="sourceLineNo">321</span><a id="line.321">        classesContexts.peek().addReferencedClassName(type.getText());</a>
-<span class="sourceLineNo">322</span><a id="line.322">    }</a>
-<span class="sourceLineNo">323</span><a id="line.323"></a>
-<span class="sourceLineNo">324</span><a id="line.324">    /**</a>
-<span class="sourceLineNo">325</span><a id="line.325">     * Encapsulates information about class coupling.</a>
-<span class="sourceLineNo">326</span><a id="line.326">     *</a>
-<span class="sourceLineNo">327</span><a id="line.327">     */</a>
-<span class="sourceLineNo">328</span><a id="line.328">    private final class ClassContext {</a>
-<span class="sourceLineNo">329</span><a id="line.329"></a>
-<span class="sourceLineNo">330</span><a id="line.330">        /**</a>
-<span class="sourceLineNo">331</span><a id="line.331">         * Set of referenced classes.</a>
-<span class="sourceLineNo">332</span><a id="line.332">         * Sorted by name for predictable violation messages in unit tests.</a>
-<span class="sourceLineNo">333</span><a id="line.333">         */</a>
-<span class="sourceLineNo">334</span><a id="line.334">        private final Set&lt;String&gt; referencedClassNames = new TreeSet&lt;&gt;();</a>
-<span class="sourceLineNo">335</span><a id="line.335">        /** Own class name. */</a>
-<span class="sourceLineNo">336</span><a id="line.336">        private final String className;</a>
-<span class="sourceLineNo">337</span><a id="line.337">        /* Location of own class. (Used to log violations) */</a>
-<span class="sourceLineNo">338</span><a id="line.338">        /** AST of class definition. */</a>
-<span class="sourceLineNo">339</span><a id="line.339">        private final DetailAST classAst;</a>
-<span class="sourceLineNo">340</span><a id="line.340"></a>
-<span class="sourceLineNo">341</span><a id="line.341">        /**</a>
-<span class="sourceLineNo">342</span><a id="line.342">         * Create new context associated with given class.</a>
-<span class="sourceLineNo">343</span><a id="line.343">         *</a>
-<span class="sourceLineNo">344</span><a id="line.344">         * @param className name of the given class.</a>
-<span class="sourceLineNo">345</span><a id="line.345">         * @param ast ast of class definition.</a>
-<span class="sourceLineNo">346</span><a id="line.346">         */</a>
-<span class="sourceLineNo">347</span><a id="line.347">        private ClassContext(String className, DetailAST ast) {</a>
-<span class="sourceLineNo">348</span><a id="line.348">            this.className = className;</a>
-<span class="sourceLineNo">349</span><a id="line.349">            classAst = ast;</a>
-<span class="sourceLineNo">350</span><a id="line.350">        }</a>
-<span class="sourceLineNo">351</span><a id="line.351"></a>
-<span class="sourceLineNo">352</span><a id="line.352">        /**</a>
-<span class="sourceLineNo">353</span><a id="line.353">         * Visits throws clause and collects all exceptions we throw.</a>
-<span class="sourceLineNo">354</span><a id="line.354">         *</a>
-<span class="sourceLineNo">355</span><a id="line.355">         * @param literalThrows throws to process.</a>
-<span class="sourceLineNo">356</span><a id="line.356">         */</a>
-<span class="sourceLineNo">357</span><a id="line.357">        public void visitLiteralThrows(DetailAST literalThrows) {</a>
-<span class="sourceLineNo">358</span><a id="line.358">            for (DetailAST childAST = literalThrows.getFirstChild();</a>
-<span class="sourceLineNo">359</span><a id="line.359">                 childAST != null;</a>
-<span class="sourceLineNo">360</span><a id="line.360">                 childAST = childAST.getNextSibling()) {</a>
-<span class="sourceLineNo">361</span><a id="line.361">                if (childAST.getType() != TokenTypes.COMMA) {</a>
-<span class="sourceLineNo">362</span><a id="line.362">                    addReferencedClassName(childAST);</a>
-<span class="sourceLineNo">363</span><a id="line.363">                }</a>
-<span class="sourceLineNo">364</span><a id="line.364">            }</a>
-<span class="sourceLineNo">365</span><a id="line.365">        }</a>
-<span class="sourceLineNo">366</span><a id="line.366"></a>
-<span class="sourceLineNo">367</span><a id="line.367">        /**</a>
-<span class="sourceLineNo">368</span><a id="line.368">         * Visits type.</a>
-<span class="sourceLineNo">369</span><a id="line.369">         *</a>
-<span class="sourceLineNo">370</span><a id="line.370">         * @param ast type to process.</a>
-<span class="sourceLineNo">371</span><a id="line.371">         */</a>
-<span class="sourceLineNo">372</span><a id="line.372">        public void visitType(DetailAST ast) {</a>
-<span class="sourceLineNo">373</span><a id="line.373">            DetailAST child = ast.getFirstChild();</a>
-<span class="sourceLineNo">374</span><a id="line.374">            while (child != null) {</a>
-<span class="sourceLineNo">375</span><a id="line.375">                if (TokenUtil.isOfType(child, TokenTypes.IDENT, TokenTypes.DOT)) {</a>
-<span class="sourceLineNo">376</span><a id="line.376">                    final String fullTypeName = FullIdent.createFullIdent(child).getText();</a>
-<span class="sourceLineNo">377</span><a id="line.377">                    final String trimmed = BRACKET_PATTERN</a>
-<span class="sourceLineNo">378</span><a id="line.378">                            .matcher(fullTypeName).replaceAll("");</a>
-<span class="sourceLineNo">379</span><a id="line.379">                    addReferencedClassName(trimmed);</a>
-<span class="sourceLineNo">380</span><a id="line.380">                }</a>
-<span class="sourceLineNo">381</span><a id="line.381">                child = child.getNextSibling();</a>
-<span class="sourceLineNo">382</span><a id="line.382">            }</a>
-<span class="sourceLineNo">383</span><a id="line.383">        }</a>
-<span class="sourceLineNo">384</span><a id="line.384"></a>
-<span class="sourceLineNo">385</span><a id="line.385">        /**</a>
-<span class="sourceLineNo">386</span><a id="line.386">         * Visits NEW.</a>
-<span class="sourceLineNo">387</span><a id="line.387">         *</a>
-<span class="sourceLineNo">388</span><a id="line.388">         * @param ast NEW to process.</a>
-<span class="sourceLineNo">389</span><a id="line.389">         */</a>
-<span class="sourceLineNo">390</span><a id="line.390">        public void visitLiteralNew(DetailAST ast) {</a>
-<span class="sourceLineNo">391</span><a id="line.391">            addReferencedClassName(ast.getFirstChild());</a>
-<span class="sourceLineNo">392</span><a id="line.392">        }</a>
-<span class="sourceLineNo">393</span><a id="line.393"></a>
-<span class="sourceLineNo">394</span><a id="line.394">        /**</a>
-<span class="sourceLineNo">395</span><a id="line.395">         * Adds new referenced class.</a>
-<span class="sourceLineNo">396</span><a id="line.396">         *</a>
-<span class="sourceLineNo">397</span><a id="line.397">         * @param ast a node which represents referenced class.</a>
-<span class="sourceLineNo">398</span><a id="line.398">         */</a>
-<span class="sourceLineNo">399</span><a id="line.399">        private void addReferencedClassName(DetailAST ast) {</a>
-<span class="sourceLineNo">400</span><a id="line.400">            final String fullIdentName = FullIdent.createFullIdent(ast).getText();</a>
-<span class="sourceLineNo">401</span><a id="line.401">            final String trimmed = BRACKET_PATTERN</a>
-<span class="sourceLineNo">402</span><a id="line.402">                    .matcher(fullIdentName).replaceAll("");</a>
-<span class="sourceLineNo">403</span><a id="line.403">            addReferencedClassName(trimmed);</a>
-<span class="sourceLineNo">404</span><a id="line.404">        }</a>
-<span class="sourceLineNo">405</span><a id="line.405"></a>
-<span class="sourceLineNo">406</span><a id="line.406">        /**</a>
-<span class="sourceLineNo">407</span><a id="line.407">         * Adds new referenced class.</a>
-<span class="sourceLineNo">408</span><a id="line.408">         *</a>
-<span class="sourceLineNo">409</span><a id="line.409">         * @param referencedClassName class name of the referenced class.</a>
-<span class="sourceLineNo">410</span><a id="line.410">         */</a>
-<span class="sourceLineNo">411</span><a id="line.411">        private void addReferencedClassName(String referencedClassName) {</a>
-<span class="sourceLineNo">412</span><a id="line.412">            if (isSignificant(referencedClassName)) {</a>
-<span class="sourceLineNo">413</span><a id="line.413">                referencedClassNames.add(referencedClassName);</a>
-<span class="sourceLineNo">414</span><a id="line.414">            }</a>
-<span class="sourceLineNo">415</span><a id="line.415">        }</a>
-<span class="sourceLineNo">416</span><a id="line.416"></a>
-<span class="sourceLineNo">417</span><a id="line.417">        /** Checks if coupling less than allowed or not. */</a>
-<span class="sourceLineNo">418</span><a id="line.418">        public void checkCoupling() {</a>
-<span class="sourceLineNo">419</span><a id="line.419">            referencedClassNames.remove(className);</a>
-<span class="sourceLineNo">420</span><a id="line.420">            referencedClassNames.remove(packageName + DOT + className);</a>
-<span class="sourceLineNo">421</span><a id="line.421"></a>
-<span class="sourceLineNo">422</span><a id="line.422">            if (referencedClassNames.size() &gt; max) {</a>
-<span class="sourceLineNo">423</span><a id="line.423">                log(classAst, getLogMessageId(),</a>
-<span class="sourceLineNo">424</span><a id="line.424">                        referencedClassNames.size(), max,</a>
-<span class="sourceLineNo">425</span><a id="line.425">                        referencedClassNames.toString());</a>
-<span class="sourceLineNo">426</span><a id="line.426">            }</a>
-<span class="sourceLineNo">427</span><a id="line.427">        }</a>
-<span class="sourceLineNo">428</span><a id="line.428"></a>
-<span class="sourceLineNo">429</span><a id="line.429">        /**</a>
-<span class="sourceLineNo">430</span><a id="line.430">         * Checks if given class shouldn't be ignored and not from java.lang.</a>
-<span class="sourceLineNo">431</span><a id="line.431">         *</a>
-<span class="sourceLineNo">432</span><a id="line.432">         * @param candidateClassName class to check.</a>
-<span class="sourceLineNo">433</span><a id="line.433">         * @return true if we should count this class.</a>
-<span class="sourceLineNo">434</span><a id="line.434">         */</a>
-<span class="sourceLineNo">435</span><a id="line.435">        private boolean isSignificant(String candidateClassName) {</a>
-<span class="sourceLineNo">436</span><a id="line.436">            return !excludedClasses.contains(candidateClassName)</a>
-<span class="sourceLineNo">437</span><a id="line.437">                &amp;&amp; !isFromExcludedPackage(candidateClassName)</a>
-<span class="sourceLineNo">438</span><a id="line.438">                &amp;&amp; !isExcludedClassRegexp(candidateClassName);</a>
-<span class="sourceLineNo">439</span><a id="line.439">        }</a>
-<span class="sourceLineNo">440</span><a id="line.440"></a>
-<span class="sourceLineNo">441</span><a id="line.441">        /**</a>
-<span class="sourceLineNo">442</span><a id="line.442">         * Checks if given class should be ignored as it belongs to excluded package.</a>
-<span class="sourceLineNo">443</span><a id="line.443">         *</a>
-<span class="sourceLineNo">444</span><a id="line.444">         * @param candidateClassName class to check</a>
-<span class="sourceLineNo">445</span><a id="line.445">         * @return true if we should not count this class.</a>
-<span class="sourceLineNo">446</span><a id="line.446">         */</a>
-<span class="sourceLineNo">447</span><a id="line.447">        private boolean isFromExcludedPackage(String candidateClassName) {</a>
-<span class="sourceLineNo">448</span><a id="line.448">            String classNameWithPackage = candidateClassName;</a>
-<span class="sourceLineNo">449</span><a id="line.449">            if (candidateClassName.indexOf(DOT) == -1) {</a>
-<span class="sourceLineNo">450</span><a id="line.450">                classNameWithPackage = getClassNameWithPackage(candidateClassName)</a>
-<span class="sourceLineNo">451</span><a id="line.451">                    .orElse("");</a>
-<span class="sourceLineNo">452</span><a id="line.452">            }</a>
-<span class="sourceLineNo">453</span><a id="line.453">            boolean isFromExcludedPackage = false;</a>
-<span class="sourceLineNo">454</span><a id="line.454">            if (classNameWithPackage.indexOf(DOT) != -1) {</a>
-<span class="sourceLineNo">455</span><a id="line.455">                final int lastDotIndex = classNameWithPackage.lastIndexOf(DOT);</a>
-<span class="sourceLineNo">456</span><a id="line.456">                final String candidatePackageName =</a>
-<span class="sourceLineNo">457</span><a id="line.457">                    classNameWithPackage.substring(0, lastDotIndex);</a>
-<span class="sourceLineNo">458</span><a id="line.458">                isFromExcludedPackage = candidatePackageName.startsWith("java.lang")</a>
-<span class="sourceLineNo">459</span><a id="line.459">                    || excludedPackages.contains(candidatePackageName);</a>
-<span class="sourceLineNo">460</span><a id="line.460">            }</a>
-<span class="sourceLineNo">461</span><a id="line.461">            return isFromExcludedPackage;</a>
-<span class="sourceLineNo">462</span><a id="line.462">        }</a>
-<span class="sourceLineNo">463</span><a id="line.463"></a>
-<span class="sourceLineNo">464</span><a id="line.464">        /**</a>
-<span class="sourceLineNo">465</span><a id="line.465">         * Retrieves class name with packages. Uses previously registered imports to</a>
-<span class="sourceLineNo">466</span><a id="line.466">         * get the full class name.</a>
-<span class="sourceLineNo">467</span><a id="line.467">         *</a>
-<span class="sourceLineNo">468</span><a id="line.468">         * @param examineClassName Class name to be retrieved.</a>
-<span class="sourceLineNo">469</span><a id="line.469">         * @return Class name with package name, if found, {@link Optional#empty()} otherwise.</a>
-<span class="sourceLineNo">470</span><a id="line.470">         */</a>
-<span class="sourceLineNo">471</span><a id="line.471">        private Optional&lt;String&gt; getClassNameWithPackage(String examineClassName) {</a>
-<span class="sourceLineNo">472</span><a id="line.472">            return Optional.ofNullable(importedClassPackages.get(examineClassName));</a>
-<span class="sourceLineNo">473</span><a id="line.473">        }</a>
-<span class="sourceLineNo">474</span><a id="line.474"></a>
-<span class="sourceLineNo">475</span><a id="line.475">        /**</a>
-<span class="sourceLineNo">476</span><a id="line.476">         * Checks if given class should be ignored as it belongs to excluded class regexp.</a>
-<span class="sourceLineNo">477</span><a id="line.477">         *</a>
-<span class="sourceLineNo">478</span><a id="line.478">         * @param candidateClassName class to check.</a>
-<span class="sourceLineNo">479</span><a id="line.479">         * @return true if we should not count this class.</a>
-<span class="sourceLineNo">480</span><a id="line.480">         */</a>
-<span class="sourceLineNo">481</span><a id="line.481">        private boolean isExcludedClassRegexp(String candidateClassName) {</a>
-<span class="sourceLineNo">482</span><a id="line.482">            boolean result = false;</a>
-<span class="sourceLineNo">483</span><a id="line.483">            for (Pattern pattern : excludeClassesRegexps) {</a>
-<span class="sourceLineNo">484</span><a id="line.484">                if (pattern.matcher(candidateClassName).matches()) {</a>
-<span class="sourceLineNo">485</span><a id="line.485">                    result = true;</a>
-<span class="sourceLineNo">486</span><a id="line.486">                    break;</a>
-<span class="sourceLineNo">487</span><a id="line.487">                }</a>
-<span class="sourceLineNo">488</span><a id="line.488">            }</a>
-<span class="sourceLineNo">489</span><a id="line.489">            return result;</a>
-<span class="sourceLineNo">490</span><a id="line.490">        }</a>
+<span class="sourceLineNo">159</span><a id="line.159">    public void setExcludeClassesRegexps(Pattern... from) {</a>
+<span class="sourceLineNo">160</span><a id="line.160">        excludeClassesRegexps.addAll(Arrays.asList(from));</a>
+<span class="sourceLineNo">161</span><a id="line.161">    }</a>
+<span class="sourceLineNo">162</span><a id="line.162"></a>
+<span class="sourceLineNo">163</span><a id="line.163">    /**</a>
+<span class="sourceLineNo">164</span><a id="line.164">     * Setter to specify user-configured packages to ignore.</a>
+<span class="sourceLineNo">165</span><a id="line.165">     *</a>
+<span class="sourceLineNo">166</span><a id="line.166">     * @param excludedPackages packages to ignore.</a>
+<span class="sourceLineNo">167</span><a id="line.167">     * @throws IllegalArgumentException if there are invalid identifiers among the packages.</a>
+<span class="sourceLineNo">168</span><a id="line.168">     */</a>
+<span class="sourceLineNo">169</span><a id="line.169">    public final void setExcludedPackages(String... excludedPackages) {</a>
+<span class="sourceLineNo">170</span><a id="line.170">        final List&lt;String&gt; invalidIdentifiers = Arrays.stream(excludedPackages)</a>
+<span class="sourceLineNo">171</span><a id="line.171">            .filter(Predicate.not(CommonUtil::isName))</a>
+<span class="sourceLineNo">172</span><a id="line.172">            .collect(Collectors.toUnmodifiableList());</a>
+<span class="sourceLineNo">173</span><a id="line.173">        if (!invalidIdentifiers.isEmpty()) {</a>
+<span class="sourceLineNo">174</span><a id="line.174">            throw new IllegalArgumentException(</a>
+<span class="sourceLineNo">175</span><a id="line.175">                "the following values are not valid identifiers: " + invalidIdentifiers);</a>
+<span class="sourceLineNo">176</span><a id="line.176">        }</a>
+<span class="sourceLineNo">177</span><a id="line.177"></a>
+<span class="sourceLineNo">178</span><a id="line.178">        this.excludedPackages = Set.of(excludedPackages);</a>
+<span class="sourceLineNo">179</span><a id="line.179">    }</a>
+<span class="sourceLineNo">180</span><a id="line.180"></a>
+<span class="sourceLineNo">181</span><a id="line.181">    @Override</a>
+<span class="sourceLineNo">182</span><a id="line.182">    public final void beginTree(DetailAST ast) {</a>
+<span class="sourceLineNo">183</span><a id="line.183">        importedClassPackages.clear();</a>
+<span class="sourceLineNo">184</span><a id="line.184">        classesContexts.clear();</a>
+<span class="sourceLineNo">185</span><a id="line.185">        classesContexts.push(new ClassContext("", null));</a>
+<span class="sourceLineNo">186</span><a id="line.186">        packageName = "";</a>
+<span class="sourceLineNo">187</span><a id="line.187">    }</a>
+<span class="sourceLineNo">188</span><a id="line.188"></a>
+<span class="sourceLineNo">189</span><a id="line.189">    @Override</a>
+<span class="sourceLineNo">190</span><a id="line.190">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">191</span><a id="line.191">        switch (ast.getType()) {</a>
+<span class="sourceLineNo">192</span><a id="line.192">            case TokenTypes.PACKAGE_DEF:</a>
+<span class="sourceLineNo">193</span><a id="line.193">                visitPackageDef(ast);</a>
+<span class="sourceLineNo">194</span><a id="line.194">                break;</a>
+<span class="sourceLineNo">195</span><a id="line.195">            case TokenTypes.IMPORT:</a>
+<span class="sourceLineNo">196</span><a id="line.196">                registerImport(ast);</a>
+<span class="sourceLineNo">197</span><a id="line.197">                break;</a>
+<span class="sourceLineNo">198</span><a id="line.198">            case TokenTypes.CLASS_DEF:</a>
+<span class="sourceLineNo">199</span><a id="line.199">            case TokenTypes.INTERFACE_DEF:</a>
+<span class="sourceLineNo">200</span><a id="line.200">            case TokenTypes.ANNOTATION_DEF:</a>
+<span class="sourceLineNo">201</span><a id="line.201">            case TokenTypes.ENUM_DEF:</a>
+<span class="sourceLineNo">202</span><a id="line.202">            case TokenTypes.RECORD_DEF:</a>
+<span class="sourceLineNo">203</span><a id="line.203">                visitClassDef(ast);</a>
+<span class="sourceLineNo">204</span><a id="line.204">                break;</a>
+<span class="sourceLineNo">205</span><a id="line.205">            case TokenTypes.EXTENDS_CLAUSE:</a>
+<span class="sourceLineNo">206</span><a id="line.206">            case TokenTypes.IMPLEMENTS_CLAUSE:</a>
+<span class="sourceLineNo">207</span><a id="line.207">            case TokenTypes.TYPE:</a>
+<span class="sourceLineNo">208</span><a id="line.208">                visitType(ast);</a>
+<span class="sourceLineNo">209</span><a id="line.209">                break;</a>
+<span class="sourceLineNo">210</span><a id="line.210">            case TokenTypes.LITERAL_NEW:</a>
+<span class="sourceLineNo">211</span><a id="line.211">                visitLiteralNew(ast);</a>
+<span class="sourceLineNo">212</span><a id="line.212">                break;</a>
+<span class="sourceLineNo">213</span><a id="line.213">            case TokenTypes.LITERAL_THROWS:</a>
+<span class="sourceLineNo">214</span><a id="line.214">                visitLiteralThrows(ast);</a>
+<span class="sourceLineNo">215</span><a id="line.215">                break;</a>
+<span class="sourceLineNo">216</span><a id="line.216">            case TokenTypes.ANNOTATION:</a>
+<span class="sourceLineNo">217</span><a id="line.217">                visitAnnotationType(ast);</a>
+<span class="sourceLineNo">218</span><a id="line.218">                break;</a>
+<span class="sourceLineNo">219</span><a id="line.219">            default:</a>
+<span class="sourceLineNo">220</span><a id="line.220">                throw new IllegalArgumentException("Unknown type: " + ast);</a>
+<span class="sourceLineNo">221</span><a id="line.221">        }</a>
+<span class="sourceLineNo">222</span><a id="line.222">    }</a>
+<span class="sourceLineNo">223</span><a id="line.223"></a>
+<span class="sourceLineNo">224</span><a id="line.224">    @Override</a>
+<span class="sourceLineNo">225</span><a id="line.225">    public void leaveToken(DetailAST ast) {</a>
+<span class="sourceLineNo">226</span><a id="line.226">        if (TokenUtil.isTypeDeclaration(ast.getType())) {</a>
+<span class="sourceLineNo">227</span><a id="line.227">            leaveClassDef();</a>
+<span class="sourceLineNo">228</span><a id="line.228">        }</a>
+<span class="sourceLineNo">229</span><a id="line.229">    }</a>
+<span class="sourceLineNo">230</span><a id="line.230"></a>
+<span class="sourceLineNo">231</span><a id="line.231">    /**</a>
+<span class="sourceLineNo">232</span><a id="line.232">     * Stores package of current class we check.</a>
+<span class="sourceLineNo">233</span><a id="line.233">     *</a>
+<span class="sourceLineNo">234</span><a id="line.234">     * @param pkg package definition.</a>
+<span class="sourceLineNo">235</span><a id="line.235">     */</a>
+<span class="sourceLineNo">236</span><a id="line.236">    private void visitPackageDef(DetailAST pkg) {</a>
+<span class="sourceLineNo">237</span><a id="line.237">        final FullIdent ident = FullIdent.createFullIdent(pkg.getLastChild().getPreviousSibling());</a>
+<span class="sourceLineNo">238</span><a id="line.238">        packageName = ident.getText();</a>
+<span class="sourceLineNo">239</span><a id="line.239">    }</a>
+<span class="sourceLineNo">240</span><a id="line.240"></a>
+<span class="sourceLineNo">241</span><a id="line.241">    /**</a>
+<span class="sourceLineNo">242</span><a id="line.242">     * Creates new context for a given class.</a>
+<span class="sourceLineNo">243</span><a id="line.243">     *</a>
+<span class="sourceLineNo">244</span><a id="line.244">     * @param classDef class definition node.</a>
+<span class="sourceLineNo">245</span><a id="line.245">     */</a>
+<span class="sourceLineNo">246</span><a id="line.246">    private void visitClassDef(DetailAST classDef) {</a>
+<span class="sourceLineNo">247</span><a id="line.247">        final String className = classDef.findFirstToken(TokenTypes.IDENT).getText();</a>
+<span class="sourceLineNo">248</span><a id="line.248">        createNewClassContext(className, classDef);</a>
+<span class="sourceLineNo">249</span><a id="line.249">    }</a>
+<span class="sourceLineNo">250</span><a id="line.250"></a>
+<span class="sourceLineNo">251</span><a id="line.251">    /** Restores previous context. */</a>
+<span class="sourceLineNo">252</span><a id="line.252">    private void leaveClassDef() {</a>
+<span class="sourceLineNo">253</span><a id="line.253">        checkCurrentClassAndRestorePrevious();</a>
+<span class="sourceLineNo">254</span><a id="line.254">    }</a>
+<span class="sourceLineNo">255</span><a id="line.255"></a>
+<span class="sourceLineNo">256</span><a id="line.256">    /**</a>
+<span class="sourceLineNo">257</span><a id="line.257">     * Registers given import. This allows us to track imported classes.</a>
+<span class="sourceLineNo">258</span><a id="line.258">     *</a>
+<span class="sourceLineNo">259</span><a id="line.259">     * @param imp import definition.</a>
+<span class="sourceLineNo">260</span><a id="line.260">     */</a>
+<span class="sourceLineNo">261</span><a id="line.261">    private void registerImport(DetailAST imp) {</a>
+<span class="sourceLineNo">262</span><a id="line.262">        final FullIdent ident = FullIdent.createFullIdent(</a>
+<span class="sourceLineNo">263</span><a id="line.263">            imp.getLastChild().getPreviousSibling());</a>
+<span class="sourceLineNo">264</span><a id="line.264">        final String fullName = ident.getText();</a>
+<span class="sourceLineNo">265</span><a id="line.265">        final int lastDot = fullName.lastIndexOf(DOT);</a>
+<span class="sourceLineNo">266</span><a id="line.266">        importedClassPackages.put(fullName.substring(lastDot + 1), fullName);</a>
+<span class="sourceLineNo">267</span><a id="line.267">    }</a>
+<span class="sourceLineNo">268</span><a id="line.268"></a>
+<span class="sourceLineNo">269</span><a id="line.269">    /**</a>
+<span class="sourceLineNo">270</span><a id="line.270">     * Creates new inner class context with given name and location.</a>
+<span class="sourceLineNo">271</span><a id="line.271">     *</a>
+<span class="sourceLineNo">272</span><a id="line.272">     * @param className The class name.</a>
+<span class="sourceLineNo">273</span><a id="line.273">     * @param ast The class ast.</a>
+<span class="sourceLineNo">274</span><a id="line.274">     */</a>
+<span class="sourceLineNo">275</span><a id="line.275">    private void createNewClassContext(String className, DetailAST ast) {</a>
+<span class="sourceLineNo">276</span><a id="line.276">        classesContexts.push(new ClassContext(className, ast));</a>
+<span class="sourceLineNo">277</span><a id="line.277">    }</a>
+<span class="sourceLineNo">278</span><a id="line.278"></a>
+<span class="sourceLineNo">279</span><a id="line.279">    /** Restores previous context. */</a>
+<span class="sourceLineNo">280</span><a id="line.280">    private void checkCurrentClassAndRestorePrevious() {</a>
+<span class="sourceLineNo">281</span><a id="line.281">        classesContexts.pop().checkCoupling();</a>
+<span class="sourceLineNo">282</span><a id="line.282">    }</a>
+<span class="sourceLineNo">283</span><a id="line.283"></a>
+<span class="sourceLineNo">284</span><a id="line.284">    /**</a>
+<span class="sourceLineNo">285</span><a id="line.285">     * Visits type token for the current class context.</a>
+<span class="sourceLineNo">286</span><a id="line.286">     *</a>
+<span class="sourceLineNo">287</span><a id="line.287">     * @param ast TYPE token.</a>
+<span class="sourceLineNo">288</span><a id="line.288">     */</a>
+<span class="sourceLineNo">289</span><a id="line.289">    private void visitType(DetailAST ast) {</a>
+<span class="sourceLineNo">290</span><a id="line.290">        classesContexts.peek().visitType(ast);</a>
+<span class="sourceLineNo">291</span><a id="line.291">    }</a>
+<span class="sourceLineNo">292</span><a id="line.292"></a>
+<span class="sourceLineNo">293</span><a id="line.293">    /**</a>
+<span class="sourceLineNo">294</span><a id="line.294">     * Visits NEW token for the current class context.</a>
+<span class="sourceLineNo">295</span><a id="line.295">     *</a>
+<span class="sourceLineNo">296</span><a id="line.296">     * @param ast NEW token.</a>
+<span class="sourceLineNo">297</span><a id="line.297">     */</a>
+<span class="sourceLineNo">298</span><a id="line.298">    private void visitLiteralNew(DetailAST ast) {</a>
+<span class="sourceLineNo">299</span><a id="line.299">        classesContexts.peek().visitLiteralNew(ast);</a>
+<span class="sourceLineNo">300</span><a id="line.300">    }</a>
+<span class="sourceLineNo">301</span><a id="line.301"></a>
+<span class="sourceLineNo">302</span><a id="line.302">    /**</a>
+<span class="sourceLineNo">303</span><a id="line.303">     * Visits THROWS token for the current class context.</a>
+<span class="sourceLineNo">304</span><a id="line.304">     *</a>
+<span class="sourceLineNo">305</span><a id="line.305">     * @param ast THROWS token.</a>
+<span class="sourceLineNo">306</span><a id="line.306">     */</a>
+<span class="sourceLineNo">307</span><a id="line.307">    private void visitLiteralThrows(DetailAST ast) {</a>
+<span class="sourceLineNo">308</span><a id="line.308">        classesContexts.peek().visitLiteralThrows(ast);</a>
+<span class="sourceLineNo">309</span><a id="line.309">    }</a>
+<span class="sourceLineNo">310</span><a id="line.310"></a>
+<span class="sourceLineNo">311</span><a id="line.311">    /**</a>
+<span class="sourceLineNo">312</span><a id="line.312">     * Visit ANNOTATION literal and get its type to referenced classes of context.</a>
+<span class="sourceLineNo">313</span><a id="line.313">     *</a>
+<span class="sourceLineNo">314</span><a id="line.314">     * @param annotationAST Annotation ast.</a>
+<span class="sourceLineNo">315</span><a id="line.315">     */</a>
+<span class="sourceLineNo">316</span><a id="line.316">    private void visitAnnotationType(DetailAST annotationAST) {</a>
+<span class="sourceLineNo">317</span><a id="line.317">        final DetailAST children = annotationAST.getFirstChild();</a>
+<span class="sourceLineNo">318</span><a id="line.318">        final DetailAST type = children.getNextSibling();</a>
+<span class="sourceLineNo">319</span><a id="line.319">        classesContexts.peek().addReferencedClassName(type.getText());</a>
+<span class="sourceLineNo">320</span><a id="line.320">    }</a>
+<span class="sourceLineNo">321</span><a id="line.321"></a>
+<span class="sourceLineNo">322</span><a id="line.322">    /**</a>
+<span class="sourceLineNo">323</span><a id="line.323">     * Encapsulates information about class coupling.</a>
+<span class="sourceLineNo">324</span><a id="line.324">     *</a>
+<span class="sourceLineNo">325</span><a id="line.325">     */</a>
+<span class="sourceLineNo">326</span><a id="line.326">    private final class ClassContext {</a>
+<span class="sourceLineNo">327</span><a id="line.327"></a>
+<span class="sourceLineNo">328</span><a id="line.328">        /**</a>
+<span class="sourceLineNo">329</span><a id="line.329">         * Set of referenced classes.</a>
+<span class="sourceLineNo">330</span><a id="line.330">         * Sorted by name for predictable violation messages in unit tests.</a>
+<span class="sourceLineNo">331</span><a id="line.331">         */</a>
+<span class="sourceLineNo">332</span><a id="line.332">        private final Set&lt;String&gt; referencedClassNames = new TreeSet&lt;&gt;();</a>
+<span class="sourceLineNo">333</span><a id="line.333">        /** Own class name. */</a>
+<span class="sourceLineNo">334</span><a id="line.334">        private final String className;</a>
+<span class="sourceLineNo">335</span><a id="line.335">        /* Location of own class. (Used to log violations) */</a>
+<span class="sourceLineNo">336</span><a id="line.336">        /** AST of class definition. */</a>
+<span class="sourceLineNo">337</span><a id="line.337">        private final DetailAST classAst;</a>
+<span class="sourceLineNo">338</span><a id="line.338"></a>
+<span class="sourceLineNo">339</span><a id="line.339">        /**</a>
+<span class="sourceLineNo">340</span><a id="line.340">         * Create new context associated with given class.</a>
+<span class="sourceLineNo">341</span><a id="line.341">         *</a>
+<span class="sourceLineNo">342</span><a id="line.342">         * @param className name of the given class.</a>
+<span class="sourceLineNo">343</span><a id="line.343">         * @param ast ast of class definition.</a>
+<span class="sourceLineNo">344</span><a id="line.344">         */</a>
+<span class="sourceLineNo">345</span><a id="line.345">        private ClassContext(String className, DetailAST ast) {</a>
+<span class="sourceLineNo">346</span><a id="line.346">            this.className = className;</a>
+<span class="sourceLineNo">347</span><a id="line.347">            classAst = ast;</a>
+<span class="sourceLineNo">348</span><a id="line.348">        }</a>
+<span class="sourceLineNo">349</span><a id="line.349"></a>
+<span class="sourceLineNo">350</span><a id="line.350">        /**</a>
+<span class="sourceLineNo">351</span><a id="line.351">         * Visits throws clause and collects all exceptions we throw.</a>
+<span class="sourceLineNo">352</span><a id="line.352">         *</a>
+<span class="sourceLineNo">353</span><a id="line.353">         * @param literalThrows throws to process.</a>
+<span class="sourceLineNo">354</span><a id="line.354">         */</a>
+<span class="sourceLineNo">355</span><a id="line.355">        public void visitLiteralThrows(DetailAST literalThrows) {</a>
+<span class="sourceLineNo">356</span><a id="line.356">            for (DetailAST childAST = literalThrows.getFirstChild();</a>
+<span class="sourceLineNo">357</span><a id="line.357">                 childAST != null;</a>
+<span class="sourceLineNo">358</span><a id="line.358">                 childAST = childAST.getNextSibling()) {</a>
+<span class="sourceLineNo">359</span><a id="line.359">                if (childAST.getType() != TokenTypes.COMMA) {</a>
+<span class="sourceLineNo">360</span><a id="line.360">                    addReferencedClassName(childAST);</a>
+<span class="sourceLineNo">361</span><a id="line.361">                }</a>
+<span class="sourceLineNo">362</span><a id="line.362">            }</a>
+<span class="sourceLineNo">363</span><a id="line.363">        }</a>
+<span class="sourceLineNo">364</span><a id="line.364"></a>
+<span class="sourceLineNo">365</span><a id="line.365">        /**</a>
+<span class="sourceLineNo">366</span><a id="line.366">         * Visits type.</a>
+<span class="sourceLineNo">367</span><a id="line.367">         *</a>
+<span class="sourceLineNo">368</span><a id="line.368">         * @param ast type to process.</a>
+<span class="sourceLineNo">369</span><a id="line.369">         */</a>
+<span class="sourceLineNo">370</span><a id="line.370">        public void visitType(DetailAST ast) {</a>
+<span class="sourceLineNo">371</span><a id="line.371">            DetailAST child = ast.getFirstChild();</a>
+<span class="sourceLineNo">372</span><a id="line.372">            while (child != null) {</a>
+<span class="sourceLineNo">373</span><a id="line.373">                if (TokenUtil.isOfType(child, TokenTypes.IDENT, TokenTypes.DOT)) {</a>
+<span class="sourceLineNo">374</span><a id="line.374">                    final String fullTypeName = FullIdent.createFullIdent(child).getText();</a>
+<span class="sourceLineNo">375</span><a id="line.375">                    final String trimmed = BRACKET_PATTERN</a>
+<span class="sourceLineNo">376</span><a id="line.376">                            .matcher(fullTypeName).replaceAll("");</a>
+<span class="sourceLineNo">377</span><a id="line.377">                    addReferencedClassName(trimmed);</a>
+<span class="sourceLineNo">378</span><a id="line.378">                }</a>
+<span class="sourceLineNo">379</span><a id="line.379">                child = child.getNextSibling();</a>
+<span class="sourceLineNo">380</span><a id="line.380">            }</a>
+<span class="sourceLineNo">381</span><a id="line.381">        }</a>
+<span class="sourceLineNo">382</span><a id="line.382"></a>
+<span class="sourceLineNo">383</span><a id="line.383">        /**</a>
+<span class="sourceLineNo">384</span><a id="line.384">         * Visits NEW.</a>
+<span class="sourceLineNo">385</span><a id="line.385">         *</a>
+<span class="sourceLineNo">386</span><a id="line.386">         * @param ast NEW to process.</a>
+<span class="sourceLineNo">387</span><a id="line.387">         */</a>
+<span class="sourceLineNo">388</span><a id="line.388">        public void visitLiteralNew(DetailAST ast) {</a>
+<span class="sourceLineNo">389</span><a id="line.389">            addReferencedClassName(ast.getFirstChild());</a>
+<span class="sourceLineNo">390</span><a id="line.390">        }</a>
+<span class="sourceLineNo">391</span><a id="line.391"></a>
+<span class="sourceLineNo">392</span><a id="line.392">        /**</a>
+<span class="sourceLineNo">393</span><a id="line.393">         * Adds new referenced class.</a>
+<span class="sourceLineNo">394</span><a id="line.394">         *</a>
+<span class="sourceLineNo">395</span><a id="line.395">         * @param ast a node which represents referenced class.</a>
+<span class="sourceLineNo">396</span><a id="line.396">         */</a>
+<span class="sourceLineNo">397</span><a id="line.397">        private void addReferencedClassName(DetailAST ast) {</a>
+<span class="sourceLineNo">398</span><a id="line.398">            final String fullIdentName = FullIdent.createFullIdent(ast).getText();</a>
+<span class="sourceLineNo">399</span><a id="line.399">            final String trimmed = BRACKET_PATTERN</a>
+<span class="sourceLineNo">400</span><a id="line.400">                    .matcher(fullIdentName).replaceAll("");</a>
+<span class="sourceLineNo">401</span><a id="line.401">            addReferencedClassName(trimmed);</a>
+<span class="sourceLineNo">402</span><a id="line.402">        }</a>
+<span class="sourceLineNo">403</span><a id="line.403"></a>
+<span class="sourceLineNo">404</span><a id="line.404">        /**</a>
+<span class="sourceLineNo">405</span><a id="line.405">         * Adds new referenced class.</a>
+<span class="sourceLineNo">406</span><a id="line.406">         *</a>
+<span class="sourceLineNo">407</span><a id="line.407">         * @param referencedClassName class name of the referenced class.</a>
+<span class="sourceLineNo">408</span><a id="line.408">         */</a>
+<span class="sourceLineNo">409</span><a id="line.409">        private void addReferencedClassName(String referencedClassName) {</a>
+<span class="sourceLineNo">410</span><a id="line.410">            if (isSignificant(referencedClassName)) {</a>
+<span class="sourceLineNo">411</span><a id="line.411">                referencedClassNames.add(referencedClassName);</a>
+<span class="sourceLineNo">412</span><a id="line.412">            }</a>
+<span class="sourceLineNo">413</span><a id="line.413">        }</a>
+<span class="sourceLineNo">414</span><a id="line.414"></a>
+<span class="sourceLineNo">415</span><a id="line.415">        /** Checks if coupling less than allowed or not. */</a>
+<span class="sourceLineNo">416</span><a id="line.416">        public void checkCoupling() {</a>
+<span class="sourceLineNo">417</span><a id="line.417">            referencedClassNames.remove(className);</a>
+<span class="sourceLineNo">418</span><a id="line.418">            referencedClassNames.remove(packageName + DOT + className);</a>
+<span class="sourceLineNo">419</span><a id="line.419"></a>
+<span class="sourceLineNo">420</span><a id="line.420">            if (referencedClassNames.size() &gt; max) {</a>
+<span class="sourceLineNo">421</span><a id="line.421">                log(classAst, getLogMessageId(),</a>
+<span class="sourceLineNo">422</span><a id="line.422">                        referencedClassNames.size(), max,</a>
+<span class="sourceLineNo">423</span><a id="line.423">                        referencedClassNames.toString());</a>
+<span class="sourceLineNo">424</span><a id="line.424">            }</a>
+<span class="sourceLineNo">425</span><a id="line.425">        }</a>
+<span class="sourceLineNo">426</span><a id="line.426"></a>
+<span class="sourceLineNo">427</span><a id="line.427">        /**</a>
+<span class="sourceLineNo">428</span><a id="line.428">         * Checks if given class shouldn't be ignored and not from java.lang.</a>
+<span class="sourceLineNo">429</span><a id="line.429">         *</a>
+<span class="sourceLineNo">430</span><a id="line.430">         * @param candidateClassName class to check.</a>
+<span class="sourceLineNo">431</span><a id="line.431">         * @return true if we should count this class.</a>
+<span class="sourceLineNo">432</span><a id="line.432">         */</a>
+<span class="sourceLineNo">433</span><a id="line.433">        private boolean isSignificant(String candidateClassName) {</a>
+<span class="sourceLineNo">434</span><a id="line.434">            return !excludedClasses.contains(candidateClassName)</a>
+<span class="sourceLineNo">435</span><a id="line.435">                &amp;&amp; !isFromExcludedPackage(candidateClassName)</a>
+<span class="sourceLineNo">436</span><a id="line.436">                &amp;&amp; !isExcludedClassRegexp(candidateClassName);</a>
+<span class="sourceLineNo">437</span><a id="line.437">        }</a>
+<span class="sourceLineNo">438</span><a id="line.438"></a>
+<span class="sourceLineNo">439</span><a id="line.439">        /**</a>
+<span class="sourceLineNo">440</span><a id="line.440">         * Checks if given class should be ignored as it belongs to excluded package.</a>
+<span class="sourceLineNo">441</span><a id="line.441">         *</a>
+<span class="sourceLineNo">442</span><a id="line.442">         * @param candidateClassName class to check</a>
+<span class="sourceLineNo">443</span><a id="line.443">         * @return true if we should not count this class.</a>
+<span class="sourceLineNo">444</span><a id="line.444">         */</a>
+<span class="sourceLineNo">445</span><a id="line.445">        private boolean isFromExcludedPackage(String candidateClassName) {</a>
+<span class="sourceLineNo">446</span><a id="line.446">            String classNameWithPackage = candidateClassName;</a>
+<span class="sourceLineNo">447</span><a id="line.447">            if (candidateClassName.indexOf(DOT) == -1) {</a>
+<span class="sourceLineNo">448</span><a id="line.448">                classNameWithPackage = getClassNameWithPackage(candidateClassName)</a>
+<span class="sourceLineNo">449</span><a id="line.449">                    .orElse("");</a>
+<span class="sourceLineNo">450</span><a id="line.450">            }</a>
+<span class="sourceLineNo">451</span><a id="line.451">            boolean isFromExcludedPackage = false;</a>
+<span class="sourceLineNo">452</span><a id="line.452">            if (classNameWithPackage.indexOf(DOT) != -1) {</a>
+<span class="sourceLineNo">453</span><a id="line.453">                final int lastDotIndex = classNameWithPackage.lastIndexOf(DOT);</a>
+<span class="sourceLineNo">454</span><a id="line.454">                final String candidatePackageName =</a>
+<span class="sourceLineNo">455</span><a id="line.455">                    classNameWithPackage.substring(0, lastDotIndex);</a>
+<span class="sourceLineNo">456</span><a id="line.456">                isFromExcludedPackage = candidatePackageName.startsWith("java.lang")</a>
+<span class="sourceLineNo">457</span><a id="line.457">                    || excludedPackages.contains(candidatePackageName);</a>
+<span class="sourceLineNo">458</span><a id="line.458">            }</a>
+<span class="sourceLineNo">459</span><a id="line.459">            return isFromExcludedPackage;</a>
+<span class="sourceLineNo">460</span><a id="line.460">        }</a>
+<span class="sourceLineNo">461</span><a id="line.461"></a>
+<span class="sourceLineNo">462</span><a id="line.462">        /**</a>
+<span class="sourceLineNo">463</span><a id="line.463">         * Retrieves class name with packages. Uses previously registered imports to</a>
+<span class="sourceLineNo">464</span><a id="line.464">         * get the full class name.</a>
+<span class="sourceLineNo">465</span><a id="line.465">         *</a>
+<span class="sourceLineNo">466</span><a id="line.466">         * @param examineClassName Class name to be retrieved.</a>
+<span class="sourceLineNo">467</span><a id="line.467">         * @return Class name with package name, if found, {@link Optional#empty()} otherwise.</a>
+<span class="sourceLineNo">468</span><a id="line.468">         */</a>
+<span class="sourceLineNo">469</span><a id="line.469">        private Optional&lt;String&gt; getClassNameWithPackage(String examineClassName) {</a>
+<span class="sourceLineNo">470</span><a id="line.470">            return Optional.ofNullable(importedClassPackages.get(examineClassName));</a>
+<span class="sourceLineNo">471</span><a id="line.471">        }</a>
+<span class="sourceLineNo">472</span><a id="line.472"></a>
+<span class="sourceLineNo">473</span><a id="line.473">        /**</a>
+<span class="sourceLineNo">474</span><a id="line.474">         * Checks if given class should be ignored as it belongs to excluded class regexp.</a>
+<span class="sourceLineNo">475</span><a id="line.475">         *</a>
+<span class="sourceLineNo">476</span><a id="line.476">         * @param candidateClassName class to check.</a>
+<span class="sourceLineNo">477</span><a id="line.477">         * @return true if we should not count this class.</a>
+<span class="sourceLineNo">478</span><a id="line.478">         */</a>
+<span class="sourceLineNo">479</span><a id="line.479">        private boolean isExcludedClassRegexp(String candidateClassName) {</a>
+<span class="sourceLineNo">480</span><a id="line.480">            boolean result = false;</a>
+<span class="sourceLineNo">481</span><a id="line.481">            for (Pattern pattern : excludeClassesRegexps) {</a>
+<span class="sourceLineNo">482</span><a id="line.482">                if (pattern.matcher(candidateClassName).matches()) {</a>
+<span class="sourceLineNo">483</span><a id="line.483">                    result = true;</a>
+<span class="sourceLineNo">484</span><a id="line.484">                    break;</a>
+<span class="sourceLineNo">485</span><a id="line.485">                }</a>
+<span class="sourceLineNo">486</span><a id="line.486">            }</a>
+<span class="sourceLineNo">487</span><a id="line.487">            return result;</a>
+<span class="sourceLineNo">488</span><a id="line.488">        }</a>
+<span class="sourceLineNo">489</span><a id="line.489"></a>
+<span class="sourceLineNo">490</span><a id="line.490">    }</a>
 <span class="sourceLineNo">491</span><a id="line.491"></a>
-<span class="sourceLineNo">492</span><a id="line.492">    }</a>
-<span class="sourceLineNo">493</span><a id="line.493"></a>
-<span class="sourceLineNo">494</span><a id="line.494">}</a>
+<span class="sourceLineNo">492</span><a id="line.492">}</a>
 
 
 
