@@ -1,0 +1,309 @@
+<!DOCTYPE HTML>
+<html lang>
+<head>
+<title>Source code</title>
+<link rel="stylesheet" type="text/css" href="../../../../../../../stylesheet.css" title="Style">
+</head>
+<body>
+<main role="main">
+<div class="sourceContainer">
+<pre><span class="sourceLineNo">001</span><a id="line.1">///////////////////////////////////////////////////////////////////////////////////////////////</a>
+<span class="sourceLineNo">002</span><a id="line.2">// checkstyle: Checks Java source code and other text files for adherence to a set of rules.</a>
+<span class="sourceLineNo">003</span><a id="line.3">// Copyright (C) 2001-2024 the original author or authors.</a>
+<span class="sourceLineNo">004</span><a id="line.4">//</a>
+<span class="sourceLineNo">005</span><a id="line.5">// This library is free software; you can redistribute it and/or</a>
+<span class="sourceLineNo">006</span><a id="line.6">// modify it under the terms of the GNU Lesser General Public</a>
+<span class="sourceLineNo">007</span><a id="line.7">// License as published by the Free Software Foundation; either</a>
+<span class="sourceLineNo">008</span><a id="line.8">// version 2.1 of the License, or (at your option) any later version.</a>
+<span class="sourceLineNo">009</span><a id="line.9">//</a>
+<span class="sourceLineNo">010</span><a id="line.10">// This library is distributed in the hope that it will be useful,</a>
+<span class="sourceLineNo">011</span><a id="line.11">// but WITHOUT ANY WARRANTY; without even the implied warranty of</a>
+<span class="sourceLineNo">012</span><a id="line.12">// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU</a>
+<span class="sourceLineNo">013</span><a id="line.13">// Lesser General Public License for more details.</a>
+<span class="sourceLineNo">014</span><a id="line.14">//</a>
+<span class="sourceLineNo">015</span><a id="line.15">// You should have received a copy of the GNU Lesser General Public</a>
+<span class="sourceLineNo">016</span><a id="line.16">// License along with this library; if not, write to the Free Software</a>
+<span class="sourceLineNo">017</span><a id="line.17">// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA</a>
+<span class="sourceLineNo">018</span><a id="line.18">///////////////////////////////////////////////////////////////////////////////////////////////</a>
+<span class="sourceLineNo">019</span><a id="line.19"></a>
+<span class="sourceLineNo">020</span><a id="line.20">package com.puppycrawl.tools.checkstyle.checks.javadoc;</a>
+<span class="sourceLineNo">021</span><a id="line.21"></a>
+<span class="sourceLineNo">022</span><a id="line.22">import java.util.Optional;</a>
+<span class="sourceLineNo">023</span><a id="line.23">import java.util.regex.Matcher;</a>
+<span class="sourceLineNo">024</span><a id="line.24">import java.util.regex.Pattern;</a>
+<span class="sourceLineNo">025</span><a id="line.25"></a>
+<span class="sourceLineNo">026</span><a id="line.26">import com.puppycrawl.tools.checkstyle.GlobalStatefulCheck;</a>
+<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
+<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.api.DetailNode;</a>
+<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;</a>
+<span class="sourceLineNo">030</span><a id="line.30">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
+<span class="sourceLineNo">031</span><a id="line.31"></a>
+<span class="sourceLineNo">032</span><a id="line.32">/**</a>
+<span class="sourceLineNo">033</span><a id="line.33"> * &lt;p&gt;</a>
+<span class="sourceLineNo">034</span><a id="line.34"> * Checks the alignment of</a>
+<span class="sourceLineNo">035</span><a id="line.35"> * &lt;a href="https://docs.oracle.com/en/java/javase/14/docs/specs/javadoc/doc-comment-spec.html#leading-asterisks"&gt;</a>
+<span class="sourceLineNo">036</span><a id="line.36"> * leading asterisks&lt;/a&gt; in a Javadoc comment. The Check ensures that leading asterisks</a>
+<span class="sourceLineNo">037</span><a id="line.37"> * are aligned vertically under the first asterisk ( &amp;#42; )</a>
+<span class="sourceLineNo">038</span><a id="line.38"> * of opening Javadoc tag. The alignment of closing Javadoc tag ( &amp;#42;/ ) is also checked.</a>
+<span class="sourceLineNo">039</span><a id="line.39"> * If a closing Javadoc tag contains non-whitespace character before it</a>
+<span class="sourceLineNo">040</span><a id="line.40"> * then it's alignment will be ignored.</a>
+<span class="sourceLineNo">041</span><a id="line.41"> * If the ending javadoc line contains a leading asterisk, then that leading asterisk's alignment</a>
+<span class="sourceLineNo">042</span><a id="line.42"> * will be considered, the closing Javadoc tag will be ignored.</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * &lt;p&gt;</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * If you're using tabs then specify the the tab width in the</a>
+<span class="sourceLineNo">046</span><a id="line.46"> * &lt;a href="https://checkstyle.org/config.html#tabWidth"&gt;tabWidth&lt;/a&gt; property.</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * &lt;li&gt;</a>
+<span class="sourceLineNo">050</span><a id="line.50"> * Property {@code violateExecutionOnNonTightHtml} - Control when to print violations if the</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * Javadoc being examined by this check violates the tight html rules defined at</a>
+<span class="sourceLineNo">052</span><a id="line.52"> * &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;Tight-HTML Rules&lt;/a&gt;.</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * Type is {@code boolean}.</a>
+<span class="sourceLineNo">054</span><a id="line.54"> * Default value is {@code false}.</a>
+<span class="sourceLineNo">055</span><a id="line.55"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">056</span><a id="line.56"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">057</span><a id="line.57"> * &lt;p&gt;</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">059</span><a id="line.59"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * &lt;p&gt;</a>
+<span class="sourceLineNo">061</span><a id="line.61"> * Violation Message Keys:</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">063</span><a id="line.63"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * &lt;li&gt;</a>
+<span class="sourceLineNo">065</span><a id="line.65"> * {@code javadoc.asterisk.indentation}</a>
+<span class="sourceLineNo">066</span><a id="line.66"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">067</span><a id="line.67"> * &lt;li&gt;</a>
+<span class="sourceLineNo">068</span><a id="line.68"> * {@code javadoc.missed.html.close}</a>
+<span class="sourceLineNo">069</span><a id="line.69"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">070</span><a id="line.70"> * &lt;li&gt;</a>
+<span class="sourceLineNo">071</span><a id="line.71"> * {@code javadoc.parse.rule.error}</a>
+<span class="sourceLineNo">072</span><a id="line.72"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">073</span><a id="line.73"> * &lt;li&gt;</a>
+<span class="sourceLineNo">074</span><a id="line.74"> * {@code javadoc.unclosedHtml}</a>
+<span class="sourceLineNo">075</span><a id="line.75"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">076</span><a id="line.76"> * &lt;li&gt;</a>
+<span class="sourceLineNo">077</span><a id="line.77"> * {@code javadoc.wrong.singleton.html.tag}</a>
+<span class="sourceLineNo">078</span><a id="line.78"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">079</span><a id="line.79"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">080</span><a id="line.80"> *</a>
+<span class="sourceLineNo">081</span><a id="line.81"> * @since 10.18.0</a>
+<span class="sourceLineNo">082</span><a id="line.82"> */</a>
+<span class="sourceLineNo">083</span><a id="line.83">@GlobalStatefulCheck</a>
+<span class="sourceLineNo">084</span><a id="line.84">public class JavadocLeadingAsteriskAlignCheck extends AbstractJavadocCheck {</a>
+<span class="sourceLineNo">085</span><a id="line.85"></a>
+<span class="sourceLineNo">086</span><a id="line.86">    /**</a>
+<span class="sourceLineNo">087</span><a id="line.87">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">088</span><a id="line.88">     * file.</a>
+<span class="sourceLineNo">089</span><a id="line.89">     */</a>
+<span class="sourceLineNo">090</span><a id="line.90">    public static final String MSG_KEY = "javadoc.asterisk.indentation";</a>
+<span class="sourceLineNo">091</span><a id="line.91"></a>
+<span class="sourceLineNo">092</span><a id="line.92">    /** Specifies the line number of starting block of the javadoc comment. */</a>
+<span class="sourceLineNo">093</span><a id="line.93">    private int javadocStartLineNumber;</a>
+<span class="sourceLineNo">094</span><a id="line.94"></a>
+<span class="sourceLineNo">095</span><a id="line.95">    /** Specifies the column number of starting block of the javadoc comment with tabs expanded. */</a>
+<span class="sourceLineNo">096</span><a id="line.96">    private int expectedColumnNumberTabsExpanded;</a>
+<span class="sourceLineNo">097</span><a id="line.97"></a>
+<span class="sourceLineNo">098</span><a id="line.98">    /**</a>
+<span class="sourceLineNo">099</span><a id="line.99">     * Specifies the column number of the leading asterisk</a>
+<span class="sourceLineNo">100</span><a id="line.100">     * without tabs expanded.</a>
+<span class="sourceLineNo">101</span><a id="line.101">     */</a>
+<span class="sourceLineNo">102</span><a id="line.102">    private int expectedColumnNumberWithoutExpandedTabs;</a>
+<span class="sourceLineNo">103</span><a id="line.103"></a>
+<span class="sourceLineNo">104</span><a id="line.104">    /** Specifies the lines of the file being processed. */</a>
+<span class="sourceLineNo">105</span><a id="line.105">    private String[] fileLines;</a>
+<span class="sourceLineNo">106</span><a id="line.106"></a>
+<span class="sourceLineNo">107</span><a id="line.107">    @Override</a>
+<span class="sourceLineNo">108</span><a id="line.108">    public int[] getDefaultJavadocTokens() {</a>
+<span class="sourceLineNo">109</span><a id="line.109">        return new int[] {</a>
+<span class="sourceLineNo">110</span><a id="line.110">            JavadocTokenTypes.LEADING_ASTERISK,</a>
+<span class="sourceLineNo">111</span><a id="line.111">        };</a>
+<span class="sourceLineNo">112</span><a id="line.112">    }</a>
+<span class="sourceLineNo">113</span><a id="line.113"></a>
+<span class="sourceLineNo">114</span><a id="line.114">    @Override</a>
+<span class="sourceLineNo">115</span><a id="line.115">    public int[] getRequiredJavadocTokens() {</a>
+<span class="sourceLineNo">116</span><a id="line.116">        return getAcceptableJavadocTokens();</a>
+<span class="sourceLineNo">117</span><a id="line.117">    }</a>
+<span class="sourceLineNo">118</span><a id="line.118"></a>
+<span class="sourceLineNo">119</span><a id="line.119">    @Override</a>
+<span class="sourceLineNo">120</span><a id="line.120">    public void beginJavadocTree(DetailNode rootAst) {</a>
+<span class="sourceLineNo">121</span><a id="line.121">        // this method processes and sets information of starting javadoc tag.</a>
+<span class="sourceLineNo">122</span><a id="line.122">        fileLines = getLines();</a>
+<span class="sourceLineNo">123</span><a id="line.123">        final String startLine = fileLines[rootAst.getLineNumber() - 1];</a>
+<span class="sourceLineNo">124</span><a id="line.124">        javadocStartLineNumber = rootAst.getLineNumber();</a>
+<span class="sourceLineNo">125</span><a id="line.125">        expectedColumnNumberTabsExpanded = CommonUtil.lengthExpandedTabs(</a>
+<span class="sourceLineNo">126</span><a id="line.126">            startLine, rootAst.getColumnNumber() - 1, getTabWidth());</a>
+<span class="sourceLineNo">127</span><a id="line.127">    }</a>
+<span class="sourceLineNo">128</span><a id="line.128"></a>
+<span class="sourceLineNo">129</span><a id="line.129">    @Override</a>
+<span class="sourceLineNo">130</span><a id="line.130">    public void visitJavadocToken(DetailNode ast) {</a>
+<span class="sourceLineNo">131</span><a id="line.131">        // this method checks the alignment of leading asterisks.</a>
+<span class="sourceLineNo">132</span><a id="line.132">        final boolean isJavadocStartingLine = ast.getLineNumber() == javadocStartLineNumber;</a>
+<span class="sourceLineNo">133</span><a id="line.133"></a>
+<span class="sourceLineNo">134</span><a id="line.134">        if (!isJavadocStartingLine) {</a>
+<span class="sourceLineNo">135</span><a id="line.135">            final Optional&lt;Integer&gt; leadingAsteriskColumnNumber =</a>
+<span class="sourceLineNo">136</span><a id="line.136">                                        getAsteriskColumnNumber(ast.getText());</a>
+<span class="sourceLineNo">137</span><a id="line.137"></a>
+<span class="sourceLineNo">138</span><a id="line.138">            leadingAsteriskColumnNumber</a>
+<span class="sourceLineNo">139</span><a id="line.139">                    .map(columnNumber -&gt; expandedTabs(ast.getText(), columnNumber))</a>
+<span class="sourceLineNo">140</span><a id="line.140">                    .filter(columnNumber -&gt; {</a>
+<span class="sourceLineNo">141</span><a id="line.141">                        return !hasValidAlignment(expectedColumnNumberTabsExpanded, columnNumber);</a>
+<span class="sourceLineNo">142</span><a id="line.142">                    })</a>
+<span class="sourceLineNo">143</span><a id="line.143">                    .ifPresent(columnNumber -&gt; {</a>
+<span class="sourceLineNo">144</span><a id="line.144">                        logViolation(ast.getLineNumber(),</a>
+<span class="sourceLineNo">145</span><a id="line.145">                                columnNumber,</a>
+<span class="sourceLineNo">146</span><a id="line.146">                                expectedColumnNumberTabsExpanded);</a>
+<span class="sourceLineNo">147</span><a id="line.147">                    });</a>
+<span class="sourceLineNo">148</span><a id="line.148">        }</a>
+<span class="sourceLineNo">149</span><a id="line.149">    }</a>
+<span class="sourceLineNo">150</span><a id="line.150"></a>
+<span class="sourceLineNo">151</span><a id="line.151">    @Override</a>
+<span class="sourceLineNo">152</span><a id="line.152">    public void finishJavadocTree(DetailNode rootAst) {</a>
+<span class="sourceLineNo">153</span><a id="line.153">        // this method checks the alignment of closing javadoc tag.</a>
+<span class="sourceLineNo">154</span><a id="line.154">        final DetailAST javadocEndToken = getBlockCommentAst().getLastChild();</a>
+<span class="sourceLineNo">155</span><a id="line.155">        final String lastLine = fileLines[javadocEndToken.getLineNo() - 1];</a>
+<span class="sourceLineNo">156</span><a id="line.156">        final Optional&lt;Integer&gt; endingBlockColumnNumber = getAsteriskColumnNumber(lastLine);</a>
+<span class="sourceLineNo">157</span><a id="line.157"></a>
+<span class="sourceLineNo">158</span><a id="line.158">        endingBlockColumnNumber</a>
+<span class="sourceLineNo">159</span><a id="line.159">                .map(columnNumber -&gt; expandedTabs(lastLine, columnNumber))</a>
+<span class="sourceLineNo">160</span><a id="line.160">                .filter(columnNumber -&gt; {</a>
+<span class="sourceLineNo">161</span><a id="line.161">                    return !hasValidAlignment(expectedColumnNumberTabsExpanded, columnNumber);</a>
+<span class="sourceLineNo">162</span><a id="line.162">                })</a>
+<span class="sourceLineNo">163</span><a id="line.163">                .ifPresent(columnNumber -&gt; {</a>
+<span class="sourceLineNo">164</span><a id="line.164">                    logViolation(javadocEndToken.getLineNo(),</a>
+<span class="sourceLineNo">165</span><a id="line.165">                            columnNumber,</a>
+<span class="sourceLineNo">166</span><a id="line.166">                            expectedColumnNumberTabsExpanded);</a>
+<span class="sourceLineNo">167</span><a id="line.167">                });</a>
+<span class="sourceLineNo">168</span><a id="line.168">    }</a>
+<span class="sourceLineNo">169</span><a id="line.169"></a>
+<span class="sourceLineNo">170</span><a id="line.170">    /**</a>
+<span class="sourceLineNo">171</span><a id="line.171">     * Processes and returns the column number of</a>
+<span class="sourceLineNo">172</span><a id="line.172">     * leading asterisk with tabs expanded.</a>
+<span class="sourceLineNo">173</span><a id="line.173">     * Also sets 'expectedColumnNumberWithoutExpandedTabs' if the leading asterisk is present.</a>
+<span class="sourceLineNo">174</span><a id="line.174">     *</a>
+<span class="sourceLineNo">175</span><a id="line.175">     * @param line javadoc comment line</a>
+<span class="sourceLineNo">176</span><a id="line.176">     * @param columnNumber column number of leading asterisk</a>
+<span class="sourceLineNo">177</span><a id="line.177">     * @return column number of leading asterisk with tabs expanded</a>
+<span class="sourceLineNo">178</span><a id="line.178">     */</a>
+<span class="sourceLineNo">179</span><a id="line.179">    private int expandedTabs(String line, int columnNumber) {</a>
+<span class="sourceLineNo">180</span><a id="line.180">        expectedColumnNumberWithoutExpandedTabs = columnNumber - 1;</a>
+<span class="sourceLineNo">181</span><a id="line.181">        return CommonUtil.lengthExpandedTabs(</a>
+<span class="sourceLineNo">182</span><a id="line.182">                    line, columnNumber, getTabWidth());</a>
+<span class="sourceLineNo">183</span><a id="line.183">    }</a>
+<span class="sourceLineNo">184</span><a id="line.184"></a>
+<span class="sourceLineNo">185</span><a id="line.185">    /**</a>
+<span class="sourceLineNo">186</span><a id="line.186">     * Processes and returns an OptionalInt containing</a>
+<span class="sourceLineNo">187</span><a id="line.187">     * the column number of leading asterisk without tabs expanded.</a>
+<span class="sourceLineNo">188</span><a id="line.188">     *</a>
+<span class="sourceLineNo">189</span><a id="line.189">     * @param line javadoc comment line</a>
+<span class="sourceLineNo">190</span><a id="line.190">     * @return asterisk's column number</a>
+<span class="sourceLineNo">191</span><a id="line.191">     */</a>
+<span class="sourceLineNo">192</span><a id="line.192">    private static Optional&lt;Integer&gt; getAsteriskColumnNumber(String line) {</a>
+<span class="sourceLineNo">193</span><a id="line.193">        final Pattern pattern = Pattern.compile("^(\\s*)\\*");</a>
+<span class="sourceLineNo">194</span><a id="line.194">        final Matcher matcher = pattern.matcher(line);</a>
+<span class="sourceLineNo">195</span><a id="line.195"></a>
+<span class="sourceLineNo">196</span><a id="line.196">        // We may not always have a leading asterisk because a javadoc line can start with</a>
+<span class="sourceLineNo">197</span><a id="line.197">        // a non-whitespace character or the javadoc line can be empty.</a>
+<span class="sourceLineNo">198</span><a id="line.198">        // In such cases, there is no leading asterisk and Optional will be empty.</a>
+<span class="sourceLineNo">199</span><a id="line.199">        return Optional.of(matcher)</a>
+<span class="sourceLineNo">200</span><a id="line.200">                .filter(Matcher::find)</a>
+<span class="sourceLineNo">201</span><a id="line.201">                .map(matcherInstance -&gt; matcherInstance.group(1))</a>
+<span class="sourceLineNo">202</span><a id="line.202">                .map(groupLength -&gt; groupLength.length() + 1);</a>
+<span class="sourceLineNo">203</span><a id="line.203">    }</a>
+<span class="sourceLineNo">204</span><a id="line.204"></a>
+<span class="sourceLineNo">205</span><a id="line.205">    /**</a>
+<span class="sourceLineNo">206</span><a id="line.206">     * Checks alignment of asterisks and logs violations.</a>
+<span class="sourceLineNo">207</span><a id="line.207">     *</a>
+<span class="sourceLineNo">208</span><a id="line.208">     * @param lineNumber line number of current comment line</a>
+<span class="sourceLineNo">209</span><a id="line.209">     * @param asteriskColNumber column number of leading asterisk</a>
+<span class="sourceLineNo">210</span><a id="line.210">     * @param expectedColNumber column number of javadoc starting token</a>
+<span class="sourceLineNo">211</span><a id="line.211">     */</a>
+<span class="sourceLineNo">212</span><a id="line.212">    private void logViolation(int lineNumber,</a>
+<span class="sourceLineNo">213</span><a id="line.213">                              int asteriskColNumber,</a>
+<span class="sourceLineNo">214</span><a id="line.214">                              int expectedColNumber) {</a>
+<span class="sourceLineNo">215</span><a id="line.215"></a>
+<span class="sourceLineNo">216</span><a id="line.216">        log(lineNumber,</a>
+<span class="sourceLineNo">217</span><a id="line.217">            expectedColumnNumberWithoutExpandedTabs,</a>
+<span class="sourceLineNo">218</span><a id="line.218">            MSG_KEY,</a>
+<span class="sourceLineNo">219</span><a id="line.219">            asteriskColNumber,</a>
+<span class="sourceLineNo">220</span><a id="line.220">            expectedColNumber);</a>
+<span class="sourceLineNo">221</span><a id="line.221">    }</a>
+<span class="sourceLineNo">222</span><a id="line.222"></a>
+<span class="sourceLineNo">223</span><a id="line.223">    /**</a>
+<span class="sourceLineNo">224</span><a id="line.224">     * Checks the column difference between</a>
+<span class="sourceLineNo">225</span><a id="line.225">     * expected column number and leading asterisk column number.</a>
+<span class="sourceLineNo">226</span><a id="line.226">     *</a>
+<span class="sourceLineNo">227</span><a id="line.227">     * @param expectedColNumber column number of javadoc starting token</a>
+<span class="sourceLineNo">228</span><a id="line.228">     * @param asteriskColNumber column number of leading asterisk</a>
+<span class="sourceLineNo">229</span><a id="line.229">     * @return true if the asterisk is aligned properly, false otherwise</a>
+<span class="sourceLineNo">230</span><a id="line.230">     */</a>
+<span class="sourceLineNo">231</span><a id="line.231">    private static boolean hasValidAlignment(int expectedColNumber,</a>
+<span class="sourceLineNo">232</span><a id="line.232">                                             int asteriskColNumber) {</a>
+<span class="sourceLineNo">233</span><a id="line.233">        return expectedColNumber - asteriskColNumber == 0;</a>
+<span class="sourceLineNo">234</span><a id="line.234">    }</a>
+<span class="sourceLineNo">235</span><a id="line.235">}</a>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</pre>
+</div>
+</main>
+</body>
+</html>

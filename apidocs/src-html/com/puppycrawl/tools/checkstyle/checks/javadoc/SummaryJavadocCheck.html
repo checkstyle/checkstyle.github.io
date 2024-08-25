@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html lang="en">
+<html lang>
 <head>
 <title>Source code</title>
 <link rel="stylesheet" type="text/css" href="../../../../../../../stylesheet.css" title="Style">
@@ -28,591 +28,654 @@
 <span class="sourceLineNo">019</span><a id="line.19"></a>
 <span class="sourceLineNo">020</span><a id="line.20">package com.puppycrawl.tools.checkstyle.checks.javadoc;</a>
 <span class="sourceLineNo">021</span><a id="line.21"></a>
-<span class="sourceLineNo">022</span><a id="line.22">import java.util.Arrays;</a>
-<span class="sourceLineNo">023</span><a id="line.23">import java.util.BitSet;</a>
-<span class="sourceLineNo">024</span><a id="line.24">import java.util.Optional;</a>
-<span class="sourceLineNo">025</span><a id="line.25">import java.util.regex.Pattern;</a>
-<span class="sourceLineNo">026</span><a id="line.26"></a>
-<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
-<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.api.DetailNode;</a>
-<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;</a>
-<span class="sourceLineNo">030</span><a id="line.30">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
-<span class="sourceLineNo">031</span><a id="line.31">import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;</a>
-<span class="sourceLineNo">032</span><a id="line.32">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
-<span class="sourceLineNo">033</span><a id="line.33"></a>
-<span class="sourceLineNo">034</span><a id="line.34">/**</a>
-<span class="sourceLineNo">035</span><a id="line.35"> * &lt;p&gt;</a>
-<span class="sourceLineNo">036</span><a id="line.36"> * Checks that</a>
-<span class="sourceLineNo">037</span><a id="line.37"> * &lt;a href="https://www.oracle.com/technical-resources/articles/java/javadoc-tool.html#firstsentence"&gt;</a>
-<span class="sourceLineNo">038</span><a id="line.38"> * Javadoc summary sentence&lt;/a&gt; does not contain phrases that are not recommended to use.</a>
-<span class="sourceLineNo">039</span><a id="line.39"> * Summaries that contain only the {@code {@inheritDoc}} tag are skipped.</a>
-<span class="sourceLineNo">040</span><a id="line.40"> * Summaries that contain a non-empty {@code {@return}} are allowed.</a>
-<span class="sourceLineNo">041</span><a id="line.41"> * Check also violate Javadoc that does not contain first sentence, though with {@code {@return}} a</a>
-<span class="sourceLineNo">042</span><a id="line.42"> * period is not required as the Javadoc tool adds it.</a>
-<span class="sourceLineNo">043</span><a id="line.43"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">044</span><a id="line.44"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">045</span><a id="line.45"> * &lt;li&gt;</a>
-<span class="sourceLineNo">046</span><a id="line.46"> * Property {@code forbiddenSummaryFragments} - Specify the regexp for forbidden summary fragments.</a>
-<span class="sourceLineNo">047</span><a id="line.47"> * Type is {@code java.util.regex.Pattern}.</a>
-<span class="sourceLineNo">048</span><a id="line.48"> * Default value is {@code "^$"}.</a>
-<span class="sourceLineNo">049</span><a id="line.49"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">022</span><a id="line.22">import java.util.ArrayList;</a>
+<span class="sourceLineNo">023</span><a id="line.23">import java.util.Arrays;</a>
+<span class="sourceLineNo">024</span><a id="line.24">import java.util.BitSet;</a>
+<span class="sourceLineNo">025</span><a id="line.25">import java.util.List;</a>
+<span class="sourceLineNo">026</span><a id="line.26">import java.util.Optional;</a>
+<span class="sourceLineNo">027</span><a id="line.27">import java.util.regex.Pattern;</a>
+<span class="sourceLineNo">028</span><a id="line.28">import java.util.stream.Stream;</a>
+<span class="sourceLineNo">029</span><a id="line.29"></a>
+<span class="sourceLineNo">030</span><a id="line.30">import javax.annotation.Nullable;</a>
+<span class="sourceLineNo">031</span><a id="line.31"></a>
+<span class="sourceLineNo">032</span><a id="line.32">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
+<span class="sourceLineNo">033</span><a id="line.33">import com.puppycrawl.tools.checkstyle.api.DetailNode;</a>
+<span class="sourceLineNo">034</span><a id="line.34">import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;</a>
+<span class="sourceLineNo">035</span><a id="line.35">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
+<span class="sourceLineNo">036</span><a id="line.36">import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;</a>
+<span class="sourceLineNo">037</span><a id="line.37">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
+<span class="sourceLineNo">038</span><a id="line.38"></a>
+<span class="sourceLineNo">039</span><a id="line.39">/**</a>
+<span class="sourceLineNo">040</span><a id="line.40"> * &lt;p&gt;</a>
+<span class="sourceLineNo">041</span><a id="line.41"> * Checks that</a>
+<span class="sourceLineNo">042</span><a id="line.42"> * &lt;a href="https://www.oracle.com/technical-resources/articles/java/javadoc-tool.html#firstsentence"&gt;</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * Javadoc summary sentence&lt;/a&gt; does not contain phrases that are not recommended to use.</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * Summaries that contain only the {@code {@inheritDoc}} tag are skipped.</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * Summaries that contain a non-empty {@code {@return}} are allowed.</a>
+<span class="sourceLineNo">046</span><a id="line.46"> * Check also violate Javadoc that does not contain first sentence, though with {@code {@return}} a</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * period is not required as the Javadoc tool adds it.</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * &lt;ul&gt;</a>
 <span class="sourceLineNo">050</span><a id="line.50"> * &lt;li&gt;</a>
-<span class="sourceLineNo">051</span><a id="line.51"> * Property {@code period} - Specify the period symbol at the end of first javadoc sentence.</a>
-<span class="sourceLineNo">052</span><a id="line.52"> * Type is {@code java.lang.String}.</a>
-<span class="sourceLineNo">053</span><a id="line.53"> * Default value is {@code "."}.</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * Property {@code forbiddenSummaryFragments} - Specify the regexp for forbidden summary fragments.</a>
+<span class="sourceLineNo">052</span><a id="line.52"> * Type is {@code java.util.regex.Pattern}.</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * Default value is {@code "^$"}.</a>
 <span class="sourceLineNo">054</span><a id="line.54"> * &lt;/li&gt;</a>
 <span class="sourceLineNo">055</span><a id="line.55"> * &lt;li&gt;</a>
-<span class="sourceLineNo">056</span><a id="line.56"> * Property {@code violateExecutionOnNonTightHtml} - Control when to print violations</a>
-<span class="sourceLineNo">057</span><a id="line.57"> * if the Javadoc being examined by this check violates the tight html rules defined at</a>
-<span class="sourceLineNo">058</span><a id="line.58"> * &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;Tight-HTML Rules&lt;/a&gt;.</a>
-<span class="sourceLineNo">059</span><a id="line.59"> * Type is {@code boolean}.</a>
-<span class="sourceLineNo">060</span><a id="line.60"> * Default value is {@code false}.</a>
-<span class="sourceLineNo">061</span><a id="line.61"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">062</span><a id="line.62"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * &lt;p&gt;</a>
-<span class="sourceLineNo">064</span><a id="line.64"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
-<span class="sourceLineNo">065</span><a id="line.65"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">066</span><a id="line.66"> * &lt;p&gt;</a>
-<span class="sourceLineNo">067</span><a id="line.67"> * Violation Message Keys:</a>
-<span class="sourceLineNo">068</span><a id="line.68"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">069</span><a id="line.69"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">070</span><a id="line.70"> * &lt;li&gt;</a>
-<span class="sourceLineNo">071</span><a id="line.71"> * {@code javadoc.missed.html.close}</a>
-<span class="sourceLineNo">072</span><a id="line.72"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">073</span><a id="line.73"> * &lt;li&gt;</a>
-<span class="sourceLineNo">074</span><a id="line.74"> * {@code javadoc.parse.rule.error}</a>
-<span class="sourceLineNo">075</span><a id="line.75"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">076</span><a id="line.76"> * &lt;li&gt;</a>
-<span class="sourceLineNo">077</span><a id="line.77"> * {@code javadoc.unclosedHtml}</a>
-<span class="sourceLineNo">078</span><a id="line.78"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">079</span><a id="line.79"> * &lt;li&gt;</a>
-<span class="sourceLineNo">080</span><a id="line.80"> * {@code javadoc.wrong.singleton.html.tag}</a>
-<span class="sourceLineNo">081</span><a id="line.81"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">082</span><a id="line.82"> * &lt;li&gt;</a>
-<span class="sourceLineNo">083</span><a id="line.83"> * {@code summary.first.sentence}</a>
-<span class="sourceLineNo">084</span><a id="line.84"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">085</span><a id="line.85"> * &lt;li&gt;</a>
-<span class="sourceLineNo">086</span><a id="line.86"> * {@code summary.javaDoc}</a>
-<span class="sourceLineNo">087</span><a id="line.87"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">088</span><a id="line.88"> * &lt;li&gt;</a>
-<span class="sourceLineNo">089</span><a id="line.89"> * {@code summary.javaDoc.missing}</a>
-<span class="sourceLineNo">090</span><a id="line.90"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">091</span><a id="line.91"> * &lt;li&gt;</a>
-<span class="sourceLineNo">092</span><a id="line.92"> * {@code summary.javaDoc.missing.period}</a>
-<span class="sourceLineNo">093</span><a id="line.93"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">094</span><a id="line.94"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">095</span><a id="line.95"> *</a>
-<span class="sourceLineNo">096</span><a id="line.96"> * @since 6.0</a>
-<span class="sourceLineNo">097</span><a id="line.97"> */</a>
-<span class="sourceLineNo">098</span><a id="line.98">@StatelessCheck</a>
-<span class="sourceLineNo">099</span><a id="line.99">public class SummaryJavadocCheck extends AbstractJavadocCheck {</a>
-<span class="sourceLineNo">100</span><a id="line.100"></a>
-<span class="sourceLineNo">101</span><a id="line.101">    /**</a>
-<span class="sourceLineNo">102</span><a id="line.102">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">103</span><a id="line.103">     * file.</a>
-<span class="sourceLineNo">104</span><a id="line.104">     */</a>
-<span class="sourceLineNo">105</span><a id="line.105">    public static final String MSG_SUMMARY_FIRST_SENTENCE = "summary.first.sentence";</a>
-<span class="sourceLineNo">106</span><a id="line.106"></a>
-<span class="sourceLineNo">107</span><a id="line.107">    /**</a>
-<span class="sourceLineNo">108</span><a id="line.108">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">109</span><a id="line.109">     * file.</a>
-<span class="sourceLineNo">110</span><a id="line.110">     */</a>
-<span class="sourceLineNo">111</span><a id="line.111">    public static final String MSG_SUMMARY_JAVADOC = "summary.javaDoc";</a>
-<span class="sourceLineNo">112</span><a id="line.112"></a>
-<span class="sourceLineNo">113</span><a id="line.113">    /**</a>
-<span class="sourceLineNo">114</span><a id="line.114">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">115</span><a id="line.115">     * file.</a>
-<span class="sourceLineNo">116</span><a id="line.116">     */</a>
-<span class="sourceLineNo">117</span><a id="line.117">    public static final String MSG_SUMMARY_JAVADOC_MISSING = "summary.javaDoc.missing";</a>
-<span class="sourceLineNo">118</span><a id="line.118"></a>
-<span class="sourceLineNo">119</span><a id="line.119">    /**</a>
-<span class="sourceLineNo">120</span><a id="line.120">     * A key is pointing to the warning message text in "messages.properties" file.</a>
-<span class="sourceLineNo">121</span><a id="line.121">     */</a>
-<span class="sourceLineNo">122</span><a id="line.122">    public static final String MSG_SUMMARY_MISSING_PERIOD = "summary.javaDoc.missing.period";</a>
-<span class="sourceLineNo">123</span><a id="line.123"></a>
-<span class="sourceLineNo">124</span><a id="line.124">    /**</a>
-<span class="sourceLineNo">125</span><a id="line.125">     * This regexp is used to convert multiline javadoc to single-line without stars.</a>
-<span class="sourceLineNo">126</span><a id="line.126">     */</a>
-<span class="sourceLineNo">127</span><a id="line.127">    private static final Pattern JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN =</a>
-<span class="sourceLineNo">128</span><a id="line.128">            Pattern.compile("\n +(\\*)|^ +(\\*)");</a>
-<span class="sourceLineNo">129</span><a id="line.129"></a>
-<span class="sourceLineNo">130</span><a id="line.130">    /**</a>
-<span class="sourceLineNo">131</span><a id="line.131">     * This regexp is used to remove html tags, whitespace, and asterisks from a string.</a>
-<span class="sourceLineNo">132</span><a id="line.132">     */</a>
-<span class="sourceLineNo">133</span><a id="line.133">    private static final Pattern HTML_ELEMENTS =</a>
-<span class="sourceLineNo">134</span><a id="line.134">            Pattern.compile("&lt;[^&gt;]*&gt;");</a>
-<span class="sourceLineNo">135</span><a id="line.135"></a>
-<span class="sourceLineNo">136</span><a id="line.136">    /** Default period literal. */</a>
-<span class="sourceLineNo">137</span><a id="line.137">    private static final String DEFAULT_PERIOD = ".";</a>
-<span class="sourceLineNo">138</span><a id="line.138"></a>
-<span class="sourceLineNo">139</span><a id="line.139">    /** Summary tag text. */</a>
-<span class="sourceLineNo">140</span><a id="line.140">    private static final String SUMMARY_TEXT = "@summary";</a>
-<span class="sourceLineNo">141</span><a id="line.141"></a>
-<span class="sourceLineNo">142</span><a id="line.142">    /** Return tag text. */</a>
-<span class="sourceLineNo">143</span><a id="line.143">    private static final String RETURN_TEXT = "@return";</a>
-<span class="sourceLineNo">144</span><a id="line.144"></a>
-<span class="sourceLineNo">145</span><a id="line.145">    /** Set of allowed Tokens tags in summary java doc. */</a>
-<span class="sourceLineNo">146</span><a id="line.146">    private static final BitSet ALLOWED_TYPES = TokenUtil.asBitSet(</a>
-<span class="sourceLineNo">147</span><a id="line.147">                    JavadocTokenTypes.WS,</a>
-<span class="sourceLineNo">148</span><a id="line.148">                    JavadocTokenTypes.DESCRIPTION,</a>
-<span class="sourceLineNo">149</span><a id="line.149">                    JavadocTokenTypes.TEXT);</a>
-<span class="sourceLineNo">150</span><a id="line.150"></a>
-<span class="sourceLineNo">151</span><a id="line.151">    /**</a>
-<span class="sourceLineNo">152</span><a id="line.152">     * Specify the regexp for forbidden summary fragments.</a>
-<span class="sourceLineNo">153</span><a id="line.153">     */</a>
-<span class="sourceLineNo">154</span><a id="line.154">    private Pattern forbiddenSummaryFragments = CommonUtil.createPattern("^$");</a>
-<span class="sourceLineNo">155</span><a id="line.155"></a>
-<span class="sourceLineNo">156</span><a id="line.156">    /**</a>
-<span class="sourceLineNo">157</span><a id="line.157">     * Specify the period symbol at the end of first javadoc sentence.</a>
-<span class="sourceLineNo">158</span><a id="line.158">     */</a>
-<span class="sourceLineNo">159</span><a id="line.159">    private String period = DEFAULT_PERIOD;</a>
-<span class="sourceLineNo">160</span><a id="line.160"></a>
-<span class="sourceLineNo">161</span><a id="line.161">    /**</a>
-<span class="sourceLineNo">162</span><a id="line.162">     * Setter to specify the regexp for forbidden summary fragments.</a>
-<span class="sourceLineNo">163</span><a id="line.163">     *</a>
-<span class="sourceLineNo">164</span><a id="line.164">     * @param pattern a pattern.</a>
-<span class="sourceLineNo">165</span><a id="line.165">     * @since 6.0</a>
-<span class="sourceLineNo">166</span><a id="line.166">     */</a>
-<span class="sourceLineNo">167</span><a id="line.167">    public void setForbiddenSummaryFragments(Pattern pattern) {</a>
-<span class="sourceLineNo">168</span><a id="line.168">        forbiddenSummaryFragments = pattern;</a>
-<span class="sourceLineNo">169</span><a id="line.169">    }</a>
-<span class="sourceLineNo">170</span><a id="line.170"></a>
-<span class="sourceLineNo">171</span><a id="line.171">    /**</a>
-<span class="sourceLineNo">172</span><a id="line.172">     * Setter to specify the period symbol at the end of first javadoc sentence.</a>
-<span class="sourceLineNo">173</span><a id="line.173">     *</a>
-<span class="sourceLineNo">174</span><a id="line.174">     * @param period period's value.</a>
-<span class="sourceLineNo">175</span><a id="line.175">     * @since 6.2</a>
-<span class="sourceLineNo">176</span><a id="line.176">     */</a>
-<span class="sourceLineNo">177</span><a id="line.177">    public void setPeriod(String period) {</a>
-<span class="sourceLineNo">178</span><a id="line.178">        this.period = period;</a>
-<span class="sourceLineNo">179</span><a id="line.179">    }</a>
-<span class="sourceLineNo">180</span><a id="line.180"></a>
-<span class="sourceLineNo">181</span><a id="line.181">    @Override</a>
-<span class="sourceLineNo">182</span><a id="line.182">    public int[] getDefaultJavadocTokens() {</a>
-<span class="sourceLineNo">183</span><a id="line.183">        return new int[] {</a>
-<span class="sourceLineNo">184</span><a id="line.184">            JavadocTokenTypes.JAVADOC,</a>
-<span class="sourceLineNo">185</span><a id="line.185">        };</a>
-<span class="sourceLineNo">186</span><a id="line.186">    }</a>
-<span class="sourceLineNo">187</span><a id="line.187"></a>
-<span class="sourceLineNo">188</span><a id="line.188">    @Override</a>
-<span class="sourceLineNo">189</span><a id="line.189">    public int[] getRequiredJavadocTokens() {</a>
-<span class="sourceLineNo">190</span><a id="line.190">        return getAcceptableJavadocTokens();</a>
-<span class="sourceLineNo">191</span><a id="line.191">    }</a>
-<span class="sourceLineNo">192</span><a id="line.192"></a>
-<span class="sourceLineNo">193</span><a id="line.193">    @Override</a>
-<span class="sourceLineNo">194</span><a id="line.194">    public void visitJavadocToken(DetailNode ast) {</a>
-<span class="sourceLineNo">195</span><a id="line.195">        final Optional&lt;DetailNode&gt; inlineTag = getInlineTagNode(ast);</a>
-<span class="sourceLineNo">196</span><a id="line.196">        final DetailNode inlineTagNode = inlineTag.orElse(null);</a>
-<span class="sourceLineNo">197</span><a id="line.197">        if (inlineTag.isPresent()</a>
-<span class="sourceLineNo">198</span><a id="line.198">            &amp;&amp; isSummaryTag(inlineTagNode)</a>
-<span class="sourceLineNo">199</span><a id="line.199">            &amp;&amp; isDefinedFirst(inlineTagNode)) {</a>
-<span class="sourceLineNo">200</span><a id="line.200">            validateSummaryTag(inlineTagNode);</a>
-<span class="sourceLineNo">201</span><a id="line.201">        }</a>
-<span class="sourceLineNo">202</span><a id="line.202">        else if (inlineTag.isPresent() &amp;&amp; isInlineReturnTag(inlineTagNode)) {</a>
-<span class="sourceLineNo">203</span><a id="line.203">            validateInlineReturnTag(inlineTagNode);</a>
-<span class="sourceLineNo">204</span><a id="line.204">        }</a>
-<span class="sourceLineNo">205</span><a id="line.205">        else if (!startsWithInheritDoc(ast)) {</a>
-<span class="sourceLineNo">206</span><a id="line.206">            validateUntaggedSummary(ast);</a>
-<span class="sourceLineNo">207</span><a id="line.207">        }</a>
-<span class="sourceLineNo">208</span><a id="line.208">    }</a>
-<span class="sourceLineNo">209</span><a id="line.209"></a>
-<span class="sourceLineNo">210</span><a id="line.210">    /**</a>
-<span class="sourceLineNo">211</span><a id="line.211">     * Checks the javadoc text for {@code period} at end and forbidden fragments.</a>
-<span class="sourceLineNo">212</span><a id="line.212">     *</a>
-<span class="sourceLineNo">213</span><a id="line.213">     * @param ast the javadoc text node</a>
-<span class="sourceLineNo">214</span><a id="line.214">     */</a>
-<span class="sourceLineNo">215</span><a id="line.215">    private void validateUntaggedSummary(DetailNode ast) {</a>
-<span class="sourceLineNo">216</span><a id="line.216">        final String summaryDoc = getSummarySentence(ast);</a>
-<span class="sourceLineNo">217</span><a id="line.217">        if (summaryDoc.isEmpty()) {</a>
-<span class="sourceLineNo">218</span><a id="line.218">            log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</a>
+<span class="sourceLineNo">056</span><a id="line.56"> * Property {@code period} - Specify the period symbol. Used to check the first sentence ends with a</a>
+<span class="sourceLineNo">057</span><a id="line.57"> * period. Periods that are not followed by a whitespace character are ignored (eg. the period in</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * v1.0). Because some periods include whitespace built into the character, if this is set to a</a>
+<span class="sourceLineNo">059</span><a id="line.59"> * non-default value any period will end the sentence, whether it is followed by whitespace or not.</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * Type is {@code java.lang.String}.</a>
+<span class="sourceLineNo">061</span><a id="line.61"> * Default value is {@code "."}.</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">063</span><a id="line.63"> * &lt;li&gt;</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * Property {@code violateExecutionOnNonTightHtml} - Control when to print violations</a>
+<span class="sourceLineNo">065</span><a id="line.65"> * if the Javadoc being examined by this check violates the tight html rules defined at</a>
+<span class="sourceLineNo">066</span><a id="line.66"> * &lt;a href="https://checkstyle.org/writingjavadocchecks.html#Tight-HTML_rules"&gt;Tight-HTML Rules&lt;/a&gt;.</a>
+<span class="sourceLineNo">067</span><a id="line.67"> * Type is {@code boolean}.</a>
+<span class="sourceLineNo">068</span><a id="line.68"> * Default value is {@code false}.</a>
+<span class="sourceLineNo">069</span><a id="line.69"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">070</span><a id="line.70"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">071</span><a id="line.71"> * &lt;p&gt;</a>
+<span class="sourceLineNo">072</span><a id="line.72"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">073</span><a id="line.73"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">074</span><a id="line.74"> * &lt;p&gt;</a>
+<span class="sourceLineNo">075</span><a id="line.75"> * Violation Message Keys:</a>
+<span class="sourceLineNo">076</span><a id="line.76"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">077</span><a id="line.77"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">078</span><a id="line.78"> * &lt;li&gt;</a>
+<span class="sourceLineNo">079</span><a id="line.79"> * {@code javadoc.missed.html.close}</a>
+<span class="sourceLineNo">080</span><a id="line.80"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">081</span><a id="line.81"> * &lt;li&gt;</a>
+<span class="sourceLineNo">082</span><a id="line.82"> * {@code javadoc.parse.rule.error}</a>
+<span class="sourceLineNo">083</span><a id="line.83"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">084</span><a id="line.84"> * &lt;li&gt;</a>
+<span class="sourceLineNo">085</span><a id="line.85"> * {@code javadoc.unclosedHtml}</a>
+<span class="sourceLineNo">086</span><a id="line.86"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">087</span><a id="line.87"> * &lt;li&gt;</a>
+<span class="sourceLineNo">088</span><a id="line.88"> * {@code javadoc.wrong.singleton.html.tag}</a>
+<span class="sourceLineNo">089</span><a id="line.89"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">090</span><a id="line.90"> * &lt;li&gt;</a>
+<span class="sourceLineNo">091</span><a id="line.91"> * {@code summary.first.sentence}</a>
+<span class="sourceLineNo">092</span><a id="line.92"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">093</span><a id="line.93"> * &lt;li&gt;</a>
+<span class="sourceLineNo">094</span><a id="line.94"> * {@code summary.javaDoc}</a>
+<span class="sourceLineNo">095</span><a id="line.95"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">096</span><a id="line.96"> * &lt;li&gt;</a>
+<span class="sourceLineNo">097</span><a id="line.97"> * {@code summary.javaDoc.missing}</a>
+<span class="sourceLineNo">098</span><a id="line.98"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">099</span><a id="line.99"> * &lt;li&gt;</a>
+<span class="sourceLineNo">100</span><a id="line.100"> * {@code summary.javaDoc.missing.period}</a>
+<span class="sourceLineNo">101</span><a id="line.101"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">102</span><a id="line.102"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">103</span><a id="line.103"> *</a>
+<span class="sourceLineNo">104</span><a id="line.104"> * @since 6.0</a>
+<span class="sourceLineNo">105</span><a id="line.105"> */</a>
+<span class="sourceLineNo">106</span><a id="line.106">@StatelessCheck</a>
+<span class="sourceLineNo">107</span><a id="line.107">public class SummaryJavadocCheck extends AbstractJavadocCheck {</a>
+<span class="sourceLineNo">108</span><a id="line.108"></a>
+<span class="sourceLineNo">109</span><a id="line.109">    /**</a>
+<span class="sourceLineNo">110</span><a id="line.110">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">111</span><a id="line.111">     * file.</a>
+<span class="sourceLineNo">112</span><a id="line.112">     */</a>
+<span class="sourceLineNo">113</span><a id="line.113">    public static final String MSG_SUMMARY_FIRST_SENTENCE = "summary.first.sentence";</a>
+<span class="sourceLineNo">114</span><a id="line.114"></a>
+<span class="sourceLineNo">115</span><a id="line.115">    /**</a>
+<span class="sourceLineNo">116</span><a id="line.116">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">117</span><a id="line.117">     * file.</a>
+<span class="sourceLineNo">118</span><a id="line.118">     */</a>
+<span class="sourceLineNo">119</span><a id="line.119">    public static final String MSG_SUMMARY_JAVADOC = "summary.javaDoc";</a>
+<span class="sourceLineNo">120</span><a id="line.120"></a>
+<span class="sourceLineNo">121</span><a id="line.121">    /**</a>
+<span class="sourceLineNo">122</span><a id="line.122">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">123</span><a id="line.123">     * file.</a>
+<span class="sourceLineNo">124</span><a id="line.124">     */</a>
+<span class="sourceLineNo">125</span><a id="line.125">    public static final String MSG_SUMMARY_JAVADOC_MISSING = "summary.javaDoc.missing";</a>
+<span class="sourceLineNo">126</span><a id="line.126"></a>
+<span class="sourceLineNo">127</span><a id="line.127">    /**</a>
+<span class="sourceLineNo">128</span><a id="line.128">     * A key is pointing to the warning message text in "messages.properties" file.</a>
+<span class="sourceLineNo">129</span><a id="line.129">     */</a>
+<span class="sourceLineNo">130</span><a id="line.130">    public static final String MSG_SUMMARY_MISSING_PERIOD = "summary.javaDoc.missing.period";</a>
+<span class="sourceLineNo">131</span><a id="line.131"></a>
+<span class="sourceLineNo">132</span><a id="line.132">    /**</a>
+<span class="sourceLineNo">133</span><a id="line.133">     * This regexp is used to convert multiline javadoc to single-line without stars.</a>
+<span class="sourceLineNo">134</span><a id="line.134">     */</a>
+<span class="sourceLineNo">135</span><a id="line.135">    private static final Pattern JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN =</a>
+<span class="sourceLineNo">136</span><a id="line.136">            Pattern.compile("\n +(\\*)|^ +(\\*)");</a>
+<span class="sourceLineNo">137</span><a id="line.137"></a>
+<span class="sourceLineNo">138</span><a id="line.138">    /**</a>
+<span class="sourceLineNo">139</span><a id="line.139">     * This regexp is used to remove html tags, whitespace, and asterisks from a string.</a>
+<span class="sourceLineNo">140</span><a id="line.140">     */</a>
+<span class="sourceLineNo">141</span><a id="line.141">    private static final Pattern HTML_ELEMENTS =</a>
+<span class="sourceLineNo">142</span><a id="line.142">            Pattern.compile("&lt;[^&gt;]*&gt;");</a>
+<span class="sourceLineNo">143</span><a id="line.143"></a>
+<span class="sourceLineNo">144</span><a id="line.144">    /** Default period literal. */</a>
+<span class="sourceLineNo">145</span><a id="line.145">    private static final String DEFAULT_PERIOD = ".";</a>
+<span class="sourceLineNo">146</span><a id="line.146"></a>
+<span class="sourceLineNo">147</span><a id="line.147">    /** Summary tag text. */</a>
+<span class="sourceLineNo">148</span><a id="line.148">    private static final String SUMMARY_TEXT = "@summary";</a>
+<span class="sourceLineNo">149</span><a id="line.149"></a>
+<span class="sourceLineNo">150</span><a id="line.150">    /** Return tag text. */</a>
+<span class="sourceLineNo">151</span><a id="line.151">    private static final String RETURN_TEXT = "@return";</a>
+<span class="sourceLineNo">152</span><a id="line.152"></a>
+<span class="sourceLineNo">153</span><a id="line.153">    /** Set of allowed Tokens tags in summary java doc. */</a>
+<span class="sourceLineNo">154</span><a id="line.154">    private static final BitSet ALLOWED_TYPES = TokenUtil.asBitSet(</a>
+<span class="sourceLineNo">155</span><a id="line.155">                    JavadocTokenTypes.WS,</a>
+<span class="sourceLineNo">156</span><a id="line.156">                    JavadocTokenTypes.DESCRIPTION,</a>
+<span class="sourceLineNo">157</span><a id="line.157">                    JavadocTokenTypes.TEXT);</a>
+<span class="sourceLineNo">158</span><a id="line.158"></a>
+<span class="sourceLineNo">159</span><a id="line.159">    /**</a>
+<span class="sourceLineNo">160</span><a id="line.160">     * Specify the regexp for forbidden summary fragments.</a>
+<span class="sourceLineNo">161</span><a id="line.161">     */</a>
+<span class="sourceLineNo">162</span><a id="line.162">    private Pattern forbiddenSummaryFragments = CommonUtil.createPattern("^$");</a>
+<span class="sourceLineNo">163</span><a id="line.163"></a>
+<span class="sourceLineNo">164</span><a id="line.164">    /**</a>
+<span class="sourceLineNo">165</span><a id="line.165">     * Specify the period symbol. Used to check the first sentence ends with a period. Periods that</a>
+<span class="sourceLineNo">166</span><a id="line.166">     * are not followed by a whitespace character are ignored (eg. the period in v1.0). Because some</a>
+<span class="sourceLineNo">167</span><a id="line.167">     * periods include whitespace built into the character, if this is set to a non-default value</a>
+<span class="sourceLineNo">168</span><a id="line.168">     * any period will end the sentence, whether it is followed by whitespace or not.</a>
+<span class="sourceLineNo">169</span><a id="line.169">     */</a>
+<span class="sourceLineNo">170</span><a id="line.170">    private String period = DEFAULT_PERIOD;</a>
+<span class="sourceLineNo">171</span><a id="line.171"></a>
+<span class="sourceLineNo">172</span><a id="line.172">    /**</a>
+<span class="sourceLineNo">173</span><a id="line.173">     * Setter to specify the regexp for forbidden summary fragments.</a>
+<span class="sourceLineNo">174</span><a id="line.174">     *</a>
+<span class="sourceLineNo">175</span><a id="line.175">     * @param pattern a pattern.</a>
+<span class="sourceLineNo">176</span><a id="line.176">     * @since 6.0</a>
+<span class="sourceLineNo">177</span><a id="line.177">     */</a>
+<span class="sourceLineNo">178</span><a id="line.178">    public void setForbiddenSummaryFragments(Pattern pattern) {</a>
+<span class="sourceLineNo">179</span><a id="line.179">        forbiddenSummaryFragments = pattern;</a>
+<span class="sourceLineNo">180</span><a id="line.180">    }</a>
+<span class="sourceLineNo">181</span><a id="line.181"></a>
+<span class="sourceLineNo">182</span><a id="line.182">    /**</a>
+<span class="sourceLineNo">183</span><a id="line.183">     * Setter to specify the period symbol. Used to check the first sentence ends with a period.</a>
+<span class="sourceLineNo">184</span><a id="line.184">     * Periods that are not followed by a whitespace character are ignored (eg. the period in v1.0).</a>
+<span class="sourceLineNo">185</span><a id="line.185">     * Because some periods include whitespace built into the character, if this is set to a</a>
+<span class="sourceLineNo">186</span><a id="line.186">     * non-default value any period will end the sentence, whether it is followed by whitespace or</a>
+<span class="sourceLineNo">187</span><a id="line.187">     * not.</a>
+<span class="sourceLineNo">188</span><a id="line.188">     *</a>
+<span class="sourceLineNo">189</span><a id="line.189">     * @param period period's value.</a>
+<span class="sourceLineNo">190</span><a id="line.190">     * @since 6.2</a>
+<span class="sourceLineNo">191</span><a id="line.191">     */</a>
+<span class="sourceLineNo">192</span><a id="line.192">    public void setPeriod(String period) {</a>
+<span class="sourceLineNo">193</span><a id="line.193">        this.period = period;</a>
+<span class="sourceLineNo">194</span><a id="line.194">    }</a>
+<span class="sourceLineNo">195</span><a id="line.195"></a>
+<span class="sourceLineNo">196</span><a id="line.196">    @Override</a>
+<span class="sourceLineNo">197</span><a id="line.197">    public int[] getDefaultJavadocTokens() {</a>
+<span class="sourceLineNo">198</span><a id="line.198">        return new int[] {</a>
+<span class="sourceLineNo">199</span><a id="line.199">            JavadocTokenTypes.JAVADOC,</a>
+<span class="sourceLineNo">200</span><a id="line.200">        };</a>
+<span class="sourceLineNo">201</span><a id="line.201">    }</a>
+<span class="sourceLineNo">202</span><a id="line.202"></a>
+<span class="sourceLineNo">203</span><a id="line.203">    @Override</a>
+<span class="sourceLineNo">204</span><a id="line.204">    public int[] getRequiredJavadocTokens() {</a>
+<span class="sourceLineNo">205</span><a id="line.205">        return getAcceptableJavadocTokens();</a>
+<span class="sourceLineNo">206</span><a id="line.206">    }</a>
+<span class="sourceLineNo">207</span><a id="line.207"></a>
+<span class="sourceLineNo">208</span><a id="line.208">    @Override</a>
+<span class="sourceLineNo">209</span><a id="line.209">    public void visitJavadocToken(DetailNode ast) {</a>
+<span class="sourceLineNo">210</span><a id="line.210">        final Optional&lt;DetailNode&gt; inlineTag = getInlineTagNode(ast);</a>
+<span class="sourceLineNo">211</span><a id="line.211">        final DetailNode inlineTagNode = inlineTag.orElse(null);</a>
+<span class="sourceLineNo">212</span><a id="line.212">        if (inlineTag.isPresent()</a>
+<span class="sourceLineNo">213</span><a id="line.213">            &amp;&amp; isSummaryTag(inlineTagNode)</a>
+<span class="sourceLineNo">214</span><a id="line.214">            &amp;&amp; isDefinedFirst(inlineTagNode)) {</a>
+<span class="sourceLineNo">215</span><a id="line.215">            validateSummaryTag(inlineTagNode);</a>
+<span class="sourceLineNo">216</span><a id="line.216">        }</a>
+<span class="sourceLineNo">217</span><a id="line.217">        else if (inlineTag.isPresent() &amp;&amp; isInlineReturnTag(inlineTagNode)) {</a>
+<span class="sourceLineNo">218</span><a id="line.218">            validateInlineReturnTag(inlineTagNode);</a>
 <span class="sourceLineNo">219</span><a id="line.219">        }</a>
-<span class="sourceLineNo">220</span><a id="line.220">        else if (!period.isEmpty()) {</a>
-<span class="sourceLineNo">221</span><a id="line.221">            final String firstSentence = getFirstSentence(ast);</a>
-<span class="sourceLineNo">222</span><a id="line.222">            final int endOfSentence = firstSentence.lastIndexOf(period);</a>
-<span class="sourceLineNo">223</span><a id="line.223">            if (!summaryDoc.contains(period)) {</a>
-<span class="sourceLineNo">224</span><a id="line.224">                log(ast.getLineNumber(), MSG_SUMMARY_FIRST_SENTENCE);</a>
-<span class="sourceLineNo">225</span><a id="line.225">            }</a>
-<span class="sourceLineNo">226</span><a id="line.226">            if (endOfSentence != -1</a>
-<span class="sourceLineNo">227</span><a id="line.227">                    &amp;&amp; containsForbiddenFragment(firstSentence.substring(0, endOfSentence))) {</a>
-<span class="sourceLineNo">228</span><a id="line.228">                log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC);</a>
-<span class="sourceLineNo">229</span><a id="line.229">            }</a>
-<span class="sourceLineNo">230</span><a id="line.230">        }</a>
-<span class="sourceLineNo">231</span><a id="line.231">    }</a>
-<span class="sourceLineNo">232</span><a id="line.232"></a>
-<span class="sourceLineNo">233</span><a id="line.233">    /**</a>
-<span class="sourceLineNo">234</span><a id="line.234">     * Gets the node for the inline tag if present.</a>
-<span class="sourceLineNo">235</span><a id="line.235">     *</a>
-<span class="sourceLineNo">236</span><a id="line.236">     * @param javadoc javadoc root node.</a>
-<span class="sourceLineNo">237</span><a id="line.237">     * @return the node for the inline tag if present.</a>
-<span class="sourceLineNo">238</span><a id="line.238">     */</a>
-<span class="sourceLineNo">239</span><a id="line.239">    private static Optional&lt;DetailNode&gt; getInlineTagNode(DetailNode javadoc) {</a>
-<span class="sourceLineNo">240</span><a id="line.240">        return Arrays.stream(javadoc.getChildren())</a>
-<span class="sourceLineNo">241</span><a id="line.241">            .filter(SummaryJavadocCheck::isInlineTagPresent)</a>
-<span class="sourceLineNo">242</span><a id="line.242">            .findFirst()</a>
-<span class="sourceLineNo">243</span><a id="line.243">            .map(SummaryJavadocCheck::getInlineTagNodeForAst);</a>
-<span class="sourceLineNo">244</span><a id="line.244">    }</a>
-<span class="sourceLineNo">245</span><a id="line.245"></a>
-<span class="sourceLineNo">246</span><a id="line.246">    /**</a>
-<span class="sourceLineNo">247</span><a id="line.247">     * Whether the {@code {@summary}} tag is defined first in the javadoc.</a>
-<span class="sourceLineNo">248</span><a id="line.248">     *</a>
-<span class="sourceLineNo">249</span><a id="line.249">     * @param inlineSummaryTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
-<span class="sourceLineNo">250</span><a id="line.250">     * @return {@code true} if the {@code {@summary}} tag is defined first in the javadoc</a>
-<span class="sourceLineNo">251</span><a id="line.251">     */</a>
-<span class="sourceLineNo">252</span><a id="line.252">    private static boolean isDefinedFirst(DetailNode inlineSummaryTag) {</a>
-<span class="sourceLineNo">253</span><a id="line.253">        boolean isDefinedFirst = true;</a>
-<span class="sourceLineNo">254</span><a id="line.254">        DetailNode currentAst = inlineSummaryTag;</a>
-<span class="sourceLineNo">255</span><a id="line.255">        while (currentAst != null &amp;&amp; isDefinedFirst) {</a>
-<span class="sourceLineNo">256</span><a id="line.256">            switch (currentAst.getType()) {</a>
-<span class="sourceLineNo">257</span><a id="line.257">                case JavadocTokenTypes.TEXT:</a>
-<span class="sourceLineNo">258</span><a id="line.258">                    isDefinedFirst = currentAst.getText().isBlank();</a>
-<span class="sourceLineNo">259</span><a id="line.259">                    break;</a>
-<span class="sourceLineNo">260</span><a id="line.260">                case JavadocTokenTypes.HTML_ELEMENT:</a>
-<span class="sourceLineNo">261</span><a id="line.261">                    isDefinedFirst = !isTextPresentInsideHtmlTag(currentAst);</a>
-<span class="sourceLineNo">262</span><a id="line.262">                    break;</a>
-<span class="sourceLineNo">263</span><a id="line.263">                default:</a>
-<span class="sourceLineNo">264</span><a id="line.264">                    break;</a>
-<span class="sourceLineNo">265</span><a id="line.265">            }</a>
-<span class="sourceLineNo">266</span><a id="line.266">            currentAst = JavadocUtil.getPreviousSibling(currentAst);</a>
-<span class="sourceLineNo">267</span><a id="line.267">        }</a>
-<span class="sourceLineNo">268</span><a id="line.268">        return isDefinedFirst;</a>
-<span class="sourceLineNo">269</span><a id="line.269">    }</a>
-<span class="sourceLineNo">270</span><a id="line.270"></a>
-<span class="sourceLineNo">271</span><a id="line.271">    /**</a>
-<span class="sourceLineNo">272</span><a id="line.272">     * Whether some text is present inside the HTML element or tag.</a>
-<span class="sourceLineNo">273</span><a id="line.273">     *</a>
-<span class="sourceLineNo">274</span><a id="line.274">     * @param node DetailNode of type {@link JavadocTokenTypes#HTML_TAG}</a>
-<span class="sourceLineNo">275</span><a id="line.275">     *             or {@link JavadocTokenTypes#HTML_ELEMENT}</a>
-<span class="sourceLineNo">276</span><a id="line.276">     * @return {@code true} if some text is present inside the HTML element or tag</a>
-<span class="sourceLineNo">277</span><a id="line.277">     */</a>
-<span class="sourceLineNo">278</span><a id="line.278">    public static boolean isTextPresentInsideHtmlTag(DetailNode node) {</a>
-<span class="sourceLineNo">279</span><a id="line.279">        DetailNode nestedChild = JavadocUtil.getFirstChild(node);</a>
-<span class="sourceLineNo">280</span><a id="line.280">        if (node.getType() == JavadocTokenTypes.HTML_ELEMENT) {</a>
-<span class="sourceLineNo">281</span><a id="line.281">            nestedChild = JavadocUtil.getFirstChild(nestedChild);</a>
-<span class="sourceLineNo">282</span><a id="line.282">        }</a>
-<span class="sourceLineNo">283</span><a id="line.283">        boolean isTextPresentInsideHtmlTag = false;</a>
-<span class="sourceLineNo">284</span><a id="line.284">        while (nestedChild != null &amp;&amp; !isTextPresentInsideHtmlTag) {</a>
-<span class="sourceLineNo">285</span><a id="line.285">            switch (nestedChild.getType()) {</a>
-<span class="sourceLineNo">286</span><a id="line.286">                case JavadocTokenTypes.TEXT:</a>
-<span class="sourceLineNo">287</span><a id="line.287">                    isTextPresentInsideHtmlTag = !nestedChild.getText().isBlank();</a>
-<span class="sourceLineNo">288</span><a id="line.288">                    break;</a>
-<span class="sourceLineNo">289</span><a id="line.289">                case JavadocTokenTypes.HTML_TAG:</a>
-<span class="sourceLineNo">290</span><a id="line.290">                case JavadocTokenTypes.HTML_ELEMENT:</a>
-<span class="sourceLineNo">291</span><a id="line.291">                    isTextPresentInsideHtmlTag = isTextPresentInsideHtmlTag(nestedChild);</a>
-<span class="sourceLineNo">292</span><a id="line.292">                    break;</a>
-<span class="sourceLineNo">293</span><a id="line.293">                default:</a>
-<span class="sourceLineNo">294</span><a id="line.294">                    break;</a>
-<span class="sourceLineNo">295</span><a id="line.295">            }</a>
-<span class="sourceLineNo">296</span><a id="line.296">            nestedChild = JavadocUtil.getNextSibling(nestedChild);</a>
-<span class="sourceLineNo">297</span><a id="line.297">        }</a>
-<span class="sourceLineNo">298</span><a id="line.298">        return isTextPresentInsideHtmlTag;</a>
-<span class="sourceLineNo">299</span><a id="line.299">    }</a>
-<span class="sourceLineNo">300</span><a id="line.300"></a>
-<span class="sourceLineNo">301</span><a id="line.301">    /**</a>
-<span class="sourceLineNo">302</span><a id="line.302">     * Checks if the inline tag node is present.</a>
-<span class="sourceLineNo">303</span><a id="line.303">     *</a>
-<span class="sourceLineNo">304</span><a id="line.304">     * @param ast ast node to check.</a>
-<span class="sourceLineNo">305</span><a id="line.305">     * @return true, if the inline tag node is present.</a>
-<span class="sourceLineNo">306</span><a id="line.306">     */</a>
-<span class="sourceLineNo">307</span><a id="line.307">    private static boolean isInlineTagPresent(DetailNode ast) {</a>
-<span class="sourceLineNo">308</span><a id="line.308">        return getInlineTagNodeForAst(ast) != null;</a>
-<span class="sourceLineNo">309</span><a id="line.309">    }</a>
-<span class="sourceLineNo">310</span><a id="line.310"></a>
-<span class="sourceLineNo">311</span><a id="line.311">    /**</a>
-<span class="sourceLineNo">312</span><a id="line.312">     * Returns an inline javadoc tag node that is within a html tag.</a>
-<span class="sourceLineNo">313</span><a id="line.313">     *</a>
-<span class="sourceLineNo">314</span><a id="line.314">     * @param ast html tag node.</a>
-<span class="sourceLineNo">315</span><a id="line.315">     * @return inline summary javadoc tag node or null if no node is found.</a>
-<span class="sourceLineNo">316</span><a id="line.316">     */</a>
-<span class="sourceLineNo">317</span><a id="line.317">    private static DetailNode getInlineTagNodeForAst(DetailNode ast) {</a>
-<span class="sourceLineNo">318</span><a id="line.318">        DetailNode node = ast;</a>
-<span class="sourceLineNo">319</span><a id="line.319">        DetailNode result = null;</a>
-<span class="sourceLineNo">320</span><a id="line.320">        // node can never be null as this method is called when there is a HTML_ELEMENT</a>
-<span class="sourceLineNo">321</span><a id="line.321">        if (node.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</a>
-<span class="sourceLineNo">322</span><a id="line.322">            result = node;</a>
-<span class="sourceLineNo">323</span><a id="line.323">        }</a>
-<span class="sourceLineNo">324</span><a id="line.324">        else if (node.getType() == JavadocTokenTypes.HTML_TAG) {</a>
-<span class="sourceLineNo">325</span><a id="line.325">            // HTML_TAG always has more than 2 children.</a>
-<span class="sourceLineNo">326</span><a id="line.326">            node = node.getChildren()[1];</a>
-<span class="sourceLineNo">327</span><a id="line.327">            result = getInlineTagNodeForAst(node);</a>
-<span class="sourceLineNo">328</span><a id="line.328">        }</a>
-<span class="sourceLineNo">329</span><a id="line.329">        else if (node.getType() == JavadocTokenTypes.HTML_ELEMENT</a>
-<span class="sourceLineNo">330</span><a id="line.330">                // Condition for SINGLETON html element which cannot contain summary node</a>
-<span class="sourceLineNo">331</span><a id="line.331">                &amp;&amp; node.getChildren()[0].getChildren().length &gt; 1) {</a>
-<span class="sourceLineNo">332</span><a id="line.332">            // Html elements have one tested tag before actual content inside it</a>
-<span class="sourceLineNo">333</span><a id="line.333">            node = node.getChildren()[0].getChildren()[1];</a>
-<span class="sourceLineNo">334</span><a id="line.334">            result = getInlineTagNodeForAst(node);</a>
-<span class="sourceLineNo">335</span><a id="line.335">        }</a>
-<span class="sourceLineNo">336</span><a id="line.336">        return result;</a>
-<span class="sourceLineNo">337</span><a id="line.337">    }</a>
-<span class="sourceLineNo">338</span><a id="line.338"></a>
-<span class="sourceLineNo">339</span><a id="line.339">    /**</a>
-<span class="sourceLineNo">340</span><a id="line.340">     * Checks if the javadoc inline tag is {@code {@summary}} tag.</a>
-<span class="sourceLineNo">341</span><a id="line.341">     *</a>
-<span class="sourceLineNo">342</span><a id="line.342">     * @param javadocInlineTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
-<span class="sourceLineNo">343</span><a id="line.343">     * @return {@code true} if inline tag is summary tag.</a>
-<span class="sourceLineNo">344</span><a id="line.344">     */</a>
-<span class="sourceLineNo">345</span><a id="line.345">    private static boolean isSummaryTag(DetailNode javadocInlineTag) {</a>
-<span class="sourceLineNo">346</span><a id="line.346">        return isInlineTagWithName(javadocInlineTag, SUMMARY_TEXT);</a>
-<span class="sourceLineNo">347</span><a id="line.347">    }</a>
-<span class="sourceLineNo">348</span><a id="line.348"></a>
-<span class="sourceLineNo">349</span><a id="line.349">    /**</a>
-<span class="sourceLineNo">350</span><a id="line.350">     * Checks if the first tag inside ast is {@code {@return}} tag.</a>
-<span class="sourceLineNo">351</span><a id="line.351">     *</a>
-<span class="sourceLineNo">352</span><a id="line.352">     * @param javadocInlineTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
-<span class="sourceLineNo">353</span><a id="line.353">     * @return {@code true} if first tag is return tag.</a>
-<span class="sourceLineNo">354</span><a id="line.354">     */</a>
-<span class="sourceLineNo">355</span><a id="line.355">    private static boolean isInlineReturnTag(DetailNode javadocInlineTag) {</a>
-<span class="sourceLineNo">356</span><a id="line.356">        return isInlineTagWithName(javadocInlineTag, RETURN_TEXT);</a>
-<span class="sourceLineNo">357</span><a id="line.357">    }</a>
-<span class="sourceLineNo">358</span><a id="line.358"></a>
-<span class="sourceLineNo">359</span><a id="line.359">    /**</a>
-<span class="sourceLineNo">360</span><a id="line.360">     * Checks if the first tag inside ast is a tag with the given name.</a>
-<span class="sourceLineNo">361</span><a id="line.361">     *</a>
-<span class="sourceLineNo">362</span><a id="line.362">     * @param javadocInlineTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
-<span class="sourceLineNo">363</span><a id="line.363">     * @param name name of inline tag.</a>
-<span class="sourceLineNo">364</span><a id="line.364">     *</a>
-<span class="sourceLineNo">365</span><a id="line.365">     * @return {@code true} if first tag is a tag with the given name.</a>
-<span class="sourceLineNo">366</span><a id="line.366">     */</a>
-<span class="sourceLineNo">367</span><a id="line.367">    private static boolean isInlineTagWithName(DetailNode javadocInlineTag, String name) {</a>
-<span class="sourceLineNo">368</span><a id="line.368">        final DetailNode[] child = javadocInlineTag.getChildren();</a>
-<span class="sourceLineNo">369</span><a id="line.369"></a>
-<span class="sourceLineNo">370</span><a id="line.370">        // Checking size of ast is not required, since ast contains</a>
-<span class="sourceLineNo">371</span><a id="line.371">        // children of Inline Tag, as at least 2 children will be present which are</a>
-<span class="sourceLineNo">372</span><a id="line.372">        // RCURLY and LCURLY.</a>
-<span class="sourceLineNo">373</span><a id="line.373">        return name.equals(child[1].getText());</a>
-<span class="sourceLineNo">374</span><a id="line.374">    }</a>
-<span class="sourceLineNo">375</span><a id="line.375"></a>
-<span class="sourceLineNo">376</span><a id="line.376">    /**</a>
-<span class="sourceLineNo">377</span><a id="line.377">     * Checks the inline summary (if present) for {@code period} at end and forbidden fragments.</a>
-<span class="sourceLineNo">378</span><a id="line.378">     *</a>
-<span class="sourceLineNo">379</span><a id="line.379">     * @param inlineSummaryTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
-<span class="sourceLineNo">380</span><a id="line.380">     */</a>
-<span class="sourceLineNo">381</span><a id="line.381">    private void validateSummaryTag(DetailNode inlineSummaryTag) {</a>
-<span class="sourceLineNo">382</span><a id="line.382">        final String inlineSummary = getContentOfInlineCustomTag(inlineSummaryTag);</a>
-<span class="sourceLineNo">383</span><a id="line.383">        final String summaryVisible = getVisibleContent(inlineSummary);</a>
-<span class="sourceLineNo">384</span><a id="line.384">        if (summaryVisible.isEmpty()) {</a>
-<span class="sourceLineNo">385</span><a id="line.385">            log(inlineSummaryTag.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</a>
-<span class="sourceLineNo">386</span><a id="line.386">        }</a>
-<span class="sourceLineNo">387</span><a id="line.387">        else if (!period.isEmpty()) {</a>
-<span class="sourceLineNo">388</span><a id="line.388">            final boolean isPeriodNotAtEnd =</a>
-<span class="sourceLineNo">389</span><a id="line.389">                    summaryVisible.lastIndexOf(period) != summaryVisible.length() - 1;</a>
-<span class="sourceLineNo">390</span><a id="line.390">            if (isPeriodNotAtEnd) {</a>
-<span class="sourceLineNo">391</span><a id="line.391">                log(inlineSummaryTag.getLineNumber(), MSG_SUMMARY_MISSING_PERIOD);</a>
-<span class="sourceLineNo">392</span><a id="line.392">            }</a>
-<span class="sourceLineNo">393</span><a id="line.393">            else if (containsForbiddenFragment(inlineSummary)) {</a>
-<span class="sourceLineNo">394</span><a id="line.394">                log(inlineSummaryTag.getLineNumber(), MSG_SUMMARY_JAVADOC);</a>
-<span class="sourceLineNo">395</span><a id="line.395">            }</a>
-<span class="sourceLineNo">396</span><a id="line.396">        }</a>
-<span class="sourceLineNo">397</span><a id="line.397">    }</a>
-<span class="sourceLineNo">398</span><a id="line.398"></a>
-<span class="sourceLineNo">399</span><a id="line.399">    /**</a>
-<span class="sourceLineNo">400</span><a id="line.400">     * Checks the inline return for forbidden fragments.</a>
-<span class="sourceLineNo">401</span><a id="line.401">     *</a>
-<span class="sourceLineNo">402</span><a id="line.402">     * @param inlineReturnTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
-<span class="sourceLineNo">403</span><a id="line.403">     */</a>
-<span class="sourceLineNo">404</span><a id="line.404">    private void validateInlineReturnTag(DetailNode inlineReturnTag) {</a>
-<span class="sourceLineNo">405</span><a id="line.405">        final String inlineReturn = getContentOfInlineCustomTag(inlineReturnTag);</a>
-<span class="sourceLineNo">406</span><a id="line.406">        final String returnVisible = getVisibleContent(inlineReturn);</a>
-<span class="sourceLineNo">407</span><a id="line.407">        if (returnVisible.isEmpty()) {</a>
-<span class="sourceLineNo">408</span><a id="line.408">            log(inlineReturnTag.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</a>
-<span class="sourceLineNo">409</span><a id="line.409">        }</a>
-<span class="sourceLineNo">410</span><a id="line.410">        else if (containsForbiddenFragment(inlineReturn)) {</a>
-<span class="sourceLineNo">411</span><a id="line.411">            log(inlineReturnTag.getLineNumber(), MSG_SUMMARY_JAVADOC);</a>
-<span class="sourceLineNo">412</span><a id="line.412">        }</a>
-<span class="sourceLineNo">413</span><a id="line.413">    }</a>
-<span class="sourceLineNo">414</span><a id="line.414"></a>
-<span class="sourceLineNo">415</span><a id="line.415">    /**</a>
-<span class="sourceLineNo">416</span><a id="line.416">     * Gets the content of inline custom tag.</a>
-<span class="sourceLineNo">417</span><a id="line.417">     *</a>
-<span class="sourceLineNo">418</span><a id="line.418">     * @param inlineTag inline tag node.</a>
-<span class="sourceLineNo">419</span><a id="line.419">     * @return String consisting of the content of inline custom tag.</a>
-<span class="sourceLineNo">420</span><a id="line.420">     */</a>
-<span class="sourceLineNo">421</span><a id="line.421">    public static String getContentOfInlineCustomTag(DetailNode inlineTag) {</a>
-<span class="sourceLineNo">422</span><a id="line.422">        final DetailNode[] childrenOfInlineTag = inlineTag.getChildren();</a>
-<span class="sourceLineNo">423</span><a id="line.423">        final StringBuilder customTagContent = new StringBuilder(256);</a>
-<span class="sourceLineNo">424</span><a id="line.424">        final int indexOfContentOfSummaryTag = 3;</a>
-<span class="sourceLineNo">425</span><a id="line.425">        if (childrenOfInlineTag.length != indexOfContentOfSummaryTag) {</a>
-<span class="sourceLineNo">426</span><a id="line.426">            DetailNode currentNode = childrenOfInlineTag[indexOfContentOfSummaryTag];</a>
-<span class="sourceLineNo">427</span><a id="line.427">            while (currentNode.getType() != JavadocTokenTypes.JAVADOC_INLINE_TAG_END) {</a>
-<span class="sourceLineNo">428</span><a id="line.428">                extractInlineTagContent(currentNode, customTagContent);</a>
-<span class="sourceLineNo">429</span><a id="line.429">                currentNode = JavadocUtil.getNextSibling(currentNode);</a>
-<span class="sourceLineNo">430</span><a id="line.430">            }</a>
-<span class="sourceLineNo">431</span><a id="line.431">        }</a>
-<span class="sourceLineNo">432</span><a id="line.432">        return customTagContent.toString();</a>
-<span class="sourceLineNo">433</span><a id="line.433">    }</a>
-<span class="sourceLineNo">434</span><a id="line.434"></a>
-<span class="sourceLineNo">435</span><a id="line.435">    /**</a>
-<span class="sourceLineNo">436</span><a id="line.436">     * Extracts the content of inline custom tag recursively.</a>
-<span class="sourceLineNo">437</span><a id="line.437">     *</a>
-<span class="sourceLineNo">438</span><a id="line.438">     * @param node DetailNode</a>
-<span class="sourceLineNo">439</span><a id="line.439">     * @param customTagContent content of custom tag</a>
-<span class="sourceLineNo">440</span><a id="line.440">     */</a>
-<span class="sourceLineNo">441</span><a id="line.441">    private static void extractInlineTagContent(DetailNode node,</a>
-<span class="sourceLineNo">442</span><a id="line.442">        StringBuilder customTagContent) {</a>
-<span class="sourceLineNo">443</span><a id="line.443">        final DetailNode[] children = node.getChildren();</a>
-<span class="sourceLineNo">444</span><a id="line.444">        if (children.length == 0) {</a>
-<span class="sourceLineNo">445</span><a id="line.445">            customTagContent.append(node.getText());</a>
-<span class="sourceLineNo">446</span><a id="line.446">        }</a>
-<span class="sourceLineNo">447</span><a id="line.447">        else {</a>
-<span class="sourceLineNo">448</span><a id="line.448">            for (DetailNode child : children) {</a>
-<span class="sourceLineNo">449</span><a id="line.449">                if (child.getType() != JavadocTokenTypes.LEADING_ASTERISK) {</a>
-<span class="sourceLineNo">450</span><a id="line.450">                    extractInlineTagContent(child, customTagContent);</a>
-<span class="sourceLineNo">451</span><a id="line.451">                }</a>
-<span class="sourceLineNo">452</span><a id="line.452">            }</a>
-<span class="sourceLineNo">453</span><a id="line.453">        }</a>
-<span class="sourceLineNo">454</span><a id="line.454">    }</a>
-<span class="sourceLineNo">455</span><a id="line.455"></a>
-<span class="sourceLineNo">456</span><a id="line.456">    /**</a>
-<span class="sourceLineNo">457</span><a id="line.457">     * Gets the string that is visible to user in javadoc.</a>
-<span class="sourceLineNo">458</span><a id="line.458">     *</a>
-<span class="sourceLineNo">459</span><a id="line.459">     * @param summary entire content of summary javadoc.</a>
-<span class="sourceLineNo">460</span><a id="line.460">     * @return string that is visible to user in javadoc.</a>
-<span class="sourceLineNo">461</span><a id="line.461">     */</a>
-<span class="sourceLineNo">462</span><a id="line.462">    private static String getVisibleContent(String summary) {</a>
-<span class="sourceLineNo">463</span><a id="line.463">        final String visibleSummary = HTML_ELEMENTS.matcher(summary).replaceAll("");</a>
-<span class="sourceLineNo">464</span><a id="line.464">        return visibleSummary.trim();</a>
-<span class="sourceLineNo">465</span><a id="line.465">    }</a>
-<span class="sourceLineNo">466</span><a id="line.466"></a>
-<span class="sourceLineNo">467</span><a id="line.467">    /**</a>
-<span class="sourceLineNo">468</span><a id="line.468">     * Tests if first sentence contains forbidden summary fragment.</a>
-<span class="sourceLineNo">469</span><a id="line.469">     *</a>
-<span class="sourceLineNo">470</span><a id="line.470">     * @param firstSentence string with first sentence.</a>
-<span class="sourceLineNo">471</span><a id="line.471">     * @return {@code true} if first sentence contains forbidden summary fragment.</a>
-<span class="sourceLineNo">472</span><a id="line.472">     */</a>
-<span class="sourceLineNo">473</span><a id="line.473">    private boolean containsForbiddenFragment(String firstSentence) {</a>
-<span class="sourceLineNo">474</span><a id="line.474">        final String javadocText = JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN</a>
-<span class="sourceLineNo">475</span><a id="line.475">                .matcher(firstSentence).replaceAll(" ");</a>
-<span class="sourceLineNo">476</span><a id="line.476">        return forbiddenSummaryFragments.matcher(trimExcessWhitespaces(javadocText)).find();</a>
-<span class="sourceLineNo">477</span><a id="line.477">    }</a>
-<span class="sourceLineNo">478</span><a id="line.478"></a>
-<span class="sourceLineNo">479</span><a id="line.479">    /**</a>
-<span class="sourceLineNo">480</span><a id="line.480">     * Trims the given {@code text} of duplicate whitespaces.</a>
-<span class="sourceLineNo">481</span><a id="line.481">     *</a>
-<span class="sourceLineNo">482</span><a id="line.482">     * @param text the text to transform.</a>
-<span class="sourceLineNo">483</span><a id="line.483">     * @return the finalized form of the text.</a>
-<span class="sourceLineNo">484</span><a id="line.484">     */</a>
-<span class="sourceLineNo">485</span><a id="line.485">    private static String trimExcessWhitespaces(String text) {</a>
-<span class="sourceLineNo">486</span><a id="line.486">        final StringBuilder result = new StringBuilder(256);</a>
-<span class="sourceLineNo">487</span><a id="line.487">        boolean previousWhitespace = true;</a>
-<span class="sourceLineNo">488</span><a id="line.488"></a>
-<span class="sourceLineNo">489</span><a id="line.489">        for (char letter : text.toCharArray()) {</a>
-<span class="sourceLineNo">490</span><a id="line.490">            final char print;</a>
-<span class="sourceLineNo">491</span><a id="line.491">            if (Character.isWhitespace(letter)) {</a>
-<span class="sourceLineNo">492</span><a id="line.492">                if (previousWhitespace) {</a>
-<span class="sourceLineNo">493</span><a id="line.493">                    continue;</a>
-<span class="sourceLineNo">494</span><a id="line.494">                }</a>
-<span class="sourceLineNo">495</span><a id="line.495"></a>
-<span class="sourceLineNo">496</span><a id="line.496">                previousWhitespace = true;</a>
-<span class="sourceLineNo">497</span><a id="line.497">                print = ' ';</a>
-<span class="sourceLineNo">498</span><a id="line.498">            }</a>
-<span class="sourceLineNo">499</span><a id="line.499">            else {</a>
-<span class="sourceLineNo">500</span><a id="line.500">                previousWhitespace = false;</a>
-<span class="sourceLineNo">501</span><a id="line.501">                print = letter;</a>
-<span class="sourceLineNo">502</span><a id="line.502">            }</a>
-<span class="sourceLineNo">503</span><a id="line.503"></a>
-<span class="sourceLineNo">504</span><a id="line.504">            result.append(print);</a>
-<span class="sourceLineNo">505</span><a id="line.505">        }</a>
+<span class="sourceLineNo">220</span><a id="line.220">        else if (!startsWithInheritDoc(ast)) {</a>
+<span class="sourceLineNo">221</span><a id="line.221">            validateUntaggedSummary(ast);</a>
+<span class="sourceLineNo">222</span><a id="line.222">        }</a>
+<span class="sourceLineNo">223</span><a id="line.223">    }</a>
+<span class="sourceLineNo">224</span><a id="line.224"></a>
+<span class="sourceLineNo">225</span><a id="line.225">    /**</a>
+<span class="sourceLineNo">226</span><a id="line.226">     * Checks the javadoc text for {@code period} at end and forbidden fragments.</a>
+<span class="sourceLineNo">227</span><a id="line.227">     *</a>
+<span class="sourceLineNo">228</span><a id="line.228">     * @param ast the javadoc text node</a>
+<span class="sourceLineNo">229</span><a id="line.229">     */</a>
+<span class="sourceLineNo">230</span><a id="line.230">    private void validateUntaggedSummary(DetailNode ast) {</a>
+<span class="sourceLineNo">231</span><a id="line.231">        final String summaryDoc = getSummarySentence(ast);</a>
+<span class="sourceLineNo">232</span><a id="line.232">        if (summaryDoc.isEmpty()) {</a>
+<span class="sourceLineNo">233</span><a id="line.233">            log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</a>
+<span class="sourceLineNo">234</span><a id="line.234">        }</a>
+<span class="sourceLineNo">235</span><a id="line.235">        else if (!period.isEmpty()) {</a>
+<span class="sourceLineNo">236</span><a id="line.236">            if (summaryDoc.contains(period)) {</a>
+<span class="sourceLineNo">237</span><a id="line.237">                final String firstSentence = getFirstSentenceOrNull(ast, period);</a>
+<span class="sourceLineNo">238</span><a id="line.238">                if (firstSentence == null) {</a>
+<span class="sourceLineNo">239</span><a id="line.239">                    log(ast.getLineNumber(), MSG_SUMMARY_FIRST_SENTENCE);</a>
+<span class="sourceLineNo">240</span><a id="line.240">                }</a>
+<span class="sourceLineNo">241</span><a id="line.241">                else if (containsForbiddenFragment(firstSentence)) {</a>
+<span class="sourceLineNo">242</span><a id="line.242">                    log(ast.getLineNumber(), MSG_SUMMARY_JAVADOC);</a>
+<span class="sourceLineNo">243</span><a id="line.243">                }</a>
+<span class="sourceLineNo">244</span><a id="line.244">            }</a>
+<span class="sourceLineNo">245</span><a id="line.245">            else {</a>
+<span class="sourceLineNo">246</span><a id="line.246">                log(ast.getLineNumber(), MSG_SUMMARY_FIRST_SENTENCE);</a>
+<span class="sourceLineNo">247</span><a id="line.247">            }</a>
+<span class="sourceLineNo">248</span><a id="line.248">        }</a>
+<span class="sourceLineNo">249</span><a id="line.249">    }</a>
+<span class="sourceLineNo">250</span><a id="line.250"></a>
+<span class="sourceLineNo">251</span><a id="line.251">    /**</a>
+<span class="sourceLineNo">252</span><a id="line.252">     * Gets the node for the inline tag if present.</a>
+<span class="sourceLineNo">253</span><a id="line.253">     *</a>
+<span class="sourceLineNo">254</span><a id="line.254">     * @param javadoc javadoc root node.</a>
+<span class="sourceLineNo">255</span><a id="line.255">     * @return the node for the inline tag if present.</a>
+<span class="sourceLineNo">256</span><a id="line.256">     */</a>
+<span class="sourceLineNo">257</span><a id="line.257">    private static Optional&lt;DetailNode&gt; getInlineTagNode(DetailNode javadoc) {</a>
+<span class="sourceLineNo">258</span><a id="line.258">        return Arrays.stream(javadoc.getChildren())</a>
+<span class="sourceLineNo">259</span><a id="line.259">            .filter(SummaryJavadocCheck::isInlineTagPresent)</a>
+<span class="sourceLineNo">260</span><a id="line.260">            .findFirst()</a>
+<span class="sourceLineNo">261</span><a id="line.261">            .map(SummaryJavadocCheck::getInlineTagNodeForAst);</a>
+<span class="sourceLineNo">262</span><a id="line.262">    }</a>
+<span class="sourceLineNo">263</span><a id="line.263"></a>
+<span class="sourceLineNo">264</span><a id="line.264">    /**</a>
+<span class="sourceLineNo">265</span><a id="line.265">     * Whether the {@code {@summary}} tag is defined first in the javadoc.</a>
+<span class="sourceLineNo">266</span><a id="line.266">     *</a>
+<span class="sourceLineNo">267</span><a id="line.267">     * @param inlineSummaryTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
+<span class="sourceLineNo">268</span><a id="line.268">     * @return {@code true} if the {@code {@summary}} tag is defined first in the javadoc</a>
+<span class="sourceLineNo">269</span><a id="line.269">     */</a>
+<span class="sourceLineNo">270</span><a id="line.270">    private static boolean isDefinedFirst(DetailNode inlineSummaryTag) {</a>
+<span class="sourceLineNo">271</span><a id="line.271">        boolean isDefinedFirst = true;</a>
+<span class="sourceLineNo">272</span><a id="line.272">        DetailNode currentAst = inlineSummaryTag;</a>
+<span class="sourceLineNo">273</span><a id="line.273">        while (currentAst != null &amp;&amp; isDefinedFirst) {</a>
+<span class="sourceLineNo">274</span><a id="line.274">            switch (currentAst.getType()) {</a>
+<span class="sourceLineNo">275</span><a id="line.275">                case JavadocTokenTypes.TEXT:</a>
+<span class="sourceLineNo">276</span><a id="line.276">                    isDefinedFirst = currentAst.getText().isBlank();</a>
+<span class="sourceLineNo">277</span><a id="line.277">                    break;</a>
+<span class="sourceLineNo">278</span><a id="line.278">                case JavadocTokenTypes.HTML_ELEMENT:</a>
+<span class="sourceLineNo">279</span><a id="line.279">                    isDefinedFirst = !isTextPresentInsideHtmlTag(currentAst);</a>
+<span class="sourceLineNo">280</span><a id="line.280">                    break;</a>
+<span class="sourceLineNo">281</span><a id="line.281">                default:</a>
+<span class="sourceLineNo">282</span><a id="line.282">                    break;</a>
+<span class="sourceLineNo">283</span><a id="line.283">            }</a>
+<span class="sourceLineNo">284</span><a id="line.284">            currentAst = JavadocUtil.getPreviousSibling(currentAst);</a>
+<span class="sourceLineNo">285</span><a id="line.285">        }</a>
+<span class="sourceLineNo">286</span><a id="line.286">        return isDefinedFirst;</a>
+<span class="sourceLineNo">287</span><a id="line.287">    }</a>
+<span class="sourceLineNo">288</span><a id="line.288"></a>
+<span class="sourceLineNo">289</span><a id="line.289">    /**</a>
+<span class="sourceLineNo">290</span><a id="line.290">     * Whether some text is present inside the HTML element or tag.</a>
+<span class="sourceLineNo">291</span><a id="line.291">     *</a>
+<span class="sourceLineNo">292</span><a id="line.292">     * @param node DetailNode of type {@link JavadocTokenTypes#HTML_TAG}</a>
+<span class="sourceLineNo">293</span><a id="line.293">     *             or {@link JavadocTokenTypes#HTML_ELEMENT}</a>
+<span class="sourceLineNo">294</span><a id="line.294">     * @return {@code true} if some text is present inside the HTML element or tag</a>
+<span class="sourceLineNo">295</span><a id="line.295">     */</a>
+<span class="sourceLineNo">296</span><a id="line.296">    public static boolean isTextPresentInsideHtmlTag(DetailNode node) {</a>
+<span class="sourceLineNo">297</span><a id="line.297">        DetailNode nestedChild = JavadocUtil.getFirstChild(node);</a>
+<span class="sourceLineNo">298</span><a id="line.298">        if (node.getType() == JavadocTokenTypes.HTML_ELEMENT) {</a>
+<span class="sourceLineNo">299</span><a id="line.299">            nestedChild = JavadocUtil.getFirstChild(nestedChild);</a>
+<span class="sourceLineNo">300</span><a id="line.300">        }</a>
+<span class="sourceLineNo">301</span><a id="line.301">        boolean isTextPresentInsideHtmlTag = false;</a>
+<span class="sourceLineNo">302</span><a id="line.302">        while (nestedChild != null &amp;&amp; !isTextPresentInsideHtmlTag) {</a>
+<span class="sourceLineNo">303</span><a id="line.303">            switch (nestedChild.getType()) {</a>
+<span class="sourceLineNo">304</span><a id="line.304">                case JavadocTokenTypes.TEXT:</a>
+<span class="sourceLineNo">305</span><a id="line.305">                    isTextPresentInsideHtmlTag = !nestedChild.getText().isBlank();</a>
+<span class="sourceLineNo">306</span><a id="line.306">                    break;</a>
+<span class="sourceLineNo">307</span><a id="line.307">                case JavadocTokenTypes.HTML_TAG:</a>
+<span class="sourceLineNo">308</span><a id="line.308">                case JavadocTokenTypes.HTML_ELEMENT:</a>
+<span class="sourceLineNo">309</span><a id="line.309">                    isTextPresentInsideHtmlTag = isTextPresentInsideHtmlTag(nestedChild);</a>
+<span class="sourceLineNo">310</span><a id="line.310">                    break;</a>
+<span class="sourceLineNo">311</span><a id="line.311">                default:</a>
+<span class="sourceLineNo">312</span><a id="line.312">                    break;</a>
+<span class="sourceLineNo">313</span><a id="line.313">            }</a>
+<span class="sourceLineNo">314</span><a id="line.314">            nestedChild = JavadocUtil.getNextSibling(nestedChild);</a>
+<span class="sourceLineNo">315</span><a id="line.315">        }</a>
+<span class="sourceLineNo">316</span><a id="line.316">        return isTextPresentInsideHtmlTag;</a>
+<span class="sourceLineNo">317</span><a id="line.317">    }</a>
+<span class="sourceLineNo">318</span><a id="line.318"></a>
+<span class="sourceLineNo">319</span><a id="line.319">    /**</a>
+<span class="sourceLineNo">320</span><a id="line.320">     * Checks if the inline tag node is present.</a>
+<span class="sourceLineNo">321</span><a id="line.321">     *</a>
+<span class="sourceLineNo">322</span><a id="line.322">     * @param ast ast node to check.</a>
+<span class="sourceLineNo">323</span><a id="line.323">     * @return true, if the inline tag node is present.</a>
+<span class="sourceLineNo">324</span><a id="line.324">     */</a>
+<span class="sourceLineNo">325</span><a id="line.325">    private static boolean isInlineTagPresent(DetailNode ast) {</a>
+<span class="sourceLineNo">326</span><a id="line.326">        return getInlineTagNodeForAst(ast) != null;</a>
+<span class="sourceLineNo">327</span><a id="line.327">    }</a>
+<span class="sourceLineNo">328</span><a id="line.328"></a>
+<span class="sourceLineNo">329</span><a id="line.329">    /**</a>
+<span class="sourceLineNo">330</span><a id="line.330">     * Returns an inline javadoc tag node that is within a html tag.</a>
+<span class="sourceLineNo">331</span><a id="line.331">     *</a>
+<span class="sourceLineNo">332</span><a id="line.332">     * @param ast html tag node.</a>
+<span class="sourceLineNo">333</span><a id="line.333">     * @return inline summary javadoc tag node or null if no node is found.</a>
+<span class="sourceLineNo">334</span><a id="line.334">     */</a>
+<span class="sourceLineNo">335</span><a id="line.335">    private static DetailNode getInlineTagNodeForAst(DetailNode ast) {</a>
+<span class="sourceLineNo">336</span><a id="line.336">        DetailNode node = ast;</a>
+<span class="sourceLineNo">337</span><a id="line.337">        DetailNode result = null;</a>
+<span class="sourceLineNo">338</span><a id="line.338">        // node can never be null as this method is called when there is a HTML_ELEMENT</a>
+<span class="sourceLineNo">339</span><a id="line.339">        if (node.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG) {</a>
+<span class="sourceLineNo">340</span><a id="line.340">            result = node;</a>
+<span class="sourceLineNo">341</span><a id="line.341">        }</a>
+<span class="sourceLineNo">342</span><a id="line.342">        else if (node.getType() == JavadocTokenTypes.HTML_TAG) {</a>
+<span class="sourceLineNo">343</span><a id="line.343">            // HTML_TAG always has more than 2 children.</a>
+<span class="sourceLineNo">344</span><a id="line.344">            node = node.getChildren()[1];</a>
+<span class="sourceLineNo">345</span><a id="line.345">            result = getInlineTagNodeForAst(node);</a>
+<span class="sourceLineNo">346</span><a id="line.346">        }</a>
+<span class="sourceLineNo">347</span><a id="line.347">        else if (node.getType() == JavadocTokenTypes.HTML_ELEMENT</a>
+<span class="sourceLineNo">348</span><a id="line.348">                // Condition for SINGLETON html element which cannot contain summary node</a>
+<span class="sourceLineNo">349</span><a id="line.349">                &amp;&amp; node.getChildren()[0].getChildren().length &gt; 1) {</a>
+<span class="sourceLineNo">350</span><a id="line.350">            // Html elements have one tested tag before actual content inside it</a>
+<span class="sourceLineNo">351</span><a id="line.351">            node = node.getChildren()[0].getChildren()[1];</a>
+<span class="sourceLineNo">352</span><a id="line.352">            result = getInlineTagNodeForAst(node);</a>
+<span class="sourceLineNo">353</span><a id="line.353">        }</a>
+<span class="sourceLineNo">354</span><a id="line.354">        return result;</a>
+<span class="sourceLineNo">355</span><a id="line.355">    }</a>
+<span class="sourceLineNo">356</span><a id="line.356"></a>
+<span class="sourceLineNo">357</span><a id="line.357">    /**</a>
+<span class="sourceLineNo">358</span><a id="line.358">     * Checks if the javadoc inline tag is {@code {@summary}} tag.</a>
+<span class="sourceLineNo">359</span><a id="line.359">     *</a>
+<span class="sourceLineNo">360</span><a id="line.360">     * @param javadocInlineTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
+<span class="sourceLineNo">361</span><a id="line.361">     * @return {@code true} if inline tag is summary tag.</a>
+<span class="sourceLineNo">362</span><a id="line.362">     */</a>
+<span class="sourceLineNo">363</span><a id="line.363">    private static boolean isSummaryTag(DetailNode javadocInlineTag) {</a>
+<span class="sourceLineNo">364</span><a id="line.364">        return isInlineTagWithName(javadocInlineTag, SUMMARY_TEXT);</a>
+<span class="sourceLineNo">365</span><a id="line.365">    }</a>
+<span class="sourceLineNo">366</span><a id="line.366"></a>
+<span class="sourceLineNo">367</span><a id="line.367">    /**</a>
+<span class="sourceLineNo">368</span><a id="line.368">     * Checks if the first tag inside ast is {@code {@return}} tag.</a>
+<span class="sourceLineNo">369</span><a id="line.369">     *</a>
+<span class="sourceLineNo">370</span><a id="line.370">     * @param javadocInlineTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
+<span class="sourceLineNo">371</span><a id="line.371">     * @return {@code true} if first tag is return tag.</a>
+<span class="sourceLineNo">372</span><a id="line.372">     */</a>
+<span class="sourceLineNo">373</span><a id="line.373">    private static boolean isInlineReturnTag(DetailNode javadocInlineTag) {</a>
+<span class="sourceLineNo">374</span><a id="line.374">        return isInlineTagWithName(javadocInlineTag, RETURN_TEXT);</a>
+<span class="sourceLineNo">375</span><a id="line.375">    }</a>
+<span class="sourceLineNo">376</span><a id="line.376"></a>
+<span class="sourceLineNo">377</span><a id="line.377">    /**</a>
+<span class="sourceLineNo">378</span><a id="line.378">     * Checks if the first tag inside ast is a tag with the given name.</a>
+<span class="sourceLineNo">379</span><a id="line.379">     *</a>
+<span class="sourceLineNo">380</span><a id="line.380">     * @param javadocInlineTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
+<span class="sourceLineNo">381</span><a id="line.381">     * @param name name of inline tag.</a>
+<span class="sourceLineNo">382</span><a id="line.382">     *</a>
+<span class="sourceLineNo">383</span><a id="line.383">     * @return {@code true} if first tag is a tag with the given name.</a>
+<span class="sourceLineNo">384</span><a id="line.384">     */</a>
+<span class="sourceLineNo">385</span><a id="line.385">    private static boolean isInlineTagWithName(DetailNode javadocInlineTag, String name) {</a>
+<span class="sourceLineNo">386</span><a id="line.386">        final DetailNode[] child = javadocInlineTag.getChildren();</a>
+<span class="sourceLineNo">387</span><a id="line.387"></a>
+<span class="sourceLineNo">388</span><a id="line.388">        // Checking size of ast is not required, since ast contains</a>
+<span class="sourceLineNo">389</span><a id="line.389">        // children of Inline Tag, as at least 2 children will be present which are</a>
+<span class="sourceLineNo">390</span><a id="line.390">        // RCURLY and LCURLY.</a>
+<span class="sourceLineNo">391</span><a id="line.391">        return name.equals(child[1].getText());</a>
+<span class="sourceLineNo">392</span><a id="line.392">    }</a>
+<span class="sourceLineNo">393</span><a id="line.393"></a>
+<span class="sourceLineNo">394</span><a id="line.394">    /**</a>
+<span class="sourceLineNo">395</span><a id="line.395">     * Checks the inline summary (if present) for {@code period} at end and forbidden fragments.</a>
+<span class="sourceLineNo">396</span><a id="line.396">     *</a>
+<span class="sourceLineNo">397</span><a id="line.397">     * @param inlineSummaryTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
+<span class="sourceLineNo">398</span><a id="line.398">     */</a>
+<span class="sourceLineNo">399</span><a id="line.399">    private void validateSummaryTag(DetailNode inlineSummaryTag) {</a>
+<span class="sourceLineNo">400</span><a id="line.400">        final String inlineSummary = getContentOfInlineCustomTag(inlineSummaryTag);</a>
+<span class="sourceLineNo">401</span><a id="line.401">        final String summaryVisible = getVisibleContent(inlineSummary);</a>
+<span class="sourceLineNo">402</span><a id="line.402">        if (summaryVisible.isEmpty()) {</a>
+<span class="sourceLineNo">403</span><a id="line.403">            log(inlineSummaryTag.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</a>
+<span class="sourceLineNo">404</span><a id="line.404">        }</a>
+<span class="sourceLineNo">405</span><a id="line.405">        else if (!period.isEmpty()) {</a>
+<span class="sourceLineNo">406</span><a id="line.406">            final boolean isPeriodNotAtEnd =</a>
+<span class="sourceLineNo">407</span><a id="line.407">                    summaryVisible.lastIndexOf(period) != summaryVisible.length() - 1;</a>
+<span class="sourceLineNo">408</span><a id="line.408">            if (isPeriodNotAtEnd) {</a>
+<span class="sourceLineNo">409</span><a id="line.409">                log(inlineSummaryTag.getLineNumber(), MSG_SUMMARY_MISSING_PERIOD);</a>
+<span class="sourceLineNo">410</span><a id="line.410">            }</a>
+<span class="sourceLineNo">411</span><a id="line.411">            else if (containsForbiddenFragment(inlineSummary)) {</a>
+<span class="sourceLineNo">412</span><a id="line.412">                log(inlineSummaryTag.getLineNumber(), MSG_SUMMARY_JAVADOC);</a>
+<span class="sourceLineNo">413</span><a id="line.413">            }</a>
+<span class="sourceLineNo">414</span><a id="line.414">        }</a>
+<span class="sourceLineNo">415</span><a id="line.415">    }</a>
+<span class="sourceLineNo">416</span><a id="line.416"></a>
+<span class="sourceLineNo">417</span><a id="line.417">    /**</a>
+<span class="sourceLineNo">418</span><a id="line.418">     * Checks the inline return for forbidden fragments.</a>
+<span class="sourceLineNo">419</span><a id="line.419">     *</a>
+<span class="sourceLineNo">420</span><a id="line.420">     * @param inlineReturnTag node of type {@link JavadocTokenTypes#JAVADOC_INLINE_TAG}</a>
+<span class="sourceLineNo">421</span><a id="line.421">     */</a>
+<span class="sourceLineNo">422</span><a id="line.422">    private void validateInlineReturnTag(DetailNode inlineReturnTag) {</a>
+<span class="sourceLineNo">423</span><a id="line.423">        final String inlineReturn = getContentOfInlineCustomTag(inlineReturnTag);</a>
+<span class="sourceLineNo">424</span><a id="line.424">        final String returnVisible = getVisibleContent(inlineReturn);</a>
+<span class="sourceLineNo">425</span><a id="line.425">        if (returnVisible.isEmpty()) {</a>
+<span class="sourceLineNo">426</span><a id="line.426">            log(inlineReturnTag.getLineNumber(), MSG_SUMMARY_JAVADOC_MISSING);</a>
+<span class="sourceLineNo">427</span><a id="line.427">        }</a>
+<span class="sourceLineNo">428</span><a id="line.428">        else if (containsForbiddenFragment(inlineReturn)) {</a>
+<span class="sourceLineNo">429</span><a id="line.429">            log(inlineReturnTag.getLineNumber(), MSG_SUMMARY_JAVADOC);</a>
+<span class="sourceLineNo">430</span><a id="line.430">        }</a>
+<span class="sourceLineNo">431</span><a id="line.431">    }</a>
+<span class="sourceLineNo">432</span><a id="line.432"></a>
+<span class="sourceLineNo">433</span><a id="line.433">    /**</a>
+<span class="sourceLineNo">434</span><a id="line.434">     * Gets the content of inline custom tag.</a>
+<span class="sourceLineNo">435</span><a id="line.435">     *</a>
+<span class="sourceLineNo">436</span><a id="line.436">     * @param inlineTag inline tag node.</a>
+<span class="sourceLineNo">437</span><a id="line.437">     * @return String consisting of the content of inline custom tag.</a>
+<span class="sourceLineNo">438</span><a id="line.438">     */</a>
+<span class="sourceLineNo">439</span><a id="line.439">    public static String getContentOfInlineCustomTag(DetailNode inlineTag) {</a>
+<span class="sourceLineNo">440</span><a id="line.440">        final DetailNode[] childrenOfInlineTag = inlineTag.getChildren();</a>
+<span class="sourceLineNo">441</span><a id="line.441">        final StringBuilder customTagContent = new StringBuilder(256);</a>
+<span class="sourceLineNo">442</span><a id="line.442">        final int indexOfContentOfSummaryTag = 3;</a>
+<span class="sourceLineNo">443</span><a id="line.443">        if (childrenOfInlineTag.length != indexOfContentOfSummaryTag) {</a>
+<span class="sourceLineNo">444</span><a id="line.444">            DetailNode currentNode = childrenOfInlineTag[indexOfContentOfSummaryTag];</a>
+<span class="sourceLineNo">445</span><a id="line.445">            while (currentNode.getType() != JavadocTokenTypes.JAVADOC_INLINE_TAG_END) {</a>
+<span class="sourceLineNo">446</span><a id="line.446">                extractInlineTagContent(currentNode, customTagContent);</a>
+<span class="sourceLineNo">447</span><a id="line.447">                currentNode = JavadocUtil.getNextSibling(currentNode);</a>
+<span class="sourceLineNo">448</span><a id="line.448">            }</a>
+<span class="sourceLineNo">449</span><a id="line.449">        }</a>
+<span class="sourceLineNo">450</span><a id="line.450">        return customTagContent.toString();</a>
+<span class="sourceLineNo">451</span><a id="line.451">    }</a>
+<span class="sourceLineNo">452</span><a id="line.452"></a>
+<span class="sourceLineNo">453</span><a id="line.453">    /**</a>
+<span class="sourceLineNo">454</span><a id="line.454">     * Extracts the content of inline custom tag recursively.</a>
+<span class="sourceLineNo">455</span><a id="line.455">     *</a>
+<span class="sourceLineNo">456</span><a id="line.456">     * @param node DetailNode</a>
+<span class="sourceLineNo">457</span><a id="line.457">     * @param customTagContent content of custom tag</a>
+<span class="sourceLineNo">458</span><a id="line.458">     */</a>
+<span class="sourceLineNo">459</span><a id="line.459">    private static void extractInlineTagContent(DetailNode node,</a>
+<span class="sourceLineNo">460</span><a id="line.460">        StringBuilder customTagContent) {</a>
+<span class="sourceLineNo">461</span><a id="line.461">        final DetailNode[] children = node.getChildren();</a>
+<span class="sourceLineNo">462</span><a id="line.462">        if (children.length == 0) {</a>
+<span class="sourceLineNo">463</span><a id="line.463">            customTagContent.append(node.getText());</a>
+<span class="sourceLineNo">464</span><a id="line.464">        }</a>
+<span class="sourceLineNo">465</span><a id="line.465">        else {</a>
+<span class="sourceLineNo">466</span><a id="line.466">            for (DetailNode child : children) {</a>
+<span class="sourceLineNo">467</span><a id="line.467">                if (child.getType() != JavadocTokenTypes.LEADING_ASTERISK) {</a>
+<span class="sourceLineNo">468</span><a id="line.468">                    extractInlineTagContent(child, customTagContent);</a>
+<span class="sourceLineNo">469</span><a id="line.469">                }</a>
+<span class="sourceLineNo">470</span><a id="line.470">            }</a>
+<span class="sourceLineNo">471</span><a id="line.471">        }</a>
+<span class="sourceLineNo">472</span><a id="line.472">    }</a>
+<span class="sourceLineNo">473</span><a id="line.473"></a>
+<span class="sourceLineNo">474</span><a id="line.474">    /**</a>
+<span class="sourceLineNo">475</span><a id="line.475">     * Gets the string that is visible to user in javadoc.</a>
+<span class="sourceLineNo">476</span><a id="line.476">     *</a>
+<span class="sourceLineNo">477</span><a id="line.477">     * @param summary entire content of summary javadoc.</a>
+<span class="sourceLineNo">478</span><a id="line.478">     * @return string that is visible to user in javadoc.</a>
+<span class="sourceLineNo">479</span><a id="line.479">     */</a>
+<span class="sourceLineNo">480</span><a id="line.480">    private static String getVisibleContent(String summary) {</a>
+<span class="sourceLineNo">481</span><a id="line.481">        final String visibleSummary = HTML_ELEMENTS.matcher(summary).replaceAll("");</a>
+<span class="sourceLineNo">482</span><a id="line.482">        return visibleSummary.trim();</a>
+<span class="sourceLineNo">483</span><a id="line.483">    }</a>
+<span class="sourceLineNo">484</span><a id="line.484"></a>
+<span class="sourceLineNo">485</span><a id="line.485">    /**</a>
+<span class="sourceLineNo">486</span><a id="line.486">     * Tests if first sentence contains forbidden summary fragment.</a>
+<span class="sourceLineNo">487</span><a id="line.487">     *</a>
+<span class="sourceLineNo">488</span><a id="line.488">     * @param firstSentence string with first sentence.</a>
+<span class="sourceLineNo">489</span><a id="line.489">     * @return {@code true} if first sentence contains forbidden summary fragment.</a>
+<span class="sourceLineNo">490</span><a id="line.490">     */</a>
+<span class="sourceLineNo">491</span><a id="line.491">    private boolean containsForbiddenFragment(String firstSentence) {</a>
+<span class="sourceLineNo">492</span><a id="line.492">        final String javadocText = JAVADOC_MULTILINE_TO_SINGLELINE_PATTERN</a>
+<span class="sourceLineNo">493</span><a id="line.493">                .matcher(firstSentence).replaceAll(" ");</a>
+<span class="sourceLineNo">494</span><a id="line.494">        return forbiddenSummaryFragments.matcher(trimExcessWhitespaces(javadocText)).find();</a>
+<span class="sourceLineNo">495</span><a id="line.495">    }</a>
+<span class="sourceLineNo">496</span><a id="line.496"></a>
+<span class="sourceLineNo">497</span><a id="line.497">    /**</a>
+<span class="sourceLineNo">498</span><a id="line.498">     * Trims the given {@code text} of duplicate whitespaces.</a>
+<span class="sourceLineNo">499</span><a id="line.499">     *</a>
+<span class="sourceLineNo">500</span><a id="line.500">     * @param text the text to transform.</a>
+<span class="sourceLineNo">501</span><a id="line.501">     * @return the finalized form of the text.</a>
+<span class="sourceLineNo">502</span><a id="line.502">     */</a>
+<span class="sourceLineNo">503</span><a id="line.503">    private static String trimExcessWhitespaces(String text) {</a>
+<span class="sourceLineNo">504</span><a id="line.504">        final StringBuilder result = new StringBuilder(256);</a>
+<span class="sourceLineNo">505</span><a id="line.505">        boolean previousWhitespace = true;</a>
 <span class="sourceLineNo">506</span><a id="line.506"></a>
-<span class="sourceLineNo">507</span><a id="line.507">        return result.toString();</a>
-<span class="sourceLineNo">508</span><a id="line.508">    }</a>
-<span class="sourceLineNo">509</span><a id="line.509"></a>
-<span class="sourceLineNo">510</span><a id="line.510">    /**</a>
-<span class="sourceLineNo">511</span><a id="line.511">     * Checks if the node starts with an {&amp;#64;inheritDoc}.</a>
-<span class="sourceLineNo">512</span><a id="line.512">     *</a>
-<span class="sourceLineNo">513</span><a id="line.513">     * @param root the root node to examine.</a>
-<span class="sourceLineNo">514</span><a id="line.514">     * @return {@code true} if the javadoc starts with an {&amp;#64;inheritDoc}.</a>
-<span class="sourceLineNo">515</span><a id="line.515">     */</a>
-<span class="sourceLineNo">516</span><a id="line.516">    private static boolean startsWithInheritDoc(DetailNode root) {</a>
-<span class="sourceLineNo">517</span><a id="line.517">        boolean found = false;</a>
-<span class="sourceLineNo">518</span><a id="line.518"></a>
-<span class="sourceLineNo">519</span><a id="line.519">        for (DetailNode child : root.getChildren()) {</a>
-<span class="sourceLineNo">520</span><a id="line.520">            if (child.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG</a>
-<span class="sourceLineNo">521</span><a id="line.521">                    &amp;&amp; child.getChildren()[1].getType() == JavadocTokenTypes.INHERIT_DOC_LITERAL) {</a>
-<span class="sourceLineNo">522</span><a id="line.522">                found = true;</a>
-<span class="sourceLineNo">523</span><a id="line.523">            }</a>
-<span class="sourceLineNo">524</span><a id="line.524">            if ((child.getType() == JavadocTokenTypes.TEXT</a>
-<span class="sourceLineNo">525</span><a id="line.525">                    || child.getType() == JavadocTokenTypes.HTML_ELEMENT)</a>
-<span class="sourceLineNo">526</span><a id="line.526">                    &amp;&amp; !CommonUtil.isBlank(child.getText())) {</a>
-<span class="sourceLineNo">527</span><a id="line.527">                break;</a>
-<span class="sourceLineNo">528</span><a id="line.528">            }</a>
-<span class="sourceLineNo">529</span><a id="line.529">        }</a>
-<span class="sourceLineNo">530</span><a id="line.530"></a>
-<span class="sourceLineNo">531</span><a id="line.531">        return found;</a>
-<span class="sourceLineNo">532</span><a id="line.532">    }</a>
-<span class="sourceLineNo">533</span><a id="line.533"></a>
-<span class="sourceLineNo">534</span><a id="line.534">    /**</a>
-<span class="sourceLineNo">535</span><a id="line.535">     * Finds and returns summary sentence.</a>
-<span class="sourceLineNo">536</span><a id="line.536">     *</a>
-<span class="sourceLineNo">537</span><a id="line.537">     * @param ast javadoc root node.</a>
-<span class="sourceLineNo">538</span><a id="line.538">     * @return violation string.</a>
-<span class="sourceLineNo">539</span><a id="line.539">     */</a>
-<span class="sourceLineNo">540</span><a id="line.540">    private static String getSummarySentence(DetailNode ast) {</a>
-<span class="sourceLineNo">541</span><a id="line.541">        final StringBuilder result = new StringBuilder(256);</a>
-<span class="sourceLineNo">542</span><a id="line.542">        for (DetailNode child : ast.getChildren()) {</a>
-<span class="sourceLineNo">543</span><a id="line.543">            if (child.getType() != JavadocTokenTypes.EOF</a>
-<span class="sourceLineNo">544</span><a id="line.544">                    &amp;&amp; ALLOWED_TYPES.get(child.getType())) {</a>
-<span class="sourceLineNo">545</span><a id="line.545">                result.append(child.getText());</a>
+<span class="sourceLineNo">507</span><a id="line.507">        for (char letter : text.toCharArray()) {</a>
+<span class="sourceLineNo">508</span><a id="line.508">            final char print;</a>
+<span class="sourceLineNo">509</span><a id="line.509">            if (Character.isWhitespace(letter)) {</a>
+<span class="sourceLineNo">510</span><a id="line.510">                if (previousWhitespace) {</a>
+<span class="sourceLineNo">511</span><a id="line.511">                    continue;</a>
+<span class="sourceLineNo">512</span><a id="line.512">                }</a>
+<span class="sourceLineNo">513</span><a id="line.513"></a>
+<span class="sourceLineNo">514</span><a id="line.514">                previousWhitespace = true;</a>
+<span class="sourceLineNo">515</span><a id="line.515">                print = ' ';</a>
+<span class="sourceLineNo">516</span><a id="line.516">            }</a>
+<span class="sourceLineNo">517</span><a id="line.517">            else {</a>
+<span class="sourceLineNo">518</span><a id="line.518">                previousWhitespace = false;</a>
+<span class="sourceLineNo">519</span><a id="line.519">                print = letter;</a>
+<span class="sourceLineNo">520</span><a id="line.520">            }</a>
+<span class="sourceLineNo">521</span><a id="line.521"></a>
+<span class="sourceLineNo">522</span><a id="line.522">            result.append(print);</a>
+<span class="sourceLineNo">523</span><a id="line.523">        }</a>
+<span class="sourceLineNo">524</span><a id="line.524"></a>
+<span class="sourceLineNo">525</span><a id="line.525">        return result.toString();</a>
+<span class="sourceLineNo">526</span><a id="line.526">    }</a>
+<span class="sourceLineNo">527</span><a id="line.527"></a>
+<span class="sourceLineNo">528</span><a id="line.528">    /**</a>
+<span class="sourceLineNo">529</span><a id="line.529">     * Checks if the node starts with an {&amp;#64;inheritDoc}.</a>
+<span class="sourceLineNo">530</span><a id="line.530">     *</a>
+<span class="sourceLineNo">531</span><a id="line.531">     * @param root the root node to examine.</a>
+<span class="sourceLineNo">532</span><a id="line.532">     * @return {@code true} if the javadoc starts with an {&amp;#64;inheritDoc}.</a>
+<span class="sourceLineNo">533</span><a id="line.533">     */</a>
+<span class="sourceLineNo">534</span><a id="line.534">    private static boolean startsWithInheritDoc(DetailNode root) {</a>
+<span class="sourceLineNo">535</span><a id="line.535">        boolean found = false;</a>
+<span class="sourceLineNo">536</span><a id="line.536"></a>
+<span class="sourceLineNo">537</span><a id="line.537">        for (DetailNode child : root.getChildren()) {</a>
+<span class="sourceLineNo">538</span><a id="line.538">            if (child.getType() == JavadocTokenTypes.JAVADOC_INLINE_TAG</a>
+<span class="sourceLineNo">539</span><a id="line.539">                    &amp;&amp; child.getChildren()[1].getType() == JavadocTokenTypes.INHERIT_DOC_LITERAL) {</a>
+<span class="sourceLineNo">540</span><a id="line.540">                found = true;</a>
+<span class="sourceLineNo">541</span><a id="line.541">            }</a>
+<span class="sourceLineNo">542</span><a id="line.542">            if ((child.getType() == JavadocTokenTypes.TEXT</a>
+<span class="sourceLineNo">543</span><a id="line.543">                    || child.getType() == JavadocTokenTypes.HTML_ELEMENT)</a>
+<span class="sourceLineNo">544</span><a id="line.544">                    &amp;&amp; !CommonUtil.isBlank(child.getText())) {</a>
+<span class="sourceLineNo">545</span><a id="line.545">                break;</a>
 <span class="sourceLineNo">546</span><a id="line.546">            }</a>
-<span class="sourceLineNo">547</span><a id="line.547">            else {</a>
-<span class="sourceLineNo">548</span><a id="line.548">                final String summary = result.toString();</a>
-<span class="sourceLineNo">549</span><a id="line.549">                if (child.getType() == JavadocTokenTypes.HTML_ELEMENT</a>
-<span class="sourceLineNo">550</span><a id="line.550">                        &amp;&amp; CommonUtil.isBlank(summary)) {</a>
-<span class="sourceLineNo">551</span><a id="line.551">                    result.append(getStringInsideTag(summary,</a>
-<span class="sourceLineNo">552</span><a id="line.552">                            child.getChildren()[0].getChildren()[0]));</a>
-<span class="sourceLineNo">553</span><a id="line.553">                }</a>
-<span class="sourceLineNo">554</span><a id="line.554">            }</a>
-<span class="sourceLineNo">555</span><a id="line.555">        }</a>
-<span class="sourceLineNo">556</span><a id="line.556">        return result.toString().trim();</a>
-<span class="sourceLineNo">557</span><a id="line.557">    }</a>
-<span class="sourceLineNo">558</span><a id="line.558"></a>
-<span class="sourceLineNo">559</span><a id="line.559">    /**</a>
-<span class="sourceLineNo">560</span><a id="line.560">     * Get concatenated string within text of html tags.</a>
-<span class="sourceLineNo">561</span><a id="line.561">     *</a>
-<span class="sourceLineNo">562</span><a id="line.562">     * @param result javadoc string</a>
-<span class="sourceLineNo">563</span><a id="line.563">     * @param detailNode javadoc tag node</a>
-<span class="sourceLineNo">564</span><a id="line.564">     * @return java doc tag content appended in result</a>
-<span class="sourceLineNo">565</span><a id="line.565">     */</a>
-<span class="sourceLineNo">566</span><a id="line.566">    private static String getStringInsideTag(String result, DetailNode detailNode) {</a>
-<span class="sourceLineNo">567</span><a id="line.567">        final StringBuilder contents = new StringBuilder(result);</a>
-<span class="sourceLineNo">568</span><a id="line.568">        DetailNode tempNode = detailNode;</a>
-<span class="sourceLineNo">569</span><a id="line.569">        while (tempNode != null) {</a>
-<span class="sourceLineNo">570</span><a id="line.570">            if (tempNode.getType() == JavadocTokenTypes.TEXT) {</a>
-<span class="sourceLineNo">571</span><a id="line.571">                contents.append(tempNode.getText());</a>
+<span class="sourceLineNo">547</span><a id="line.547">        }</a>
+<span class="sourceLineNo">548</span><a id="line.548"></a>
+<span class="sourceLineNo">549</span><a id="line.549">        return found;</a>
+<span class="sourceLineNo">550</span><a id="line.550">    }</a>
+<span class="sourceLineNo">551</span><a id="line.551"></a>
+<span class="sourceLineNo">552</span><a id="line.552">    /**</a>
+<span class="sourceLineNo">553</span><a id="line.553">     * Finds and returns summary sentence.</a>
+<span class="sourceLineNo">554</span><a id="line.554">     *</a>
+<span class="sourceLineNo">555</span><a id="line.555">     * @param ast javadoc root node.</a>
+<span class="sourceLineNo">556</span><a id="line.556">     * @return violation string.</a>
+<span class="sourceLineNo">557</span><a id="line.557">     */</a>
+<span class="sourceLineNo">558</span><a id="line.558">    private static String getSummarySentence(DetailNode ast) {</a>
+<span class="sourceLineNo">559</span><a id="line.559">        final StringBuilder result = new StringBuilder(256);</a>
+<span class="sourceLineNo">560</span><a id="line.560">        for (DetailNode child : ast.getChildren()) {</a>
+<span class="sourceLineNo">561</span><a id="line.561">            if (child.getType() != JavadocTokenTypes.EOF</a>
+<span class="sourceLineNo">562</span><a id="line.562">                    &amp;&amp; ALLOWED_TYPES.get(child.getType())) {</a>
+<span class="sourceLineNo">563</span><a id="line.563">                result.append(child.getText());</a>
+<span class="sourceLineNo">564</span><a id="line.564">            }</a>
+<span class="sourceLineNo">565</span><a id="line.565">            else {</a>
+<span class="sourceLineNo">566</span><a id="line.566">                final String summary = result.toString();</a>
+<span class="sourceLineNo">567</span><a id="line.567">                if (child.getType() == JavadocTokenTypes.HTML_ELEMENT</a>
+<span class="sourceLineNo">568</span><a id="line.568">                        &amp;&amp; CommonUtil.isBlank(summary)) {</a>
+<span class="sourceLineNo">569</span><a id="line.569">                    result.append(getStringInsideTag(summary,</a>
+<span class="sourceLineNo">570</span><a id="line.570">                            child.getChildren()[0].getChildren()[0]));</a>
+<span class="sourceLineNo">571</span><a id="line.571">                }</a>
 <span class="sourceLineNo">572</span><a id="line.572">            }</a>
-<span class="sourceLineNo">573</span><a id="line.573">            tempNode = JavadocUtil.getNextSibling(tempNode);</a>
-<span class="sourceLineNo">574</span><a id="line.574">        }</a>
-<span class="sourceLineNo">575</span><a id="line.575">        return contents.toString();</a>
-<span class="sourceLineNo">576</span><a id="line.576">    }</a>
-<span class="sourceLineNo">577</span><a id="line.577"></a>
-<span class="sourceLineNo">578</span><a id="line.578">    /**</a>
-<span class="sourceLineNo">579</span><a id="line.579">     * Finds and returns first sentence.</a>
-<span class="sourceLineNo">580</span><a id="line.580">     *</a>
-<span class="sourceLineNo">581</span><a id="line.581">     * @param ast Javadoc root node.</a>
-<span class="sourceLineNo">582</span><a id="line.582">     * @return first sentence.</a>
+<span class="sourceLineNo">573</span><a id="line.573">        }</a>
+<span class="sourceLineNo">574</span><a id="line.574">        return result.toString().trim();</a>
+<span class="sourceLineNo">575</span><a id="line.575">    }</a>
+<span class="sourceLineNo">576</span><a id="line.576"></a>
+<span class="sourceLineNo">577</span><a id="line.577">    /**</a>
+<span class="sourceLineNo">578</span><a id="line.578">     * Get concatenated string within text of html tags.</a>
+<span class="sourceLineNo">579</span><a id="line.579">     *</a>
+<span class="sourceLineNo">580</span><a id="line.580">     * @param result javadoc string</a>
+<span class="sourceLineNo">581</span><a id="line.581">     * @param detailNode javadoc tag node</a>
+<span class="sourceLineNo">582</span><a id="line.582">     * @return java doc tag content appended in result</a>
 <span class="sourceLineNo">583</span><a id="line.583">     */</a>
-<span class="sourceLineNo">584</span><a id="line.584">    private static String getFirstSentence(DetailNode ast) {</a>
-<span class="sourceLineNo">585</span><a id="line.585">        final StringBuilder result = new StringBuilder(256);</a>
-<span class="sourceLineNo">586</span><a id="line.586">        final String periodSuffix = DEFAULT_PERIOD + ' ';</a>
-<span class="sourceLineNo">587</span><a id="line.587">        for (DetailNode child : ast.getChildren()) {</a>
-<span class="sourceLineNo">588</span><a id="line.588">            final String text;</a>
-<span class="sourceLineNo">589</span><a id="line.589">            if (child.getChildren().length == 0) {</a>
-<span class="sourceLineNo">590</span><a id="line.590">                text = child.getText();</a>
-<span class="sourceLineNo">591</span><a id="line.591">            }</a>
-<span class="sourceLineNo">592</span><a id="line.592">            else {</a>
-<span class="sourceLineNo">593</span><a id="line.593">                text = getFirstSentence(child);</a>
-<span class="sourceLineNo">594</span><a id="line.594">            }</a>
+<span class="sourceLineNo">584</span><a id="line.584">    private static String getStringInsideTag(String result, DetailNode detailNode) {</a>
+<span class="sourceLineNo">585</span><a id="line.585">        final StringBuilder contents = new StringBuilder(result);</a>
+<span class="sourceLineNo">586</span><a id="line.586">        DetailNode tempNode = detailNode;</a>
+<span class="sourceLineNo">587</span><a id="line.587">        while (tempNode != null) {</a>
+<span class="sourceLineNo">588</span><a id="line.588">            if (tempNode.getType() == JavadocTokenTypes.TEXT) {</a>
+<span class="sourceLineNo">589</span><a id="line.589">                contents.append(tempNode.getText());</a>
+<span class="sourceLineNo">590</span><a id="line.590">            }</a>
+<span class="sourceLineNo">591</span><a id="line.591">            tempNode = JavadocUtil.getNextSibling(tempNode);</a>
+<span class="sourceLineNo">592</span><a id="line.592">        }</a>
+<span class="sourceLineNo">593</span><a id="line.593">        return contents.toString();</a>
+<span class="sourceLineNo">594</span><a id="line.594">    }</a>
 <span class="sourceLineNo">595</span><a id="line.595"></a>
-<span class="sourceLineNo">596</span><a id="line.596">            if (text.contains(periodSuffix)) {</a>
-<span class="sourceLineNo">597</span><a id="line.597">                result.append(text, 0, text.indexOf(periodSuffix) + 1);</a>
-<span class="sourceLineNo">598</span><a id="line.598">                break;</a>
-<span class="sourceLineNo">599</span><a id="line.599">            }</a>
-<span class="sourceLineNo">600</span><a id="line.600"></a>
-<span class="sourceLineNo">601</span><a id="line.601">            result.append(text);</a>
-<span class="sourceLineNo">602</span><a id="line.602">        }</a>
-<span class="sourceLineNo">603</span><a id="line.603">        return result.toString();</a>
-<span class="sourceLineNo">604</span><a id="line.604">    }</a>
-<span class="sourceLineNo">605</span><a id="line.605"></a>
-<span class="sourceLineNo">606</span><a id="line.606">}</a>
+<span class="sourceLineNo">596</span><a id="line.596">    /**</a>
+<span class="sourceLineNo">597</span><a id="line.597">     * Finds and returns the first sentence.</a>
+<span class="sourceLineNo">598</span><a id="line.598">     *</a>
+<span class="sourceLineNo">599</span><a id="line.599">     * @param ast The Javadoc root node.</a>
+<span class="sourceLineNo">600</span><a id="line.600">     * @param period The configured period symbol.</a>
+<span class="sourceLineNo">601</span><a id="line.601">     * @return The first sentence up to and excluding the period, or null if no ending was found.</a>
+<span class="sourceLineNo">602</span><a id="line.602">     */</a>
+<span class="sourceLineNo">603</span><a id="line.603">    @Nullable</a>
+<span class="sourceLineNo">604</span><a id="line.604">    private static String getFirstSentenceOrNull(DetailNode ast, String period) {</a>
+<span class="sourceLineNo">605</span><a id="line.605">        final List&lt;String&gt; sentenceParts = new ArrayList&lt;&gt;();</a>
+<span class="sourceLineNo">606</span><a id="line.606">        String sentence = null;</a>
+<span class="sourceLineNo">607</span><a id="line.607">        for (String text : (Iterable&lt;String&gt;) streamTextParts(ast)::iterator) {</a>
+<span class="sourceLineNo">608</span><a id="line.608">            final String sentenceEnding = findSentenceEndingOrNull(text, period);</a>
+<span class="sourceLineNo">609</span><a id="line.609">            if (sentenceEnding != null) {</a>
+<span class="sourceLineNo">610</span><a id="line.610">                sentenceParts.add(sentenceEnding);</a>
+<span class="sourceLineNo">611</span><a id="line.611">                sentence = String.join("", sentenceParts);</a>
+<span class="sourceLineNo">612</span><a id="line.612">                break;</a>
+<span class="sourceLineNo">613</span><a id="line.613">            }</a>
+<span class="sourceLineNo">614</span><a id="line.614">            else {</a>
+<span class="sourceLineNo">615</span><a id="line.615">                sentenceParts.add(text);</a>
+<span class="sourceLineNo">616</span><a id="line.616">            }</a>
+<span class="sourceLineNo">617</span><a id="line.617">        }</a>
+<span class="sourceLineNo">618</span><a id="line.618">        return sentence;</a>
+<span class="sourceLineNo">619</span><a id="line.619">    }</a>
+<span class="sourceLineNo">620</span><a id="line.620"></a>
+<span class="sourceLineNo">621</span><a id="line.621">    /**</a>
+<span class="sourceLineNo">622</span><a id="line.622">     * Streams through all the text under the given node.</a>
+<span class="sourceLineNo">623</span><a id="line.623">     *</a>
+<span class="sourceLineNo">624</span><a id="line.624">     * @param node The Javadoc node to examine.</a>
+<span class="sourceLineNo">625</span><a id="line.625">     * @return All the text in all nodes that have no child nodes.</a>
+<span class="sourceLineNo">626</span><a id="line.626">     */</a>
+<span class="sourceLineNo">627</span><a id="line.627">    private static Stream&lt;String&gt; streamTextParts(DetailNode node) {</a>
+<span class="sourceLineNo">628</span><a id="line.628">        final Stream&lt;String&gt; stream;</a>
+<span class="sourceLineNo">629</span><a id="line.629">        if (node.getChildren().length == 0) {</a>
+<span class="sourceLineNo">630</span><a id="line.630">            stream = Stream.of(node.getText());</a>
+<span class="sourceLineNo">631</span><a id="line.631">        }</a>
+<span class="sourceLineNo">632</span><a id="line.632">        else {</a>
+<span class="sourceLineNo">633</span><a id="line.633">            stream = Stream.of(node.getChildren())</a>
+<span class="sourceLineNo">634</span><a id="line.634">                .flatMap(SummaryJavadocCheck::streamTextParts);</a>
+<span class="sourceLineNo">635</span><a id="line.635">        }</a>
+<span class="sourceLineNo">636</span><a id="line.636">        return stream;</a>
+<span class="sourceLineNo">637</span><a id="line.637">    }</a>
+<span class="sourceLineNo">638</span><a id="line.638"></a>
+<span class="sourceLineNo">639</span><a id="line.639">    /**</a>
+<span class="sourceLineNo">640</span><a id="line.640">     * Finds the end of a sentence. If a sentence ending period was found, returns the whole string</a>
+<span class="sourceLineNo">641</span><a id="line.641">     * up to and excluding that period. The end of sentence detection here could be replaced in the</a>
+<span class="sourceLineNo">642</span><a id="line.642">     * future by Java's built-in BreakIterator class.</a>
+<span class="sourceLineNo">643</span><a id="line.643">     *</a>
+<span class="sourceLineNo">644</span><a id="line.644">     * @param text The string to search.</a>
+<span class="sourceLineNo">645</span><a id="line.645">     * @param period The period character to find.</a>
+<span class="sourceLineNo">646</span><a id="line.646">     * @return The string up to and excluding the period, or null if no ending was found.</a>
+<span class="sourceLineNo">647</span><a id="line.647">     */</a>
+<span class="sourceLineNo">648</span><a id="line.648">    @Nullable</a>
+<span class="sourceLineNo">649</span><a id="line.649">    private static String findSentenceEndingOrNull(String text, String period) {</a>
+<span class="sourceLineNo">650</span><a id="line.650">        int periodIndex = text.indexOf(period);</a>
+<span class="sourceLineNo">651</span><a id="line.651">        String sentenceEnding = null;</a>
+<span class="sourceLineNo">652</span><a id="line.652">        while (periodIndex &gt;= 0) {</a>
+<span class="sourceLineNo">653</span><a id="line.653">            final int afterPeriodIndex = periodIndex + period.length();</a>
+<span class="sourceLineNo">654</span><a id="line.654"></a>
+<span class="sourceLineNo">655</span><a id="line.655">            // Handle western period separately as it is only the end of a sentence if followed</a>
+<span class="sourceLineNo">656</span><a id="line.656">            // by whitespace. Other period characters often include whitespace in the character.</a>
+<span class="sourceLineNo">657</span><a id="line.657">            if (!DEFAULT_PERIOD.equals(period)</a>
+<span class="sourceLineNo">658</span><a id="line.658">                || afterPeriodIndex &gt;= text.length()</a>
+<span class="sourceLineNo">659</span><a id="line.659">                || Character.isWhitespace(text.charAt(afterPeriodIndex))) {</a>
+<span class="sourceLineNo">660</span><a id="line.660">                sentenceEnding = text.substring(0, periodIndex);</a>
+<span class="sourceLineNo">661</span><a id="line.661">                break;</a>
+<span class="sourceLineNo">662</span><a id="line.662">            }</a>
+<span class="sourceLineNo">663</span><a id="line.663">            else {</a>
+<span class="sourceLineNo">664</span><a id="line.664">                periodIndex = text.indexOf(period, afterPeriodIndex);</a>
+<span class="sourceLineNo">665</span><a id="line.665">            }</a>
+<span class="sourceLineNo">666</span><a id="line.666">        }</a>
+<span class="sourceLineNo">667</span><a id="line.667">        return sentenceEnding;</a>
+<span class="sourceLineNo">668</span><a id="line.668">    }</a>
+<span class="sourceLineNo">669</span><a id="line.669">}</a>
 
 
 
