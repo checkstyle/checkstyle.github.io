@@ -39,255 +39,258 @@
 <span class="sourceLineNo">030</span><a id="line.30">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
 <span class="sourceLineNo">031</span><a id="line.31"></a>
 <span class="sourceLineNo">032</span><a id="line.32">/**</a>
-<span class="sourceLineNo">033</span><a id="line.33"> * &lt;p&gt;</a>
+<span class="sourceLineNo">033</span><a id="line.33"> * &lt;div&gt;</a>
 <span class="sourceLineNo">034</span><a id="line.34"> * Detects uncommented {@code main} methods.</a>
-<span class="sourceLineNo">035</span><a id="line.35"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">036</span><a id="line.36"> * &lt;p&gt;</a>
-<span class="sourceLineNo">037</span><a id="line.37"> * Rationale: A {@code main} method is often used for debugging purposes.</a>
-<span class="sourceLineNo">038</span><a id="line.38"> * When debugging is finished, developers often forget to remove the method,</a>
-<span class="sourceLineNo">039</span><a id="line.39"> * which changes the API and increases the size of the resulting class or JAR file.</a>
-<span class="sourceLineNo">040</span><a id="line.40"> * Except for the real program entry points, all {@code main} methods</a>
-<span class="sourceLineNo">041</span><a id="line.41"> * should be removed or commented out of the sources.</a>
-<span class="sourceLineNo">042</span><a id="line.42"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">043</span><a id="line.43"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">044</span><a id="line.44"> * &lt;li&gt;</a>
-<span class="sourceLineNo">045</span><a id="line.45"> * Property {@code excludedClasses} - Specify pattern for qualified names of</a>
-<span class="sourceLineNo">046</span><a id="line.46"> * classes which are allowed to have a {@code main} method.</a>
-<span class="sourceLineNo">047</span><a id="line.47"> * Type is {@code java.util.regex.Pattern}.</a>
-<span class="sourceLineNo">048</span><a id="line.48"> * Default value is {@code "^$"}.</a>
-<span class="sourceLineNo">049</span><a id="line.49"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">050</span><a id="line.50"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">051</span><a id="line.51"> * &lt;p&gt;</a>
-<span class="sourceLineNo">052</span><a id="line.52"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
-<span class="sourceLineNo">053</span><a id="line.53"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">054</span><a id="line.54"> * &lt;p&gt;</a>
-<span class="sourceLineNo">055</span><a id="line.55"> * Violation Message Keys:</a>
-<span class="sourceLineNo">056</span><a id="line.56"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">057</span><a id="line.57"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">058</span><a id="line.58"> * &lt;li&gt;</a>
-<span class="sourceLineNo">059</span><a id="line.59"> * {@code uncommented.main}</a>
-<span class="sourceLineNo">060</span><a id="line.60"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">061</span><a id="line.61"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">062</span><a id="line.62"> *</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * @since 3.2</a>
-<span class="sourceLineNo">064</span><a id="line.64"> */</a>
-<span class="sourceLineNo">065</span><a id="line.65">@FileStatefulCheck</a>
-<span class="sourceLineNo">066</span><a id="line.66">public class UncommentedMainCheck</a>
-<span class="sourceLineNo">067</span><a id="line.67">    extends AbstractCheck {</a>
-<span class="sourceLineNo">068</span><a id="line.68"></a>
-<span class="sourceLineNo">069</span><a id="line.69">    /**</a>
-<span class="sourceLineNo">070</span><a id="line.70">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">071</span><a id="line.71">     * file.</a>
-<span class="sourceLineNo">072</span><a id="line.72">     */</a>
-<span class="sourceLineNo">073</span><a id="line.73">    public static final String MSG_KEY = "uncommented.main";</a>
-<span class="sourceLineNo">074</span><a id="line.74"></a>
-<span class="sourceLineNo">075</span><a id="line.75">    /** Set of possible String array types. */</a>
-<span class="sourceLineNo">076</span><a id="line.76">    private static final Set&lt;String&gt; STRING_PARAMETER_NAMES = Set.of(</a>
-<span class="sourceLineNo">077</span><a id="line.77">        String[].class.getCanonicalName(),</a>
-<span class="sourceLineNo">078</span><a id="line.78">        String.class.getCanonicalName(),</a>
-<span class="sourceLineNo">079</span><a id="line.79">        String[].class.getSimpleName(),</a>
-<span class="sourceLineNo">080</span><a id="line.80">        String.class.getSimpleName()</a>
-<span class="sourceLineNo">081</span><a id="line.81">    );</a>
-<span class="sourceLineNo">082</span><a id="line.82"></a>
-<span class="sourceLineNo">083</span><a id="line.83">    /**</a>
-<span class="sourceLineNo">084</span><a id="line.84">     * Specify pattern for qualified names of classes which are allowed to</a>
-<span class="sourceLineNo">085</span><a id="line.85">     * have a {@code main} method.</a>
-<span class="sourceLineNo">086</span><a id="line.86">     */</a>
-<span class="sourceLineNo">087</span><a id="line.87">    private Pattern excludedClasses = Pattern.compile("^$");</a>
-<span class="sourceLineNo">088</span><a id="line.88">    /** Current class name. */</a>
-<span class="sourceLineNo">089</span><a id="line.89">    private String currentClass;</a>
-<span class="sourceLineNo">090</span><a id="line.90">    /** Current package. */</a>
-<span class="sourceLineNo">091</span><a id="line.91">    private FullIdent packageName;</a>
-<span class="sourceLineNo">092</span><a id="line.92">    /** Class definition depth. */</a>
-<span class="sourceLineNo">093</span><a id="line.93">    private int classDepth;</a>
-<span class="sourceLineNo">094</span><a id="line.94"></a>
-<span class="sourceLineNo">095</span><a id="line.95">    /**</a>
-<span class="sourceLineNo">096</span><a id="line.96">     * Setter to specify pattern for qualified names of classes which are allowed</a>
-<span class="sourceLineNo">097</span><a id="line.97">     * to have a {@code main} method.</a>
-<span class="sourceLineNo">098</span><a id="line.98">     *</a>
-<span class="sourceLineNo">099</span><a id="line.99">     * @param excludedClasses a pattern</a>
-<span class="sourceLineNo">100</span><a id="line.100">     * @since 3.2</a>
-<span class="sourceLineNo">101</span><a id="line.101">     */</a>
-<span class="sourceLineNo">102</span><a id="line.102">    public void setExcludedClasses(Pattern excludedClasses) {</a>
-<span class="sourceLineNo">103</span><a id="line.103">        this.excludedClasses = excludedClasses;</a>
-<span class="sourceLineNo">104</span><a id="line.104">    }</a>
-<span class="sourceLineNo">105</span><a id="line.105"></a>
-<span class="sourceLineNo">106</span><a id="line.106">    @Override</a>
-<span class="sourceLineNo">107</span><a id="line.107">    public int[] getAcceptableTokens() {</a>
-<span class="sourceLineNo">108</span><a id="line.108">        return getRequiredTokens();</a>
-<span class="sourceLineNo">109</span><a id="line.109">    }</a>
-<span class="sourceLineNo">110</span><a id="line.110"></a>
-<span class="sourceLineNo">111</span><a id="line.111">    @Override</a>
-<span class="sourceLineNo">112</span><a id="line.112">    public int[] getDefaultTokens() {</a>
-<span class="sourceLineNo">113</span><a id="line.113">        return getRequiredTokens();</a>
-<span class="sourceLineNo">114</span><a id="line.114">    }</a>
-<span class="sourceLineNo">115</span><a id="line.115"></a>
-<span class="sourceLineNo">116</span><a id="line.116">    @Override</a>
-<span class="sourceLineNo">117</span><a id="line.117">    public int[] getRequiredTokens() {</a>
-<span class="sourceLineNo">118</span><a id="line.118">        return new int[] {</a>
-<span class="sourceLineNo">119</span><a id="line.119">            TokenTypes.METHOD_DEF,</a>
-<span class="sourceLineNo">120</span><a id="line.120">            TokenTypes.CLASS_DEF,</a>
-<span class="sourceLineNo">121</span><a id="line.121">            TokenTypes.PACKAGE_DEF,</a>
-<span class="sourceLineNo">122</span><a id="line.122">            TokenTypes.RECORD_DEF,</a>
-<span class="sourceLineNo">123</span><a id="line.123">        };</a>
-<span class="sourceLineNo">124</span><a id="line.124">    }</a>
-<span class="sourceLineNo">125</span><a id="line.125"></a>
-<span class="sourceLineNo">126</span><a id="line.126">    @Override</a>
-<span class="sourceLineNo">127</span><a id="line.127">    public void beginTree(DetailAST rootAST) {</a>
-<span class="sourceLineNo">128</span><a id="line.128">        packageName = FullIdent.createFullIdent(null);</a>
-<span class="sourceLineNo">129</span><a id="line.129">        classDepth = 0;</a>
-<span class="sourceLineNo">130</span><a id="line.130">    }</a>
-<span class="sourceLineNo">131</span><a id="line.131"></a>
-<span class="sourceLineNo">132</span><a id="line.132">    @Override</a>
-<span class="sourceLineNo">133</span><a id="line.133">    public void leaveToken(DetailAST ast) {</a>
-<span class="sourceLineNo">134</span><a id="line.134">        if (ast.getType() == TokenTypes.CLASS_DEF) {</a>
-<span class="sourceLineNo">135</span><a id="line.135">            classDepth--;</a>
-<span class="sourceLineNo">136</span><a id="line.136">        }</a>
-<span class="sourceLineNo">137</span><a id="line.137">    }</a>
-<span class="sourceLineNo">138</span><a id="line.138"></a>
-<span class="sourceLineNo">139</span><a id="line.139">    @Override</a>
-<span class="sourceLineNo">140</span><a id="line.140">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">141</span><a id="line.141">        switch (ast.getType()) {</a>
-<span class="sourceLineNo">142</span><a id="line.142">            case TokenTypes.PACKAGE_DEF:</a>
-<span class="sourceLineNo">143</span><a id="line.143">                visitPackageDef(ast);</a>
-<span class="sourceLineNo">144</span><a id="line.144">                break;</a>
-<span class="sourceLineNo">145</span><a id="line.145">            case TokenTypes.RECORD_DEF:</a>
-<span class="sourceLineNo">146</span><a id="line.146">            case TokenTypes.CLASS_DEF:</a>
-<span class="sourceLineNo">147</span><a id="line.147">                visitClassOrRecordDef(ast);</a>
-<span class="sourceLineNo">148</span><a id="line.148">                break;</a>
-<span class="sourceLineNo">149</span><a id="line.149">            case TokenTypes.METHOD_DEF:</a>
-<span class="sourceLineNo">150</span><a id="line.150">                visitMethodDef(ast);</a>
+<span class="sourceLineNo">035</span><a id="line.35"> * &lt;/div&gt;</a>
+<span class="sourceLineNo">036</span><a id="line.36"> *</a>
+<span class="sourceLineNo">037</span><a id="line.37"> * &lt;p&gt;</a>
+<span class="sourceLineNo">038</span><a id="line.38"> * Rationale: A {@code main} method is often used for debugging purposes.</a>
+<span class="sourceLineNo">039</span><a id="line.39"> * When debugging is finished, developers often forget to remove the method,</a>
+<span class="sourceLineNo">040</span><a id="line.40"> * which changes the API and increases the size of the resulting class or JAR file.</a>
+<span class="sourceLineNo">041</span><a id="line.41"> * Except for the real program entry points, all {@code main} methods</a>
+<span class="sourceLineNo">042</span><a id="line.42"> * should be removed or commented out of the sources.</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * &lt;li&gt;</a>
+<span class="sourceLineNo">046</span><a id="line.46"> * Property {@code excludedClasses} - Specify pattern for qualified names of</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * classes which are allowed to have a {@code main} method.</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * Type is {@code java.util.regex.Pattern}.</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * Default value is {@code "^$"}.</a>
+<span class="sourceLineNo">050</span><a id="line.50"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">052</span><a id="line.52"> *</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * &lt;p&gt;</a>
+<span class="sourceLineNo">054</span><a id="line.54"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">055</span><a id="line.55"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">056</span><a id="line.56"> *</a>
+<span class="sourceLineNo">057</span><a id="line.57"> * &lt;p&gt;</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * Violation Message Keys:</a>
+<span class="sourceLineNo">059</span><a id="line.59"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">061</span><a id="line.61"> * &lt;li&gt;</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * {@code uncommented.main}</a>
+<span class="sourceLineNo">063</span><a id="line.63"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">065</span><a id="line.65"> *</a>
+<span class="sourceLineNo">066</span><a id="line.66"> * @since 3.2</a>
+<span class="sourceLineNo">067</span><a id="line.67"> */</a>
+<span class="sourceLineNo">068</span><a id="line.68">@FileStatefulCheck</a>
+<span class="sourceLineNo">069</span><a id="line.69">public class UncommentedMainCheck</a>
+<span class="sourceLineNo">070</span><a id="line.70">    extends AbstractCheck {</a>
+<span class="sourceLineNo">071</span><a id="line.71"></a>
+<span class="sourceLineNo">072</span><a id="line.72">    /**</a>
+<span class="sourceLineNo">073</span><a id="line.73">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">074</span><a id="line.74">     * file.</a>
+<span class="sourceLineNo">075</span><a id="line.75">     */</a>
+<span class="sourceLineNo">076</span><a id="line.76">    public static final String MSG_KEY = "uncommented.main";</a>
+<span class="sourceLineNo">077</span><a id="line.77"></a>
+<span class="sourceLineNo">078</span><a id="line.78">    /** Set of possible String array types. */</a>
+<span class="sourceLineNo">079</span><a id="line.79">    private static final Set&lt;String&gt; STRING_PARAMETER_NAMES = Set.of(</a>
+<span class="sourceLineNo">080</span><a id="line.80">        String[].class.getCanonicalName(),</a>
+<span class="sourceLineNo">081</span><a id="line.81">        String.class.getCanonicalName(),</a>
+<span class="sourceLineNo">082</span><a id="line.82">        String[].class.getSimpleName(),</a>
+<span class="sourceLineNo">083</span><a id="line.83">        String.class.getSimpleName()</a>
+<span class="sourceLineNo">084</span><a id="line.84">    );</a>
+<span class="sourceLineNo">085</span><a id="line.85"></a>
+<span class="sourceLineNo">086</span><a id="line.86">    /**</a>
+<span class="sourceLineNo">087</span><a id="line.87">     * Specify pattern for qualified names of classes which are allowed to</a>
+<span class="sourceLineNo">088</span><a id="line.88">     * have a {@code main} method.</a>
+<span class="sourceLineNo">089</span><a id="line.89">     */</a>
+<span class="sourceLineNo">090</span><a id="line.90">    private Pattern excludedClasses = Pattern.compile("^$");</a>
+<span class="sourceLineNo">091</span><a id="line.91">    /** Current class name. */</a>
+<span class="sourceLineNo">092</span><a id="line.92">    private String currentClass;</a>
+<span class="sourceLineNo">093</span><a id="line.93">    /** Current package. */</a>
+<span class="sourceLineNo">094</span><a id="line.94">    private FullIdent packageName;</a>
+<span class="sourceLineNo">095</span><a id="line.95">    /** Class definition depth. */</a>
+<span class="sourceLineNo">096</span><a id="line.96">    private int classDepth;</a>
+<span class="sourceLineNo">097</span><a id="line.97"></a>
+<span class="sourceLineNo">098</span><a id="line.98">    /**</a>
+<span class="sourceLineNo">099</span><a id="line.99">     * Setter to specify pattern for qualified names of classes which are allowed</a>
+<span class="sourceLineNo">100</span><a id="line.100">     * to have a {@code main} method.</a>
+<span class="sourceLineNo">101</span><a id="line.101">     *</a>
+<span class="sourceLineNo">102</span><a id="line.102">     * @param excludedClasses a pattern</a>
+<span class="sourceLineNo">103</span><a id="line.103">     * @since 3.2</a>
+<span class="sourceLineNo">104</span><a id="line.104">     */</a>
+<span class="sourceLineNo">105</span><a id="line.105">    public void setExcludedClasses(Pattern excludedClasses) {</a>
+<span class="sourceLineNo">106</span><a id="line.106">        this.excludedClasses = excludedClasses;</a>
+<span class="sourceLineNo">107</span><a id="line.107">    }</a>
+<span class="sourceLineNo">108</span><a id="line.108"></a>
+<span class="sourceLineNo">109</span><a id="line.109">    @Override</a>
+<span class="sourceLineNo">110</span><a id="line.110">    public int[] getAcceptableTokens() {</a>
+<span class="sourceLineNo">111</span><a id="line.111">        return getRequiredTokens();</a>
+<span class="sourceLineNo">112</span><a id="line.112">    }</a>
+<span class="sourceLineNo">113</span><a id="line.113"></a>
+<span class="sourceLineNo">114</span><a id="line.114">    @Override</a>
+<span class="sourceLineNo">115</span><a id="line.115">    public int[] getDefaultTokens() {</a>
+<span class="sourceLineNo">116</span><a id="line.116">        return getRequiredTokens();</a>
+<span class="sourceLineNo">117</span><a id="line.117">    }</a>
+<span class="sourceLineNo">118</span><a id="line.118"></a>
+<span class="sourceLineNo">119</span><a id="line.119">    @Override</a>
+<span class="sourceLineNo">120</span><a id="line.120">    public int[] getRequiredTokens() {</a>
+<span class="sourceLineNo">121</span><a id="line.121">        return new int[] {</a>
+<span class="sourceLineNo">122</span><a id="line.122">            TokenTypes.METHOD_DEF,</a>
+<span class="sourceLineNo">123</span><a id="line.123">            TokenTypes.CLASS_DEF,</a>
+<span class="sourceLineNo">124</span><a id="line.124">            TokenTypes.PACKAGE_DEF,</a>
+<span class="sourceLineNo">125</span><a id="line.125">            TokenTypes.RECORD_DEF,</a>
+<span class="sourceLineNo">126</span><a id="line.126">        };</a>
+<span class="sourceLineNo">127</span><a id="line.127">    }</a>
+<span class="sourceLineNo">128</span><a id="line.128"></a>
+<span class="sourceLineNo">129</span><a id="line.129">    @Override</a>
+<span class="sourceLineNo">130</span><a id="line.130">    public void beginTree(DetailAST rootAST) {</a>
+<span class="sourceLineNo">131</span><a id="line.131">        packageName = FullIdent.createFullIdent(null);</a>
+<span class="sourceLineNo">132</span><a id="line.132">        classDepth = 0;</a>
+<span class="sourceLineNo">133</span><a id="line.133">    }</a>
+<span class="sourceLineNo">134</span><a id="line.134"></a>
+<span class="sourceLineNo">135</span><a id="line.135">    @Override</a>
+<span class="sourceLineNo">136</span><a id="line.136">    public void leaveToken(DetailAST ast) {</a>
+<span class="sourceLineNo">137</span><a id="line.137">        if (ast.getType() == TokenTypes.CLASS_DEF) {</a>
+<span class="sourceLineNo">138</span><a id="line.138">            classDepth--;</a>
+<span class="sourceLineNo">139</span><a id="line.139">        }</a>
+<span class="sourceLineNo">140</span><a id="line.140">    }</a>
+<span class="sourceLineNo">141</span><a id="line.141"></a>
+<span class="sourceLineNo">142</span><a id="line.142">    @Override</a>
+<span class="sourceLineNo">143</span><a id="line.143">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">144</span><a id="line.144">        switch (ast.getType()) {</a>
+<span class="sourceLineNo">145</span><a id="line.145">            case TokenTypes.PACKAGE_DEF:</a>
+<span class="sourceLineNo">146</span><a id="line.146">                visitPackageDef(ast);</a>
+<span class="sourceLineNo">147</span><a id="line.147">                break;</a>
+<span class="sourceLineNo">148</span><a id="line.148">            case TokenTypes.RECORD_DEF:</a>
+<span class="sourceLineNo">149</span><a id="line.149">            case TokenTypes.CLASS_DEF:</a>
+<span class="sourceLineNo">150</span><a id="line.150">                visitClassOrRecordDef(ast);</a>
 <span class="sourceLineNo">151</span><a id="line.151">                break;</a>
-<span class="sourceLineNo">152</span><a id="line.152">            default:</a>
-<span class="sourceLineNo">153</span><a id="line.153">                throw new IllegalStateException(ast.toString());</a>
-<span class="sourceLineNo">154</span><a id="line.154">        }</a>
-<span class="sourceLineNo">155</span><a id="line.155">    }</a>
-<span class="sourceLineNo">156</span><a id="line.156"></a>
-<span class="sourceLineNo">157</span><a id="line.157">    /**</a>
-<span class="sourceLineNo">158</span><a id="line.158">     * Sets current package.</a>
-<span class="sourceLineNo">159</span><a id="line.159">     *</a>
-<span class="sourceLineNo">160</span><a id="line.160">     * @param packageDef node for package definition</a>
-<span class="sourceLineNo">161</span><a id="line.161">     */</a>
-<span class="sourceLineNo">162</span><a id="line.162">    private void visitPackageDef(DetailAST packageDef) {</a>
-<span class="sourceLineNo">163</span><a id="line.163">        packageName = FullIdent.createFullIdent(packageDef.getLastChild()</a>
-<span class="sourceLineNo">164</span><a id="line.164">                .getPreviousSibling());</a>
-<span class="sourceLineNo">165</span><a id="line.165">    }</a>
-<span class="sourceLineNo">166</span><a id="line.166"></a>
-<span class="sourceLineNo">167</span><a id="line.167">    /**</a>
-<span class="sourceLineNo">168</span><a id="line.168">     * If not inner class then change current class name.</a>
-<span class="sourceLineNo">169</span><a id="line.169">     *</a>
-<span class="sourceLineNo">170</span><a id="line.170">     * @param classOrRecordDef node for class or record definition</a>
-<span class="sourceLineNo">171</span><a id="line.171">     */</a>
-<span class="sourceLineNo">172</span><a id="line.172">    private void visitClassOrRecordDef(DetailAST classOrRecordDef) {</a>
-<span class="sourceLineNo">173</span><a id="line.173">        // we are not use inner classes because they can not</a>
-<span class="sourceLineNo">174</span><a id="line.174">        // have static methods</a>
-<span class="sourceLineNo">175</span><a id="line.175">        if (classDepth == 0) {</a>
-<span class="sourceLineNo">176</span><a id="line.176">            final DetailAST ident = classOrRecordDef.findFirstToken(TokenTypes.IDENT);</a>
-<span class="sourceLineNo">177</span><a id="line.177">            currentClass = packageName.getText() + "." + ident.getText();</a>
-<span class="sourceLineNo">178</span><a id="line.178">            classDepth++;</a>
-<span class="sourceLineNo">179</span><a id="line.179">        }</a>
-<span class="sourceLineNo">180</span><a id="line.180">    }</a>
-<span class="sourceLineNo">181</span><a id="line.181"></a>
-<span class="sourceLineNo">182</span><a id="line.182">    /**</a>
-<span class="sourceLineNo">183</span><a id="line.183">     * Checks method definition if this is</a>
-<span class="sourceLineNo">184</span><a id="line.184">     * {@code public static void main(String[])}.</a>
-<span class="sourceLineNo">185</span><a id="line.185">     *</a>
-<span class="sourceLineNo">186</span><a id="line.186">     * @param method method definition node</a>
-<span class="sourceLineNo">187</span><a id="line.187">     */</a>
-<span class="sourceLineNo">188</span><a id="line.188">    private void visitMethodDef(DetailAST method) {</a>
-<span class="sourceLineNo">189</span><a id="line.189">        if (classDepth == 1</a>
-<span class="sourceLineNo">190</span><a id="line.190">                // method not in inner class or in interface definition</a>
-<span class="sourceLineNo">191</span><a id="line.191">                &amp;&amp; checkClassName()</a>
-<span class="sourceLineNo">192</span><a id="line.192">                &amp;&amp; checkName(method)</a>
-<span class="sourceLineNo">193</span><a id="line.193">                &amp;&amp; checkModifiers(method)</a>
-<span class="sourceLineNo">194</span><a id="line.194">                &amp;&amp; checkType(method)</a>
-<span class="sourceLineNo">195</span><a id="line.195">                &amp;&amp; checkParams(method)) {</a>
-<span class="sourceLineNo">196</span><a id="line.196">            log(method, MSG_KEY);</a>
-<span class="sourceLineNo">197</span><a id="line.197">        }</a>
-<span class="sourceLineNo">198</span><a id="line.198">    }</a>
-<span class="sourceLineNo">199</span><a id="line.199"></a>
-<span class="sourceLineNo">200</span><a id="line.200">    /**</a>
-<span class="sourceLineNo">201</span><a id="line.201">     * Checks that current class is not excluded.</a>
-<span class="sourceLineNo">202</span><a id="line.202">     *</a>
-<span class="sourceLineNo">203</span><a id="line.203">     * @return true if check passed, false otherwise</a>
-<span class="sourceLineNo">204</span><a id="line.204">     */</a>
-<span class="sourceLineNo">205</span><a id="line.205">    private boolean checkClassName() {</a>
-<span class="sourceLineNo">206</span><a id="line.206">        return !excludedClasses.matcher(currentClass).find();</a>
-<span class="sourceLineNo">207</span><a id="line.207">    }</a>
-<span class="sourceLineNo">208</span><a id="line.208"></a>
-<span class="sourceLineNo">209</span><a id="line.209">    /**</a>
-<span class="sourceLineNo">210</span><a id="line.210">     * Checks that method name is @quot;main@quot;.</a>
-<span class="sourceLineNo">211</span><a id="line.211">     *</a>
-<span class="sourceLineNo">212</span><a id="line.212">     * @param method the METHOD_DEF node</a>
-<span class="sourceLineNo">213</span><a id="line.213">     * @return true if check passed, false otherwise</a>
-<span class="sourceLineNo">214</span><a id="line.214">     */</a>
-<span class="sourceLineNo">215</span><a id="line.215">    private static boolean checkName(DetailAST method) {</a>
-<span class="sourceLineNo">216</span><a id="line.216">        final DetailAST ident = method.findFirstToken(TokenTypes.IDENT);</a>
-<span class="sourceLineNo">217</span><a id="line.217">        return "main".equals(ident.getText());</a>
-<span class="sourceLineNo">218</span><a id="line.218">    }</a>
-<span class="sourceLineNo">219</span><a id="line.219"></a>
-<span class="sourceLineNo">220</span><a id="line.220">    /**</a>
-<span class="sourceLineNo">221</span><a id="line.221">     * Checks that method has final and static modifiers.</a>
-<span class="sourceLineNo">222</span><a id="line.222">     *</a>
-<span class="sourceLineNo">223</span><a id="line.223">     * @param method the METHOD_DEF node</a>
-<span class="sourceLineNo">224</span><a id="line.224">     * @return true if check passed, false otherwise</a>
-<span class="sourceLineNo">225</span><a id="line.225">     */</a>
-<span class="sourceLineNo">226</span><a id="line.226">    private static boolean checkModifiers(DetailAST method) {</a>
-<span class="sourceLineNo">227</span><a id="line.227">        final DetailAST modifiers =</a>
-<span class="sourceLineNo">228</span><a id="line.228">            method.findFirstToken(TokenTypes.MODIFIERS);</a>
-<span class="sourceLineNo">229</span><a id="line.229"></a>
-<span class="sourceLineNo">230</span><a id="line.230">        return modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null</a>
-<span class="sourceLineNo">231</span><a id="line.231">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</a>
-<span class="sourceLineNo">232</span><a id="line.232">    }</a>
-<span class="sourceLineNo">233</span><a id="line.233"></a>
-<span class="sourceLineNo">234</span><a id="line.234">    /**</a>
-<span class="sourceLineNo">235</span><a id="line.235">     * Checks that return type is {@code void}.</a>
-<span class="sourceLineNo">236</span><a id="line.236">     *</a>
-<span class="sourceLineNo">237</span><a id="line.237">     * @param method the METHOD_DEF node</a>
-<span class="sourceLineNo">238</span><a id="line.238">     * @return true if check passed, false otherwise</a>
-<span class="sourceLineNo">239</span><a id="line.239">     */</a>
-<span class="sourceLineNo">240</span><a id="line.240">    private static boolean checkType(DetailAST method) {</a>
-<span class="sourceLineNo">241</span><a id="line.241">        final DetailAST type =</a>
-<span class="sourceLineNo">242</span><a id="line.242">            method.findFirstToken(TokenTypes.TYPE).getFirstChild();</a>
-<span class="sourceLineNo">243</span><a id="line.243">        return type.getType() == TokenTypes.LITERAL_VOID;</a>
-<span class="sourceLineNo">244</span><a id="line.244">    }</a>
-<span class="sourceLineNo">245</span><a id="line.245"></a>
-<span class="sourceLineNo">246</span><a id="line.246">    /**</a>
-<span class="sourceLineNo">247</span><a id="line.247">     * Checks that method has only {@code String[]} or only {@code String...} param.</a>
-<span class="sourceLineNo">248</span><a id="line.248">     *</a>
-<span class="sourceLineNo">249</span><a id="line.249">     * @param method the METHOD_DEF node</a>
-<span class="sourceLineNo">250</span><a id="line.250">     * @return true if check passed, false otherwise</a>
-<span class="sourceLineNo">251</span><a id="line.251">     */</a>
-<span class="sourceLineNo">252</span><a id="line.252">    private static boolean checkParams(DetailAST method) {</a>
-<span class="sourceLineNo">253</span><a id="line.253">        boolean checkPassed = false;</a>
-<span class="sourceLineNo">254</span><a id="line.254">        final DetailAST params = method.findFirstToken(TokenTypes.PARAMETERS);</a>
-<span class="sourceLineNo">255</span><a id="line.255"></a>
-<span class="sourceLineNo">256</span><a id="line.256">        if (params.getChildCount() == 1) {</a>
-<span class="sourceLineNo">257</span><a id="line.257">            final DetailAST parameterType = params.getFirstChild().findFirstToken(TokenTypes.TYPE);</a>
-<span class="sourceLineNo">258</span><a id="line.258">            final boolean isArrayDeclaration =</a>
-<span class="sourceLineNo">259</span><a id="line.259">                parameterType.findFirstToken(TokenTypes.ARRAY_DECLARATOR) != null;</a>
-<span class="sourceLineNo">260</span><a id="line.260">            final Optional&lt;DetailAST&gt; varargs = Optional.ofNullable(</a>
-<span class="sourceLineNo">261</span><a id="line.261">                params.getFirstChild().findFirstToken(TokenTypes.ELLIPSIS));</a>
-<span class="sourceLineNo">262</span><a id="line.262"></a>
-<span class="sourceLineNo">263</span><a id="line.263">            if (isArrayDeclaration || varargs.isPresent()) {</a>
-<span class="sourceLineNo">264</span><a id="line.264">                checkPassed = isStringType(parameterType.getFirstChild());</a>
-<span class="sourceLineNo">265</span><a id="line.265">            }</a>
-<span class="sourceLineNo">266</span><a id="line.266">        }</a>
-<span class="sourceLineNo">267</span><a id="line.267">        return checkPassed;</a>
-<span class="sourceLineNo">268</span><a id="line.268">    }</a>
-<span class="sourceLineNo">269</span><a id="line.269"></a>
-<span class="sourceLineNo">270</span><a id="line.270">    /**</a>
-<span class="sourceLineNo">271</span><a id="line.271">     * Whether the type is java.lang.String.</a>
-<span class="sourceLineNo">272</span><a id="line.272">     *</a>
-<span class="sourceLineNo">273</span><a id="line.273">     * @param typeAst the type to check.</a>
-<span class="sourceLineNo">274</span><a id="line.274">     * @return true, if the type is java.lang.String.</a>
-<span class="sourceLineNo">275</span><a id="line.275">     */</a>
-<span class="sourceLineNo">276</span><a id="line.276">    private static boolean isStringType(DetailAST typeAst) {</a>
-<span class="sourceLineNo">277</span><a id="line.277">        final FullIdent type = FullIdent.createFullIdent(typeAst);</a>
-<span class="sourceLineNo">278</span><a id="line.278">        return STRING_PARAMETER_NAMES.contains(type.getText());</a>
-<span class="sourceLineNo">279</span><a id="line.279">    }</a>
-<span class="sourceLineNo">280</span><a id="line.280"></a>
-<span class="sourceLineNo">281</span><a id="line.281">}</a>
+<span class="sourceLineNo">152</span><a id="line.152">            case TokenTypes.METHOD_DEF:</a>
+<span class="sourceLineNo">153</span><a id="line.153">                visitMethodDef(ast);</a>
+<span class="sourceLineNo">154</span><a id="line.154">                break;</a>
+<span class="sourceLineNo">155</span><a id="line.155">            default:</a>
+<span class="sourceLineNo">156</span><a id="line.156">                throw new IllegalStateException(ast.toString());</a>
+<span class="sourceLineNo">157</span><a id="line.157">        }</a>
+<span class="sourceLineNo">158</span><a id="line.158">    }</a>
+<span class="sourceLineNo">159</span><a id="line.159"></a>
+<span class="sourceLineNo">160</span><a id="line.160">    /**</a>
+<span class="sourceLineNo">161</span><a id="line.161">     * Sets current package.</a>
+<span class="sourceLineNo">162</span><a id="line.162">     *</a>
+<span class="sourceLineNo">163</span><a id="line.163">     * @param packageDef node for package definition</a>
+<span class="sourceLineNo">164</span><a id="line.164">     */</a>
+<span class="sourceLineNo">165</span><a id="line.165">    private void visitPackageDef(DetailAST packageDef) {</a>
+<span class="sourceLineNo">166</span><a id="line.166">        packageName = FullIdent.createFullIdent(packageDef.getLastChild()</a>
+<span class="sourceLineNo">167</span><a id="line.167">                .getPreviousSibling());</a>
+<span class="sourceLineNo">168</span><a id="line.168">    }</a>
+<span class="sourceLineNo">169</span><a id="line.169"></a>
+<span class="sourceLineNo">170</span><a id="line.170">    /**</a>
+<span class="sourceLineNo">171</span><a id="line.171">     * If not inner class then change current class name.</a>
+<span class="sourceLineNo">172</span><a id="line.172">     *</a>
+<span class="sourceLineNo">173</span><a id="line.173">     * @param classOrRecordDef node for class or record definition</a>
+<span class="sourceLineNo">174</span><a id="line.174">     */</a>
+<span class="sourceLineNo">175</span><a id="line.175">    private void visitClassOrRecordDef(DetailAST classOrRecordDef) {</a>
+<span class="sourceLineNo">176</span><a id="line.176">        // we are not use inner classes because they can not</a>
+<span class="sourceLineNo">177</span><a id="line.177">        // have static methods</a>
+<span class="sourceLineNo">178</span><a id="line.178">        if (classDepth == 0) {</a>
+<span class="sourceLineNo">179</span><a id="line.179">            final DetailAST ident = classOrRecordDef.findFirstToken(TokenTypes.IDENT);</a>
+<span class="sourceLineNo">180</span><a id="line.180">            currentClass = packageName.getText() + "." + ident.getText();</a>
+<span class="sourceLineNo">181</span><a id="line.181">            classDepth++;</a>
+<span class="sourceLineNo">182</span><a id="line.182">        }</a>
+<span class="sourceLineNo">183</span><a id="line.183">    }</a>
+<span class="sourceLineNo">184</span><a id="line.184"></a>
+<span class="sourceLineNo">185</span><a id="line.185">    /**</a>
+<span class="sourceLineNo">186</span><a id="line.186">     * Checks method definition if this is</a>
+<span class="sourceLineNo">187</span><a id="line.187">     * {@code public static void main(String[])}.</a>
+<span class="sourceLineNo">188</span><a id="line.188">     *</a>
+<span class="sourceLineNo">189</span><a id="line.189">     * @param method method definition node</a>
+<span class="sourceLineNo">190</span><a id="line.190">     */</a>
+<span class="sourceLineNo">191</span><a id="line.191">    private void visitMethodDef(DetailAST method) {</a>
+<span class="sourceLineNo">192</span><a id="line.192">        if (classDepth == 1</a>
+<span class="sourceLineNo">193</span><a id="line.193">                // method not in inner class or in interface definition</a>
+<span class="sourceLineNo">194</span><a id="line.194">                &amp;&amp; checkClassName()</a>
+<span class="sourceLineNo">195</span><a id="line.195">                &amp;&amp; checkName(method)</a>
+<span class="sourceLineNo">196</span><a id="line.196">                &amp;&amp; checkModifiers(method)</a>
+<span class="sourceLineNo">197</span><a id="line.197">                &amp;&amp; checkType(method)</a>
+<span class="sourceLineNo">198</span><a id="line.198">                &amp;&amp; checkParams(method)) {</a>
+<span class="sourceLineNo">199</span><a id="line.199">            log(method, MSG_KEY);</a>
+<span class="sourceLineNo">200</span><a id="line.200">        }</a>
+<span class="sourceLineNo">201</span><a id="line.201">    }</a>
+<span class="sourceLineNo">202</span><a id="line.202"></a>
+<span class="sourceLineNo">203</span><a id="line.203">    /**</a>
+<span class="sourceLineNo">204</span><a id="line.204">     * Checks that current class is not excluded.</a>
+<span class="sourceLineNo">205</span><a id="line.205">     *</a>
+<span class="sourceLineNo">206</span><a id="line.206">     * @return true if check passed, false otherwise</a>
+<span class="sourceLineNo">207</span><a id="line.207">     */</a>
+<span class="sourceLineNo">208</span><a id="line.208">    private boolean checkClassName() {</a>
+<span class="sourceLineNo">209</span><a id="line.209">        return !excludedClasses.matcher(currentClass).find();</a>
+<span class="sourceLineNo">210</span><a id="line.210">    }</a>
+<span class="sourceLineNo">211</span><a id="line.211"></a>
+<span class="sourceLineNo">212</span><a id="line.212">    /**</a>
+<span class="sourceLineNo">213</span><a id="line.213">     * Checks that method name is @quot;main@quot;.</a>
+<span class="sourceLineNo">214</span><a id="line.214">     *</a>
+<span class="sourceLineNo">215</span><a id="line.215">     * @param method the METHOD_DEF node</a>
+<span class="sourceLineNo">216</span><a id="line.216">     * @return true if check passed, false otherwise</a>
+<span class="sourceLineNo">217</span><a id="line.217">     */</a>
+<span class="sourceLineNo">218</span><a id="line.218">    private static boolean checkName(DetailAST method) {</a>
+<span class="sourceLineNo">219</span><a id="line.219">        final DetailAST ident = method.findFirstToken(TokenTypes.IDENT);</a>
+<span class="sourceLineNo">220</span><a id="line.220">        return "main".equals(ident.getText());</a>
+<span class="sourceLineNo">221</span><a id="line.221">    }</a>
+<span class="sourceLineNo">222</span><a id="line.222"></a>
+<span class="sourceLineNo">223</span><a id="line.223">    /**</a>
+<span class="sourceLineNo">224</span><a id="line.224">     * Checks that method has final and static modifiers.</a>
+<span class="sourceLineNo">225</span><a id="line.225">     *</a>
+<span class="sourceLineNo">226</span><a id="line.226">     * @param method the METHOD_DEF node</a>
+<span class="sourceLineNo">227</span><a id="line.227">     * @return true if check passed, false otherwise</a>
+<span class="sourceLineNo">228</span><a id="line.228">     */</a>
+<span class="sourceLineNo">229</span><a id="line.229">    private static boolean checkModifiers(DetailAST method) {</a>
+<span class="sourceLineNo">230</span><a id="line.230">        final DetailAST modifiers =</a>
+<span class="sourceLineNo">231</span><a id="line.231">            method.findFirstToken(TokenTypes.MODIFIERS);</a>
+<span class="sourceLineNo">232</span><a id="line.232"></a>
+<span class="sourceLineNo">233</span><a id="line.233">        return modifiers.findFirstToken(TokenTypes.LITERAL_PUBLIC) != null</a>
+<span class="sourceLineNo">234</span><a id="line.234">            &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</a>
+<span class="sourceLineNo">235</span><a id="line.235">    }</a>
+<span class="sourceLineNo">236</span><a id="line.236"></a>
+<span class="sourceLineNo">237</span><a id="line.237">    /**</a>
+<span class="sourceLineNo">238</span><a id="line.238">     * Checks that return type is {@code void}.</a>
+<span class="sourceLineNo">239</span><a id="line.239">     *</a>
+<span class="sourceLineNo">240</span><a id="line.240">     * @param method the METHOD_DEF node</a>
+<span class="sourceLineNo">241</span><a id="line.241">     * @return true if check passed, false otherwise</a>
+<span class="sourceLineNo">242</span><a id="line.242">     */</a>
+<span class="sourceLineNo">243</span><a id="line.243">    private static boolean checkType(DetailAST method) {</a>
+<span class="sourceLineNo">244</span><a id="line.244">        final DetailAST type =</a>
+<span class="sourceLineNo">245</span><a id="line.245">            method.findFirstToken(TokenTypes.TYPE).getFirstChild();</a>
+<span class="sourceLineNo">246</span><a id="line.246">        return type.getType() == TokenTypes.LITERAL_VOID;</a>
+<span class="sourceLineNo">247</span><a id="line.247">    }</a>
+<span class="sourceLineNo">248</span><a id="line.248"></a>
+<span class="sourceLineNo">249</span><a id="line.249">    /**</a>
+<span class="sourceLineNo">250</span><a id="line.250">     * Checks that method has only {@code String[]} or only {@code String...} param.</a>
+<span class="sourceLineNo">251</span><a id="line.251">     *</a>
+<span class="sourceLineNo">252</span><a id="line.252">     * @param method the METHOD_DEF node</a>
+<span class="sourceLineNo">253</span><a id="line.253">     * @return true if check passed, false otherwise</a>
+<span class="sourceLineNo">254</span><a id="line.254">     */</a>
+<span class="sourceLineNo">255</span><a id="line.255">    private static boolean checkParams(DetailAST method) {</a>
+<span class="sourceLineNo">256</span><a id="line.256">        boolean checkPassed = false;</a>
+<span class="sourceLineNo">257</span><a id="line.257">        final DetailAST params = method.findFirstToken(TokenTypes.PARAMETERS);</a>
+<span class="sourceLineNo">258</span><a id="line.258"></a>
+<span class="sourceLineNo">259</span><a id="line.259">        if (params.getChildCount() == 1) {</a>
+<span class="sourceLineNo">260</span><a id="line.260">            final DetailAST parameterType = params.getFirstChild().findFirstToken(TokenTypes.TYPE);</a>
+<span class="sourceLineNo">261</span><a id="line.261">            final boolean isArrayDeclaration =</a>
+<span class="sourceLineNo">262</span><a id="line.262">                parameterType.findFirstToken(TokenTypes.ARRAY_DECLARATOR) != null;</a>
+<span class="sourceLineNo">263</span><a id="line.263">            final Optional&lt;DetailAST&gt; varargs = Optional.ofNullable(</a>
+<span class="sourceLineNo">264</span><a id="line.264">                params.getFirstChild().findFirstToken(TokenTypes.ELLIPSIS));</a>
+<span class="sourceLineNo">265</span><a id="line.265"></a>
+<span class="sourceLineNo">266</span><a id="line.266">            if (isArrayDeclaration || varargs.isPresent()) {</a>
+<span class="sourceLineNo">267</span><a id="line.267">                checkPassed = isStringType(parameterType.getFirstChild());</a>
+<span class="sourceLineNo">268</span><a id="line.268">            }</a>
+<span class="sourceLineNo">269</span><a id="line.269">        }</a>
+<span class="sourceLineNo">270</span><a id="line.270">        return checkPassed;</a>
+<span class="sourceLineNo">271</span><a id="line.271">    }</a>
+<span class="sourceLineNo">272</span><a id="line.272"></a>
+<span class="sourceLineNo">273</span><a id="line.273">    /**</a>
+<span class="sourceLineNo">274</span><a id="line.274">     * Whether the type is java.lang.String.</a>
+<span class="sourceLineNo">275</span><a id="line.275">     *</a>
+<span class="sourceLineNo">276</span><a id="line.276">     * @param typeAst the type to check.</a>
+<span class="sourceLineNo">277</span><a id="line.277">     * @return true, if the type is java.lang.String.</a>
+<span class="sourceLineNo">278</span><a id="line.278">     */</a>
+<span class="sourceLineNo">279</span><a id="line.279">    private static boolean isStringType(DetailAST typeAst) {</a>
+<span class="sourceLineNo">280</span><a id="line.280">        final FullIdent type = FullIdent.createFullIdent(typeAst);</a>
+<span class="sourceLineNo">281</span><a id="line.281">        return STRING_PARAMETER_NAMES.contains(type.getText());</a>
+<span class="sourceLineNo">282</span><a id="line.282">    }</a>
+<span class="sourceLineNo">283</span><a id="line.283"></a>
+<span class="sourceLineNo">284</span><a id="line.284">}</a>
 
 
 

@@ -28,684 +28,718 @@
 <span class="sourceLineNo">019</span><a id="line.19"></a>
 <span class="sourceLineNo">020</span><a id="line.20">package com.puppycrawl.tools.checkstyle.checks.coding;</a>
 <span class="sourceLineNo">021</span><a id="line.21"></a>
-<span class="sourceLineNo">022</span><a id="line.22">import java.util.regex.Pattern;</a>
-<span class="sourceLineNo">023</span><a id="line.23"></a>
-<span class="sourceLineNo">024</span><a id="line.24">import com.puppycrawl.tools.checkstyle.FileStatefulCheck;</a>
-<span class="sourceLineNo">025</span><a id="line.25">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
-<span class="sourceLineNo">026</span><a id="line.26">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
-<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
-<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
-<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
-<span class="sourceLineNo">030</span><a id="line.30"></a>
-<span class="sourceLineNo">031</span><a id="line.31">/**</a>
-<span class="sourceLineNo">032</span><a id="line.32"> * &lt;p&gt;</a>
-<span class="sourceLineNo">033</span><a id="line.33"> * Checks if unnecessary parentheses are used in a statement or expression.</a>
-<span class="sourceLineNo">034</span><a id="line.34"> * The check will flag the following with warnings:</a>
-<span class="sourceLineNo">035</span><a id="line.35"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">036</span><a id="line.36"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">037</span><a id="line.37"> * return (x);          // parens around identifier</a>
-<span class="sourceLineNo">038</span><a id="line.38"> * return (x + 1);      // parens around return value</a>
-<span class="sourceLineNo">039</span><a id="line.39"> * int x = (y / 2 + 1); // parens around assignment rhs</a>
-<span class="sourceLineNo">040</span><a id="line.40"> * for (int i = (0); i &amp;lt; 10; i++) {  // parens around literal</a>
-<span class="sourceLineNo">041</span><a id="line.41"> * t -= (z + 1);                     // parens around assignment rhs</a>
-<span class="sourceLineNo">042</span><a id="line.42"> * boolean a = (x &amp;gt; 7 &amp;amp;&amp;amp; y &amp;gt; 5)      // parens around expression</a>
-<span class="sourceLineNo">043</span><a id="line.43"> *             || z &amp;lt; 9;</a>
-<span class="sourceLineNo">044</span><a id="line.44"> * boolean b = (~a) &amp;gt; -27            // parens around ~a</a>
-<span class="sourceLineNo">045</span><a id="line.45"> *             &amp;amp;&amp;amp; (a-- &amp;lt; 30);        // parens around expression</a>
-<span class="sourceLineNo">046</span><a id="line.46"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">047</span><a id="line.47"> * &lt;p&gt;</a>
-<span class="sourceLineNo">048</span><a id="line.48"> * The check is not "type aware", that is to say, it can't tell if parentheses</a>
-<span class="sourceLineNo">049</span><a id="line.49"> * are unnecessary based on the types in an expression. The check is partially aware about</a>
-<span class="sourceLineNo">050</span><a id="line.50"> * operator precedence but unaware about operator associativity.</a>
-<span class="sourceLineNo">051</span><a id="line.51"> * It won't catch cases such as:</a>
-<span class="sourceLineNo">052</span><a id="line.52"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">053</span><a id="line.53"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">054</span><a id="line.54"> * int x = (a + b) + c; // 1st Case</a>
-<span class="sourceLineNo">055</span><a id="line.55"> * boolean p = true; // 2nd Case</a>
-<span class="sourceLineNo">056</span><a id="line.56"> * int q = 4;</a>
-<span class="sourceLineNo">057</span><a id="line.57"> * int r = 3;</a>
-<span class="sourceLineNo">058</span><a id="line.58"> * if (p == (q &amp;lt;= r)) {}&lt;/pre&gt;</a>
-<span class="sourceLineNo">059</span><a id="line.59"> * &lt;p&gt;</a>
-<span class="sourceLineNo">060</span><a id="line.60"> * In the first case, given that &lt;em&gt;a&lt;/em&gt;, &lt;em&gt;b&lt;/em&gt;, and &lt;em&gt;c&lt;/em&gt; are</a>
-<span class="sourceLineNo">061</span><a id="line.61"> * all {@code int} variables, the parentheses around {@code a + b}</a>
-<span class="sourceLineNo">062</span><a id="line.62"> * are not needed.</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * In the second case, parentheses are required as &lt;em&gt;q&lt;/em&gt;, &lt;em&gt;r&lt;/em&gt; are</a>
-<span class="sourceLineNo">064</span><a id="line.64"> * of type {@code int} and &lt;em&gt;p&lt;/em&gt; is of type {@code boolean}</a>
-<span class="sourceLineNo">065</span><a id="line.65"> * and removing parentheses will give a compile-time error. Even if &lt;em&gt;q&lt;/em&gt;</a>
-<span class="sourceLineNo">066</span><a id="line.66"> * and &lt;em&gt;r&lt;/em&gt; were {@code boolean} still there will be no violation</a>
-<span class="sourceLineNo">067</span><a id="line.67"> * raised as check is not "type aware".</a>
-<span class="sourceLineNo">068</span><a id="line.68"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">069</span><a id="line.69"> * &lt;p&gt;</a>
-<span class="sourceLineNo">070</span><a id="line.70"> * The partial support for operator precedence includes cases of the following type:</a>
-<span class="sourceLineNo">071</span><a id="line.71"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">072</span><a id="line.72"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">073</span><a id="line.73"> * boolean a = true, b = true;</a>
-<span class="sourceLineNo">074</span><a id="line.74"> * boolean c = false, d = false;</a>
-<span class="sourceLineNo">075</span><a id="line.75"> * if ((a &amp;amp;&amp;amp; b) || c) { // violation, unnecessary paren</a>
-<span class="sourceLineNo">076</span><a id="line.76"> * }</a>
-<span class="sourceLineNo">077</span><a id="line.77"> * if (a &amp;amp;&amp;amp; (b || c)) { // ok</a>
-<span class="sourceLineNo">078</span><a id="line.78"> * }</a>
-<span class="sourceLineNo">079</span><a id="line.79"> * if ((a == b) &amp;amp;&amp;amp; c) { // violation, unnecessary paren</a>
-<span class="sourceLineNo">080</span><a id="line.80"> * }</a>
-<span class="sourceLineNo">081</span><a id="line.81"> * String e = &amp;quot;e&amp;quot;;</a>
-<span class="sourceLineNo">082</span><a id="line.82"> * if ((e instanceof String) &amp;amp;&amp;amp; a || b) { // violation, unnecessary paren</a>
-<span class="sourceLineNo">083</span><a id="line.83"> * }</a>
-<span class="sourceLineNo">084</span><a id="line.84"> * int f = 0;</a>
-<span class="sourceLineNo">085</span><a id="line.85"> * int g = 0;</a>
-<span class="sourceLineNo">086</span><a id="line.86"> * if (!(f &amp;gt;= g) // ok</a>
-<span class="sourceLineNo">087</span><a id="line.87"> *         &amp;amp;&amp;amp; (g &amp;gt; f)) { // violation, unnecessary paren</a>
-<span class="sourceLineNo">088</span><a id="line.88"> * }</a>
-<span class="sourceLineNo">089</span><a id="line.89"> * if ((++f) &amp;gt; g &amp;amp;&amp;amp; a) { // violation, unnecessary paren</a>
-<span class="sourceLineNo">090</span><a id="line.90"> * }</a>
-<span class="sourceLineNo">091</span><a id="line.91"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">092</span><a id="line.92"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">093</span><a id="line.93"> * &lt;li&gt;</a>
-<span class="sourceLineNo">094</span><a id="line.94"> * Property {@code tokens} - tokens to check</a>
-<span class="sourceLineNo">095</span><a id="line.95"> * Type is {@code java.lang.String[]}.</a>
-<span class="sourceLineNo">096</span><a id="line.96"> * Validation type is {@code tokenSet}.</a>
-<span class="sourceLineNo">097</span><a id="line.97"> * Default value is:</a>
-<span class="sourceLineNo">098</span><a id="line.98"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#EXPR"&gt;</a>
-<span class="sourceLineNo">099</span><a id="line.99"> * EXPR&lt;/a&gt;,</a>
-<span class="sourceLineNo">100</span><a id="line.100"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#IDENT"&gt;</a>
-<span class="sourceLineNo">101</span><a id="line.101"> * IDENT&lt;/a&gt;,</a>
-<span class="sourceLineNo">102</span><a id="line.102"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_DOUBLE"&gt;</a>
-<span class="sourceLineNo">103</span><a id="line.103"> * NUM_DOUBLE&lt;/a&gt;,</a>
-<span class="sourceLineNo">104</span><a id="line.104"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_FLOAT"&gt;</a>
-<span class="sourceLineNo">105</span><a id="line.105"> * NUM_FLOAT&lt;/a&gt;,</a>
-<span class="sourceLineNo">106</span><a id="line.106"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_INT"&gt;</a>
-<span class="sourceLineNo">107</span><a id="line.107"> * NUM_INT&lt;/a&gt;,</a>
-<span class="sourceLineNo">108</span><a id="line.108"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_LONG"&gt;</a>
-<span class="sourceLineNo">109</span><a id="line.109"> * NUM_LONG&lt;/a&gt;,</a>
-<span class="sourceLineNo">110</span><a id="line.110"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#STRING_LITERAL"&gt;</a>
-<span class="sourceLineNo">111</span><a id="line.111"> * STRING_LITERAL&lt;/a&gt;,</a>
-<span class="sourceLineNo">112</span><a id="line.112"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_NULL"&gt;</a>
-<span class="sourceLineNo">113</span><a id="line.113"> * LITERAL_NULL&lt;/a&gt;,</a>
-<span class="sourceLineNo">114</span><a id="line.114"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_FALSE"&gt;</a>
-<span class="sourceLineNo">115</span><a id="line.115"> * LITERAL_FALSE&lt;/a&gt;,</a>
-<span class="sourceLineNo">116</span><a id="line.116"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_TRUE"&gt;</a>
-<span class="sourceLineNo">117</span><a id="line.117"> * LITERAL_TRUE&lt;/a&gt;,</a>
-<span class="sourceLineNo">118</span><a id="line.118"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ASSIGN"&gt;</a>
-<span class="sourceLineNo">119</span><a id="line.119"> * ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">120</span><a id="line.120"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BAND_ASSIGN"&gt;</a>
-<span class="sourceLineNo">121</span><a id="line.121"> * BAND_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">122</span><a id="line.122"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BOR_ASSIGN"&gt;</a>
-<span class="sourceLineNo">123</span><a id="line.123"> * BOR_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">124</span><a id="line.124"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BSR_ASSIGN"&gt;</a>
-<span class="sourceLineNo">125</span><a id="line.125"> * BSR_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">126</span><a id="line.126"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BXOR_ASSIGN"&gt;</a>
-<span class="sourceLineNo">127</span><a id="line.127"> * BXOR_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">128</span><a id="line.128"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#DIV_ASSIGN"&gt;</a>
-<span class="sourceLineNo">129</span><a id="line.129"> * DIV_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">130</span><a id="line.130"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#MINUS_ASSIGN"&gt;</a>
-<span class="sourceLineNo">131</span><a id="line.131"> * MINUS_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">132</span><a id="line.132"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#MOD_ASSIGN"&gt;</a>
-<span class="sourceLineNo">133</span><a id="line.133"> * MOD_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">134</span><a id="line.134"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#PLUS_ASSIGN"&gt;</a>
-<span class="sourceLineNo">135</span><a id="line.135"> * PLUS_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">136</span><a id="line.136"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#SL_ASSIGN"&gt;</a>
-<span class="sourceLineNo">137</span><a id="line.137"> * SL_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">138</span><a id="line.138"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#SR_ASSIGN"&gt;</a>
-<span class="sourceLineNo">139</span><a id="line.139"> * SR_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">140</span><a id="line.140"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#STAR_ASSIGN"&gt;</a>
-<span class="sourceLineNo">141</span><a id="line.141"> * STAR_ASSIGN&lt;/a&gt;,</a>
-<span class="sourceLineNo">142</span><a id="line.142"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAMBDA"&gt;</a>
-<span class="sourceLineNo">143</span><a id="line.143"> * LAMBDA&lt;/a&gt;,</a>
-<span class="sourceLineNo">144</span><a id="line.144"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#TEXT_BLOCK_LITERAL_BEGIN"&gt;</a>
-<span class="sourceLineNo">145</span><a id="line.145"> * TEXT_BLOCK_LITERAL_BEGIN&lt;/a&gt;,</a>
-<span class="sourceLineNo">146</span><a id="line.146"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAND"&gt;</a>
-<span class="sourceLineNo">147</span><a id="line.147"> * LAND&lt;/a&gt;,</a>
-<span class="sourceLineNo">148</span><a id="line.148"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LOR"&gt;</a>
-<span class="sourceLineNo">149</span><a id="line.149"> * LOR&lt;/a&gt;,</a>
-<span class="sourceLineNo">150</span><a id="line.150"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_INSTANCEOF"&gt;</a>
-<span class="sourceLineNo">151</span><a id="line.151"> * LITERAL_INSTANCEOF&lt;/a&gt;,</a>
-<span class="sourceLineNo">152</span><a id="line.152"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#GT"&gt;</a>
-<span class="sourceLineNo">153</span><a id="line.153"> * GT&lt;/a&gt;,</a>
-<span class="sourceLineNo">154</span><a id="line.154"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LT"&gt;</a>
-<span class="sourceLineNo">155</span><a id="line.155"> * LT&lt;/a&gt;,</a>
-<span class="sourceLineNo">156</span><a id="line.156"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#GE"&gt;</a>
-<span class="sourceLineNo">157</span><a id="line.157"> * GE&lt;/a&gt;,</a>
-<span class="sourceLineNo">158</span><a id="line.158"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LE"&gt;</a>
-<span class="sourceLineNo">159</span><a id="line.159"> * LE&lt;/a&gt;,</a>
-<span class="sourceLineNo">160</span><a id="line.160"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#EQUAL"&gt;</a>
-<span class="sourceLineNo">161</span><a id="line.161"> * EQUAL&lt;/a&gt;,</a>
-<span class="sourceLineNo">162</span><a id="line.162"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NOT_EQUAL"&gt;</a>
-<span class="sourceLineNo">163</span><a id="line.163"> * NOT_EQUAL&lt;/a&gt;,</a>
-<span class="sourceLineNo">164</span><a id="line.164"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#UNARY_MINUS"&gt;</a>
-<span class="sourceLineNo">165</span><a id="line.165"> * UNARY_MINUS&lt;/a&gt;,</a>
-<span class="sourceLineNo">166</span><a id="line.166"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#UNARY_PLUS"&gt;</a>
-<span class="sourceLineNo">167</span><a id="line.167"> * UNARY_PLUS&lt;/a&gt;,</a>
-<span class="sourceLineNo">168</span><a id="line.168"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#INC"&gt;</a>
-<span class="sourceLineNo">169</span><a id="line.169"> * INC&lt;/a&gt;,</a>
-<span class="sourceLineNo">170</span><a id="line.170"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#DEC"&gt;</a>
-<span class="sourceLineNo">171</span><a id="line.171"> * DEC&lt;/a&gt;,</a>
-<span class="sourceLineNo">172</span><a id="line.172"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LNOT"&gt;</a>
-<span class="sourceLineNo">173</span><a id="line.173"> * LNOT&lt;/a&gt;,</a>
-<span class="sourceLineNo">174</span><a id="line.174"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BNOT"&gt;</a>
-<span class="sourceLineNo">175</span><a id="line.175"> * BNOT&lt;/a&gt;,</a>
-<span class="sourceLineNo">176</span><a id="line.176"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#POST_INC"&gt;</a>
-<span class="sourceLineNo">177</span><a id="line.177"> * POST_INC&lt;/a&gt;,</a>
-<span class="sourceLineNo">178</span><a id="line.178"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#POST_DEC"&gt;</a>
-<span class="sourceLineNo">179</span><a id="line.179"> * POST_DEC&lt;/a&gt;.</a>
-<span class="sourceLineNo">180</span><a id="line.180"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">181</span><a id="line.181"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">182</span><a id="line.182"> * &lt;p&gt;</a>
-<span class="sourceLineNo">183</span><a id="line.183"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
-<span class="sourceLineNo">184</span><a id="line.184"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">185</span><a id="line.185"> * &lt;p&gt;</a>
-<span class="sourceLineNo">186</span><a id="line.186"> * Violation Message Keys:</a>
-<span class="sourceLineNo">187</span><a id="line.187"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">188</span><a id="line.188"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">189</span><a id="line.189"> * &lt;li&gt;</a>
-<span class="sourceLineNo">190</span><a id="line.190"> * {@code unnecessary.paren.assign}</a>
-<span class="sourceLineNo">191</span><a id="line.191"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">192</span><a id="line.192"> * &lt;li&gt;</a>
-<span class="sourceLineNo">193</span><a id="line.193"> * {@code unnecessary.paren.expr}</a>
-<span class="sourceLineNo">194</span><a id="line.194"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">195</span><a id="line.195"> * &lt;li&gt;</a>
-<span class="sourceLineNo">196</span><a id="line.196"> * {@code unnecessary.paren.ident}</a>
-<span class="sourceLineNo">197</span><a id="line.197"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">198</span><a id="line.198"> * &lt;li&gt;</a>
-<span class="sourceLineNo">199</span><a id="line.199"> * {@code unnecessary.paren.lambda}</a>
-<span class="sourceLineNo">200</span><a id="line.200"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">201</span><a id="line.201"> * &lt;li&gt;</a>
-<span class="sourceLineNo">202</span><a id="line.202"> * {@code unnecessary.paren.literal}</a>
-<span class="sourceLineNo">203</span><a id="line.203"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">204</span><a id="line.204"> * &lt;li&gt;</a>
-<span class="sourceLineNo">205</span><a id="line.205"> * {@code unnecessary.paren.return}</a>
-<span class="sourceLineNo">206</span><a id="line.206"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">207</span><a id="line.207"> * &lt;li&gt;</a>
-<span class="sourceLineNo">208</span><a id="line.208"> * {@code unnecessary.paren.string}</a>
-<span class="sourceLineNo">209</span><a id="line.209"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">210</span><a id="line.210"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">211</span><a id="line.211"> *</a>
-<span class="sourceLineNo">212</span><a id="line.212"> * @since 3.4</a>
-<span class="sourceLineNo">213</span><a id="line.213"> */</a>
-<span class="sourceLineNo">214</span><a id="line.214">@FileStatefulCheck</a>
-<span class="sourceLineNo">215</span><a id="line.215">public class UnnecessaryParenthesesCheck extends AbstractCheck {</a>
-<span class="sourceLineNo">216</span><a id="line.216"></a>
-<span class="sourceLineNo">217</span><a id="line.217">    /**</a>
-<span class="sourceLineNo">218</span><a id="line.218">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">219</span><a id="line.219">     * file.</a>
-<span class="sourceLineNo">220</span><a id="line.220">     */</a>
-<span class="sourceLineNo">221</span><a id="line.221">    public static final String MSG_IDENT = "unnecessary.paren.ident";</a>
-<span class="sourceLineNo">222</span><a id="line.222"></a>
-<span class="sourceLineNo">223</span><a id="line.223">    /**</a>
-<span class="sourceLineNo">224</span><a id="line.224">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">225</span><a id="line.225">     * file.</a>
-<span class="sourceLineNo">226</span><a id="line.226">     */</a>
-<span class="sourceLineNo">227</span><a id="line.227">    public static final String MSG_ASSIGN = "unnecessary.paren.assign";</a>
-<span class="sourceLineNo">228</span><a id="line.228"></a>
-<span class="sourceLineNo">229</span><a id="line.229">    /**</a>
-<span class="sourceLineNo">230</span><a id="line.230">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">231</span><a id="line.231">     * file.</a>
-<span class="sourceLineNo">232</span><a id="line.232">     */</a>
-<span class="sourceLineNo">233</span><a id="line.233">    public static final String MSG_EXPR = "unnecessary.paren.expr";</a>
-<span class="sourceLineNo">234</span><a id="line.234"></a>
-<span class="sourceLineNo">235</span><a id="line.235">    /**</a>
-<span class="sourceLineNo">236</span><a id="line.236">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">237</span><a id="line.237">     * file.</a>
-<span class="sourceLineNo">238</span><a id="line.238">     */</a>
-<span class="sourceLineNo">239</span><a id="line.239">    public static final String MSG_LITERAL = "unnecessary.paren.literal";</a>
-<span class="sourceLineNo">240</span><a id="line.240"></a>
-<span class="sourceLineNo">241</span><a id="line.241">    /**</a>
-<span class="sourceLineNo">242</span><a id="line.242">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">243</span><a id="line.243">     * file.</a>
-<span class="sourceLineNo">244</span><a id="line.244">     */</a>
-<span class="sourceLineNo">245</span><a id="line.245">    public static final String MSG_STRING = "unnecessary.paren.string";</a>
-<span class="sourceLineNo">246</span><a id="line.246"></a>
-<span class="sourceLineNo">247</span><a id="line.247">    /**</a>
-<span class="sourceLineNo">248</span><a id="line.248">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">249</span><a id="line.249">     * file.</a>
-<span class="sourceLineNo">250</span><a id="line.250">     */</a>
-<span class="sourceLineNo">251</span><a id="line.251">    public static final String MSG_RETURN = "unnecessary.paren.return";</a>
-<span class="sourceLineNo">252</span><a id="line.252"></a>
-<span class="sourceLineNo">253</span><a id="line.253">    /**</a>
-<span class="sourceLineNo">254</span><a id="line.254">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">255</span><a id="line.255">     * file.</a>
-<span class="sourceLineNo">256</span><a id="line.256">     */</a>
-<span class="sourceLineNo">257</span><a id="line.257">    public static final String MSG_LAMBDA = "unnecessary.paren.lambda";</a>
-<span class="sourceLineNo">258</span><a id="line.258"></a>
-<span class="sourceLineNo">259</span><a id="line.259">    /**</a>
-<span class="sourceLineNo">260</span><a id="line.260">     * Compiled pattern used to match newline control characters, for replacement.</a>
-<span class="sourceLineNo">261</span><a id="line.261">     */</a>
-<span class="sourceLineNo">262</span><a id="line.262">    private static final Pattern NEWLINE = Pattern.compile("\\R");</a>
-<span class="sourceLineNo">263</span><a id="line.263"></a>
-<span class="sourceLineNo">264</span><a id="line.264">    /**</a>
-<span class="sourceLineNo">265</span><a id="line.265">     * String used to amend TEXT_BLOCK_CONTENT so that it matches STRING_LITERAL.</a>
-<span class="sourceLineNo">266</span><a id="line.266">     */</a>
-<span class="sourceLineNo">267</span><a id="line.267">    private static final String QUOTE = "\"";</a>
-<span class="sourceLineNo">268</span><a id="line.268"></a>
-<span class="sourceLineNo">269</span><a id="line.269">    /** The maximum string length before we chop the string. */</a>
-<span class="sourceLineNo">270</span><a id="line.270">    private static final int MAX_QUOTED_LENGTH = 25;</a>
+<span class="sourceLineNo">022</span><a id="line.22">import java.util.ArrayList;</a>
+<span class="sourceLineNo">023</span><a id="line.23">import java.util.Collections;</a>
+<span class="sourceLineNo">024</span><a id="line.24">import java.util.List;</a>
+<span class="sourceLineNo">025</span><a id="line.25">import java.util.regex.Pattern;</a>
+<span class="sourceLineNo">026</span><a id="line.26"></a>
+<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.FileStatefulCheck;</a>
+<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
+<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
+<span class="sourceLineNo">030</span><a id="line.30">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
+<span class="sourceLineNo">031</span><a id="line.31">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</a>
+<span class="sourceLineNo">032</span><a id="line.32">import com.puppycrawl.tools.checkstyle.utils.TokenUtil;</a>
+<span class="sourceLineNo">033</span><a id="line.33"></a>
+<span class="sourceLineNo">034</span><a id="line.34">/**</a>
+<span class="sourceLineNo">035</span><a id="line.35"> * &lt;div&gt;</a>
+<span class="sourceLineNo">036</span><a id="line.36"> * Checks if unnecessary parentheses are used in a statement or expression.</a>
+<span class="sourceLineNo">037</span><a id="line.37"> * The check will flag the following with warnings:</a>
+<span class="sourceLineNo">038</span><a id="line.38"> * &lt;/div&gt;</a>
+<span class="sourceLineNo">039</span><a id="line.39"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">040</span><a id="line.40"> * return (x);          // parens around identifier</a>
+<span class="sourceLineNo">041</span><a id="line.41"> * return (x + 1);      // parens around return value</a>
+<span class="sourceLineNo">042</span><a id="line.42"> * int x = (y / 2 + 1); // parens around assignment rhs</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * for (int i = (0); i &amp;lt; 10; i++) {  // parens around literal</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * t -= (z + 1);                     // parens around assignment rhs</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * boolean a = (x &amp;gt; 7 &amp;amp;&amp;amp; y &amp;gt; 5)      // parens around expression</a>
+<span class="sourceLineNo">046</span><a id="line.46"> *             || z &amp;lt; 9;</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * boolean b = (~a) &amp;gt; -27            // parens around ~a</a>
+<span class="sourceLineNo">048</span><a id="line.48"> *             &amp;amp;&amp;amp; (a-- &amp;lt; 30);        // parens around expression</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">050</span><a id="line.50"> *</a>
+<span class="sourceLineNo">051</span><a id="line.51"> * &lt;p&gt;</a>
+<span class="sourceLineNo">052</span><a id="line.52"> * The check is not "type aware", that is to say, it can't tell if parentheses</a>
+<span class="sourceLineNo">053</span><a id="line.53"> * are unnecessary based on the types in an expression. The check is partially aware about</a>
+<span class="sourceLineNo">054</span><a id="line.54"> * operator precedence but unaware about operator associativity.</a>
+<span class="sourceLineNo">055</span><a id="line.55"> * It won't catch cases such as:</a>
+<span class="sourceLineNo">056</span><a id="line.56"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">057</span><a id="line.57"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * int x = (a + b) + c; // 1st Case</a>
+<span class="sourceLineNo">059</span><a id="line.59"> * boolean p = true; // 2nd Case</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * int q = 4;</a>
+<span class="sourceLineNo">061</span><a id="line.61"> * int r = 3;</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * if (p == (q &amp;lt;= r)) {}&lt;/pre&gt;</a>
+<span class="sourceLineNo">063</span><a id="line.63"> *</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * &lt;p&gt;</a>
+<span class="sourceLineNo">065</span><a id="line.65"> * In the first case, given that &lt;em&gt;a&lt;/em&gt;, &lt;em&gt;b&lt;/em&gt;, and &lt;em&gt;c&lt;/em&gt; are</a>
+<span class="sourceLineNo">066</span><a id="line.66"> * all {@code int} variables, the parentheses around {@code a + b}</a>
+<span class="sourceLineNo">067</span><a id="line.67"> * are not needed.</a>
+<span class="sourceLineNo">068</span><a id="line.68"> * In the second case, parentheses are required as &lt;em&gt;q&lt;/em&gt;, &lt;em&gt;r&lt;/em&gt; are</a>
+<span class="sourceLineNo">069</span><a id="line.69"> * of type {@code int} and &lt;em&gt;p&lt;/em&gt; is of type {@code boolean}</a>
+<span class="sourceLineNo">070</span><a id="line.70"> * and removing parentheses will give a compile-time error. Even if &lt;em&gt;q&lt;/em&gt;</a>
+<span class="sourceLineNo">071</span><a id="line.71"> * and &lt;em&gt;r&lt;/em&gt; were {@code boolean} still there will be no violation</a>
+<span class="sourceLineNo">072</span><a id="line.72"> * raised as check is not "type aware".</a>
+<span class="sourceLineNo">073</span><a id="line.73"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">074</span><a id="line.74"> *</a>
+<span class="sourceLineNo">075</span><a id="line.75"> * &lt;p&gt;</a>
+<span class="sourceLineNo">076</span><a id="line.76"> * The partial support for operator precedence includes cases of the following type:</a>
+<span class="sourceLineNo">077</span><a id="line.77"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">078</span><a id="line.78"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">079</span><a id="line.79"> * boolean a = true, b = true;</a>
+<span class="sourceLineNo">080</span><a id="line.80"> * boolean c = false, d = false;</a>
+<span class="sourceLineNo">081</span><a id="line.81"> * if ((a &amp;amp;&amp;amp; b) || c) { // violation, unnecessary paren</a>
+<span class="sourceLineNo">082</span><a id="line.82"> * }</a>
+<span class="sourceLineNo">083</span><a id="line.83"> * if (a &amp;amp;&amp;amp; (b || c)) { // ok</a>
+<span class="sourceLineNo">084</span><a id="line.84"> * }</a>
+<span class="sourceLineNo">085</span><a id="line.85"> * if ((a == b) &amp;amp;&amp;amp; c) { // violation, unnecessary paren</a>
+<span class="sourceLineNo">086</span><a id="line.86"> * }</a>
+<span class="sourceLineNo">087</span><a id="line.87"> * String e = &amp;quot;e&amp;quot;;</a>
+<span class="sourceLineNo">088</span><a id="line.88"> * if ((e instanceof String) &amp;amp;&amp;amp; a || b) { // violation, unnecessary paren</a>
+<span class="sourceLineNo">089</span><a id="line.89"> * }</a>
+<span class="sourceLineNo">090</span><a id="line.90"> * int f = 0;</a>
+<span class="sourceLineNo">091</span><a id="line.91"> * int g = 0;</a>
+<span class="sourceLineNo">092</span><a id="line.92"> * if (!(f &amp;gt;= g) // ok</a>
+<span class="sourceLineNo">093</span><a id="line.93"> *         &amp;amp;&amp;amp; (g &amp;gt; f)) { // violation, unnecessary paren</a>
+<span class="sourceLineNo">094</span><a id="line.94"> * }</a>
+<span class="sourceLineNo">095</span><a id="line.95"> * if ((++f) &amp;gt; g &amp;amp;&amp;amp; a) { // violation, unnecessary paren</a>
+<span class="sourceLineNo">096</span><a id="line.96"> * }</a>
+<span class="sourceLineNo">097</span><a id="line.97"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">098</span><a id="line.98"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">099</span><a id="line.99"> * &lt;li&gt;</a>
+<span class="sourceLineNo">100</span><a id="line.100"> * Property {@code tokens} - tokens to check</a>
+<span class="sourceLineNo">101</span><a id="line.101"> * Type is {@code java.lang.String[]}.</a>
+<span class="sourceLineNo">102</span><a id="line.102"> * Validation type is {@code tokenSet}.</a>
+<span class="sourceLineNo">103</span><a id="line.103"> * Default value is:</a>
+<span class="sourceLineNo">104</span><a id="line.104"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#EXPR"&gt;</a>
+<span class="sourceLineNo">105</span><a id="line.105"> * EXPR&lt;/a&gt;,</a>
+<span class="sourceLineNo">106</span><a id="line.106"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#IDENT"&gt;</a>
+<span class="sourceLineNo">107</span><a id="line.107"> * IDENT&lt;/a&gt;,</a>
+<span class="sourceLineNo">108</span><a id="line.108"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_DOUBLE"&gt;</a>
+<span class="sourceLineNo">109</span><a id="line.109"> * NUM_DOUBLE&lt;/a&gt;,</a>
+<span class="sourceLineNo">110</span><a id="line.110"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_FLOAT"&gt;</a>
+<span class="sourceLineNo">111</span><a id="line.111"> * NUM_FLOAT&lt;/a&gt;,</a>
+<span class="sourceLineNo">112</span><a id="line.112"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_INT"&gt;</a>
+<span class="sourceLineNo">113</span><a id="line.113"> * NUM_INT&lt;/a&gt;,</a>
+<span class="sourceLineNo">114</span><a id="line.114"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NUM_LONG"&gt;</a>
+<span class="sourceLineNo">115</span><a id="line.115"> * NUM_LONG&lt;/a&gt;,</a>
+<span class="sourceLineNo">116</span><a id="line.116"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#STRING_LITERAL"&gt;</a>
+<span class="sourceLineNo">117</span><a id="line.117"> * STRING_LITERAL&lt;/a&gt;,</a>
+<span class="sourceLineNo">118</span><a id="line.118"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_NULL"&gt;</a>
+<span class="sourceLineNo">119</span><a id="line.119"> * LITERAL_NULL&lt;/a&gt;,</a>
+<span class="sourceLineNo">120</span><a id="line.120"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_FALSE"&gt;</a>
+<span class="sourceLineNo">121</span><a id="line.121"> * LITERAL_FALSE&lt;/a&gt;,</a>
+<span class="sourceLineNo">122</span><a id="line.122"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_TRUE"&gt;</a>
+<span class="sourceLineNo">123</span><a id="line.123"> * LITERAL_TRUE&lt;/a&gt;,</a>
+<span class="sourceLineNo">124</span><a id="line.124"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#ASSIGN"&gt;</a>
+<span class="sourceLineNo">125</span><a id="line.125"> * ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">126</span><a id="line.126"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BAND_ASSIGN"&gt;</a>
+<span class="sourceLineNo">127</span><a id="line.127"> * BAND_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">128</span><a id="line.128"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BOR_ASSIGN"&gt;</a>
+<span class="sourceLineNo">129</span><a id="line.129"> * BOR_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">130</span><a id="line.130"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BSR_ASSIGN"&gt;</a>
+<span class="sourceLineNo">131</span><a id="line.131"> * BSR_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">132</span><a id="line.132"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BXOR_ASSIGN"&gt;</a>
+<span class="sourceLineNo">133</span><a id="line.133"> * BXOR_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">134</span><a id="line.134"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#DIV_ASSIGN"&gt;</a>
+<span class="sourceLineNo">135</span><a id="line.135"> * DIV_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">136</span><a id="line.136"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#MINUS_ASSIGN"&gt;</a>
+<span class="sourceLineNo">137</span><a id="line.137"> * MINUS_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">138</span><a id="line.138"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#MOD_ASSIGN"&gt;</a>
+<span class="sourceLineNo">139</span><a id="line.139"> * MOD_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">140</span><a id="line.140"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#PLUS_ASSIGN"&gt;</a>
+<span class="sourceLineNo">141</span><a id="line.141"> * PLUS_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">142</span><a id="line.142"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#SL_ASSIGN"&gt;</a>
+<span class="sourceLineNo">143</span><a id="line.143"> * SL_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">144</span><a id="line.144"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#SR_ASSIGN"&gt;</a>
+<span class="sourceLineNo">145</span><a id="line.145"> * SR_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">146</span><a id="line.146"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#STAR_ASSIGN"&gt;</a>
+<span class="sourceLineNo">147</span><a id="line.147"> * STAR_ASSIGN&lt;/a&gt;,</a>
+<span class="sourceLineNo">148</span><a id="line.148"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAMBDA"&gt;</a>
+<span class="sourceLineNo">149</span><a id="line.149"> * LAMBDA&lt;/a&gt;,</a>
+<span class="sourceLineNo">150</span><a id="line.150"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#TEXT_BLOCK_LITERAL_BEGIN"&gt;</a>
+<span class="sourceLineNo">151</span><a id="line.151"> * TEXT_BLOCK_LITERAL_BEGIN&lt;/a&gt;,</a>
+<span class="sourceLineNo">152</span><a id="line.152"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LAND"&gt;</a>
+<span class="sourceLineNo">153</span><a id="line.153"> * LAND&lt;/a&gt;,</a>
+<span class="sourceLineNo">154</span><a id="line.154"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LOR"&gt;</a>
+<span class="sourceLineNo">155</span><a id="line.155"> * LOR&lt;/a&gt;,</a>
+<span class="sourceLineNo">156</span><a id="line.156"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LITERAL_INSTANCEOF"&gt;</a>
+<span class="sourceLineNo">157</span><a id="line.157"> * LITERAL_INSTANCEOF&lt;/a&gt;,</a>
+<span class="sourceLineNo">158</span><a id="line.158"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#GT"&gt;</a>
+<span class="sourceLineNo">159</span><a id="line.159"> * GT&lt;/a&gt;,</a>
+<span class="sourceLineNo">160</span><a id="line.160"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LT"&gt;</a>
+<span class="sourceLineNo">161</span><a id="line.161"> * LT&lt;/a&gt;,</a>
+<span class="sourceLineNo">162</span><a id="line.162"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#GE"&gt;</a>
+<span class="sourceLineNo">163</span><a id="line.163"> * GE&lt;/a&gt;,</a>
+<span class="sourceLineNo">164</span><a id="line.164"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LE"&gt;</a>
+<span class="sourceLineNo">165</span><a id="line.165"> * LE&lt;/a&gt;,</a>
+<span class="sourceLineNo">166</span><a id="line.166"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#EQUAL"&gt;</a>
+<span class="sourceLineNo">167</span><a id="line.167"> * EQUAL&lt;/a&gt;,</a>
+<span class="sourceLineNo">168</span><a id="line.168"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#NOT_EQUAL"&gt;</a>
+<span class="sourceLineNo">169</span><a id="line.169"> * NOT_EQUAL&lt;/a&gt;,</a>
+<span class="sourceLineNo">170</span><a id="line.170"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#UNARY_MINUS"&gt;</a>
+<span class="sourceLineNo">171</span><a id="line.171"> * UNARY_MINUS&lt;/a&gt;,</a>
+<span class="sourceLineNo">172</span><a id="line.172"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#UNARY_PLUS"&gt;</a>
+<span class="sourceLineNo">173</span><a id="line.173"> * UNARY_PLUS&lt;/a&gt;,</a>
+<span class="sourceLineNo">174</span><a id="line.174"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#INC"&gt;</a>
+<span class="sourceLineNo">175</span><a id="line.175"> * INC&lt;/a&gt;,</a>
+<span class="sourceLineNo">176</span><a id="line.176"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#DEC"&gt;</a>
+<span class="sourceLineNo">177</span><a id="line.177"> * DEC&lt;/a&gt;,</a>
+<span class="sourceLineNo">178</span><a id="line.178"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#LNOT"&gt;</a>
+<span class="sourceLineNo">179</span><a id="line.179"> * LNOT&lt;/a&gt;,</a>
+<span class="sourceLineNo">180</span><a id="line.180"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#BNOT"&gt;</a>
+<span class="sourceLineNo">181</span><a id="line.181"> * BNOT&lt;/a&gt;,</a>
+<span class="sourceLineNo">182</span><a id="line.182"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#POST_INC"&gt;</a>
+<span class="sourceLineNo">183</span><a id="line.183"> * POST_INC&lt;/a&gt;,</a>
+<span class="sourceLineNo">184</span><a id="line.184"> * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#POST_DEC"&gt;</a>
+<span class="sourceLineNo">185</span><a id="line.185"> * POST_DEC&lt;/a&gt;.</a>
+<span class="sourceLineNo">186</span><a id="line.186"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">187</span><a id="line.187"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">188</span><a id="line.188"> *</a>
+<span class="sourceLineNo">189</span><a id="line.189"> * &lt;p&gt;</a>
+<span class="sourceLineNo">190</span><a id="line.190"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">191</span><a id="line.191"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">192</span><a id="line.192"> *</a>
+<span class="sourceLineNo">193</span><a id="line.193"> * &lt;p&gt;</a>
+<span class="sourceLineNo">194</span><a id="line.194"> * Violation Message Keys:</a>
+<span class="sourceLineNo">195</span><a id="line.195"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">196</span><a id="line.196"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">197</span><a id="line.197"> * &lt;li&gt;</a>
+<span class="sourceLineNo">198</span><a id="line.198"> * {@code unnecessary.paren.assign}</a>
+<span class="sourceLineNo">199</span><a id="line.199"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">200</span><a id="line.200"> * &lt;li&gt;</a>
+<span class="sourceLineNo">201</span><a id="line.201"> * {@code unnecessary.paren.expr}</a>
+<span class="sourceLineNo">202</span><a id="line.202"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">203</span><a id="line.203"> * &lt;li&gt;</a>
+<span class="sourceLineNo">204</span><a id="line.204"> * {@code unnecessary.paren.ident}</a>
+<span class="sourceLineNo">205</span><a id="line.205"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">206</span><a id="line.206"> * &lt;li&gt;</a>
+<span class="sourceLineNo">207</span><a id="line.207"> * {@code unnecessary.paren.lambda}</a>
+<span class="sourceLineNo">208</span><a id="line.208"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">209</span><a id="line.209"> * &lt;li&gt;</a>
+<span class="sourceLineNo">210</span><a id="line.210"> * {@code unnecessary.paren.literal}</a>
+<span class="sourceLineNo">211</span><a id="line.211"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">212</span><a id="line.212"> * &lt;li&gt;</a>
+<span class="sourceLineNo">213</span><a id="line.213"> * {@code unnecessary.paren.return}</a>
+<span class="sourceLineNo">214</span><a id="line.214"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">215</span><a id="line.215"> * &lt;li&gt;</a>
+<span class="sourceLineNo">216</span><a id="line.216"> * {@code unnecessary.paren.string}</a>
+<span class="sourceLineNo">217</span><a id="line.217"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">218</span><a id="line.218"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">219</span><a id="line.219"> *</a>
+<span class="sourceLineNo">220</span><a id="line.220"> * @since 3.4</a>
+<span class="sourceLineNo">221</span><a id="line.221"> */</a>
+<span class="sourceLineNo">222</span><a id="line.222">@FileStatefulCheck</a>
+<span class="sourceLineNo">223</span><a id="line.223">public class UnnecessaryParenthesesCheck extends AbstractCheck {</a>
+<span class="sourceLineNo">224</span><a id="line.224"></a>
+<span class="sourceLineNo">225</span><a id="line.225">    /**</a>
+<span class="sourceLineNo">226</span><a id="line.226">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">227</span><a id="line.227">     * file.</a>
+<span class="sourceLineNo">228</span><a id="line.228">     */</a>
+<span class="sourceLineNo">229</span><a id="line.229">    public static final String MSG_IDENT = "unnecessary.paren.ident";</a>
+<span class="sourceLineNo">230</span><a id="line.230"></a>
+<span class="sourceLineNo">231</span><a id="line.231">    /**</a>
+<span class="sourceLineNo">232</span><a id="line.232">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">233</span><a id="line.233">     * file.</a>
+<span class="sourceLineNo">234</span><a id="line.234">     */</a>
+<span class="sourceLineNo">235</span><a id="line.235">    public static final String MSG_ASSIGN = "unnecessary.paren.assign";</a>
+<span class="sourceLineNo">236</span><a id="line.236"></a>
+<span class="sourceLineNo">237</span><a id="line.237">    /**</a>
+<span class="sourceLineNo">238</span><a id="line.238">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">239</span><a id="line.239">     * file.</a>
+<span class="sourceLineNo">240</span><a id="line.240">     */</a>
+<span class="sourceLineNo">241</span><a id="line.241">    public static final String MSG_EXPR = "unnecessary.paren.expr";</a>
+<span class="sourceLineNo">242</span><a id="line.242"></a>
+<span class="sourceLineNo">243</span><a id="line.243">    /**</a>
+<span class="sourceLineNo">244</span><a id="line.244">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">245</span><a id="line.245">     * file.</a>
+<span class="sourceLineNo">246</span><a id="line.246">     */</a>
+<span class="sourceLineNo">247</span><a id="line.247">    public static final String MSG_LITERAL = "unnecessary.paren.literal";</a>
+<span class="sourceLineNo">248</span><a id="line.248"></a>
+<span class="sourceLineNo">249</span><a id="line.249">    /**</a>
+<span class="sourceLineNo">250</span><a id="line.250">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">251</span><a id="line.251">     * file.</a>
+<span class="sourceLineNo">252</span><a id="line.252">     */</a>
+<span class="sourceLineNo">253</span><a id="line.253">    public static final String MSG_STRING = "unnecessary.paren.string";</a>
+<span class="sourceLineNo">254</span><a id="line.254"></a>
+<span class="sourceLineNo">255</span><a id="line.255">    /**</a>
+<span class="sourceLineNo">256</span><a id="line.256">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">257</span><a id="line.257">     * file.</a>
+<span class="sourceLineNo">258</span><a id="line.258">     */</a>
+<span class="sourceLineNo">259</span><a id="line.259">    public static final String MSG_RETURN = "unnecessary.paren.return";</a>
+<span class="sourceLineNo">260</span><a id="line.260"></a>
+<span class="sourceLineNo">261</span><a id="line.261">    /**</a>
+<span class="sourceLineNo">262</span><a id="line.262">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">263</span><a id="line.263">     * file.</a>
+<span class="sourceLineNo">264</span><a id="line.264">     */</a>
+<span class="sourceLineNo">265</span><a id="line.265">    public static final String MSG_LAMBDA = "unnecessary.paren.lambda";</a>
+<span class="sourceLineNo">266</span><a id="line.266"></a>
+<span class="sourceLineNo">267</span><a id="line.267">    /**</a>
+<span class="sourceLineNo">268</span><a id="line.268">     * Compiled pattern used to match newline control characters, for replacement.</a>
+<span class="sourceLineNo">269</span><a id="line.269">     */</a>
+<span class="sourceLineNo">270</span><a id="line.270">    private static final Pattern NEWLINE = Pattern.compile("\\R");</a>
 <span class="sourceLineNo">271</span><a id="line.271"></a>
-<span class="sourceLineNo">272</span><a id="line.272">    /** Token types for literals. */</a>
-<span class="sourceLineNo">273</span><a id="line.273">    private static final int[] LITERALS = {</a>
-<span class="sourceLineNo">274</span><a id="line.274">        TokenTypes.NUM_DOUBLE,</a>
-<span class="sourceLineNo">275</span><a id="line.275">        TokenTypes.NUM_FLOAT,</a>
-<span class="sourceLineNo">276</span><a id="line.276">        TokenTypes.NUM_INT,</a>
-<span class="sourceLineNo">277</span><a id="line.277">        TokenTypes.NUM_LONG,</a>
-<span class="sourceLineNo">278</span><a id="line.278">        TokenTypes.STRING_LITERAL,</a>
-<span class="sourceLineNo">279</span><a id="line.279">        TokenTypes.LITERAL_NULL,</a>
-<span class="sourceLineNo">280</span><a id="line.280">        TokenTypes.LITERAL_FALSE,</a>
-<span class="sourceLineNo">281</span><a id="line.281">        TokenTypes.LITERAL_TRUE,</a>
-<span class="sourceLineNo">282</span><a id="line.282">        TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,</a>
-<span class="sourceLineNo">283</span><a id="line.283">    };</a>
-<span class="sourceLineNo">284</span><a id="line.284"></a>
-<span class="sourceLineNo">285</span><a id="line.285">    /** Token types for assignment operations. */</a>
-<span class="sourceLineNo">286</span><a id="line.286">    private static final int[] ASSIGNMENTS = {</a>
-<span class="sourceLineNo">287</span><a id="line.287">        TokenTypes.ASSIGN,</a>
-<span class="sourceLineNo">288</span><a id="line.288">        TokenTypes.BAND_ASSIGN,</a>
-<span class="sourceLineNo">289</span><a id="line.289">        TokenTypes.BOR_ASSIGN,</a>
-<span class="sourceLineNo">290</span><a id="line.290">        TokenTypes.BSR_ASSIGN,</a>
-<span class="sourceLineNo">291</span><a id="line.291">        TokenTypes.BXOR_ASSIGN,</a>
-<span class="sourceLineNo">292</span><a id="line.292">        TokenTypes.DIV_ASSIGN,</a>
-<span class="sourceLineNo">293</span><a id="line.293">        TokenTypes.MINUS_ASSIGN,</a>
-<span class="sourceLineNo">294</span><a id="line.294">        TokenTypes.MOD_ASSIGN,</a>
-<span class="sourceLineNo">295</span><a id="line.295">        TokenTypes.PLUS_ASSIGN,</a>
-<span class="sourceLineNo">296</span><a id="line.296">        TokenTypes.SL_ASSIGN,</a>
-<span class="sourceLineNo">297</span><a id="line.297">        TokenTypes.SR_ASSIGN,</a>
-<span class="sourceLineNo">298</span><a id="line.298">        TokenTypes.STAR_ASSIGN,</a>
-<span class="sourceLineNo">299</span><a id="line.299">    };</a>
-<span class="sourceLineNo">300</span><a id="line.300"></a>
-<span class="sourceLineNo">301</span><a id="line.301">    /** Token types for conditional operators. */</a>
-<span class="sourceLineNo">302</span><a id="line.302">    private static final int[] CONDITIONAL_OPERATOR = {</a>
-<span class="sourceLineNo">303</span><a id="line.303">        TokenTypes.LOR,</a>
-<span class="sourceLineNo">304</span><a id="line.304">        TokenTypes.LAND,</a>
-<span class="sourceLineNo">305</span><a id="line.305">    };</a>
-<span class="sourceLineNo">306</span><a id="line.306"></a>
-<span class="sourceLineNo">307</span><a id="line.307">    /** Token types for relation operator. */</a>
-<span class="sourceLineNo">308</span><a id="line.308">    private static final int[] RELATIONAL_OPERATOR = {</a>
-<span class="sourceLineNo">309</span><a id="line.309">        TokenTypes.LITERAL_INSTANCEOF,</a>
-<span class="sourceLineNo">310</span><a id="line.310">        TokenTypes.GT,</a>
-<span class="sourceLineNo">311</span><a id="line.311">        TokenTypes.LT,</a>
-<span class="sourceLineNo">312</span><a id="line.312">        TokenTypes.GE,</a>
-<span class="sourceLineNo">313</span><a id="line.313">        TokenTypes.LE,</a>
-<span class="sourceLineNo">314</span><a id="line.314">        TokenTypes.EQUAL,</a>
-<span class="sourceLineNo">315</span><a id="line.315">        TokenTypes.NOT_EQUAL,</a>
-<span class="sourceLineNo">316</span><a id="line.316">    };</a>
-<span class="sourceLineNo">317</span><a id="line.317"></a>
-<span class="sourceLineNo">318</span><a id="line.318">    /** Token types for unary and postfix operators. */</a>
-<span class="sourceLineNo">319</span><a id="line.319">    private static final int[] UNARY_AND_POSTFIX = {</a>
-<span class="sourceLineNo">320</span><a id="line.320">        TokenTypes.UNARY_MINUS,</a>
-<span class="sourceLineNo">321</span><a id="line.321">        TokenTypes.UNARY_PLUS,</a>
-<span class="sourceLineNo">322</span><a id="line.322">        TokenTypes.INC,</a>
-<span class="sourceLineNo">323</span><a id="line.323">        TokenTypes.DEC,</a>
-<span class="sourceLineNo">324</span><a id="line.324">        TokenTypes.LNOT,</a>
-<span class="sourceLineNo">325</span><a id="line.325">        TokenTypes.BNOT,</a>
-<span class="sourceLineNo">326</span><a id="line.326">        TokenTypes.POST_INC,</a>
-<span class="sourceLineNo">327</span><a id="line.327">        TokenTypes.POST_DEC,</a>
-<span class="sourceLineNo">328</span><a id="line.328">    };</a>
-<span class="sourceLineNo">329</span><a id="line.329"></a>
-<span class="sourceLineNo">330</span><a id="line.330">    /** Token types for bitwise binary operator. */</a>
-<span class="sourceLineNo">331</span><a id="line.331">    private static final int[] BITWISE_BINARY_OPERATORS = {</a>
-<span class="sourceLineNo">332</span><a id="line.332">        TokenTypes.BXOR,</a>
-<span class="sourceLineNo">333</span><a id="line.333">        TokenTypes.BOR,</a>
-<span class="sourceLineNo">334</span><a id="line.334">        TokenTypes.BAND,</a>
-<span class="sourceLineNo">335</span><a id="line.335">    };</a>
-<span class="sourceLineNo">336</span><a id="line.336"></a>
-<span class="sourceLineNo">337</span><a id="line.337">    /**</a>
-<span class="sourceLineNo">338</span><a id="line.338">     * Used to test if logging a warning in a parent node may be skipped</a>
-<span class="sourceLineNo">339</span><a id="line.339">     * because a warning was already logged on an immediate child node.</a>
-<span class="sourceLineNo">340</span><a id="line.340">     */</a>
-<span class="sourceLineNo">341</span><a id="line.341">    private DetailAST parentToSkip;</a>
-<span class="sourceLineNo">342</span><a id="line.342">    /** Depth of nested assignments.  Normally this will be 0 or 1. */</a>
-<span class="sourceLineNo">343</span><a id="line.343">    private int assignDepth;</a>
+<span class="sourceLineNo">272</span><a id="line.272">    /**</a>
+<span class="sourceLineNo">273</span><a id="line.273">     * String used to amend TEXT_BLOCK_CONTENT so that it matches STRING_LITERAL.</a>
+<span class="sourceLineNo">274</span><a id="line.274">     */</a>
+<span class="sourceLineNo">275</span><a id="line.275">    private static final String QUOTE = "\"";</a>
+<span class="sourceLineNo">276</span><a id="line.276"></a>
+<span class="sourceLineNo">277</span><a id="line.277">    /** The maximum string length before we chop the string. */</a>
+<span class="sourceLineNo">278</span><a id="line.278">    private static final int MAX_QUOTED_LENGTH = 25;</a>
+<span class="sourceLineNo">279</span><a id="line.279"></a>
+<span class="sourceLineNo">280</span><a id="line.280">    /** Token types for literals. */</a>
+<span class="sourceLineNo">281</span><a id="line.281">    private static final int[] LITERALS = {</a>
+<span class="sourceLineNo">282</span><a id="line.282">        TokenTypes.NUM_DOUBLE,</a>
+<span class="sourceLineNo">283</span><a id="line.283">        TokenTypes.NUM_FLOAT,</a>
+<span class="sourceLineNo">284</span><a id="line.284">        TokenTypes.NUM_INT,</a>
+<span class="sourceLineNo">285</span><a id="line.285">        TokenTypes.NUM_LONG,</a>
+<span class="sourceLineNo">286</span><a id="line.286">        TokenTypes.STRING_LITERAL,</a>
+<span class="sourceLineNo">287</span><a id="line.287">        TokenTypes.LITERAL_NULL,</a>
+<span class="sourceLineNo">288</span><a id="line.288">        TokenTypes.LITERAL_FALSE,</a>
+<span class="sourceLineNo">289</span><a id="line.289">        TokenTypes.LITERAL_TRUE,</a>
+<span class="sourceLineNo">290</span><a id="line.290">        TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,</a>
+<span class="sourceLineNo">291</span><a id="line.291">    };</a>
+<span class="sourceLineNo">292</span><a id="line.292"></a>
+<span class="sourceLineNo">293</span><a id="line.293">    /** Token types for assignment operations. */</a>
+<span class="sourceLineNo">294</span><a id="line.294">    private static final int[] ASSIGNMENTS = {</a>
+<span class="sourceLineNo">295</span><a id="line.295">        TokenTypes.ASSIGN,</a>
+<span class="sourceLineNo">296</span><a id="line.296">        TokenTypes.BAND_ASSIGN,</a>
+<span class="sourceLineNo">297</span><a id="line.297">        TokenTypes.BOR_ASSIGN,</a>
+<span class="sourceLineNo">298</span><a id="line.298">        TokenTypes.BSR_ASSIGN,</a>
+<span class="sourceLineNo">299</span><a id="line.299">        TokenTypes.BXOR_ASSIGN,</a>
+<span class="sourceLineNo">300</span><a id="line.300">        TokenTypes.DIV_ASSIGN,</a>
+<span class="sourceLineNo">301</span><a id="line.301">        TokenTypes.MINUS_ASSIGN,</a>
+<span class="sourceLineNo">302</span><a id="line.302">        TokenTypes.MOD_ASSIGN,</a>
+<span class="sourceLineNo">303</span><a id="line.303">        TokenTypes.PLUS_ASSIGN,</a>
+<span class="sourceLineNo">304</span><a id="line.304">        TokenTypes.SL_ASSIGN,</a>
+<span class="sourceLineNo">305</span><a id="line.305">        TokenTypes.SR_ASSIGN,</a>
+<span class="sourceLineNo">306</span><a id="line.306">        TokenTypes.STAR_ASSIGN,</a>
+<span class="sourceLineNo">307</span><a id="line.307">    };</a>
+<span class="sourceLineNo">308</span><a id="line.308"></a>
+<span class="sourceLineNo">309</span><a id="line.309">    /** Token types for conditional operators. */</a>
+<span class="sourceLineNo">310</span><a id="line.310">    private static final int[] CONDITIONAL_OPERATOR = {</a>
+<span class="sourceLineNo">311</span><a id="line.311">        TokenTypes.LOR,</a>
+<span class="sourceLineNo">312</span><a id="line.312">        TokenTypes.LAND,</a>
+<span class="sourceLineNo">313</span><a id="line.313">    };</a>
+<span class="sourceLineNo">314</span><a id="line.314"></a>
+<span class="sourceLineNo">315</span><a id="line.315">    /** Token types for relation operator. */</a>
+<span class="sourceLineNo">316</span><a id="line.316">    private static final int[] RELATIONAL_OPERATOR = {</a>
+<span class="sourceLineNo">317</span><a id="line.317">        TokenTypes.LITERAL_INSTANCEOF,</a>
+<span class="sourceLineNo">318</span><a id="line.318">        TokenTypes.GT,</a>
+<span class="sourceLineNo">319</span><a id="line.319">        TokenTypes.LT,</a>
+<span class="sourceLineNo">320</span><a id="line.320">        TokenTypes.GE,</a>
+<span class="sourceLineNo">321</span><a id="line.321">        TokenTypes.LE,</a>
+<span class="sourceLineNo">322</span><a id="line.322">        TokenTypes.EQUAL,</a>
+<span class="sourceLineNo">323</span><a id="line.323">        TokenTypes.NOT_EQUAL,</a>
+<span class="sourceLineNo">324</span><a id="line.324">    };</a>
+<span class="sourceLineNo">325</span><a id="line.325"></a>
+<span class="sourceLineNo">326</span><a id="line.326">    /** Token types for unary and postfix operators. */</a>
+<span class="sourceLineNo">327</span><a id="line.327">    private static final int[] UNARY_AND_POSTFIX = {</a>
+<span class="sourceLineNo">328</span><a id="line.328">        TokenTypes.UNARY_MINUS,</a>
+<span class="sourceLineNo">329</span><a id="line.329">        TokenTypes.UNARY_PLUS,</a>
+<span class="sourceLineNo">330</span><a id="line.330">        TokenTypes.INC,</a>
+<span class="sourceLineNo">331</span><a id="line.331">        TokenTypes.DEC,</a>
+<span class="sourceLineNo">332</span><a id="line.332">        TokenTypes.LNOT,</a>
+<span class="sourceLineNo">333</span><a id="line.333">        TokenTypes.BNOT,</a>
+<span class="sourceLineNo">334</span><a id="line.334">        TokenTypes.POST_INC,</a>
+<span class="sourceLineNo">335</span><a id="line.335">        TokenTypes.POST_DEC,</a>
+<span class="sourceLineNo">336</span><a id="line.336">    };</a>
+<span class="sourceLineNo">337</span><a id="line.337"></a>
+<span class="sourceLineNo">338</span><a id="line.338">    /** Token types for bitwise binary operator. */</a>
+<span class="sourceLineNo">339</span><a id="line.339">    private static final int[] BITWISE_BINARY_OPERATORS = {</a>
+<span class="sourceLineNo">340</span><a id="line.340">        TokenTypes.BXOR,</a>
+<span class="sourceLineNo">341</span><a id="line.341">        TokenTypes.BOR,</a>
+<span class="sourceLineNo">342</span><a id="line.342">        TokenTypes.BAND,</a>
+<span class="sourceLineNo">343</span><a id="line.343">    };</a>
 <span class="sourceLineNo">344</span><a id="line.344"></a>
-<span class="sourceLineNo">345</span><a id="line.345">    @Override</a>
-<span class="sourceLineNo">346</span><a id="line.346">    public int[] getDefaultTokens() {</a>
-<span class="sourceLineNo">347</span><a id="line.347">        return new int[] {</a>
-<span class="sourceLineNo">348</span><a id="line.348">            TokenTypes.EXPR,</a>
-<span class="sourceLineNo">349</span><a id="line.349">            TokenTypes.IDENT,</a>
-<span class="sourceLineNo">350</span><a id="line.350">            TokenTypes.NUM_DOUBLE,</a>
-<span class="sourceLineNo">351</span><a id="line.351">            TokenTypes.NUM_FLOAT,</a>
-<span class="sourceLineNo">352</span><a id="line.352">            TokenTypes.NUM_INT,</a>
-<span class="sourceLineNo">353</span><a id="line.353">            TokenTypes.NUM_LONG,</a>
-<span class="sourceLineNo">354</span><a id="line.354">            TokenTypes.STRING_LITERAL,</a>
-<span class="sourceLineNo">355</span><a id="line.355">            TokenTypes.LITERAL_NULL,</a>
-<span class="sourceLineNo">356</span><a id="line.356">            TokenTypes.LITERAL_FALSE,</a>
-<span class="sourceLineNo">357</span><a id="line.357">            TokenTypes.LITERAL_TRUE,</a>
-<span class="sourceLineNo">358</span><a id="line.358">            TokenTypes.ASSIGN,</a>
-<span class="sourceLineNo">359</span><a id="line.359">            TokenTypes.BAND_ASSIGN,</a>
-<span class="sourceLineNo">360</span><a id="line.360">            TokenTypes.BOR_ASSIGN,</a>
-<span class="sourceLineNo">361</span><a id="line.361">            TokenTypes.BSR_ASSIGN,</a>
-<span class="sourceLineNo">362</span><a id="line.362">            TokenTypes.BXOR_ASSIGN,</a>
-<span class="sourceLineNo">363</span><a id="line.363">            TokenTypes.DIV_ASSIGN,</a>
-<span class="sourceLineNo">364</span><a id="line.364">            TokenTypes.MINUS_ASSIGN,</a>
-<span class="sourceLineNo">365</span><a id="line.365">            TokenTypes.MOD_ASSIGN,</a>
-<span class="sourceLineNo">366</span><a id="line.366">            TokenTypes.PLUS_ASSIGN,</a>
-<span class="sourceLineNo">367</span><a id="line.367">            TokenTypes.SL_ASSIGN,</a>
-<span class="sourceLineNo">368</span><a id="line.368">            TokenTypes.SR_ASSIGN,</a>
-<span class="sourceLineNo">369</span><a id="line.369">            TokenTypes.STAR_ASSIGN,</a>
-<span class="sourceLineNo">370</span><a id="line.370">            TokenTypes.LAMBDA,</a>
-<span class="sourceLineNo">371</span><a id="line.371">            TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,</a>
-<span class="sourceLineNo">372</span><a id="line.372">            TokenTypes.LAND,</a>
-<span class="sourceLineNo">373</span><a id="line.373">            TokenTypes.LOR,</a>
-<span class="sourceLineNo">374</span><a id="line.374">            TokenTypes.LITERAL_INSTANCEOF,</a>
-<span class="sourceLineNo">375</span><a id="line.375">            TokenTypes.GT,</a>
-<span class="sourceLineNo">376</span><a id="line.376">            TokenTypes.LT,</a>
-<span class="sourceLineNo">377</span><a id="line.377">            TokenTypes.GE,</a>
-<span class="sourceLineNo">378</span><a id="line.378">            TokenTypes.LE,</a>
-<span class="sourceLineNo">379</span><a id="line.379">            TokenTypes.EQUAL,</a>
-<span class="sourceLineNo">380</span><a id="line.380">            TokenTypes.NOT_EQUAL,</a>
-<span class="sourceLineNo">381</span><a id="line.381">            TokenTypes.UNARY_MINUS,</a>
-<span class="sourceLineNo">382</span><a id="line.382">            TokenTypes.UNARY_PLUS,</a>
-<span class="sourceLineNo">383</span><a id="line.383">            TokenTypes.INC,</a>
-<span class="sourceLineNo">384</span><a id="line.384">            TokenTypes.DEC,</a>
-<span class="sourceLineNo">385</span><a id="line.385">            TokenTypes.LNOT,</a>
-<span class="sourceLineNo">386</span><a id="line.386">            TokenTypes.BNOT,</a>
-<span class="sourceLineNo">387</span><a id="line.387">            TokenTypes.POST_INC,</a>
-<span class="sourceLineNo">388</span><a id="line.388">            TokenTypes.POST_DEC,</a>
-<span class="sourceLineNo">389</span><a id="line.389">        };</a>
-<span class="sourceLineNo">390</span><a id="line.390">    }</a>
-<span class="sourceLineNo">391</span><a id="line.391"></a>
-<span class="sourceLineNo">392</span><a id="line.392">    @Override</a>
-<span class="sourceLineNo">393</span><a id="line.393">    public int[] getAcceptableTokens() {</a>
-<span class="sourceLineNo">394</span><a id="line.394">        return new int[] {</a>
-<span class="sourceLineNo">395</span><a id="line.395">            TokenTypes.EXPR,</a>
-<span class="sourceLineNo">396</span><a id="line.396">            TokenTypes.IDENT,</a>
-<span class="sourceLineNo">397</span><a id="line.397">            TokenTypes.NUM_DOUBLE,</a>
-<span class="sourceLineNo">398</span><a id="line.398">            TokenTypes.NUM_FLOAT,</a>
-<span class="sourceLineNo">399</span><a id="line.399">            TokenTypes.NUM_INT,</a>
-<span class="sourceLineNo">400</span><a id="line.400">            TokenTypes.NUM_LONG,</a>
-<span class="sourceLineNo">401</span><a id="line.401">            TokenTypes.STRING_LITERAL,</a>
-<span class="sourceLineNo">402</span><a id="line.402">            TokenTypes.LITERAL_NULL,</a>
-<span class="sourceLineNo">403</span><a id="line.403">            TokenTypes.LITERAL_FALSE,</a>
-<span class="sourceLineNo">404</span><a id="line.404">            TokenTypes.LITERAL_TRUE,</a>
-<span class="sourceLineNo">405</span><a id="line.405">            TokenTypes.ASSIGN,</a>
-<span class="sourceLineNo">406</span><a id="line.406">            TokenTypes.BAND_ASSIGN,</a>
-<span class="sourceLineNo">407</span><a id="line.407">            TokenTypes.BOR_ASSIGN,</a>
-<span class="sourceLineNo">408</span><a id="line.408">            TokenTypes.BSR_ASSIGN,</a>
-<span class="sourceLineNo">409</span><a id="line.409">            TokenTypes.BXOR_ASSIGN,</a>
-<span class="sourceLineNo">410</span><a id="line.410">            TokenTypes.DIV_ASSIGN,</a>
-<span class="sourceLineNo">411</span><a id="line.411">            TokenTypes.MINUS_ASSIGN,</a>
-<span class="sourceLineNo">412</span><a id="line.412">            TokenTypes.MOD_ASSIGN,</a>
-<span class="sourceLineNo">413</span><a id="line.413">            TokenTypes.PLUS_ASSIGN,</a>
-<span class="sourceLineNo">414</span><a id="line.414">            TokenTypes.SL_ASSIGN,</a>
-<span class="sourceLineNo">415</span><a id="line.415">            TokenTypes.SR_ASSIGN,</a>
-<span class="sourceLineNo">416</span><a id="line.416">            TokenTypes.STAR_ASSIGN,</a>
-<span class="sourceLineNo">417</span><a id="line.417">            TokenTypes.LAMBDA,</a>
-<span class="sourceLineNo">418</span><a id="line.418">            TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,</a>
-<span class="sourceLineNo">419</span><a id="line.419">            TokenTypes.LAND,</a>
-<span class="sourceLineNo">420</span><a id="line.420">            TokenTypes.LOR,</a>
-<span class="sourceLineNo">421</span><a id="line.421">            TokenTypes.LITERAL_INSTANCEOF,</a>
-<span class="sourceLineNo">422</span><a id="line.422">            TokenTypes.GT,</a>
-<span class="sourceLineNo">423</span><a id="line.423">            TokenTypes.LT,</a>
-<span class="sourceLineNo">424</span><a id="line.424">            TokenTypes.GE,</a>
-<span class="sourceLineNo">425</span><a id="line.425">            TokenTypes.LE,</a>
-<span class="sourceLineNo">426</span><a id="line.426">            TokenTypes.EQUAL,</a>
-<span class="sourceLineNo">427</span><a id="line.427">            TokenTypes.NOT_EQUAL,</a>
-<span class="sourceLineNo">428</span><a id="line.428">            TokenTypes.UNARY_MINUS,</a>
-<span class="sourceLineNo">429</span><a id="line.429">            TokenTypes.UNARY_PLUS,</a>
-<span class="sourceLineNo">430</span><a id="line.430">            TokenTypes.INC,</a>
-<span class="sourceLineNo">431</span><a id="line.431">            TokenTypes.DEC,</a>
-<span class="sourceLineNo">432</span><a id="line.432">            TokenTypes.LNOT,</a>
-<span class="sourceLineNo">433</span><a id="line.433">            TokenTypes.BNOT,</a>
-<span class="sourceLineNo">434</span><a id="line.434">            TokenTypes.POST_INC,</a>
-<span class="sourceLineNo">435</span><a id="line.435">            TokenTypes.POST_DEC,</a>
-<span class="sourceLineNo">436</span><a id="line.436">            TokenTypes.BXOR,</a>
-<span class="sourceLineNo">437</span><a id="line.437">            TokenTypes.BOR,</a>
-<span class="sourceLineNo">438</span><a id="line.438">            TokenTypes.BAND,</a>
-<span class="sourceLineNo">439</span><a id="line.439">        };</a>
-<span class="sourceLineNo">440</span><a id="line.440">    }</a>
-<span class="sourceLineNo">441</span><a id="line.441"></a>
-<span class="sourceLineNo">442</span><a id="line.442">    @Override</a>
-<span class="sourceLineNo">443</span><a id="line.443">    public int[] getRequiredTokens() {</a>
-<span class="sourceLineNo">444</span><a id="line.444">        // Check can work with any of acceptable tokens</a>
-<span class="sourceLineNo">445</span><a id="line.445">        return CommonUtil.EMPTY_INT_ARRAY;</a>
-<span class="sourceLineNo">446</span><a id="line.446">    }</a>
-<span class="sourceLineNo">447</span><a id="line.447"></a>
-<span class="sourceLineNo">448</span><a id="line.448">    // -@cs[CyclomaticComplexity] All logs should be in visit token.</a>
-<span class="sourceLineNo">449</span><a id="line.449">    @Override</a>
-<span class="sourceLineNo">450</span><a id="line.450">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">451</span><a id="line.451">        final DetailAST parent = ast.getParent();</a>
-<span class="sourceLineNo">452</span><a id="line.452"></a>
-<span class="sourceLineNo">453</span><a id="line.453">        if (isLambdaSingleParameterSurrounded(ast)) {</a>
-<span class="sourceLineNo">454</span><a id="line.454">            log(ast, MSG_LAMBDA);</a>
-<span class="sourceLineNo">455</span><a id="line.455">        }</a>
-<span class="sourceLineNo">456</span><a id="line.456">        else if (parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</a>
-<span class="sourceLineNo">457</span><a id="line.457">            final int type = ast.getType();</a>
-<span class="sourceLineNo">458</span><a id="line.458">            final boolean surrounded = isSurrounded(ast);</a>
-<span class="sourceLineNo">459</span><a id="line.459">            // An identifier surrounded by parentheses.</a>
-<span class="sourceLineNo">460</span><a id="line.460">            if (surrounded &amp;&amp; type == TokenTypes.IDENT) {</a>
-<span class="sourceLineNo">461</span><a id="line.461">                parentToSkip = ast.getParent();</a>
-<span class="sourceLineNo">462</span><a id="line.462">                log(ast, MSG_IDENT, ast.getText());</a>
-<span class="sourceLineNo">463</span><a id="line.463">            }</a>
-<span class="sourceLineNo">464</span><a id="line.464">            // A literal (numeric or string) surrounded by parentheses.</a>
-<span class="sourceLineNo">465</span><a id="line.465">            else if (surrounded &amp;&amp; TokenUtil.isOfType(type, LITERALS)) {</a>
-<span class="sourceLineNo">466</span><a id="line.466">                parentToSkip = ast.getParent();</a>
-<span class="sourceLineNo">467</span><a id="line.467">                if (type == TokenTypes.STRING_LITERAL) {</a>
-<span class="sourceLineNo">468</span><a id="line.468">                    log(ast, MSG_STRING,</a>
-<span class="sourceLineNo">469</span><a id="line.469">                        chopString(ast.getText()));</a>
-<span class="sourceLineNo">470</span><a id="line.470">                }</a>
-<span class="sourceLineNo">471</span><a id="line.471">                else if (type == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN) {</a>
-<span class="sourceLineNo">472</span><a id="line.472">                    // Strip newline control characters to keep message as single-line, add</a>
-<span class="sourceLineNo">473</span><a id="line.473">                    // quotes to make string consistent with STRING_LITERAL</a>
-<span class="sourceLineNo">474</span><a id="line.474">                    final String logString = QUOTE</a>
-<span class="sourceLineNo">475</span><a id="line.475">                        + NEWLINE.matcher(</a>
-<span class="sourceLineNo">476</span><a id="line.476">                            ast.getFirstChild().getText()).replaceAll("\\\\n")</a>
-<span class="sourceLineNo">477</span><a id="line.477">                        + QUOTE;</a>
-<span class="sourceLineNo">478</span><a id="line.478">                    log(ast, MSG_STRING, chopString(logString));</a>
-<span class="sourceLineNo">479</span><a id="line.479">                }</a>
-<span class="sourceLineNo">480</span><a id="line.480">                else {</a>
-<span class="sourceLineNo">481</span><a id="line.481">                    log(ast, MSG_LITERAL, ast.getText());</a>
-<span class="sourceLineNo">482</span><a id="line.482">                }</a>
-<span class="sourceLineNo">483</span><a id="line.483">            }</a>
-<span class="sourceLineNo">484</span><a id="line.484">            // The rhs of an assignment surrounded by parentheses.</a>
-<span class="sourceLineNo">485</span><a id="line.485">            else if (TokenUtil.isOfType(type, ASSIGNMENTS)) {</a>
-<span class="sourceLineNo">486</span><a id="line.486">                assignDepth++;</a>
-<span class="sourceLineNo">487</span><a id="line.487">                final DetailAST last = ast.getLastChild();</a>
-<span class="sourceLineNo">488</span><a id="line.488">                if (last.getType() == TokenTypes.RPAREN) {</a>
-<span class="sourceLineNo">489</span><a id="line.489">                    log(ast, MSG_ASSIGN);</a>
-<span class="sourceLineNo">490</span><a id="line.490">                }</a>
-<span class="sourceLineNo">491</span><a id="line.491">            }</a>
-<span class="sourceLineNo">492</span><a id="line.492">        }</a>
-<span class="sourceLineNo">493</span><a id="line.493">    }</a>
-<span class="sourceLineNo">494</span><a id="line.494"></a>
-<span class="sourceLineNo">495</span><a id="line.495">    @Override</a>
-<span class="sourceLineNo">496</span><a id="line.496">    public void leaveToken(DetailAST ast) {</a>
-<span class="sourceLineNo">497</span><a id="line.497">        final int type = ast.getType();</a>
-<span class="sourceLineNo">498</span><a id="line.498">        final DetailAST parent = ast.getParent();</a>
-<span class="sourceLineNo">499</span><a id="line.499"></a>
-<span class="sourceLineNo">500</span><a id="line.500">        // shouldn't process assign in annotation pairs</a>
-<span class="sourceLineNo">501</span><a id="line.501">        if (type != TokenTypes.ASSIGN</a>
-<span class="sourceLineNo">502</span><a id="line.502">            || parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</a>
-<span class="sourceLineNo">503</span><a id="line.503">            if (type == TokenTypes.EXPR) {</a>
-<span class="sourceLineNo">504</span><a id="line.504">                checkExpression(ast);</a>
-<span class="sourceLineNo">505</span><a id="line.505">            }</a>
-<span class="sourceLineNo">506</span><a id="line.506">            else if (TokenUtil.isOfType(type, ASSIGNMENTS)) {</a>
-<span class="sourceLineNo">507</span><a id="line.507">                assignDepth--;</a>
-<span class="sourceLineNo">508</span><a id="line.508">            }</a>
-<span class="sourceLineNo">509</span><a id="line.509">            else if (isSurrounded(ast) &amp;&amp; unnecessaryParenAroundOperators(ast)) {</a>
-<span class="sourceLineNo">510</span><a id="line.510">                log(ast.getPreviousSibling(), MSG_EXPR);</a>
-<span class="sourceLineNo">511</span><a id="line.511">            }</a>
-<span class="sourceLineNo">512</span><a id="line.512">        }</a>
-<span class="sourceLineNo">513</span><a id="line.513">    }</a>
-<span class="sourceLineNo">514</span><a id="line.514"></a>
-<span class="sourceLineNo">515</span><a id="line.515">    /**</a>
-<span class="sourceLineNo">516</span><a id="line.516">     * Tests if the given {@code DetailAST} is surrounded by parentheses.</a>
-<span class="sourceLineNo">517</span><a id="line.517">     *</a>
-<span class="sourceLineNo">518</span><a id="line.518">     * @param ast the {@code DetailAST} to check if it is surrounded by</a>
-<span class="sourceLineNo">519</span><a id="line.519">     *        parentheses.</a>
-<span class="sourceLineNo">520</span><a id="line.520">     * @return {@code true} if {@code ast} is surrounded by</a>
-<span class="sourceLineNo">521</span><a id="line.521">     *         parentheses.</a>
-<span class="sourceLineNo">522</span><a id="line.522">     */</a>
-<span class="sourceLineNo">523</span><a id="line.523">    private static boolean isSurrounded(DetailAST ast) {</a>
-<span class="sourceLineNo">524</span><a id="line.524">        final DetailAST prev = ast.getPreviousSibling();</a>
-<span class="sourceLineNo">525</span><a id="line.525">        final DetailAST parent = ast.getParent();</a>
-<span class="sourceLineNo">526</span><a id="line.526">        final boolean isPreviousSiblingLeftParenthesis = prev != null</a>
-<span class="sourceLineNo">527</span><a id="line.527">                &amp;&amp; prev.getType() == TokenTypes.LPAREN;</a>
-<span class="sourceLineNo">528</span><a id="line.528">        final boolean isMethodCallWithUnnecessaryParenthesis =</a>
-<span class="sourceLineNo">529</span><a id="line.529">                parent.getType() == TokenTypes.METHOD_CALL</a>
-<span class="sourceLineNo">530</span><a id="line.530">                &amp;&amp; parent.getPreviousSibling() != null</a>
-<span class="sourceLineNo">531</span><a id="line.531">                &amp;&amp; parent.getPreviousSibling().getType() == TokenTypes.LPAREN;</a>
-<span class="sourceLineNo">532</span><a id="line.532">        return isPreviousSiblingLeftParenthesis || isMethodCallWithUnnecessaryParenthesis;</a>
-<span class="sourceLineNo">533</span><a id="line.533">    }</a>
-<span class="sourceLineNo">534</span><a id="line.534"></a>
-<span class="sourceLineNo">535</span><a id="line.535">    /**</a>
-<span class="sourceLineNo">536</span><a id="line.536">     * Tests if the given expression node is surrounded by parentheses.</a>
-<span class="sourceLineNo">537</span><a id="line.537">     *</a>
-<span class="sourceLineNo">538</span><a id="line.538">     * @param ast a {@code DetailAST} whose type is</a>
-<span class="sourceLineNo">539</span><a id="line.539">     *        {@code TokenTypes.EXPR}.</a>
-<span class="sourceLineNo">540</span><a id="line.540">     * @return {@code true} if the expression is surrounded by</a>
-<span class="sourceLineNo">541</span><a id="line.541">     *         parentheses.</a>
-<span class="sourceLineNo">542</span><a id="line.542">     */</a>
-<span class="sourceLineNo">543</span><a id="line.543">    private static boolean isExprSurrounded(DetailAST ast) {</a>
-<span class="sourceLineNo">544</span><a id="line.544">        return ast.getFirstChild().getType() == TokenTypes.LPAREN;</a>
-<span class="sourceLineNo">545</span><a id="line.545">    }</a>
-<span class="sourceLineNo">546</span><a id="line.546"></a>
-<span class="sourceLineNo">547</span><a id="line.547">    /**</a>
-<span class="sourceLineNo">548</span><a id="line.548">     * Checks whether an expression is surrounded by parentheses.</a>
-<span class="sourceLineNo">549</span><a id="line.549">     *</a>
-<span class="sourceLineNo">550</span><a id="line.550">     * @param ast the {@code DetailAST} to check if it is surrounded by</a>
-<span class="sourceLineNo">551</span><a id="line.551">     *        parentheses.</a>
-<span class="sourceLineNo">552</span><a id="line.552">     */</a>
-<span class="sourceLineNo">553</span><a id="line.553">    private void checkExpression(DetailAST ast) {</a>
-<span class="sourceLineNo">554</span><a id="line.554">        // If 'parentToSkip' == 'ast', then we've already logged a</a>
-<span class="sourceLineNo">555</span><a id="line.555">        // warning about an immediate child node in visitToken, so we don't</a>
-<span class="sourceLineNo">556</span><a id="line.556">        // need to log another one here.</a>
-<span class="sourceLineNo">557</span><a id="line.557">        if (parentToSkip != ast &amp;&amp; isExprSurrounded(ast)) {</a>
-<span class="sourceLineNo">558</span><a id="line.558">            if (ast.getParent().getType() == TokenTypes.LITERAL_RETURN) {</a>
-<span class="sourceLineNo">559</span><a id="line.559">                log(ast, MSG_RETURN);</a>
-<span class="sourceLineNo">560</span><a id="line.560">            }</a>
-<span class="sourceLineNo">561</span><a id="line.561">            else if (assignDepth &gt;= 1) {</a>
-<span class="sourceLineNo">562</span><a id="line.562">                log(ast, MSG_ASSIGN);</a>
-<span class="sourceLineNo">563</span><a id="line.563">            }</a>
-<span class="sourceLineNo">564</span><a id="line.564">            else {</a>
-<span class="sourceLineNo">565</span><a id="line.565">                log(ast, MSG_EXPR);</a>
-<span class="sourceLineNo">566</span><a id="line.566">            }</a>
-<span class="sourceLineNo">567</span><a id="line.567">        }</a>
-<span class="sourceLineNo">568</span><a id="line.568">    }</a>
-<span class="sourceLineNo">569</span><a id="line.569"></a>
-<span class="sourceLineNo">570</span><a id="line.570">    /**</a>
-<span class="sourceLineNo">571</span><a id="line.571">     * Checks if conditional, relational, bitwise binary operator, unary and postfix operators</a>
-<span class="sourceLineNo">572</span><a id="line.572">     * in expressions are surrounded by unnecessary parentheses.</a>
-<span class="sourceLineNo">573</span><a id="line.573">     *</a>
-<span class="sourceLineNo">574</span><a id="line.574">     * @param ast the {@code DetailAST} to check if it is surrounded by</a>
-<span class="sourceLineNo">575</span><a id="line.575">     *        unnecessary parentheses.</a>
-<span class="sourceLineNo">576</span><a id="line.576">     * @return {@code true} if the expression is surrounded by</a>
-<span class="sourceLineNo">577</span><a id="line.577">     *         unnecessary parentheses.</a>
-<span class="sourceLineNo">578</span><a id="line.578">     */</a>
-<span class="sourceLineNo">579</span><a id="line.579">    private static boolean unnecessaryParenAroundOperators(DetailAST ast) {</a>
-<span class="sourceLineNo">580</span><a id="line.580">        final int type = ast.getType();</a>
-<span class="sourceLineNo">581</span><a id="line.581">        final boolean isConditionalOrRelational = TokenUtil.isOfType(type, CONDITIONAL_OPERATOR)</a>
-<span class="sourceLineNo">582</span><a id="line.582">                        || TokenUtil.isOfType(type, RELATIONAL_OPERATOR);</a>
-<span class="sourceLineNo">583</span><a id="line.583">        final boolean isBitwise = TokenUtil.isOfType(type, BITWISE_BINARY_OPERATORS);</a>
-<span class="sourceLineNo">584</span><a id="line.584">        final boolean hasUnnecessaryParentheses;</a>
-<span class="sourceLineNo">585</span><a id="line.585">        if (isConditionalOrRelational) {</a>
-<span class="sourceLineNo">586</span><a id="line.586">            hasUnnecessaryParentheses = checkConditionalOrRelationalOperator(ast);</a>
-<span class="sourceLineNo">587</span><a id="line.587">        }</a>
-<span class="sourceLineNo">588</span><a id="line.588">        else if (isBitwise) {</a>
-<span class="sourceLineNo">589</span><a id="line.589">            hasUnnecessaryParentheses = checkBitwiseBinaryOperator(ast);</a>
-<span class="sourceLineNo">590</span><a id="line.590">        }</a>
-<span class="sourceLineNo">591</span><a id="line.591">        else {</a>
-<span class="sourceLineNo">592</span><a id="line.592">            hasUnnecessaryParentheses = TokenUtil.isOfType(type, UNARY_AND_POSTFIX)</a>
-<span class="sourceLineNo">593</span><a id="line.593">                    &amp;&amp; isBitWiseBinaryOrConditionalOrRelationalOperator(ast.getParent().getType());</a>
-<span class="sourceLineNo">594</span><a id="line.594">        }</a>
-<span class="sourceLineNo">595</span><a id="line.595">        return hasUnnecessaryParentheses;</a>
-<span class="sourceLineNo">596</span><a id="line.596">    }</a>
-<span class="sourceLineNo">597</span><a id="line.597"></a>
-<span class="sourceLineNo">598</span><a id="line.598">    /**</a>
-<span class="sourceLineNo">599</span><a id="line.599">     * Check if conditional or relational operator has unnecessary parentheses.</a>
-<span class="sourceLineNo">600</span><a id="line.600">     *</a>
-<span class="sourceLineNo">601</span><a id="line.601">     * @param ast to check if surrounded by unnecessary parentheses</a>
-<span class="sourceLineNo">602</span><a id="line.602">     * @return true if unnecessary parenthesis</a>
-<span class="sourceLineNo">603</span><a id="line.603">     */</a>
-<span class="sourceLineNo">604</span><a id="line.604">    private static boolean checkConditionalOrRelationalOperator(DetailAST ast) {</a>
-<span class="sourceLineNo">605</span><a id="line.605">        final int type = ast.getType();</a>
-<span class="sourceLineNo">606</span><a id="line.606">        final int parentType = ast.getParent().getType();</a>
-<span class="sourceLineNo">607</span><a id="line.607">        final boolean isParentEqualityOperator =</a>
-<span class="sourceLineNo">608</span><a id="line.608">                TokenUtil.isOfType(parentType, TokenTypes.EQUAL, TokenTypes.NOT_EQUAL);</a>
-<span class="sourceLineNo">609</span><a id="line.609">        final boolean result;</a>
-<span class="sourceLineNo">610</span><a id="line.610">        if (type == TokenTypes.LOR) {</a>
-<span class="sourceLineNo">611</span><a id="line.611">            result = !TokenUtil.isOfType(parentType, TokenTypes.LAND)</a>
-<span class="sourceLineNo">612</span><a id="line.612">                    &amp;&amp; !TokenUtil.isOfType(parentType, BITWISE_BINARY_OPERATORS);</a>
-<span class="sourceLineNo">613</span><a id="line.613">        }</a>
-<span class="sourceLineNo">614</span><a id="line.614">        else if (type == TokenTypes.LAND) {</a>
-<span class="sourceLineNo">615</span><a id="line.615">            result = !TokenUtil.isOfType(parentType, BITWISE_BINARY_OPERATORS);</a>
-<span class="sourceLineNo">616</span><a id="line.616">        }</a>
-<span class="sourceLineNo">617</span><a id="line.617">        else {</a>
-<span class="sourceLineNo">618</span><a id="line.618">            result = true;</a>
-<span class="sourceLineNo">619</span><a id="line.619">        }</a>
-<span class="sourceLineNo">620</span><a id="line.620">        return result &amp;&amp; !isParentEqualityOperator</a>
-<span class="sourceLineNo">621</span><a id="line.621">                &amp;&amp; isBitWiseBinaryOrConditionalOrRelationalOperator(parentType);</a>
-<span class="sourceLineNo">622</span><a id="line.622">    }</a>
-<span class="sourceLineNo">623</span><a id="line.623"></a>
-<span class="sourceLineNo">624</span><a id="line.624">    /**</a>
-<span class="sourceLineNo">625</span><a id="line.625">     * Check if bitwise binary operator has unnecessary parentheses.</a>
-<span class="sourceLineNo">626</span><a id="line.626">     *</a>
-<span class="sourceLineNo">627</span><a id="line.627">     * @param ast to check if surrounded by unnecessary parentheses</a>
-<span class="sourceLineNo">628</span><a id="line.628">     * @return true if unnecessary parenthesis</a>
-<span class="sourceLineNo">629</span><a id="line.629">     */</a>
-<span class="sourceLineNo">630</span><a id="line.630">    private static boolean checkBitwiseBinaryOperator(DetailAST ast) {</a>
-<span class="sourceLineNo">631</span><a id="line.631">        final int type = ast.getType();</a>
-<span class="sourceLineNo">632</span><a id="line.632">        final int parentType = ast.getParent().getType();</a>
-<span class="sourceLineNo">633</span><a id="line.633">        final boolean result;</a>
-<span class="sourceLineNo">634</span><a id="line.634">        if (type == TokenTypes.BOR) {</a>
-<span class="sourceLineNo">635</span><a id="line.635">            result = !TokenUtil.isOfType(parentType, TokenTypes.BAND, TokenTypes.BXOR)</a>
-<span class="sourceLineNo">636</span><a id="line.636">                    &amp;&amp; !TokenUtil.isOfType(parentType, RELATIONAL_OPERATOR);</a>
-<span class="sourceLineNo">637</span><a id="line.637">        }</a>
-<span class="sourceLineNo">638</span><a id="line.638">        else if (type == TokenTypes.BXOR) {</a>
-<span class="sourceLineNo">639</span><a id="line.639">            result = !TokenUtil.isOfType(parentType, TokenTypes.BAND)</a>
-<span class="sourceLineNo">640</span><a id="line.640">                    &amp;&amp; !TokenUtil.isOfType(parentType, RELATIONAL_OPERATOR);</a>
-<span class="sourceLineNo">641</span><a id="line.641">        }</a>
-<span class="sourceLineNo">642</span><a id="line.642">        // we deal with bitwise AND here.</a>
-<span class="sourceLineNo">643</span><a id="line.643">        else {</a>
-<span class="sourceLineNo">644</span><a id="line.644">            result = !TokenUtil.isOfType(parentType, RELATIONAL_OPERATOR);</a>
-<span class="sourceLineNo">645</span><a id="line.645">        }</a>
-<span class="sourceLineNo">646</span><a id="line.646">        return result &amp;&amp; isBitWiseBinaryOrConditionalOrRelationalOperator(parentType);</a>
-<span class="sourceLineNo">647</span><a id="line.647">    }</a>
-<span class="sourceLineNo">648</span><a id="line.648"></a>
-<span class="sourceLineNo">649</span><a id="line.649">    /**</a>
-<span class="sourceLineNo">650</span><a id="line.650">     * Check if token type is bitwise binary or conditional or relational operator.</a>
-<span class="sourceLineNo">651</span><a id="line.651">     *</a>
-<span class="sourceLineNo">652</span><a id="line.652">     * @param type Token type to check</a>
-<span class="sourceLineNo">653</span><a id="line.653">     * @return true if it is bitwise binary or conditional operator</a>
-<span class="sourceLineNo">654</span><a id="line.654">     */</a>
-<span class="sourceLineNo">655</span><a id="line.655">    private static boolean isBitWiseBinaryOrConditionalOrRelationalOperator(int type) {</a>
-<span class="sourceLineNo">656</span><a id="line.656">        return TokenUtil.isOfType(type, CONDITIONAL_OPERATOR)</a>
-<span class="sourceLineNo">657</span><a id="line.657">                || TokenUtil.isOfType(type, RELATIONAL_OPERATOR)</a>
-<span class="sourceLineNo">658</span><a id="line.658">                || TokenUtil.isOfType(type, BITWISE_BINARY_OPERATORS);</a>
-<span class="sourceLineNo">659</span><a id="line.659">    }</a>
-<span class="sourceLineNo">660</span><a id="line.660"></a>
-<span class="sourceLineNo">661</span><a id="line.661">    /**</a>
-<span class="sourceLineNo">662</span><a id="line.662">     * Tests if the given node has a single parameter, no defined type, and is surrounded</a>
-<span class="sourceLineNo">663</span><a id="line.663">     * by parentheses. This condition can only be true for lambdas.</a>
+<span class="sourceLineNo">345</span><a id="line.345">    /**</a>
+<span class="sourceLineNo">346</span><a id="line.346">     * Used to test if logging a warning in a parent node may be skipped</a>
+<span class="sourceLineNo">347</span><a id="line.347">     * because a warning was already logged on an immediate child node.</a>
+<span class="sourceLineNo">348</span><a id="line.348">     */</a>
+<span class="sourceLineNo">349</span><a id="line.349">    private DetailAST parentToSkip;</a>
+<span class="sourceLineNo">350</span><a id="line.350">    /** Depth of nested assignments.  Normally this will be 0 or 1. */</a>
+<span class="sourceLineNo">351</span><a id="line.351">    private int assignDepth;</a>
+<span class="sourceLineNo">352</span><a id="line.352"></a>
+<span class="sourceLineNo">353</span><a id="line.353">    @Override</a>
+<span class="sourceLineNo">354</span><a id="line.354">    public int[] getDefaultTokens() {</a>
+<span class="sourceLineNo">355</span><a id="line.355">        return new int[] {</a>
+<span class="sourceLineNo">356</span><a id="line.356">            TokenTypes.EXPR,</a>
+<span class="sourceLineNo">357</span><a id="line.357">            TokenTypes.IDENT,</a>
+<span class="sourceLineNo">358</span><a id="line.358">            TokenTypes.NUM_DOUBLE,</a>
+<span class="sourceLineNo">359</span><a id="line.359">            TokenTypes.NUM_FLOAT,</a>
+<span class="sourceLineNo">360</span><a id="line.360">            TokenTypes.NUM_INT,</a>
+<span class="sourceLineNo">361</span><a id="line.361">            TokenTypes.NUM_LONG,</a>
+<span class="sourceLineNo">362</span><a id="line.362">            TokenTypes.STRING_LITERAL,</a>
+<span class="sourceLineNo">363</span><a id="line.363">            TokenTypes.LITERAL_NULL,</a>
+<span class="sourceLineNo">364</span><a id="line.364">            TokenTypes.LITERAL_FALSE,</a>
+<span class="sourceLineNo">365</span><a id="line.365">            TokenTypes.LITERAL_TRUE,</a>
+<span class="sourceLineNo">366</span><a id="line.366">            TokenTypes.ASSIGN,</a>
+<span class="sourceLineNo">367</span><a id="line.367">            TokenTypes.BAND_ASSIGN,</a>
+<span class="sourceLineNo">368</span><a id="line.368">            TokenTypes.BOR_ASSIGN,</a>
+<span class="sourceLineNo">369</span><a id="line.369">            TokenTypes.BSR_ASSIGN,</a>
+<span class="sourceLineNo">370</span><a id="line.370">            TokenTypes.BXOR_ASSIGN,</a>
+<span class="sourceLineNo">371</span><a id="line.371">            TokenTypes.DIV_ASSIGN,</a>
+<span class="sourceLineNo">372</span><a id="line.372">            TokenTypes.MINUS_ASSIGN,</a>
+<span class="sourceLineNo">373</span><a id="line.373">            TokenTypes.MOD_ASSIGN,</a>
+<span class="sourceLineNo">374</span><a id="line.374">            TokenTypes.PLUS_ASSIGN,</a>
+<span class="sourceLineNo">375</span><a id="line.375">            TokenTypes.SL_ASSIGN,</a>
+<span class="sourceLineNo">376</span><a id="line.376">            TokenTypes.SR_ASSIGN,</a>
+<span class="sourceLineNo">377</span><a id="line.377">            TokenTypes.STAR_ASSIGN,</a>
+<span class="sourceLineNo">378</span><a id="line.378">            TokenTypes.LAMBDA,</a>
+<span class="sourceLineNo">379</span><a id="line.379">            TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,</a>
+<span class="sourceLineNo">380</span><a id="line.380">            TokenTypes.LAND,</a>
+<span class="sourceLineNo">381</span><a id="line.381">            TokenTypes.LOR,</a>
+<span class="sourceLineNo">382</span><a id="line.382">            TokenTypes.LITERAL_INSTANCEOF,</a>
+<span class="sourceLineNo">383</span><a id="line.383">            TokenTypes.GT,</a>
+<span class="sourceLineNo">384</span><a id="line.384">            TokenTypes.LT,</a>
+<span class="sourceLineNo">385</span><a id="line.385">            TokenTypes.GE,</a>
+<span class="sourceLineNo">386</span><a id="line.386">            TokenTypes.LE,</a>
+<span class="sourceLineNo">387</span><a id="line.387">            TokenTypes.EQUAL,</a>
+<span class="sourceLineNo">388</span><a id="line.388">            TokenTypes.NOT_EQUAL,</a>
+<span class="sourceLineNo">389</span><a id="line.389">            TokenTypes.UNARY_MINUS,</a>
+<span class="sourceLineNo">390</span><a id="line.390">            TokenTypes.UNARY_PLUS,</a>
+<span class="sourceLineNo">391</span><a id="line.391">            TokenTypes.INC,</a>
+<span class="sourceLineNo">392</span><a id="line.392">            TokenTypes.DEC,</a>
+<span class="sourceLineNo">393</span><a id="line.393">            TokenTypes.LNOT,</a>
+<span class="sourceLineNo">394</span><a id="line.394">            TokenTypes.BNOT,</a>
+<span class="sourceLineNo">395</span><a id="line.395">            TokenTypes.POST_INC,</a>
+<span class="sourceLineNo">396</span><a id="line.396">            TokenTypes.POST_DEC,</a>
+<span class="sourceLineNo">397</span><a id="line.397">        };</a>
+<span class="sourceLineNo">398</span><a id="line.398">    }</a>
+<span class="sourceLineNo">399</span><a id="line.399"></a>
+<span class="sourceLineNo">400</span><a id="line.400">    @Override</a>
+<span class="sourceLineNo">401</span><a id="line.401">    public int[] getAcceptableTokens() {</a>
+<span class="sourceLineNo">402</span><a id="line.402">        return new int[] {</a>
+<span class="sourceLineNo">403</span><a id="line.403">            TokenTypes.EXPR,</a>
+<span class="sourceLineNo">404</span><a id="line.404">            TokenTypes.IDENT,</a>
+<span class="sourceLineNo">405</span><a id="line.405">            TokenTypes.NUM_DOUBLE,</a>
+<span class="sourceLineNo">406</span><a id="line.406">            TokenTypes.NUM_FLOAT,</a>
+<span class="sourceLineNo">407</span><a id="line.407">            TokenTypes.NUM_INT,</a>
+<span class="sourceLineNo">408</span><a id="line.408">            TokenTypes.NUM_LONG,</a>
+<span class="sourceLineNo">409</span><a id="line.409">            TokenTypes.STRING_LITERAL,</a>
+<span class="sourceLineNo">410</span><a id="line.410">            TokenTypes.LITERAL_NULL,</a>
+<span class="sourceLineNo">411</span><a id="line.411">            TokenTypes.LITERAL_FALSE,</a>
+<span class="sourceLineNo">412</span><a id="line.412">            TokenTypes.LITERAL_TRUE,</a>
+<span class="sourceLineNo">413</span><a id="line.413">            TokenTypes.ASSIGN,</a>
+<span class="sourceLineNo">414</span><a id="line.414">            TokenTypes.BAND_ASSIGN,</a>
+<span class="sourceLineNo">415</span><a id="line.415">            TokenTypes.BOR_ASSIGN,</a>
+<span class="sourceLineNo">416</span><a id="line.416">            TokenTypes.BSR_ASSIGN,</a>
+<span class="sourceLineNo">417</span><a id="line.417">            TokenTypes.BXOR_ASSIGN,</a>
+<span class="sourceLineNo">418</span><a id="line.418">            TokenTypes.DIV_ASSIGN,</a>
+<span class="sourceLineNo">419</span><a id="line.419">            TokenTypes.MINUS_ASSIGN,</a>
+<span class="sourceLineNo">420</span><a id="line.420">            TokenTypes.MOD_ASSIGN,</a>
+<span class="sourceLineNo">421</span><a id="line.421">            TokenTypes.PLUS_ASSIGN,</a>
+<span class="sourceLineNo">422</span><a id="line.422">            TokenTypes.SL_ASSIGN,</a>
+<span class="sourceLineNo">423</span><a id="line.423">            TokenTypes.SR_ASSIGN,</a>
+<span class="sourceLineNo">424</span><a id="line.424">            TokenTypes.STAR_ASSIGN,</a>
+<span class="sourceLineNo">425</span><a id="line.425">            TokenTypes.LAMBDA,</a>
+<span class="sourceLineNo">426</span><a id="line.426">            TokenTypes.TEXT_BLOCK_LITERAL_BEGIN,</a>
+<span class="sourceLineNo">427</span><a id="line.427">            TokenTypes.LAND,</a>
+<span class="sourceLineNo">428</span><a id="line.428">            TokenTypes.LOR,</a>
+<span class="sourceLineNo">429</span><a id="line.429">            TokenTypes.LITERAL_INSTANCEOF,</a>
+<span class="sourceLineNo">430</span><a id="line.430">            TokenTypes.GT,</a>
+<span class="sourceLineNo">431</span><a id="line.431">            TokenTypes.LT,</a>
+<span class="sourceLineNo">432</span><a id="line.432">            TokenTypes.GE,</a>
+<span class="sourceLineNo">433</span><a id="line.433">            TokenTypes.LE,</a>
+<span class="sourceLineNo">434</span><a id="line.434">            TokenTypes.EQUAL,</a>
+<span class="sourceLineNo">435</span><a id="line.435">            TokenTypes.NOT_EQUAL,</a>
+<span class="sourceLineNo">436</span><a id="line.436">            TokenTypes.UNARY_MINUS,</a>
+<span class="sourceLineNo">437</span><a id="line.437">            TokenTypes.UNARY_PLUS,</a>
+<span class="sourceLineNo">438</span><a id="line.438">            TokenTypes.INC,</a>
+<span class="sourceLineNo">439</span><a id="line.439">            TokenTypes.DEC,</a>
+<span class="sourceLineNo">440</span><a id="line.440">            TokenTypes.LNOT,</a>
+<span class="sourceLineNo">441</span><a id="line.441">            TokenTypes.BNOT,</a>
+<span class="sourceLineNo">442</span><a id="line.442">            TokenTypes.POST_INC,</a>
+<span class="sourceLineNo">443</span><a id="line.443">            TokenTypes.POST_DEC,</a>
+<span class="sourceLineNo">444</span><a id="line.444">            TokenTypes.BXOR,</a>
+<span class="sourceLineNo">445</span><a id="line.445">            TokenTypes.BOR,</a>
+<span class="sourceLineNo">446</span><a id="line.446">            TokenTypes.BAND,</a>
+<span class="sourceLineNo">447</span><a id="line.447">            TokenTypes.QUESTION,</a>
+<span class="sourceLineNo">448</span><a id="line.448">        };</a>
+<span class="sourceLineNo">449</span><a id="line.449">    }</a>
+<span class="sourceLineNo">450</span><a id="line.450"></a>
+<span class="sourceLineNo">451</span><a id="line.451">    @Override</a>
+<span class="sourceLineNo">452</span><a id="line.452">    public int[] getRequiredTokens() {</a>
+<span class="sourceLineNo">453</span><a id="line.453">        // Check can work with any of acceptable tokens</a>
+<span class="sourceLineNo">454</span><a id="line.454">        return CommonUtil.EMPTY_INT_ARRAY;</a>
+<span class="sourceLineNo">455</span><a id="line.455">    }</a>
+<span class="sourceLineNo">456</span><a id="line.456"></a>
+<span class="sourceLineNo">457</span><a id="line.457">    // -@cs[CyclomaticComplexity] All logs should be in visit token.</a>
+<span class="sourceLineNo">458</span><a id="line.458">    @Override</a>
+<span class="sourceLineNo">459</span><a id="line.459">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">460</span><a id="line.460">        final DetailAST parent = ast.getParent();</a>
+<span class="sourceLineNo">461</span><a id="line.461"></a>
+<span class="sourceLineNo">462</span><a id="line.462">        if (isLambdaSingleParameterSurrounded(ast)) {</a>
+<span class="sourceLineNo">463</span><a id="line.463">            log(ast, MSG_LAMBDA);</a>
+<span class="sourceLineNo">464</span><a id="line.464">        }</a>
+<span class="sourceLineNo">465</span><a id="line.465">        else if (ast.getType() == TokenTypes.QUESTION) {</a>
+<span class="sourceLineNo">466</span><a id="line.466">            getParenthesesChildrenAroundQuestion(ast)</a>
+<span class="sourceLineNo">467</span><a id="line.467">                .forEach(unnecessaryChild -&gt; log(unnecessaryChild, MSG_EXPR));</a>
+<span class="sourceLineNo">468</span><a id="line.468">        }</a>
+<span class="sourceLineNo">469</span><a id="line.469">        else if (parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</a>
+<span class="sourceLineNo">470</span><a id="line.470">            final int type = ast.getType();</a>
+<span class="sourceLineNo">471</span><a id="line.471">            final boolean surrounded = isSurrounded(ast);</a>
+<span class="sourceLineNo">472</span><a id="line.472">            // An identifier surrounded by parentheses.</a>
+<span class="sourceLineNo">473</span><a id="line.473">            if (surrounded &amp;&amp; type == TokenTypes.IDENT) {</a>
+<span class="sourceLineNo">474</span><a id="line.474">                parentToSkip = ast.getParent();</a>
+<span class="sourceLineNo">475</span><a id="line.475">                log(ast, MSG_IDENT, ast.getText());</a>
+<span class="sourceLineNo">476</span><a id="line.476">            }</a>
+<span class="sourceLineNo">477</span><a id="line.477">            // A literal (numeric or string) surrounded by parentheses.</a>
+<span class="sourceLineNo">478</span><a id="line.478">            else if (surrounded &amp;&amp; TokenUtil.isOfType(type, LITERALS)) {</a>
+<span class="sourceLineNo">479</span><a id="line.479">                parentToSkip = ast.getParent();</a>
+<span class="sourceLineNo">480</span><a id="line.480">                if (type == TokenTypes.STRING_LITERAL) {</a>
+<span class="sourceLineNo">481</span><a id="line.481">                    log(ast, MSG_STRING,</a>
+<span class="sourceLineNo">482</span><a id="line.482">                        chopString(ast.getText()));</a>
+<span class="sourceLineNo">483</span><a id="line.483">                }</a>
+<span class="sourceLineNo">484</span><a id="line.484">                else if (type == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN) {</a>
+<span class="sourceLineNo">485</span><a id="line.485">                    // Strip newline control characters to keep message as single-line, add</a>
+<span class="sourceLineNo">486</span><a id="line.486">                    // quotes to make string consistent with STRING_LITERAL</a>
+<span class="sourceLineNo">487</span><a id="line.487">                    final String logString = QUOTE</a>
+<span class="sourceLineNo">488</span><a id="line.488">                        + NEWLINE.matcher(</a>
+<span class="sourceLineNo">489</span><a id="line.489">                            ast.getFirstChild().getText()).replaceAll("\\\\n")</a>
+<span class="sourceLineNo">490</span><a id="line.490">                        + QUOTE;</a>
+<span class="sourceLineNo">491</span><a id="line.491">                    log(ast, MSG_STRING, chopString(logString));</a>
+<span class="sourceLineNo">492</span><a id="line.492">                }</a>
+<span class="sourceLineNo">493</span><a id="line.493">                else {</a>
+<span class="sourceLineNo">494</span><a id="line.494">                    log(ast, MSG_LITERAL, ast.getText());</a>
+<span class="sourceLineNo">495</span><a id="line.495">                }</a>
+<span class="sourceLineNo">496</span><a id="line.496">            }</a>
+<span class="sourceLineNo">497</span><a id="line.497">            // The rhs of an assignment surrounded by parentheses.</a>
+<span class="sourceLineNo">498</span><a id="line.498">            else if (TokenUtil.isOfType(type, ASSIGNMENTS)) {</a>
+<span class="sourceLineNo">499</span><a id="line.499">                assignDepth++;</a>
+<span class="sourceLineNo">500</span><a id="line.500">                final DetailAST last = ast.getLastChild();</a>
+<span class="sourceLineNo">501</span><a id="line.501">                if (last.getType() == TokenTypes.RPAREN) {</a>
+<span class="sourceLineNo">502</span><a id="line.502">                    log(ast, MSG_ASSIGN);</a>
+<span class="sourceLineNo">503</span><a id="line.503">                }</a>
+<span class="sourceLineNo">504</span><a id="line.504">            }</a>
+<span class="sourceLineNo">505</span><a id="line.505">        }</a>
+<span class="sourceLineNo">506</span><a id="line.506">    }</a>
+<span class="sourceLineNo">507</span><a id="line.507"></a>
+<span class="sourceLineNo">508</span><a id="line.508">    @Override</a>
+<span class="sourceLineNo">509</span><a id="line.509">    public void leaveToken(DetailAST ast) {</a>
+<span class="sourceLineNo">510</span><a id="line.510">        final int type = ast.getType();</a>
+<span class="sourceLineNo">511</span><a id="line.511">        final DetailAST parent = ast.getParent();</a>
+<span class="sourceLineNo">512</span><a id="line.512"></a>
+<span class="sourceLineNo">513</span><a id="line.513">        // shouldn't process assign in annotation pairs</a>
+<span class="sourceLineNo">514</span><a id="line.514">        if (type != TokenTypes.ASSIGN</a>
+<span class="sourceLineNo">515</span><a id="line.515">            || parent.getType() != TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR) {</a>
+<span class="sourceLineNo">516</span><a id="line.516">            if (type == TokenTypes.EXPR) {</a>
+<span class="sourceLineNo">517</span><a id="line.517">                checkExpression(ast);</a>
+<span class="sourceLineNo">518</span><a id="line.518">            }</a>
+<span class="sourceLineNo">519</span><a id="line.519">            else if (TokenUtil.isOfType(type, ASSIGNMENTS)) {</a>
+<span class="sourceLineNo">520</span><a id="line.520">                assignDepth--;</a>
+<span class="sourceLineNo">521</span><a id="line.521">            }</a>
+<span class="sourceLineNo">522</span><a id="line.522">            else if (isSurrounded(ast) &amp;&amp; unnecessaryParenAroundOperators(ast)) {</a>
+<span class="sourceLineNo">523</span><a id="line.523">                log(ast.getPreviousSibling(), MSG_EXPR);</a>
+<span class="sourceLineNo">524</span><a id="line.524">            }</a>
+<span class="sourceLineNo">525</span><a id="line.525">        }</a>
+<span class="sourceLineNo">526</span><a id="line.526">    }</a>
+<span class="sourceLineNo">527</span><a id="line.527"></a>
+<span class="sourceLineNo">528</span><a id="line.528">    /**</a>
+<span class="sourceLineNo">529</span><a id="line.529">     * Tests if the given {@code DetailAST} is surrounded by parentheses.</a>
+<span class="sourceLineNo">530</span><a id="line.530">     *</a>
+<span class="sourceLineNo">531</span><a id="line.531">     * @param ast the {@code DetailAST} to check if it is surrounded by</a>
+<span class="sourceLineNo">532</span><a id="line.532">     *        parentheses.</a>
+<span class="sourceLineNo">533</span><a id="line.533">     * @return {@code true} if {@code ast} is surrounded by</a>
+<span class="sourceLineNo">534</span><a id="line.534">     *         parentheses.</a>
+<span class="sourceLineNo">535</span><a id="line.535">     */</a>
+<span class="sourceLineNo">536</span><a id="line.536">    private static boolean isSurrounded(DetailAST ast) {</a>
+<span class="sourceLineNo">537</span><a id="line.537">        final DetailAST prev = ast.getPreviousSibling();</a>
+<span class="sourceLineNo">538</span><a id="line.538">        final DetailAST parent = ast.getParent();</a>
+<span class="sourceLineNo">539</span><a id="line.539">        final boolean isPreviousSiblingLeftParenthesis = prev != null</a>
+<span class="sourceLineNo">540</span><a id="line.540">                &amp;&amp; prev.getType() == TokenTypes.LPAREN;</a>
+<span class="sourceLineNo">541</span><a id="line.541">        final boolean isMethodCallWithUnnecessaryParenthesis =</a>
+<span class="sourceLineNo">542</span><a id="line.542">                parent.getType() == TokenTypes.METHOD_CALL</a>
+<span class="sourceLineNo">543</span><a id="line.543">                &amp;&amp; parent.getPreviousSibling() != null</a>
+<span class="sourceLineNo">544</span><a id="line.544">                &amp;&amp; parent.getPreviousSibling().getType() == TokenTypes.LPAREN;</a>
+<span class="sourceLineNo">545</span><a id="line.545">        return isPreviousSiblingLeftParenthesis || isMethodCallWithUnnecessaryParenthesis;</a>
+<span class="sourceLineNo">546</span><a id="line.546">    }</a>
+<span class="sourceLineNo">547</span><a id="line.547"></a>
+<span class="sourceLineNo">548</span><a id="line.548">    /**</a>
+<span class="sourceLineNo">549</span><a id="line.549">     * Tests if the given expression node is surrounded by parentheses.</a>
+<span class="sourceLineNo">550</span><a id="line.550">     *</a>
+<span class="sourceLineNo">551</span><a id="line.551">     * @param ast a {@code DetailAST} whose type is</a>
+<span class="sourceLineNo">552</span><a id="line.552">     *        {@code TokenTypes.EXPR}.</a>
+<span class="sourceLineNo">553</span><a id="line.553">     * @return {@code true} if the expression is surrounded by</a>
+<span class="sourceLineNo">554</span><a id="line.554">     *         parentheses.</a>
+<span class="sourceLineNo">555</span><a id="line.555">     */</a>
+<span class="sourceLineNo">556</span><a id="line.556">    private static boolean isExprSurrounded(DetailAST ast) {</a>
+<span class="sourceLineNo">557</span><a id="line.557">        return ast.getFirstChild().getType() == TokenTypes.LPAREN;</a>
+<span class="sourceLineNo">558</span><a id="line.558">    }</a>
+<span class="sourceLineNo">559</span><a id="line.559"></a>
+<span class="sourceLineNo">560</span><a id="line.560">    /**</a>
+<span class="sourceLineNo">561</span><a id="line.561">     * Checks whether an expression is surrounded by parentheses.</a>
+<span class="sourceLineNo">562</span><a id="line.562">     *</a>
+<span class="sourceLineNo">563</span><a id="line.563">     * @param ast the {@code DetailAST} to check if it is surrounded by</a>
+<span class="sourceLineNo">564</span><a id="line.564">     *        parentheses.</a>
+<span class="sourceLineNo">565</span><a id="line.565">     */</a>
+<span class="sourceLineNo">566</span><a id="line.566">    private void checkExpression(DetailAST ast) {</a>
+<span class="sourceLineNo">567</span><a id="line.567">        // If 'parentToSkip' == 'ast', then we've already logged a</a>
+<span class="sourceLineNo">568</span><a id="line.568">        // warning about an immediate child node in visitToken, so we don't</a>
+<span class="sourceLineNo">569</span><a id="line.569">        // need to log another one here.</a>
+<span class="sourceLineNo">570</span><a id="line.570">        if (parentToSkip != ast &amp;&amp; isExprSurrounded(ast)) {</a>
+<span class="sourceLineNo">571</span><a id="line.571">            if (ast.getParent().getType() == TokenTypes.LITERAL_RETURN) {</a>
+<span class="sourceLineNo">572</span><a id="line.572">                log(ast, MSG_RETURN);</a>
+<span class="sourceLineNo">573</span><a id="line.573">            }</a>
+<span class="sourceLineNo">574</span><a id="line.574">            else if (assignDepth &gt;= 1) {</a>
+<span class="sourceLineNo">575</span><a id="line.575">                log(ast, MSG_ASSIGN);</a>
+<span class="sourceLineNo">576</span><a id="line.576">            }</a>
+<span class="sourceLineNo">577</span><a id="line.577">            else {</a>
+<span class="sourceLineNo">578</span><a id="line.578">                log(ast, MSG_EXPR);</a>
+<span class="sourceLineNo">579</span><a id="line.579">            }</a>
+<span class="sourceLineNo">580</span><a id="line.580">        }</a>
+<span class="sourceLineNo">581</span><a id="line.581">    }</a>
+<span class="sourceLineNo">582</span><a id="line.582"></a>
+<span class="sourceLineNo">583</span><a id="line.583">    /**</a>
+<span class="sourceLineNo">584</span><a id="line.584">     * Checks if conditional, relational, bitwise binary operator, unary and postfix operators</a>
+<span class="sourceLineNo">585</span><a id="line.585">     * in expressions are surrounded by unnecessary parentheses.</a>
+<span class="sourceLineNo">586</span><a id="line.586">     *</a>
+<span class="sourceLineNo">587</span><a id="line.587">     * @param ast the {@code DetailAST} to check if it is surrounded by</a>
+<span class="sourceLineNo">588</span><a id="line.588">     *        unnecessary parentheses.</a>
+<span class="sourceLineNo">589</span><a id="line.589">     * @return {@code true} if the expression is surrounded by</a>
+<span class="sourceLineNo">590</span><a id="line.590">     *         unnecessary parentheses.</a>
+<span class="sourceLineNo">591</span><a id="line.591">     */</a>
+<span class="sourceLineNo">592</span><a id="line.592">    private static boolean unnecessaryParenAroundOperators(DetailAST ast) {</a>
+<span class="sourceLineNo">593</span><a id="line.593">        final int type = ast.getType();</a>
+<span class="sourceLineNo">594</span><a id="line.594">        final boolean isConditionalOrRelational = TokenUtil.isOfType(type, CONDITIONAL_OPERATOR)</a>
+<span class="sourceLineNo">595</span><a id="line.595">                        || TokenUtil.isOfType(type, RELATIONAL_OPERATOR);</a>
+<span class="sourceLineNo">596</span><a id="line.596">        final boolean isBitwise = TokenUtil.isOfType(type, BITWISE_BINARY_OPERATORS);</a>
+<span class="sourceLineNo">597</span><a id="line.597">        final boolean hasUnnecessaryParentheses;</a>
+<span class="sourceLineNo">598</span><a id="line.598">        if (isConditionalOrRelational) {</a>
+<span class="sourceLineNo">599</span><a id="line.599">            hasUnnecessaryParentheses = checkConditionalOrRelationalOperator(ast);</a>
+<span class="sourceLineNo">600</span><a id="line.600">        }</a>
+<span class="sourceLineNo">601</span><a id="line.601">        else if (isBitwise) {</a>
+<span class="sourceLineNo">602</span><a id="line.602">            hasUnnecessaryParentheses = checkBitwiseBinaryOperator(ast);</a>
+<span class="sourceLineNo">603</span><a id="line.603">        }</a>
+<span class="sourceLineNo">604</span><a id="line.604">        else {</a>
+<span class="sourceLineNo">605</span><a id="line.605">            hasUnnecessaryParentheses = TokenUtil.isOfType(type, UNARY_AND_POSTFIX)</a>
+<span class="sourceLineNo">606</span><a id="line.606">                    &amp;&amp; isBitWiseBinaryOrConditionalOrRelationalOperator(ast.getParent().getType());</a>
+<span class="sourceLineNo">607</span><a id="line.607">        }</a>
+<span class="sourceLineNo">608</span><a id="line.608">        return hasUnnecessaryParentheses;</a>
+<span class="sourceLineNo">609</span><a id="line.609">    }</a>
+<span class="sourceLineNo">610</span><a id="line.610"></a>
+<span class="sourceLineNo">611</span><a id="line.611">    /**</a>
+<span class="sourceLineNo">612</span><a id="line.612">     * Check if conditional or relational operator has unnecessary parentheses.</a>
+<span class="sourceLineNo">613</span><a id="line.613">     *</a>
+<span class="sourceLineNo">614</span><a id="line.614">     * @param ast to check if surrounded by unnecessary parentheses</a>
+<span class="sourceLineNo">615</span><a id="line.615">     * @return true if unnecessary parenthesis</a>
+<span class="sourceLineNo">616</span><a id="line.616">     */</a>
+<span class="sourceLineNo">617</span><a id="line.617">    private static boolean checkConditionalOrRelationalOperator(DetailAST ast) {</a>
+<span class="sourceLineNo">618</span><a id="line.618">        final int type = ast.getType();</a>
+<span class="sourceLineNo">619</span><a id="line.619">        final int parentType = ast.getParent().getType();</a>
+<span class="sourceLineNo">620</span><a id="line.620">        final boolean isParentEqualityOperator =</a>
+<span class="sourceLineNo">621</span><a id="line.621">                TokenUtil.isOfType(parentType, TokenTypes.EQUAL, TokenTypes.NOT_EQUAL);</a>
+<span class="sourceLineNo">622</span><a id="line.622">        final boolean result;</a>
+<span class="sourceLineNo">623</span><a id="line.623">        if (type == TokenTypes.LOR) {</a>
+<span class="sourceLineNo">624</span><a id="line.624">            result = !TokenUtil.isOfType(parentType, TokenTypes.LAND)</a>
+<span class="sourceLineNo">625</span><a id="line.625">                    &amp;&amp; !TokenUtil.isOfType(parentType, BITWISE_BINARY_OPERATORS);</a>
+<span class="sourceLineNo">626</span><a id="line.626">        }</a>
+<span class="sourceLineNo">627</span><a id="line.627">        else if (type == TokenTypes.LAND) {</a>
+<span class="sourceLineNo">628</span><a id="line.628">            result = !TokenUtil.isOfType(parentType, BITWISE_BINARY_OPERATORS);</a>
+<span class="sourceLineNo">629</span><a id="line.629">        }</a>
+<span class="sourceLineNo">630</span><a id="line.630">        else {</a>
+<span class="sourceLineNo">631</span><a id="line.631">            result = true;</a>
+<span class="sourceLineNo">632</span><a id="line.632">        }</a>
+<span class="sourceLineNo">633</span><a id="line.633">        return result &amp;&amp; !isParentEqualityOperator</a>
+<span class="sourceLineNo">634</span><a id="line.634">                &amp;&amp; isBitWiseBinaryOrConditionalOrRelationalOperator(parentType);</a>
+<span class="sourceLineNo">635</span><a id="line.635">    }</a>
+<span class="sourceLineNo">636</span><a id="line.636"></a>
+<span class="sourceLineNo">637</span><a id="line.637">    /**</a>
+<span class="sourceLineNo">638</span><a id="line.638">     * Check if bitwise binary operator has unnecessary parentheses.</a>
+<span class="sourceLineNo">639</span><a id="line.639">     *</a>
+<span class="sourceLineNo">640</span><a id="line.640">     * @param ast to check if surrounded by unnecessary parentheses</a>
+<span class="sourceLineNo">641</span><a id="line.641">     * @return true if unnecessary parenthesis</a>
+<span class="sourceLineNo">642</span><a id="line.642">     */</a>
+<span class="sourceLineNo">643</span><a id="line.643">    private static boolean checkBitwiseBinaryOperator(DetailAST ast) {</a>
+<span class="sourceLineNo">644</span><a id="line.644">        final int type = ast.getType();</a>
+<span class="sourceLineNo">645</span><a id="line.645">        final int parentType = ast.getParent().getType();</a>
+<span class="sourceLineNo">646</span><a id="line.646">        final boolean result;</a>
+<span class="sourceLineNo">647</span><a id="line.647">        if (type == TokenTypes.BOR) {</a>
+<span class="sourceLineNo">648</span><a id="line.648">            result = !TokenUtil.isOfType(parentType, TokenTypes.BAND, TokenTypes.BXOR)</a>
+<span class="sourceLineNo">649</span><a id="line.649">                    &amp;&amp; !TokenUtil.isOfType(parentType, RELATIONAL_OPERATOR);</a>
+<span class="sourceLineNo">650</span><a id="line.650">        }</a>
+<span class="sourceLineNo">651</span><a id="line.651">        else if (type == TokenTypes.BXOR) {</a>
+<span class="sourceLineNo">652</span><a id="line.652">            result = !TokenUtil.isOfType(parentType, TokenTypes.BAND)</a>
+<span class="sourceLineNo">653</span><a id="line.653">                    &amp;&amp; !TokenUtil.isOfType(parentType, RELATIONAL_OPERATOR);</a>
+<span class="sourceLineNo">654</span><a id="line.654">        }</a>
+<span class="sourceLineNo">655</span><a id="line.655">        // we deal with bitwise AND here.</a>
+<span class="sourceLineNo">656</span><a id="line.656">        else {</a>
+<span class="sourceLineNo">657</span><a id="line.657">            result = !TokenUtil.isOfType(parentType, RELATIONAL_OPERATOR);</a>
+<span class="sourceLineNo">658</span><a id="line.658">        }</a>
+<span class="sourceLineNo">659</span><a id="line.659">        return result &amp;&amp; isBitWiseBinaryOrConditionalOrRelationalOperator(parentType);</a>
+<span class="sourceLineNo">660</span><a id="line.660">    }</a>
+<span class="sourceLineNo">661</span><a id="line.661"></a>
+<span class="sourceLineNo">662</span><a id="line.662">    /**</a>
+<span class="sourceLineNo">663</span><a id="line.663">     * Check if token type is bitwise binary or conditional or relational operator.</a>
 <span class="sourceLineNo">664</span><a id="line.664">     *</a>
-<span class="sourceLineNo">665</span><a id="line.665">     * @param ast a {@code DetailAST} node</a>
-<span class="sourceLineNo">666</span><a id="line.666">     * @return {@code true} if the lambda has a single parameter, no defined type, and is</a>
-<span class="sourceLineNo">667</span><a id="line.667">     *         surrounded by parentheses.</a>
-<span class="sourceLineNo">668</span><a id="line.668">     */</a>
-<span class="sourceLineNo">669</span><a id="line.669">    private static boolean isLambdaSingleParameterSurrounded(DetailAST ast) {</a>
-<span class="sourceLineNo">670</span><a id="line.670">        final DetailAST firstChild = ast.getFirstChild();</a>
-<span class="sourceLineNo">671</span><a id="line.671">        boolean result = false;</a>
-<span class="sourceLineNo">672</span><a id="line.672">        if (TokenUtil.isOfType(firstChild, TokenTypes.LPAREN)) {</a>
-<span class="sourceLineNo">673</span><a id="line.673">            final DetailAST parameters = firstChild.getNextSibling();</a>
-<span class="sourceLineNo">674</span><a id="line.674">            if (parameters.getChildCount(TokenTypes.PARAMETER_DEF) == 1</a>
-<span class="sourceLineNo">675</span><a id="line.675">                    &amp;&amp; !parameters.getFirstChild().findFirstToken(TokenTypes.TYPE).hasChildren()) {</a>
-<span class="sourceLineNo">676</span><a id="line.676">                result = true;</a>
-<span class="sourceLineNo">677</span><a id="line.677">            }</a>
-<span class="sourceLineNo">678</span><a id="line.678">        }</a>
-<span class="sourceLineNo">679</span><a id="line.679">        return result;</a>
-<span class="sourceLineNo">680</span><a id="line.680">    }</a>
-<span class="sourceLineNo">681</span><a id="line.681"></a>
-<span class="sourceLineNo">682</span><a id="line.682">    /**</a>
-<span class="sourceLineNo">683</span><a id="line.683">     * Returns the specified string chopped to {@code MAX_QUOTED_LENGTH}</a>
-<span class="sourceLineNo">684</span><a id="line.684">     * plus an ellipsis (...) if the length of the string exceeds {@code</a>
-<span class="sourceLineNo">685</span><a id="line.685">     * MAX_QUOTED_LENGTH}.</a>
-<span class="sourceLineNo">686</span><a id="line.686">     *</a>
-<span class="sourceLineNo">687</span><a id="line.687">     * @param value the string to potentially chop.</a>
-<span class="sourceLineNo">688</span><a id="line.688">     * @return the chopped string if {@code string} is longer than</a>
-<span class="sourceLineNo">689</span><a id="line.689">     *         {@code MAX_QUOTED_LENGTH}; otherwise {@code string}.</a>
-<span class="sourceLineNo">690</span><a id="line.690">     */</a>
-<span class="sourceLineNo">691</span><a id="line.691">    private static String chopString(String value) {</a>
-<span class="sourceLineNo">692</span><a id="line.692">        String result = value;</a>
-<span class="sourceLineNo">693</span><a id="line.693">        if (value.length() &gt; MAX_QUOTED_LENGTH) {</a>
-<span class="sourceLineNo">694</span><a id="line.694">            result = value.substring(0, MAX_QUOTED_LENGTH) + "...\"";</a>
-<span class="sourceLineNo">695</span><a id="line.695">        }</a>
-<span class="sourceLineNo">696</span><a id="line.696">        return result;</a>
-<span class="sourceLineNo">697</span><a id="line.697">    }</a>
-<span class="sourceLineNo">698</span><a id="line.698"></a>
-<span class="sourceLineNo">699</span><a id="line.699">}</a>
+<span class="sourceLineNo">665</span><a id="line.665">     * @param type Token type to check</a>
+<span class="sourceLineNo">666</span><a id="line.666">     * @return true if it is bitwise binary or conditional operator</a>
+<span class="sourceLineNo">667</span><a id="line.667">     */</a>
+<span class="sourceLineNo">668</span><a id="line.668">    private static boolean isBitWiseBinaryOrConditionalOrRelationalOperator(int type) {</a>
+<span class="sourceLineNo">669</span><a id="line.669">        return TokenUtil.isOfType(type, CONDITIONAL_OPERATOR)</a>
+<span class="sourceLineNo">670</span><a id="line.670">                || TokenUtil.isOfType(type, RELATIONAL_OPERATOR)</a>
+<span class="sourceLineNo">671</span><a id="line.671">                || TokenUtil.isOfType(type, BITWISE_BINARY_OPERATORS);</a>
+<span class="sourceLineNo">672</span><a id="line.672">    }</a>
+<span class="sourceLineNo">673</span><a id="line.673"></a>
+<span class="sourceLineNo">674</span><a id="line.674">    /**</a>
+<span class="sourceLineNo">675</span><a id="line.675">     * Tests if the given node has a single parameter, no defined type, and is surrounded</a>
+<span class="sourceLineNo">676</span><a id="line.676">     * by parentheses. This condition can only be true for lambdas.</a>
+<span class="sourceLineNo">677</span><a id="line.677">     *</a>
+<span class="sourceLineNo">678</span><a id="line.678">     * @param ast a {@code DetailAST} node</a>
+<span class="sourceLineNo">679</span><a id="line.679">     * @return {@code true} if the lambda has a single parameter, no defined type, and is</a>
+<span class="sourceLineNo">680</span><a id="line.680">     *         surrounded by parentheses.</a>
+<span class="sourceLineNo">681</span><a id="line.681">     */</a>
+<span class="sourceLineNo">682</span><a id="line.682">    private static boolean isLambdaSingleParameterSurrounded(DetailAST ast) {</a>
+<span class="sourceLineNo">683</span><a id="line.683">        final DetailAST firstChild = ast.getFirstChild();</a>
+<span class="sourceLineNo">684</span><a id="line.684">        boolean result = false;</a>
+<span class="sourceLineNo">685</span><a id="line.685">        if (TokenUtil.isOfType(firstChild, TokenTypes.LPAREN)) {</a>
+<span class="sourceLineNo">686</span><a id="line.686">            final DetailAST parameters = firstChild.getNextSibling();</a>
+<span class="sourceLineNo">687</span><a id="line.687">            if (parameters.getChildCount(TokenTypes.PARAMETER_DEF) == 1</a>
+<span class="sourceLineNo">688</span><a id="line.688">                    &amp;&amp; !parameters.getFirstChild().findFirstToken(TokenTypes.TYPE).hasChildren()) {</a>
+<span class="sourceLineNo">689</span><a id="line.689">                result = true;</a>
+<span class="sourceLineNo">690</span><a id="line.690">            }</a>
+<span class="sourceLineNo">691</span><a id="line.691">        }</a>
+<span class="sourceLineNo">692</span><a id="line.692">        return result;</a>
+<span class="sourceLineNo">693</span><a id="line.693">    }</a>
+<span class="sourceLineNo">694</span><a id="line.694"></a>
+<span class="sourceLineNo">695</span><a id="line.695">    /**</a>
+<span class="sourceLineNo">696</span><a id="line.696">     *  Returns the direct LPAREN tokens children to a given QUESTION token which</a>
+<span class="sourceLineNo">697</span><a id="line.697">     *  contain an expression not a literal variable.</a>
+<span class="sourceLineNo">698</span><a id="line.698">     *</a>
+<span class="sourceLineNo">699</span><a id="line.699">     *  @param questionToken {@code DetailAST} question token to be checked</a>
+<span class="sourceLineNo">700</span><a id="line.700">     *  @return the direct children to the given question token which their types are LPAREN</a>
+<span class="sourceLineNo">701</span><a id="line.701">     *          tokens and not contain a literal inside the parentheses</a>
+<span class="sourceLineNo">702</span><a id="line.702">     */</a>
+<span class="sourceLineNo">703</span><a id="line.703">    private static List&lt;DetailAST&gt; getParenthesesChildrenAroundQuestion(DetailAST questionToken) {</a>
+<span class="sourceLineNo">704</span><a id="line.704">        final List&lt;DetailAST&gt; surroundedChildren = new ArrayList&lt;&gt;();</a>
+<span class="sourceLineNo">705</span><a id="line.705">        DetailAST directChild = questionToken.getFirstChild();</a>
+<span class="sourceLineNo">706</span><a id="line.706">        while (directChild != null) {</a>
+<span class="sourceLineNo">707</span><a id="line.707">            if (directChild.getType() == TokenTypes.LPAREN</a>
+<span class="sourceLineNo">708</span><a id="line.708">                    &amp;&amp; !TokenUtil.isOfType(directChild.getNextSibling(), LITERALS)) {</a>
+<span class="sourceLineNo">709</span><a id="line.709">                surroundedChildren.add(directChild);</a>
+<span class="sourceLineNo">710</span><a id="line.710">            }</a>
+<span class="sourceLineNo">711</span><a id="line.711">            directChild = directChild.getNextSibling();</a>
+<span class="sourceLineNo">712</span><a id="line.712">        }</a>
+<span class="sourceLineNo">713</span><a id="line.713">        return Collections.unmodifiableList(surroundedChildren);</a>
+<span class="sourceLineNo">714</span><a id="line.714">    }</a>
+<span class="sourceLineNo">715</span><a id="line.715"></a>
+<span class="sourceLineNo">716</span><a id="line.716">    /**</a>
+<span class="sourceLineNo">717</span><a id="line.717">     * Returns the specified string chopped to {@code MAX_QUOTED_LENGTH}</a>
+<span class="sourceLineNo">718</span><a id="line.718">     * plus an ellipsis (...) if the length of the string exceeds {@code</a>
+<span class="sourceLineNo">719</span><a id="line.719">     * MAX_QUOTED_LENGTH}.</a>
+<span class="sourceLineNo">720</span><a id="line.720">     *</a>
+<span class="sourceLineNo">721</span><a id="line.721">     * @param value the string to potentially chop.</a>
+<span class="sourceLineNo">722</span><a id="line.722">     * @return the chopped string if {@code string} is longer than</a>
+<span class="sourceLineNo">723</span><a id="line.723">     *         {@code MAX_QUOTED_LENGTH}; otherwise {@code string}.</a>
+<span class="sourceLineNo">724</span><a id="line.724">     */</a>
+<span class="sourceLineNo">725</span><a id="line.725">    private static String chopString(String value) {</a>
+<span class="sourceLineNo">726</span><a id="line.726">        String result = value;</a>
+<span class="sourceLineNo">727</span><a id="line.727">        if (value.length() &gt; MAX_QUOTED_LENGTH) {</a>
+<span class="sourceLineNo">728</span><a id="line.728">            result = value.substring(0, MAX_QUOTED_LENGTH) + "...\"";</a>
+<span class="sourceLineNo">729</span><a id="line.729">        }</a>
+<span class="sourceLineNo">730</span><a id="line.730">        return result;</a>
+<span class="sourceLineNo">731</span><a id="line.731">    }</a>
+<span class="sourceLineNo">732</span><a id="line.732"></a>
+<span class="sourceLineNo">733</span><a id="line.733">}</a>
 
 
 
