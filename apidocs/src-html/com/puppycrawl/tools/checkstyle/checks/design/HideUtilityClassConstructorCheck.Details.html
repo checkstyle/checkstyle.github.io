@@ -28,241 +28,295 @@
 <span class="sourceLineNo">019</span><a id="line.19"></a>
 <span class="sourceLineNo">020</span><a id="line.20">package com.puppycrawl.tools.checkstyle.checks.design;</a>
 <span class="sourceLineNo">021</span><a id="line.21"></a>
-<span class="sourceLineNo">022</span><a id="line.22">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
-<span class="sourceLineNo">023</span><a id="line.23">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
-<span class="sourceLineNo">024</span><a id="line.24">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
-<span class="sourceLineNo">025</span><a id="line.25">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
-<span class="sourceLineNo">026</span><a id="line.26"></a>
-<span class="sourceLineNo">027</span><a id="line.27">/**</a>
-<span class="sourceLineNo">028</span><a id="line.28"> * &lt;div&gt;</a>
-<span class="sourceLineNo">029</span><a id="line.29"> * Makes sure that utility classes (classes that contain only static methods or fields in their API)</a>
-<span class="sourceLineNo">030</span><a id="line.30"> * do not have a public constructor.</a>
-<span class="sourceLineNo">031</span><a id="line.31"> * &lt;/div&gt;</a>
-<span class="sourceLineNo">032</span><a id="line.32"> *</a>
-<span class="sourceLineNo">033</span><a id="line.33"> * &lt;p&gt;</a>
-<span class="sourceLineNo">034</span><a id="line.34"> * Rationale: Instantiating utility classes does not make sense.</a>
-<span class="sourceLineNo">035</span><a id="line.35"> * Hence, the constructors should either be private or (if you want to allow subclassing) protected.</a>
-<span class="sourceLineNo">036</span><a id="line.36"> * A common mistake is forgetting to hide the default constructor.</a>
-<span class="sourceLineNo">037</span><a id="line.37"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">038</span><a id="line.38"> *</a>
-<span class="sourceLineNo">039</span><a id="line.39"> * &lt;p&gt;</a>
-<span class="sourceLineNo">040</span><a id="line.40"> * If you make the constructor protected you may want to consider the following constructor</a>
-<span class="sourceLineNo">041</span><a id="line.41"> * implementation technique to disallow instantiating subclasses:</a>
-<span class="sourceLineNo">042</span><a id="line.42"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">043</span><a id="line.43"> * &lt;pre&gt;</a>
-<span class="sourceLineNo">044</span><a id="line.44"> * public class StringUtils // not final to allow subclassing</a>
-<span class="sourceLineNo">045</span><a id="line.45"> * {</a>
-<span class="sourceLineNo">046</span><a id="line.46"> *   protected StringUtils() {</a>
-<span class="sourceLineNo">047</span><a id="line.47"> *     // prevents calls from subclass</a>
-<span class="sourceLineNo">048</span><a id="line.48"> *     throw new UnsupportedOperationException();</a>
-<span class="sourceLineNo">049</span><a id="line.49"> *   }</a>
-<span class="sourceLineNo">050</span><a id="line.50"> *</a>
-<span class="sourceLineNo">051</span><a id="line.51"> *   public static int count(char c, String s) {</a>
-<span class="sourceLineNo">052</span><a id="line.52"> *     // ...</a>
+<span class="sourceLineNo">022</span><a id="line.22">import java.util.Collections;</a>
+<span class="sourceLineNo">023</span><a id="line.23">import java.util.Set;</a>
+<span class="sourceLineNo">024</span><a id="line.24"></a>
+<span class="sourceLineNo">025</span><a id="line.25">import com.puppycrawl.tools.checkstyle.StatelessCheck;</a>
+<span class="sourceLineNo">026</span><a id="line.26">import com.puppycrawl.tools.checkstyle.api.AbstractCheck;</a>
+<span class="sourceLineNo">027</span><a id="line.27">import com.puppycrawl.tools.checkstyle.api.DetailAST;</a>
+<span class="sourceLineNo">028</span><a id="line.28">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</a>
+<span class="sourceLineNo">029</span><a id="line.29">import com.puppycrawl.tools.checkstyle.utils.AnnotationUtil;</a>
+<span class="sourceLineNo">030</span><a id="line.30"></a>
+<span class="sourceLineNo">031</span><a id="line.31">/**</a>
+<span class="sourceLineNo">032</span><a id="line.32"> * &lt;div&gt;</a>
+<span class="sourceLineNo">033</span><a id="line.33"> * Makes sure that utility classes (classes that contain only static methods or fields in their API)</a>
+<span class="sourceLineNo">034</span><a id="line.34"> * do not have a public constructor.</a>
+<span class="sourceLineNo">035</span><a id="line.35"> * &lt;/div&gt;</a>
+<span class="sourceLineNo">036</span><a id="line.36"> *</a>
+<span class="sourceLineNo">037</span><a id="line.37"> * &lt;p&gt;</a>
+<span class="sourceLineNo">038</span><a id="line.38"> * Rationale: Instantiating utility classes does not make sense.</a>
+<span class="sourceLineNo">039</span><a id="line.39"> * Hence, the constructors should either be private or (if you want to allow subclassing) protected.</a>
+<span class="sourceLineNo">040</span><a id="line.40"> * A common mistake is forgetting to hide the default constructor.</a>
+<span class="sourceLineNo">041</span><a id="line.41"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">042</span><a id="line.42"> *</a>
+<span class="sourceLineNo">043</span><a id="line.43"> * &lt;p&gt;</a>
+<span class="sourceLineNo">044</span><a id="line.44"> * If you make the constructor protected you may want to consider the following constructor</a>
+<span class="sourceLineNo">045</span><a id="line.45"> * implementation technique to disallow instantiating subclasses:</a>
+<span class="sourceLineNo">046</span><a id="line.46"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">047</span><a id="line.47"> * &lt;pre&gt;</a>
+<span class="sourceLineNo">048</span><a id="line.48"> * public class StringUtils // not final to allow subclassing</a>
+<span class="sourceLineNo">049</span><a id="line.49"> * {</a>
+<span class="sourceLineNo">050</span><a id="line.50"> *   protected StringUtils() {</a>
+<span class="sourceLineNo">051</span><a id="line.51"> *     // prevents calls from subclass</a>
+<span class="sourceLineNo">052</span><a id="line.52"> *     throw new UnsupportedOperationException();</a>
 <span class="sourceLineNo">053</span><a id="line.53"> *   }</a>
-<span class="sourceLineNo">054</span><a id="line.54"> * }</a>
-<span class="sourceLineNo">055</span><a id="line.55"> * &lt;/pre&gt;</a>
-<span class="sourceLineNo">056</span><a id="line.56"> *</a>
-<span class="sourceLineNo">057</span><a id="line.57"> * &lt;p&gt;</a>
-<span class="sourceLineNo">058</span><a id="line.58"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
-<span class="sourceLineNo">059</span><a id="line.59"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">060</span><a id="line.60"> *</a>
-<span class="sourceLineNo">061</span><a id="line.61"> * &lt;p&gt;</a>
-<span class="sourceLineNo">062</span><a id="line.62"> * Violation Message Keys:</a>
-<span class="sourceLineNo">063</span><a id="line.63"> * &lt;/p&gt;</a>
-<span class="sourceLineNo">064</span><a id="line.64"> * &lt;ul&gt;</a>
-<span class="sourceLineNo">065</span><a id="line.65"> * &lt;li&gt;</a>
-<span class="sourceLineNo">066</span><a id="line.66"> * {@code hide.utility.class}</a>
-<span class="sourceLineNo">067</span><a id="line.67"> * &lt;/li&gt;</a>
-<span class="sourceLineNo">068</span><a id="line.68"> * &lt;/ul&gt;</a>
-<span class="sourceLineNo">069</span><a id="line.69"> *</a>
-<span class="sourceLineNo">070</span><a id="line.70"> * @since 3.1</a>
-<span class="sourceLineNo">071</span><a id="line.71"> */</a>
-<span class="sourceLineNo">072</span><a id="line.72">@StatelessCheck</a>
-<span class="sourceLineNo">073</span><a id="line.73">public class HideUtilityClassConstructorCheck extends AbstractCheck {</a>
-<span class="sourceLineNo">074</span><a id="line.74"></a>
-<span class="sourceLineNo">075</span><a id="line.75">    /**</a>
-<span class="sourceLineNo">076</span><a id="line.76">     * A key is pointing to the warning message text in "messages.properties"</a>
-<span class="sourceLineNo">077</span><a id="line.77">     * file.</a>
-<span class="sourceLineNo">078</span><a id="line.78">     */</a>
-<span class="sourceLineNo">079</span><a id="line.79">    public static final String MSG_KEY = "hide.utility.class";</a>
-<span class="sourceLineNo">080</span><a id="line.80"></a>
-<span class="sourceLineNo">081</span><a id="line.81">    @Override</a>
-<span class="sourceLineNo">082</span><a id="line.82">    public int[] getDefaultTokens() {</a>
-<span class="sourceLineNo">083</span><a id="line.83">        return getRequiredTokens();</a>
-<span class="sourceLineNo">084</span><a id="line.84">    }</a>
-<span class="sourceLineNo">085</span><a id="line.85"></a>
-<span class="sourceLineNo">086</span><a id="line.86">    @Override</a>
-<span class="sourceLineNo">087</span><a id="line.87">    public int[] getAcceptableTokens() {</a>
-<span class="sourceLineNo">088</span><a id="line.88">        return getRequiredTokens();</a>
-<span class="sourceLineNo">089</span><a id="line.89">    }</a>
-<span class="sourceLineNo">090</span><a id="line.90"></a>
-<span class="sourceLineNo">091</span><a id="line.91">    @Override</a>
-<span class="sourceLineNo">092</span><a id="line.92">    public int[] getRequiredTokens() {</a>
-<span class="sourceLineNo">093</span><a id="line.93">        return new int[] {TokenTypes.CLASS_DEF};</a>
-<span class="sourceLineNo">094</span><a id="line.94">    }</a>
-<span class="sourceLineNo">095</span><a id="line.95"></a>
-<span class="sourceLineNo">096</span><a id="line.96">    @Override</a>
-<span class="sourceLineNo">097</span><a id="line.97">    public void visitToken(DetailAST ast) {</a>
-<span class="sourceLineNo">098</span><a id="line.98">        // abstract class could not have private constructor</a>
-<span class="sourceLineNo">099</span><a id="line.99">        if (!isAbstract(ast)) {</a>
-<span class="sourceLineNo">100</span><a id="line.100">            final boolean hasStaticModifier = isStatic(ast);</a>
-<span class="sourceLineNo">101</span><a id="line.101"></a>
-<span class="sourceLineNo">102</span><a id="line.102">            final Details details = new Details(ast);</a>
-<span class="sourceLineNo">103</span><a id="line.103">            details.invoke();</a>
-<span class="sourceLineNo">104</span><a id="line.104"></a>
-<span class="sourceLineNo">105</span><a id="line.105">            final boolean hasDefaultCtor = details.isHasDefaultCtor();</a>
-<span class="sourceLineNo">106</span><a id="line.106">            final boolean hasPublicCtor = details.isHasPublicCtor();</a>
-<span class="sourceLineNo">107</span><a id="line.107">            final boolean hasNonStaticMethodOrField = details.isHasNonStaticMethodOrField();</a>
-<span class="sourceLineNo">108</span><a id="line.108">            final boolean hasNonPrivateStaticMethodOrField =</a>
-<span class="sourceLineNo">109</span><a id="line.109">                    details.isHasNonPrivateStaticMethodOrField();</a>
-<span class="sourceLineNo">110</span><a id="line.110"></a>
-<span class="sourceLineNo">111</span><a id="line.111">            final boolean hasAccessibleCtor = hasDefaultCtor || hasPublicCtor;</a>
-<span class="sourceLineNo">112</span><a id="line.112"></a>
-<span class="sourceLineNo">113</span><a id="line.113">            // figure out if class extends java.lang.object directly</a>
-<span class="sourceLineNo">114</span><a id="line.114">            // keep it simple for now and get a 99% solution</a>
-<span class="sourceLineNo">115</span><a id="line.115">            final boolean extendsJlo =</a>
-<span class="sourceLineNo">116</span><a id="line.116">                ast.findFirstToken(TokenTypes.EXTENDS_CLAUSE) == null;</a>
-<span class="sourceLineNo">117</span><a id="line.117"></a>
-<span class="sourceLineNo">118</span><a id="line.118">            final boolean isUtilClass = extendsJlo</a>
-<span class="sourceLineNo">119</span><a id="line.119">                &amp;&amp; !hasNonStaticMethodOrField &amp;&amp; hasNonPrivateStaticMethodOrField;</a>
-<span class="sourceLineNo">120</span><a id="line.120"></a>
-<span class="sourceLineNo">121</span><a id="line.121">            if (isUtilClass &amp;&amp; hasAccessibleCtor &amp;&amp; !hasStaticModifier) {</a>
-<span class="sourceLineNo">122</span><a id="line.122">                log(ast, MSG_KEY);</a>
-<span class="sourceLineNo">123</span><a id="line.123">            }</a>
-<span class="sourceLineNo">124</span><a id="line.124">        }</a>
-<span class="sourceLineNo">125</span><a id="line.125">    }</a>
-<span class="sourceLineNo">126</span><a id="line.126"></a>
-<span class="sourceLineNo">127</span><a id="line.127">    /**</a>
-<span class="sourceLineNo">128</span><a id="line.128">     * Returns true if given class is abstract or false.</a>
-<span class="sourceLineNo">129</span><a id="line.129">     *</a>
-<span class="sourceLineNo">130</span><a id="line.130">     * @param ast class definition for check.</a>
-<span class="sourceLineNo">131</span><a id="line.131">     * @return true if a given class declared as abstract.</a>
-<span class="sourceLineNo">132</span><a id="line.132">     */</a>
-<span class="sourceLineNo">133</span><a id="line.133">    private static boolean isAbstract(DetailAST ast) {</a>
-<span class="sourceLineNo">134</span><a id="line.134">        return ast.findFirstToken(TokenTypes.MODIFIERS)</a>
-<span class="sourceLineNo">135</span><a id="line.135">            .findFirstToken(TokenTypes.ABSTRACT) != null;</a>
-<span class="sourceLineNo">136</span><a id="line.136">    }</a>
-<span class="sourceLineNo">137</span><a id="line.137"></a>
-<span class="sourceLineNo">138</span><a id="line.138">    /**</a>
-<span class="sourceLineNo">139</span><a id="line.139">     * Returns true if given class is static or false.</a>
-<span class="sourceLineNo">140</span><a id="line.140">     *</a>
-<span class="sourceLineNo">141</span><a id="line.141">     * @param ast class definition for check.</a>
-<span class="sourceLineNo">142</span><a id="line.142">     * @return true if a given class declared as static.</a>
-<span class="sourceLineNo">143</span><a id="line.143">     */</a>
-<span class="sourceLineNo">144</span><a id="line.144">    private static boolean isStatic(DetailAST ast) {</a>
-<span class="sourceLineNo">145</span><a id="line.145">        return ast.findFirstToken(TokenTypes.MODIFIERS)</a>
-<span class="sourceLineNo">146</span><a id="line.146">            .findFirstToken(TokenTypes.LITERAL_STATIC) != null;</a>
-<span class="sourceLineNo">147</span><a id="line.147">    }</a>
+<span class="sourceLineNo">054</span><a id="line.54"> *</a>
+<span class="sourceLineNo">055</span><a id="line.55"> *   public static int count(char c, String s) {</a>
+<span class="sourceLineNo">056</span><a id="line.56"> *     // ...</a>
+<span class="sourceLineNo">057</span><a id="line.57"> *   }</a>
+<span class="sourceLineNo">058</span><a id="line.58"> * }</a>
+<span class="sourceLineNo">059</span><a id="line.59"> * &lt;/pre&gt;</a>
+<span class="sourceLineNo">060</span><a id="line.60"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">061</span><a id="line.61"> * &lt;li&gt;</a>
+<span class="sourceLineNo">062</span><a id="line.62"> * Property {@code ignoreAnnotatedBy} - Ignore classes annotated</a>
+<span class="sourceLineNo">063</span><a id="line.63"> * with the specified annotation(s). Annotation names provided in this property</a>
+<span class="sourceLineNo">064</span><a id="line.64"> * must exactly match the annotation names on the classes. If the target class has annotations</a>
+<span class="sourceLineNo">065</span><a id="line.65"> * specified with their fully qualified names (including package), the annotations in this</a>
+<span class="sourceLineNo">066</span><a id="line.66"> * property should also be specified with their fully qualified names. Similarly, if the target</a>
+<span class="sourceLineNo">067</span><a id="line.67"> * class has annotations specified with their simple names, this property should contain the</a>
+<span class="sourceLineNo">068</span><a id="line.68"> * annotations with the same simple names.</a>
+<span class="sourceLineNo">069</span><a id="line.69"> * Type is {@code java.lang.String[]}.</a>
+<span class="sourceLineNo">070</span><a id="line.70"> * Default value is {@code ""}.</a>
+<span class="sourceLineNo">071</span><a id="line.71"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">072</span><a id="line.72"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">073</span><a id="line.73"> *</a>
+<span class="sourceLineNo">074</span><a id="line.74"> * &lt;p&gt;</a>
+<span class="sourceLineNo">075</span><a id="line.75"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</a>
+<span class="sourceLineNo">076</span><a id="line.76"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">077</span><a id="line.77"> *</a>
+<span class="sourceLineNo">078</span><a id="line.78"> * &lt;p&gt;</a>
+<span class="sourceLineNo">079</span><a id="line.79"> * Violation Message Keys:</a>
+<span class="sourceLineNo">080</span><a id="line.80"> * &lt;/p&gt;</a>
+<span class="sourceLineNo">081</span><a id="line.81"> * &lt;ul&gt;</a>
+<span class="sourceLineNo">082</span><a id="line.82"> * &lt;li&gt;</a>
+<span class="sourceLineNo">083</span><a id="line.83"> * {@code hide.utility.class}</a>
+<span class="sourceLineNo">084</span><a id="line.84"> * &lt;/li&gt;</a>
+<span class="sourceLineNo">085</span><a id="line.85"> * &lt;/ul&gt;</a>
+<span class="sourceLineNo">086</span><a id="line.86"> *</a>
+<span class="sourceLineNo">087</span><a id="line.87"> * @since 3.1</a>
+<span class="sourceLineNo">088</span><a id="line.88"> */</a>
+<span class="sourceLineNo">089</span><a id="line.89">@StatelessCheck</a>
+<span class="sourceLineNo">090</span><a id="line.90">public class HideUtilityClassConstructorCheck extends AbstractCheck {</a>
+<span class="sourceLineNo">091</span><a id="line.91"></a>
+<span class="sourceLineNo">092</span><a id="line.92">    /**</a>
+<span class="sourceLineNo">093</span><a id="line.93">     * A key is pointing to the warning message text in "messages.properties"</a>
+<span class="sourceLineNo">094</span><a id="line.94">     * file.</a>
+<span class="sourceLineNo">095</span><a id="line.95">     */</a>
+<span class="sourceLineNo">096</span><a id="line.96">    public static final String MSG_KEY = "hide.utility.class";</a>
+<span class="sourceLineNo">097</span><a id="line.97"></a>
+<span class="sourceLineNo">098</span><a id="line.98">    /**</a>
+<span class="sourceLineNo">099</span><a id="line.99">     * Ignore classes annotated with the specified annotation(s). Annotation names</a>
+<span class="sourceLineNo">100</span><a id="line.100">     * provided in this property must exactly match the annotation names on the classes.</a>
+<span class="sourceLineNo">101</span><a id="line.101">     * If the target class has annotations specified with their fully qualified names</a>
+<span class="sourceLineNo">102</span><a id="line.102">     * (including package), the annotations in this property should also be specified with</a>
+<span class="sourceLineNo">103</span><a id="line.103">     * their fully qualified names. Similarly, if the target class has annotations specified</a>
+<span class="sourceLineNo">104</span><a id="line.104">     * with their simple names, this property should contain the annotations with the same</a>
+<span class="sourceLineNo">105</span><a id="line.105">     * simple names.</a>
+<span class="sourceLineNo">106</span><a id="line.106">     */</a>
+<span class="sourceLineNo">107</span><a id="line.107">    private Set&lt;String&gt; ignoreAnnotatedBy = Collections.emptySet();</a>
+<span class="sourceLineNo">108</span><a id="line.108"></a>
+<span class="sourceLineNo">109</span><a id="line.109">    /**</a>
+<span class="sourceLineNo">110</span><a id="line.110">     * Setter to ignore classes annotated with the specified annotation(s). Annotation names</a>
+<span class="sourceLineNo">111</span><a id="line.111">     * provided in this property must exactly match the annotation names on the classes.</a>
+<span class="sourceLineNo">112</span><a id="line.112">     * If the target class has annotations specified with their fully qualified names</a>
+<span class="sourceLineNo">113</span><a id="line.113">     * (including package), the annotations in this property should also be specified with</a>
+<span class="sourceLineNo">114</span><a id="line.114">     * their fully qualified names. Similarly, if the target class has annotations specified</a>
+<span class="sourceLineNo">115</span><a id="line.115">     * with their simple names, this property should contain the annotations with the same</a>
+<span class="sourceLineNo">116</span><a id="line.116">     * simple names.</a>
+<span class="sourceLineNo">117</span><a id="line.117">     *</a>
+<span class="sourceLineNo">118</span><a id="line.118">     * @param annotationNames specified annotation(s)</a>
+<span class="sourceLineNo">119</span><a id="line.119">     * @since 10.20.0</a>
+<span class="sourceLineNo">120</span><a id="line.120">     */</a>
+<span class="sourceLineNo">121</span><a id="line.121">    public void setIgnoreAnnotatedBy(String... annotationNames) {</a>
+<span class="sourceLineNo">122</span><a id="line.122">        ignoreAnnotatedBy = Set.of(annotationNames);</a>
+<span class="sourceLineNo">123</span><a id="line.123">    }</a>
+<span class="sourceLineNo">124</span><a id="line.124"></a>
+<span class="sourceLineNo">125</span><a id="line.125">    @Override</a>
+<span class="sourceLineNo">126</span><a id="line.126">    public int[] getDefaultTokens() {</a>
+<span class="sourceLineNo">127</span><a id="line.127">        return getRequiredTokens();</a>
+<span class="sourceLineNo">128</span><a id="line.128">    }</a>
+<span class="sourceLineNo">129</span><a id="line.129"></a>
+<span class="sourceLineNo">130</span><a id="line.130">    @Override</a>
+<span class="sourceLineNo">131</span><a id="line.131">    public int[] getAcceptableTokens() {</a>
+<span class="sourceLineNo">132</span><a id="line.132">        return getRequiredTokens();</a>
+<span class="sourceLineNo">133</span><a id="line.133">    }</a>
+<span class="sourceLineNo">134</span><a id="line.134"></a>
+<span class="sourceLineNo">135</span><a id="line.135">    @Override</a>
+<span class="sourceLineNo">136</span><a id="line.136">    public int[] getRequiredTokens() {</a>
+<span class="sourceLineNo">137</span><a id="line.137">        return new int[] {TokenTypes.CLASS_DEF};</a>
+<span class="sourceLineNo">138</span><a id="line.138">    }</a>
+<span class="sourceLineNo">139</span><a id="line.139"></a>
+<span class="sourceLineNo">140</span><a id="line.140">    @Override</a>
+<span class="sourceLineNo">141</span><a id="line.141">    public void visitToken(DetailAST ast) {</a>
+<span class="sourceLineNo">142</span><a id="line.142">        // abstract class could not have private constructor</a>
+<span class="sourceLineNo">143</span><a id="line.143">        if (!isAbstract(ast) &amp;&amp; !shouldIgnoreClass(ast)) {</a>
+<span class="sourceLineNo">144</span><a id="line.144">            final boolean hasStaticModifier = isStatic(ast);</a>
+<span class="sourceLineNo">145</span><a id="line.145"></a>
+<span class="sourceLineNo">146</span><a id="line.146">            final Details details = new Details(ast);</a>
+<span class="sourceLineNo">147</span><a id="line.147">            details.invoke();</a>
 <span class="sourceLineNo">148</span><a id="line.148"></a>
-<span class="sourceLineNo">149</span><a id="line.149">    /**</a>
-<span class="sourceLineNo">150</span><a id="line.150">     * Details of class that are required for validation.</a>
-<span class="sourceLineNo">151</span><a id="line.151">     */</a>
-<span class="sourceLineNo">152</span><a id="line.152">    private static final class Details {</a>
-<span class="sourceLineNo">153</span><a id="line.153"></a>
-<span class="sourceLineNo">154</span><a id="line.154">        /** Class ast. */</a>
-<span class="sourceLineNo">155</span><a id="line.155">        private final DetailAST ast;</a>
-<span class="sourceLineNo">156</span><a id="line.156">        /** Result of details gathering. */</a>
-<span class="sourceLineNo">157</span><a id="line.157">        private boolean hasNonStaticMethodOrField;</a>
-<span class="sourceLineNo">158</span><a id="line.158">        /** Result of details gathering. */</a>
-<span class="sourceLineNo">159</span><a id="line.159">        private boolean hasNonPrivateStaticMethodOrField;</a>
-<span class="sourceLineNo">160</span><a id="line.160">        /** Result of details gathering. */</a>
-<span class="sourceLineNo">161</span><a id="line.161">        private boolean hasDefaultCtor;</a>
-<span class="sourceLineNo">162</span><a id="line.162">        /** Result of details gathering. */</a>
-<span class="sourceLineNo">163</span><a id="line.163">        private boolean hasPublicCtor;</a>
+<span class="sourceLineNo">149</span><a id="line.149">            final boolean hasDefaultCtor = details.isHasDefaultCtor();</a>
+<span class="sourceLineNo">150</span><a id="line.150">            final boolean hasPublicCtor = details.isHasPublicCtor();</a>
+<span class="sourceLineNo">151</span><a id="line.151">            final boolean hasNonStaticMethodOrField = details.isHasNonStaticMethodOrField();</a>
+<span class="sourceLineNo">152</span><a id="line.152">            final boolean hasNonPrivateStaticMethodOrField =</a>
+<span class="sourceLineNo">153</span><a id="line.153">                    details.isHasNonPrivateStaticMethodOrField();</a>
+<span class="sourceLineNo">154</span><a id="line.154"></a>
+<span class="sourceLineNo">155</span><a id="line.155">            final boolean hasAccessibleCtor = hasDefaultCtor || hasPublicCtor;</a>
+<span class="sourceLineNo">156</span><a id="line.156"></a>
+<span class="sourceLineNo">157</span><a id="line.157">            // figure out if class extends java.lang.object directly</a>
+<span class="sourceLineNo">158</span><a id="line.158">            // keep it simple for now and get a 99% solution</a>
+<span class="sourceLineNo">159</span><a id="line.159">            final boolean extendsJlo =</a>
+<span class="sourceLineNo">160</span><a id="line.160">                ast.findFirstToken(TokenTypes.EXTENDS_CLAUSE) == null;</a>
+<span class="sourceLineNo">161</span><a id="line.161"></a>
+<span class="sourceLineNo">162</span><a id="line.162">            final boolean isUtilClass = extendsJlo</a>
+<span class="sourceLineNo">163</span><a id="line.163">                &amp;&amp; !hasNonStaticMethodOrField &amp;&amp; hasNonPrivateStaticMethodOrField;</a>
 <span class="sourceLineNo">164</span><a id="line.164"></a>
-<span class="sourceLineNo">165</span><a id="line.165">        /**</a>
-<span class="sourceLineNo">166</span><a id="line.166">         * C-tor.</a>
-<span class="sourceLineNo">167</span><a id="line.167">         *</a>
-<span class="sourceLineNo">168</span><a id="line.168">         * @param ast class ast</a>
-<span class="sourceLineNo">169</span><a id="line.169">         */</a>
-<span class="sourceLineNo">170</span><a id="line.170">        private Details(DetailAST ast) {</a>
-<span class="sourceLineNo">171</span><a id="line.171">            this.ast = ast;</a>
-<span class="sourceLineNo">172</span><a id="line.172">        }</a>
-<span class="sourceLineNo">173</span><a id="line.173"></a>
-<span class="sourceLineNo">174</span><a id="line.174">        /**</a>
-<span class="sourceLineNo">175</span><a id="line.175">         * Getter.</a>
-<span class="sourceLineNo">176</span><a id="line.176">         *</a>
-<span class="sourceLineNo">177</span><a id="line.177">         * @return boolean</a>
-<span class="sourceLineNo">178</span><a id="line.178">         */</a>
-<span class="sourceLineNo">179</span><a id="line.179">        public boolean isHasNonStaticMethodOrField() {</a>
-<span class="sourceLineNo">180</span><a id="line.180">            return hasNonStaticMethodOrField;</a>
-<span class="sourceLineNo">181</span><a id="line.181">        }</a>
-<span class="sourceLineNo">182</span><a id="line.182"></a>
-<span class="sourceLineNo">183</span><a id="line.183">        /**</a>
-<span class="sourceLineNo">184</span><a id="line.184">         * Getter.</a>
-<span class="sourceLineNo">185</span><a id="line.185">         *</a>
-<span class="sourceLineNo">186</span><a id="line.186">         * @return boolean</a>
-<span class="sourceLineNo">187</span><a id="line.187">         */</a>
-<span class="sourceLineNo">188</span><a id="line.188">        public boolean isHasNonPrivateStaticMethodOrField() {</a>
-<span class="sourceLineNo">189</span><a id="line.189">            return hasNonPrivateStaticMethodOrField;</a>
-<span class="sourceLineNo">190</span><a id="line.190">        }</a>
-<span class="sourceLineNo">191</span><a id="line.191"></a>
-<span class="sourceLineNo">192</span><a id="line.192">        /**</a>
-<span class="sourceLineNo">193</span><a id="line.193">         * Getter.</a>
-<span class="sourceLineNo">194</span><a id="line.194">         *</a>
-<span class="sourceLineNo">195</span><a id="line.195">         * @return boolean</a>
-<span class="sourceLineNo">196</span><a id="line.196">         */</a>
-<span class="sourceLineNo">197</span><a id="line.197">        public boolean isHasDefaultCtor() {</a>
-<span class="sourceLineNo">198</span><a id="line.198">            return hasDefaultCtor;</a>
-<span class="sourceLineNo">199</span><a id="line.199">        }</a>
-<span class="sourceLineNo">200</span><a id="line.200"></a>
-<span class="sourceLineNo">201</span><a id="line.201">        /**</a>
-<span class="sourceLineNo">202</span><a id="line.202">         * Getter.</a>
-<span class="sourceLineNo">203</span><a id="line.203">         *</a>
-<span class="sourceLineNo">204</span><a id="line.204">         * @return boolean</a>
-<span class="sourceLineNo">205</span><a id="line.205">         */</a>
-<span class="sourceLineNo">206</span><a id="line.206">        public boolean isHasPublicCtor() {</a>
-<span class="sourceLineNo">207</span><a id="line.207">            return hasPublicCtor;</a>
-<span class="sourceLineNo">208</span><a id="line.208">        }</a>
-<span class="sourceLineNo">209</span><a id="line.209"></a>
-<span class="sourceLineNo">210</span><a id="line.210">        /**</a>
-<span class="sourceLineNo">211</span><a id="line.211">         * Main method to gather statistics.</a>
-<span class="sourceLineNo">212</span><a id="line.212">         */</a>
-<span class="sourceLineNo">213</span><a id="line.213">        public void invoke() {</a>
-<span class="sourceLineNo">214</span><a id="line.214">            final DetailAST objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);</a>
-<span class="sourceLineNo">215</span><a id="line.215">            hasDefaultCtor = true;</a>
-<span class="sourceLineNo">216</span><a id="line.216">            DetailAST child = objBlock.getFirstChild();</a>
-<span class="sourceLineNo">217</span><a id="line.217"></a>
-<span class="sourceLineNo">218</span><a id="line.218">            while (child != null) {</a>
-<span class="sourceLineNo">219</span><a id="line.219">                final int type = child.getType();</a>
-<span class="sourceLineNo">220</span><a id="line.220">                if (type == TokenTypes.METHOD_DEF</a>
-<span class="sourceLineNo">221</span><a id="line.221">                        || type == TokenTypes.VARIABLE_DEF) {</a>
-<span class="sourceLineNo">222</span><a id="line.222">                    final DetailAST modifiers =</a>
-<span class="sourceLineNo">223</span><a id="line.223">                        child.findFirstToken(TokenTypes.MODIFIERS);</a>
-<span class="sourceLineNo">224</span><a id="line.224">                    final boolean isStatic =</a>
-<span class="sourceLineNo">225</span><a id="line.225">                        modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</a>
-<span class="sourceLineNo">226</span><a id="line.226"></a>
-<span class="sourceLineNo">227</span><a id="line.227">                    if (isStatic) {</a>
-<span class="sourceLineNo">228</span><a id="line.228">                        final boolean isPrivate =</a>
-<span class="sourceLineNo">229</span><a id="line.229">                                modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) != null;</a>
-<span class="sourceLineNo">230</span><a id="line.230"></a>
-<span class="sourceLineNo">231</span><a id="line.231">                        if (!isPrivate) {</a>
-<span class="sourceLineNo">232</span><a id="line.232">                            hasNonPrivateStaticMethodOrField = true;</a>
-<span class="sourceLineNo">233</span><a id="line.233">                        }</a>
-<span class="sourceLineNo">234</span><a id="line.234">                    }</a>
-<span class="sourceLineNo">235</span><a id="line.235">                    else {</a>
-<span class="sourceLineNo">236</span><a id="line.236">                        hasNonStaticMethodOrField = true;</a>
-<span class="sourceLineNo">237</span><a id="line.237">                    }</a>
-<span class="sourceLineNo">238</span><a id="line.238">                }</a>
-<span class="sourceLineNo">239</span><a id="line.239">                if (type == TokenTypes.CTOR_DEF) {</a>
-<span class="sourceLineNo">240</span><a id="line.240">                    hasDefaultCtor = false;</a>
-<span class="sourceLineNo">241</span><a id="line.241">                    final DetailAST modifiers =</a>
-<span class="sourceLineNo">242</span><a id="line.242">                        child.findFirstToken(TokenTypes.MODIFIERS);</a>
-<span class="sourceLineNo">243</span><a id="line.243">                    if (modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</a>
-<span class="sourceLineNo">244</span><a id="line.244">                        &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PROTECTED) == null) {</a>
-<span class="sourceLineNo">245</span><a id="line.245">                        // treat package visible as public</a>
-<span class="sourceLineNo">246</span><a id="line.246">                        // for the purpose of this Check</a>
-<span class="sourceLineNo">247</span><a id="line.247">                        hasPublicCtor = true;</a>
-<span class="sourceLineNo">248</span><a id="line.248">                    }</a>
-<span class="sourceLineNo">249</span><a id="line.249">                }</a>
-<span class="sourceLineNo">250</span><a id="line.250">                child = child.getNextSibling();</a>
-<span class="sourceLineNo">251</span><a id="line.251">            }</a>
-<span class="sourceLineNo">252</span><a id="line.252">        }</a>
-<span class="sourceLineNo">253</span><a id="line.253"></a>
-<span class="sourceLineNo">254</span><a id="line.254">    }</a>
-<span class="sourceLineNo">255</span><a id="line.255"></a>
-<span class="sourceLineNo">256</span><a id="line.256">}</a>
+<span class="sourceLineNo">165</span><a id="line.165">            if (isUtilClass &amp;&amp; hasAccessibleCtor &amp;&amp; !hasStaticModifier) {</a>
+<span class="sourceLineNo">166</span><a id="line.166">                log(ast, MSG_KEY);</a>
+<span class="sourceLineNo">167</span><a id="line.167">            }</a>
+<span class="sourceLineNo">168</span><a id="line.168">        }</a>
+<span class="sourceLineNo">169</span><a id="line.169">    }</a>
+<span class="sourceLineNo">170</span><a id="line.170"></a>
+<span class="sourceLineNo">171</span><a id="line.171">    /**</a>
+<span class="sourceLineNo">172</span><a id="line.172">     * Returns true if given class is abstract or false.</a>
+<span class="sourceLineNo">173</span><a id="line.173">     *</a>
+<span class="sourceLineNo">174</span><a id="line.174">     * @param ast class definition for check.</a>
+<span class="sourceLineNo">175</span><a id="line.175">     * @return true if a given class declared as abstract.</a>
+<span class="sourceLineNo">176</span><a id="line.176">     */</a>
+<span class="sourceLineNo">177</span><a id="line.177">    private static boolean isAbstract(DetailAST ast) {</a>
+<span class="sourceLineNo">178</span><a id="line.178">        return ast.findFirstToken(TokenTypes.MODIFIERS)</a>
+<span class="sourceLineNo">179</span><a id="line.179">            .findFirstToken(TokenTypes.ABSTRACT) != null;</a>
+<span class="sourceLineNo">180</span><a id="line.180">    }</a>
+<span class="sourceLineNo">181</span><a id="line.181"></a>
+<span class="sourceLineNo">182</span><a id="line.182">    /**</a>
+<span class="sourceLineNo">183</span><a id="line.183">     * Returns true if given class is static or false.</a>
+<span class="sourceLineNo">184</span><a id="line.184">     *</a>
+<span class="sourceLineNo">185</span><a id="line.185">     * @param ast class definition for check.</a>
+<span class="sourceLineNo">186</span><a id="line.186">     * @return true if a given class declared as static.</a>
+<span class="sourceLineNo">187</span><a id="line.187">     */</a>
+<span class="sourceLineNo">188</span><a id="line.188">    private static boolean isStatic(DetailAST ast) {</a>
+<span class="sourceLineNo">189</span><a id="line.189">        return ast.findFirstToken(TokenTypes.MODIFIERS)</a>
+<span class="sourceLineNo">190</span><a id="line.190">            .findFirstToken(TokenTypes.LITERAL_STATIC) != null;</a>
+<span class="sourceLineNo">191</span><a id="line.191">    }</a>
+<span class="sourceLineNo">192</span><a id="line.192"></a>
+<span class="sourceLineNo">193</span><a id="line.193">    /**</a>
+<span class="sourceLineNo">194</span><a id="line.194">     * Checks if class is annotated by specific annotation(s) to skip.</a>
+<span class="sourceLineNo">195</span><a id="line.195">     *</a>
+<span class="sourceLineNo">196</span><a id="line.196">     * @param ast class to check</a>
+<span class="sourceLineNo">197</span><a id="line.197">     * @return true if annotated by ignored annotations</a>
+<span class="sourceLineNo">198</span><a id="line.198">     */</a>
+<span class="sourceLineNo">199</span><a id="line.199">    private boolean shouldIgnoreClass(DetailAST ast) {</a>
+<span class="sourceLineNo">200</span><a id="line.200">        return AnnotationUtil.containsAnnotation(ast, ignoreAnnotatedBy);</a>
+<span class="sourceLineNo">201</span><a id="line.201">    }</a>
+<span class="sourceLineNo">202</span><a id="line.202"></a>
+<span class="sourceLineNo">203</span><a id="line.203">    /**</a>
+<span class="sourceLineNo">204</span><a id="line.204">     * Details of class that are required for validation.</a>
+<span class="sourceLineNo">205</span><a id="line.205">     */</a>
+<span class="sourceLineNo">206</span><a id="line.206">    private static final class Details {</a>
+<span class="sourceLineNo">207</span><a id="line.207"></a>
+<span class="sourceLineNo">208</span><a id="line.208">        /** Class ast. */</a>
+<span class="sourceLineNo">209</span><a id="line.209">        private final DetailAST ast;</a>
+<span class="sourceLineNo">210</span><a id="line.210">        /** Result of details gathering. */</a>
+<span class="sourceLineNo">211</span><a id="line.211">        private boolean hasNonStaticMethodOrField;</a>
+<span class="sourceLineNo">212</span><a id="line.212">        /** Result of details gathering. */</a>
+<span class="sourceLineNo">213</span><a id="line.213">        private boolean hasNonPrivateStaticMethodOrField;</a>
+<span class="sourceLineNo">214</span><a id="line.214">        /** Result of details gathering. */</a>
+<span class="sourceLineNo">215</span><a id="line.215">        private boolean hasDefaultCtor;</a>
+<span class="sourceLineNo">216</span><a id="line.216">        /** Result of details gathering. */</a>
+<span class="sourceLineNo">217</span><a id="line.217">        private boolean hasPublicCtor;</a>
+<span class="sourceLineNo">218</span><a id="line.218"></a>
+<span class="sourceLineNo">219</span><a id="line.219">        /**</a>
+<span class="sourceLineNo">220</span><a id="line.220">         * C-tor.</a>
+<span class="sourceLineNo">221</span><a id="line.221">         *</a>
+<span class="sourceLineNo">222</span><a id="line.222">         * @param ast class ast</a>
+<span class="sourceLineNo">223</span><a id="line.223">         */</a>
+<span class="sourceLineNo">224</span><a id="line.224">        private Details(DetailAST ast) {</a>
+<span class="sourceLineNo">225</span><a id="line.225">            this.ast = ast;</a>
+<span class="sourceLineNo">226</span><a id="line.226">        }</a>
+<span class="sourceLineNo">227</span><a id="line.227"></a>
+<span class="sourceLineNo">228</span><a id="line.228">        /**</a>
+<span class="sourceLineNo">229</span><a id="line.229">         * Getter.</a>
+<span class="sourceLineNo">230</span><a id="line.230">         *</a>
+<span class="sourceLineNo">231</span><a id="line.231">         * @return boolean</a>
+<span class="sourceLineNo">232</span><a id="line.232">         */</a>
+<span class="sourceLineNo">233</span><a id="line.233">        public boolean isHasNonStaticMethodOrField() {</a>
+<span class="sourceLineNo">234</span><a id="line.234">            return hasNonStaticMethodOrField;</a>
+<span class="sourceLineNo">235</span><a id="line.235">        }</a>
+<span class="sourceLineNo">236</span><a id="line.236"></a>
+<span class="sourceLineNo">237</span><a id="line.237">        /**</a>
+<span class="sourceLineNo">238</span><a id="line.238">         * Getter.</a>
+<span class="sourceLineNo">239</span><a id="line.239">         *</a>
+<span class="sourceLineNo">240</span><a id="line.240">         * @return boolean</a>
+<span class="sourceLineNo">241</span><a id="line.241">         */</a>
+<span class="sourceLineNo">242</span><a id="line.242">        public boolean isHasNonPrivateStaticMethodOrField() {</a>
+<span class="sourceLineNo">243</span><a id="line.243">            return hasNonPrivateStaticMethodOrField;</a>
+<span class="sourceLineNo">244</span><a id="line.244">        }</a>
+<span class="sourceLineNo">245</span><a id="line.245"></a>
+<span class="sourceLineNo">246</span><a id="line.246">        /**</a>
+<span class="sourceLineNo">247</span><a id="line.247">         * Getter.</a>
+<span class="sourceLineNo">248</span><a id="line.248">         *</a>
+<span class="sourceLineNo">249</span><a id="line.249">         * @return boolean</a>
+<span class="sourceLineNo">250</span><a id="line.250">         */</a>
+<span class="sourceLineNo">251</span><a id="line.251">        public boolean isHasDefaultCtor() {</a>
+<span class="sourceLineNo">252</span><a id="line.252">            return hasDefaultCtor;</a>
+<span class="sourceLineNo">253</span><a id="line.253">        }</a>
+<span class="sourceLineNo">254</span><a id="line.254"></a>
+<span class="sourceLineNo">255</span><a id="line.255">        /**</a>
+<span class="sourceLineNo">256</span><a id="line.256">         * Getter.</a>
+<span class="sourceLineNo">257</span><a id="line.257">         *</a>
+<span class="sourceLineNo">258</span><a id="line.258">         * @return boolean</a>
+<span class="sourceLineNo">259</span><a id="line.259">         */</a>
+<span class="sourceLineNo">260</span><a id="line.260">        public boolean isHasPublicCtor() {</a>
+<span class="sourceLineNo">261</span><a id="line.261">            return hasPublicCtor;</a>
+<span class="sourceLineNo">262</span><a id="line.262">        }</a>
+<span class="sourceLineNo">263</span><a id="line.263"></a>
+<span class="sourceLineNo">264</span><a id="line.264">        /**</a>
+<span class="sourceLineNo">265</span><a id="line.265">         * Main method to gather statistics.</a>
+<span class="sourceLineNo">266</span><a id="line.266">         */</a>
+<span class="sourceLineNo">267</span><a id="line.267">        public void invoke() {</a>
+<span class="sourceLineNo">268</span><a id="line.268">            final DetailAST objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);</a>
+<span class="sourceLineNo">269</span><a id="line.269">            hasDefaultCtor = true;</a>
+<span class="sourceLineNo">270</span><a id="line.270">            DetailAST child = objBlock.getFirstChild();</a>
+<span class="sourceLineNo">271</span><a id="line.271"></a>
+<span class="sourceLineNo">272</span><a id="line.272">            while (child != null) {</a>
+<span class="sourceLineNo">273</span><a id="line.273">                final int type = child.getType();</a>
+<span class="sourceLineNo">274</span><a id="line.274">                if (type == TokenTypes.METHOD_DEF</a>
+<span class="sourceLineNo">275</span><a id="line.275">                        || type == TokenTypes.VARIABLE_DEF) {</a>
+<span class="sourceLineNo">276</span><a id="line.276">                    final DetailAST modifiers =</a>
+<span class="sourceLineNo">277</span><a id="line.277">                        child.findFirstToken(TokenTypes.MODIFIERS);</a>
+<span class="sourceLineNo">278</span><a id="line.278">                    final boolean isStatic =</a>
+<span class="sourceLineNo">279</span><a id="line.279">                        modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null;</a>
+<span class="sourceLineNo">280</span><a id="line.280"></a>
+<span class="sourceLineNo">281</span><a id="line.281">                    if (isStatic) {</a>
+<span class="sourceLineNo">282</span><a id="line.282">                        final boolean isPrivate =</a>
+<span class="sourceLineNo">283</span><a id="line.283">                                modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) != null;</a>
+<span class="sourceLineNo">284</span><a id="line.284"></a>
+<span class="sourceLineNo">285</span><a id="line.285">                        if (!isPrivate) {</a>
+<span class="sourceLineNo">286</span><a id="line.286">                            hasNonPrivateStaticMethodOrField = true;</a>
+<span class="sourceLineNo">287</span><a id="line.287">                        }</a>
+<span class="sourceLineNo">288</span><a id="line.288">                    }</a>
+<span class="sourceLineNo">289</span><a id="line.289">                    else {</a>
+<span class="sourceLineNo">290</span><a id="line.290">                        hasNonStaticMethodOrField = true;</a>
+<span class="sourceLineNo">291</span><a id="line.291">                    }</a>
+<span class="sourceLineNo">292</span><a id="line.292">                }</a>
+<span class="sourceLineNo">293</span><a id="line.293">                if (type == TokenTypes.CTOR_DEF) {</a>
+<span class="sourceLineNo">294</span><a id="line.294">                    hasDefaultCtor = false;</a>
+<span class="sourceLineNo">295</span><a id="line.295">                    final DetailAST modifiers =</a>
+<span class="sourceLineNo">296</span><a id="line.296">                        child.findFirstToken(TokenTypes.MODIFIERS);</a>
+<span class="sourceLineNo">297</span><a id="line.297">                    if (modifiers.findFirstToken(TokenTypes.LITERAL_PRIVATE) == null</a>
+<span class="sourceLineNo">298</span><a id="line.298">                        &amp;&amp; modifiers.findFirstToken(TokenTypes.LITERAL_PROTECTED) == null) {</a>
+<span class="sourceLineNo">299</span><a id="line.299">                        // treat package visible as public</a>
+<span class="sourceLineNo">300</span><a id="line.300">                        // for the purpose of this Check</a>
+<span class="sourceLineNo">301</span><a id="line.301">                        hasPublicCtor = true;</a>
+<span class="sourceLineNo">302</span><a id="line.302">                    }</a>
+<span class="sourceLineNo">303</span><a id="line.303">                }</a>
+<span class="sourceLineNo">304</span><a id="line.304">                child = child.getNextSibling();</a>
+<span class="sourceLineNo">305</span><a id="line.305">            }</a>
+<span class="sourceLineNo">306</span><a id="line.306">        }</a>
+<span class="sourceLineNo">307</span><a id="line.307"></a>
+<span class="sourceLineNo">308</span><a id="line.308">    }</a>
+<span class="sourceLineNo">309</span><a id="line.309"></a>
+<span class="sourceLineNo">310</span><a id="line.310">}</a>
 
 
 
