@@ -571,7 +571,7 @@
 <span class="sourceLineNo">562</span><a id="line.562">        else {</a>
 <span class="sourceLineNo">563</span><a id="line.563">            final List&lt;TypeDeclDesc&gt; typeDeclWithSameName = typeDeclWithSameName(shortNameOfClass);</a>
 <span class="sourceLineNo">564</span><a id="line.564">            if (!typeDeclWithSameName.isEmpty()) {</a>
-<span class="sourceLineNo">565</span><a id="line.565">                obtainedClass = getTheNearestClass(</a>
+<span class="sourceLineNo">565</span><a id="line.565">                obtainedClass = getClosestMatchingTypeDeclaration(</a>
 <span class="sourceLineNo">566</span><a id="line.566">                        anonInnerAstToTypeDeclDesc.get(literalNewAst).getQualifiedName(),</a>
 <span class="sourceLineNo">567</span><a id="line.567">                        typeDeclWithSameName);</a>
 <span class="sourceLineNo">568</span><a id="line.568">            }</a>
@@ -640,10 +640,10 @@
 <span class="sourceLineNo">631</span><a id="line.631">     * @param typeDeclWithSameName typeDeclarations which have the same name as the super class</a>
 <span class="sourceLineNo">632</span><a id="line.632">     * @return the nearest class</a>
 <span class="sourceLineNo">633</span><a id="line.633">     */</a>
-<span class="sourceLineNo">634</span><a id="line.634">    private static TypeDeclDesc getTheNearestClass(String outerTypeDeclName,</a>
+<span class="sourceLineNo">634</span><a id="line.634">    private static TypeDeclDesc getClosestMatchingTypeDeclaration(String outerTypeDeclName,</a>
 <span class="sourceLineNo">635</span><a id="line.635">            List&lt;TypeDeclDesc&gt; typeDeclWithSameName) {</a>
 <span class="sourceLineNo">636</span><a id="line.636">        return Collections.min(typeDeclWithSameName, (first, second) -&gt; {</a>
-<span class="sourceLineNo">637</span><a id="line.637">            return getTypeDeclarationNameMatchingCountDiff(outerTypeDeclName, first, second);</a>
+<span class="sourceLineNo">637</span><a id="line.637">            return calculateTypeDeclarationDistance(outerTypeDeclName, first, second);</a>
 <span class="sourceLineNo">638</span><a id="line.638">        });</a>
 <span class="sourceLineNo">639</span><a id="line.639">    }</a>
 <span class="sourceLineNo">640</span><a id="line.640"></a>
@@ -651,422 +651,468 @@
 <span class="sourceLineNo">642</span><a id="line.642">     * Get the difference between type declaration name matching count. If the</a>
 <span class="sourceLineNo">643</span><a id="line.643">     * difference between them is zero, then their depth is compared to obtain the result.</a>
 <span class="sourceLineNo">644</span><a id="line.644">     *</a>
-<span class="sourceLineNo">645</span><a id="line.645">     * @param outerTypeDeclName outer type declaration of anonymous inner class</a>
-<span class="sourceLineNo">646</span><a id="line.646">     * @param firstTypeDecl first input type declaration</a>
-<span class="sourceLineNo">647</span><a id="line.647">     * @param secondTypeDecl second input type declaration</a>
+<span class="sourceLineNo">645</span><a id="line.645">     * @param outerTypeName outer type declaration of anonymous inner class</a>
+<span class="sourceLineNo">646</span><a id="line.646">     * @param firstType first input type declaration</a>
+<span class="sourceLineNo">647</span><a id="line.647">     * @param secondType second input type declaration</a>
 <span class="sourceLineNo">648</span><a id="line.648">     * @return difference between type declaration name matching count</a>
 <span class="sourceLineNo">649</span><a id="line.649">     */</a>
-<span class="sourceLineNo">650</span><a id="line.650">    private static int getTypeDeclarationNameMatchingCountDiff(String outerTypeDeclName,</a>
-<span class="sourceLineNo">651</span><a id="line.651">                                                               TypeDeclDesc firstTypeDecl,</a>
-<span class="sourceLineNo">652</span><a id="line.652">                                                               TypeDeclDesc secondTypeDecl) {</a>
-<span class="sourceLineNo">653</span><a id="line.653">        int diff = Integer.compare(</a>
-<span class="sourceLineNo">654</span><a id="line.654">            CheckUtil.typeDeclarationNameMatchingCount(</a>
-<span class="sourceLineNo">655</span><a id="line.655">                outerTypeDeclName, secondTypeDecl.getQualifiedName()),</a>
-<span class="sourceLineNo">656</span><a id="line.656">            CheckUtil.typeDeclarationNameMatchingCount(</a>
-<span class="sourceLineNo">657</span><a id="line.657">                outerTypeDeclName, firstTypeDecl.getQualifiedName()));</a>
-<span class="sourceLineNo">658</span><a id="line.658">        if (diff == 0) {</a>
-<span class="sourceLineNo">659</span><a id="line.659">            diff = Integer.compare(firstTypeDecl.getDepth(), secondTypeDecl.getDepth());</a>
-<span class="sourceLineNo">660</span><a id="line.660">        }</a>
-<span class="sourceLineNo">661</span><a id="line.661">        return diff;</a>
-<span class="sourceLineNo">662</span><a id="line.662">    }</a>
-<span class="sourceLineNo">663</span><a id="line.663"></a>
-<span class="sourceLineNo">664</span><a id="line.664">    /**</a>
-<span class="sourceLineNo">665</span><a id="line.665">     * Get qualified type declaration name from type ast.</a>
-<span class="sourceLineNo">666</span><a id="line.666">     *</a>
-<span class="sourceLineNo">667</span><a id="line.667">     * @param typeDeclAst type declaration ast</a>
-<span class="sourceLineNo">668</span><a id="line.668">     * @return qualified name of type declaration</a>
-<span class="sourceLineNo">669</span><a id="line.669">     */</a>
-<span class="sourceLineNo">670</span><a id="line.670">    private String getQualifiedTypeDeclarationName(DetailAST typeDeclAst) {</a>
-<span class="sourceLineNo">671</span><a id="line.671">        final String className = typeDeclAst.findFirstToken(TokenTypes.IDENT).getText();</a>
-<span class="sourceLineNo">672</span><a id="line.672">        String outerClassQualifiedName = null;</a>
-<span class="sourceLineNo">673</span><a id="line.673">        if (!typeDeclarations.isEmpty()) {</a>
-<span class="sourceLineNo">674</span><a id="line.674">            outerClassQualifiedName = typeDeclarations.peek().getQualifiedName();</a>
-<span class="sourceLineNo">675</span><a id="line.675">        }</a>
-<span class="sourceLineNo">676</span><a id="line.676">        return CheckUtil</a>
-<span class="sourceLineNo">677</span><a id="line.677">            .getQualifiedTypeDeclarationName(packageName, outerClassQualifiedName, className);</a>
-<span class="sourceLineNo">678</span><a id="line.678">    }</a>
-<span class="sourceLineNo">679</span><a id="line.679"></a>
-<span class="sourceLineNo">680</span><a id="line.680">    /**</a>
-<span class="sourceLineNo">681</span><a id="line.681">     * Iterate over all the ast nodes present under {@code ast}.</a>
+<span class="sourceLineNo">650</span><a id="line.650">    private static int calculateTypeDeclarationDistance(String outerTypeName,</a>
+<span class="sourceLineNo">651</span><a id="line.651">                                                        TypeDeclDesc firstType,</a>
+<span class="sourceLineNo">652</span><a id="line.652">                                                        TypeDeclDesc secondType) {</a>
+<span class="sourceLineNo">653</span><a id="line.653">        final int firstMatchCount =</a>
+<span class="sourceLineNo">654</span><a id="line.654">                countMatchingQualifierChars(outerTypeName, firstType.getQualifiedName());</a>
+<span class="sourceLineNo">655</span><a id="line.655">        final int secondMatchCount =</a>
+<span class="sourceLineNo">656</span><a id="line.656">                countMatchingQualifierChars(outerTypeName, secondType.getQualifiedName());</a>
+<span class="sourceLineNo">657</span><a id="line.657">        final int matchDistance = Integer.compare(secondMatchCount, firstMatchCount);</a>
+<span class="sourceLineNo">658</span><a id="line.658"></a>
+<span class="sourceLineNo">659</span><a id="line.659">        final int distance;</a>
+<span class="sourceLineNo">660</span><a id="line.660">        if (matchDistance == 0) {</a>
+<span class="sourceLineNo">661</span><a id="line.661">            distance = Integer.compare(firstType.getDepth(), secondType.getDepth());</a>
+<span class="sourceLineNo">662</span><a id="line.662">        }</a>
+<span class="sourceLineNo">663</span><a id="line.663">        else {</a>
+<span class="sourceLineNo">664</span><a id="line.664">            distance = matchDistance;</a>
+<span class="sourceLineNo">665</span><a id="line.665">        }</a>
+<span class="sourceLineNo">666</span><a id="line.666"></a>
+<span class="sourceLineNo">667</span><a id="line.667">        return distance;</a>
+<span class="sourceLineNo">668</span><a id="line.668">    }</a>
+<span class="sourceLineNo">669</span><a id="line.669"></a>
+<span class="sourceLineNo">670</span><a id="line.670">    /**</a>
+<span class="sourceLineNo">671</span><a id="line.671">     * Calculates the type declaration matching count for the superclass of an anonymous inner</a>
+<span class="sourceLineNo">672</span><a id="line.672">     * class.</a>
+<span class="sourceLineNo">673</span><a id="line.673">     *</a>
+<span class="sourceLineNo">674</span><a id="line.674">     * &lt;p&gt;</a>
+<span class="sourceLineNo">675</span><a id="line.675">     * For example, if the pattern class is {@code Main.ClassOne} and the class to be matched is</a>
+<span class="sourceLineNo">676</span><a id="line.676">     * {@code Main.ClassOne.ClassTwo.ClassThree}, then the matching count would be calculated by</a>
+<span class="sourceLineNo">677</span><a id="line.677">     * comparing the characters at each position, and updating the count whenever a '.'</a>
+<span class="sourceLineNo">678</span><a id="line.678">     * is encountered.</a>
+<span class="sourceLineNo">679</span><a id="line.679">     * This is necessary because pattern class can include anonymous inner classes, unlike regular</a>
+<span class="sourceLineNo">680</span><a id="line.680">     * inheritance where nested classes cannot be extended.</a>
+<span class="sourceLineNo">681</span><a id="line.681">     * &lt;/p&gt;</a>
 <span class="sourceLineNo">682</span><a id="line.682">     *</a>
-<span class="sourceLineNo">683</span><a id="line.683">     * @param ast ast</a>
-<span class="sourceLineNo">684</span><a id="line.684">     * @param variablesStack stack of all the relevant variables in the scope</a>
-<span class="sourceLineNo">685</span><a id="line.685">     */</a>
-<span class="sourceLineNo">686</span><a id="line.686">    private void iterateOverBlockContainingLocalAnonInnerClass(</a>
-<span class="sourceLineNo">687</span><a id="line.687">            DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {</a>
-<span class="sourceLineNo">688</span><a id="line.688">        DetailAST currNode = ast;</a>
-<span class="sourceLineNo">689</span><a id="line.689">        while (currNode != null) {</a>
-<span class="sourceLineNo">690</span><a id="line.690">            customVisitToken(currNode, variablesStack);</a>
-<span class="sourceLineNo">691</span><a id="line.691">            DetailAST toVisit = currNode.getFirstChild();</a>
-<span class="sourceLineNo">692</span><a id="line.692">            while (currNode != ast &amp;&amp; toVisit == null) {</a>
-<span class="sourceLineNo">693</span><a id="line.693">                customLeaveToken(currNode, variablesStack);</a>
-<span class="sourceLineNo">694</span><a id="line.694">                toVisit = currNode.getNextSibling();</a>
-<span class="sourceLineNo">695</span><a id="line.695">                currNode = currNode.getParent();</a>
-<span class="sourceLineNo">696</span><a id="line.696">            }</a>
-<span class="sourceLineNo">697</span><a id="line.697">            currNode = toVisit;</a>
-<span class="sourceLineNo">698</span><a id="line.698">        }</a>
-<span class="sourceLineNo">699</span><a id="line.699">    }</a>
-<span class="sourceLineNo">700</span><a id="line.700"></a>
-<span class="sourceLineNo">701</span><a id="line.701">    /**</a>
-<span class="sourceLineNo">702</span><a id="line.702">     * Visit all ast nodes under {@link UnusedLocalVariableCheck#anonInnerClassHolders} once</a>
-<span class="sourceLineNo">703</span><a id="line.703">     * again.</a>
-<span class="sourceLineNo">704</span><a id="line.704">     *</a>
-<span class="sourceLineNo">705</span><a id="line.705">     * @param ast ast</a>
-<span class="sourceLineNo">706</span><a id="line.706">     * @param variablesStack stack of all the relevant variables in the scope</a>
-<span class="sourceLineNo">707</span><a id="line.707">     */</a>
-<span class="sourceLineNo">708</span><a id="line.708">    private void customVisitToken(DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {</a>
-<span class="sourceLineNo">709</span><a id="line.709">        final int type = ast.getType();</a>
-<span class="sourceLineNo">710</span><a id="line.710">        if (type == TokenTypes.DOT) {</a>
-<span class="sourceLineNo">711</span><a id="line.711">            visitDotToken(ast, variablesStack);</a>
-<span class="sourceLineNo">712</span><a id="line.712">        }</a>
-<span class="sourceLineNo">713</span><a id="line.713">        else if (type == TokenTypes.VARIABLE_DEF) {</a>
-<span class="sourceLineNo">714</span><a id="line.714">            addLocalVariables(ast, variablesStack);</a>
-<span class="sourceLineNo">715</span><a id="line.715">        }</a>
-<span class="sourceLineNo">716</span><a id="line.716">        else if (type == TokenTypes.IDENT) {</a>
-<span class="sourceLineNo">717</span><a id="line.717">            visitIdentToken(ast, variablesStack);</a>
-<span class="sourceLineNo">718</span><a id="line.718">        }</a>
-<span class="sourceLineNo">719</span><a id="line.719">        else if (isInsideLocalAnonInnerClass(ast)) {</a>
-<span class="sourceLineNo">720</span><a id="line.720">            final TypeDeclDesc obtainedClass = getSuperClassOfAnonInnerClass(ast);</a>
-<span class="sourceLineNo">721</span><a id="line.721">            modifyVariablesStack(obtainedClass, variablesStack, ast);</a>
-<span class="sourceLineNo">722</span><a id="line.722">        }</a>
-<span class="sourceLineNo">723</span><a id="line.723">    }</a>
-<span class="sourceLineNo">724</span><a id="line.724"></a>
-<span class="sourceLineNo">725</span><a id="line.725">    /**</a>
-<span class="sourceLineNo">726</span><a id="line.726">     * Leave all ast nodes under {@link UnusedLocalVariableCheck#anonInnerClassHolders} once</a>
-<span class="sourceLineNo">727</span><a id="line.727">     * again.</a>
+<span class="sourceLineNo">683</span><a id="line.683">     * @param pattern type declaration to match against</a>
+<span class="sourceLineNo">684</span><a id="line.684">     * @param candidate type declaration to be matched</a>
+<span class="sourceLineNo">685</span><a id="line.685">     * @return the type declaration matching count</a>
+<span class="sourceLineNo">686</span><a id="line.686">     */</a>
+<span class="sourceLineNo">687</span><a id="line.687">    private static int countMatchingQualifierChars(String pattern,</a>
+<span class="sourceLineNo">688</span><a id="line.688">                                                   String candidate) {</a>
+<span class="sourceLineNo">689</span><a id="line.689">        final int typeDeclarationToBeMatchedLength = candidate.length();</a>
+<span class="sourceLineNo">690</span><a id="line.690">        final int minLength = Math</a>
+<span class="sourceLineNo">691</span><a id="line.691">                .min(typeDeclarationToBeMatchedLength, pattern.length());</a>
+<span class="sourceLineNo">692</span><a id="line.692">        final boolean shouldCountBeUpdatedAtLastCharacter =</a>
+<span class="sourceLineNo">693</span><a id="line.693">                typeDeclarationToBeMatchedLength &gt; minLength</a>
+<span class="sourceLineNo">694</span><a id="line.694">                &amp;&amp; candidate.charAt(minLength) == PACKAGE_SEPARATOR.charAt(0);</a>
+<span class="sourceLineNo">695</span><a id="line.695"></a>
+<span class="sourceLineNo">696</span><a id="line.696">        int result = 0;</a>
+<span class="sourceLineNo">697</span><a id="line.697">        for (int idx = 0;</a>
+<span class="sourceLineNo">698</span><a id="line.698">             idx &lt; minLength</a>
+<span class="sourceLineNo">699</span><a id="line.699">                &amp;&amp; pattern.charAt(idx) == candidate.charAt(idx);</a>
+<span class="sourceLineNo">700</span><a id="line.700">             idx++) {</a>
+<span class="sourceLineNo">701</span><a id="line.701"></a>
+<span class="sourceLineNo">702</span><a id="line.702">            if (shouldCountBeUpdatedAtLastCharacter</a>
+<span class="sourceLineNo">703</span><a id="line.703">                    || pattern.charAt(idx) == PACKAGE_SEPARATOR.charAt(0)) {</a>
+<span class="sourceLineNo">704</span><a id="line.704">                result = idx;</a>
+<span class="sourceLineNo">705</span><a id="line.705">            }</a>
+<span class="sourceLineNo">706</span><a id="line.706">        }</a>
+<span class="sourceLineNo">707</span><a id="line.707">        return result;</a>
+<span class="sourceLineNo">708</span><a id="line.708">    }</a>
+<span class="sourceLineNo">709</span><a id="line.709"></a>
+<span class="sourceLineNo">710</span><a id="line.710">    /**</a>
+<span class="sourceLineNo">711</span><a id="line.711">     * Get qualified type declaration name from type ast.</a>
+<span class="sourceLineNo">712</span><a id="line.712">     *</a>
+<span class="sourceLineNo">713</span><a id="line.713">     * @param typeDeclAst type declaration ast</a>
+<span class="sourceLineNo">714</span><a id="line.714">     * @return qualified name of type declaration</a>
+<span class="sourceLineNo">715</span><a id="line.715">     */</a>
+<span class="sourceLineNo">716</span><a id="line.716">    private String getQualifiedTypeDeclarationName(DetailAST typeDeclAst) {</a>
+<span class="sourceLineNo">717</span><a id="line.717">        final String className = typeDeclAst.findFirstToken(TokenTypes.IDENT).getText();</a>
+<span class="sourceLineNo">718</span><a id="line.718">        String outerClassQualifiedName = null;</a>
+<span class="sourceLineNo">719</span><a id="line.719">        if (!typeDeclarations.isEmpty()) {</a>
+<span class="sourceLineNo">720</span><a id="line.720">            outerClassQualifiedName = typeDeclarations.peek().getQualifiedName();</a>
+<span class="sourceLineNo">721</span><a id="line.721">        }</a>
+<span class="sourceLineNo">722</span><a id="line.722">        return CheckUtil</a>
+<span class="sourceLineNo">723</span><a id="line.723">            .getQualifiedTypeDeclarationName(packageName, outerClassQualifiedName, className);</a>
+<span class="sourceLineNo">724</span><a id="line.724">    }</a>
+<span class="sourceLineNo">725</span><a id="line.725"></a>
+<span class="sourceLineNo">726</span><a id="line.726">    /**</a>
+<span class="sourceLineNo">727</span><a id="line.727">     * Iterate over all the ast nodes present under {@code ast}.</a>
 <span class="sourceLineNo">728</span><a id="line.728">     *</a>
 <span class="sourceLineNo">729</span><a id="line.729">     * @param ast ast</a>
 <span class="sourceLineNo">730</span><a id="line.730">     * @param variablesStack stack of all the relevant variables in the scope</a>
 <span class="sourceLineNo">731</span><a id="line.731">     */</a>
-<span class="sourceLineNo">732</span><a id="line.732">    private void customLeaveToken(DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {</a>
-<span class="sourceLineNo">733</span><a id="line.733">        logViolations(ast, variablesStack);</a>
-<span class="sourceLineNo">734</span><a id="line.734">    }</a>
-<span class="sourceLineNo">735</span><a id="line.735"></a>
-<span class="sourceLineNo">736</span><a id="line.736">    /**</a>
-<span class="sourceLineNo">737</span><a id="line.737">     * Whether to check identifier token nested under dotAst.</a>
-<span class="sourceLineNo">738</span><a id="line.738">     *</a>
-<span class="sourceLineNo">739</span><a id="line.739">     * @param dotAst dotAst</a>
-<span class="sourceLineNo">740</span><a id="line.740">     * @return true if ident nested under dotAst should be checked</a>
-<span class="sourceLineNo">741</span><a id="line.741">     */</a>
-<span class="sourceLineNo">742</span><a id="line.742">    private static boolean shouldCheckIdentTokenNestedUnderDot(DetailAST dotAst) {</a>
-<span class="sourceLineNo">743</span><a id="line.743"></a>
-<span class="sourceLineNo">744</span><a id="line.744">        return TokenUtil.findFirstTokenByPredicate(dotAst,</a>
-<span class="sourceLineNo">745</span><a id="line.745">                        childAst -&gt; {</a>
-<span class="sourceLineNo">746</span><a id="line.746">                            return TokenUtil.isOfType(childAst,</a>
-<span class="sourceLineNo">747</span><a id="line.747">                                    UNACCEPTABLE_CHILD_OF_DOT);</a>
-<span class="sourceLineNo">748</span><a id="line.748">                        })</a>
-<span class="sourceLineNo">749</span><a id="line.749">                .isEmpty();</a>
-<span class="sourceLineNo">750</span><a id="line.750">    }</a>
-<span class="sourceLineNo">751</span><a id="line.751"></a>
-<span class="sourceLineNo">752</span><a id="line.752">    /**</a>
-<span class="sourceLineNo">753</span><a id="line.753">     * Checks the identifier ast.</a>
-<span class="sourceLineNo">754</span><a id="line.754">     *</a>
-<span class="sourceLineNo">755</span><a id="line.755">     * @param identAst ast of type {@link TokenTypes#IDENT}</a>
-<span class="sourceLineNo">756</span><a id="line.756">     * @param variablesStack stack of all the relevant variables in the scope</a>
-<span class="sourceLineNo">757</span><a id="line.757">     */</a>
-<span class="sourceLineNo">758</span><a id="line.758">    private static void checkIdentifierAst(DetailAST identAst, Deque&lt;VariableDesc&gt; variablesStack) {</a>
-<span class="sourceLineNo">759</span><a id="line.759">        for (VariableDesc variableDesc : variablesStack) {</a>
-<span class="sourceLineNo">760</span><a id="line.760">            if (identAst.getText().equals(variableDesc.getName())</a>
-<span class="sourceLineNo">761</span><a id="line.761">                    &amp;&amp; !isLeftHandSideValue(identAst)) {</a>
-<span class="sourceLineNo">762</span><a id="line.762">                variableDesc.registerAsUsed();</a>
-<span class="sourceLineNo">763</span><a id="line.763">                break;</a>
-<span class="sourceLineNo">764</span><a id="line.764">            }</a>
-<span class="sourceLineNo">765</span><a id="line.765">        }</a>
-<span class="sourceLineNo">766</span><a id="line.766">    }</a>
-<span class="sourceLineNo">767</span><a id="line.767"></a>
-<span class="sourceLineNo">768</span><a id="line.768">    /**</a>
-<span class="sourceLineNo">769</span><a id="line.769">     * Find the scope of variable.</a>
-<span class="sourceLineNo">770</span><a id="line.770">     *</a>
-<span class="sourceLineNo">771</span><a id="line.771">     * @param variableDef ast of type {@link TokenTypes#VARIABLE_DEF}</a>
-<span class="sourceLineNo">772</span><a id="line.772">     * @return scope of variableDef</a>
-<span class="sourceLineNo">773</span><a id="line.773">     */</a>
-<span class="sourceLineNo">774</span><a id="line.774">    private static DetailAST findScopeOfVariable(DetailAST variableDef) {</a>
-<span class="sourceLineNo">775</span><a id="line.775">        final DetailAST result;</a>
-<span class="sourceLineNo">776</span><a id="line.776">        final DetailAST parentAst = variableDef.getParent();</a>
-<span class="sourceLineNo">777</span><a id="line.777">        if (TokenUtil.isOfType(parentAst, TokenTypes.SLIST, TokenTypes.OBJBLOCK)) {</a>
-<span class="sourceLineNo">778</span><a id="line.778">            result = parentAst;</a>
-<span class="sourceLineNo">779</span><a id="line.779">        }</a>
-<span class="sourceLineNo">780</span><a id="line.780">        else {</a>
-<span class="sourceLineNo">781</span><a id="line.781">            result = parentAst.getParent();</a>
-<span class="sourceLineNo">782</span><a id="line.782">        }</a>
-<span class="sourceLineNo">783</span><a id="line.783">        return result;</a>
-<span class="sourceLineNo">784</span><a id="line.784">    }</a>
-<span class="sourceLineNo">785</span><a id="line.785"></a>
-<span class="sourceLineNo">786</span><a id="line.786">    /**</a>
-<span class="sourceLineNo">787</span><a id="line.787">     * Checks whether the ast of type {@link TokenTypes#IDENT} is</a>
-<span class="sourceLineNo">788</span><a id="line.788">     * used as left-hand side value. An identifier is being used as a left-hand side</a>
-<span class="sourceLineNo">789</span><a id="line.789">     * value if it is used as the left operand of an assignment or as an</a>
-<span class="sourceLineNo">790</span><a id="line.790">     * operand of a stand-alone increment or decrement.</a>
-<span class="sourceLineNo">791</span><a id="line.791">     *</a>
-<span class="sourceLineNo">792</span><a id="line.792">     * @param identAst ast of type {@link TokenTypes#IDENT}</a>
-<span class="sourceLineNo">793</span><a id="line.793">     * @return true if identAst is used as a left-hand side value</a>
-<span class="sourceLineNo">794</span><a id="line.794">     */</a>
-<span class="sourceLineNo">795</span><a id="line.795">    private static boolean isLeftHandSideValue(DetailAST identAst) {</a>
-<span class="sourceLineNo">796</span><a id="line.796">        final DetailAST parent = identAst.getParent();</a>
-<span class="sourceLineNo">797</span><a id="line.797">        return isStandAloneIncrementOrDecrement(identAst)</a>
-<span class="sourceLineNo">798</span><a id="line.798">                || parent.getType() == TokenTypes.ASSIGN</a>
-<span class="sourceLineNo">799</span><a id="line.799">                &amp;&amp; identAst != parent.getLastChild();</a>
-<span class="sourceLineNo">800</span><a id="line.800">    }</a>
-<span class="sourceLineNo">801</span><a id="line.801"></a>
-<span class="sourceLineNo">802</span><a id="line.802">    /**</a>
-<span class="sourceLineNo">803</span><a id="line.803">     * Checks whether the ast of type {@link TokenTypes#IDENT} is used as</a>
-<span class="sourceLineNo">804</span><a id="line.804">     * an operand of a stand-alone increment or decrement.</a>
-<span class="sourceLineNo">805</span><a id="line.805">     *</a>
-<span class="sourceLineNo">806</span><a id="line.806">     * @param identAst ast of type {@link TokenTypes#IDENT}</a>
-<span class="sourceLineNo">807</span><a id="line.807">     * @return true if identAst is used as an operand of stand-alone</a>
-<span class="sourceLineNo">808</span><a id="line.808">     *         increment or decrement</a>
-<span class="sourceLineNo">809</span><a id="line.809">     */</a>
-<span class="sourceLineNo">810</span><a id="line.810">    private static boolean isStandAloneIncrementOrDecrement(DetailAST identAst) {</a>
-<span class="sourceLineNo">811</span><a id="line.811">        final DetailAST parent = identAst.getParent();</a>
-<span class="sourceLineNo">812</span><a id="line.812">        final DetailAST grandParent = parent.getParent();</a>
-<span class="sourceLineNo">813</span><a id="line.813">        return TokenUtil.isOfType(parent, INCREMENT_AND_DECREMENT_TOKENS)</a>
-<span class="sourceLineNo">814</span><a id="line.814">                &amp;&amp; TokenUtil.isOfType(grandParent, TokenTypes.EXPR)</a>
-<span class="sourceLineNo">815</span><a id="line.815">                &amp;&amp; !isIncrementOrDecrementVariableUsed(grandParent);</a>
-<span class="sourceLineNo">816</span><a id="line.816">    }</a>
-<span class="sourceLineNo">817</span><a id="line.817"></a>
-<span class="sourceLineNo">818</span><a id="line.818">    /**</a>
-<span class="sourceLineNo">819</span><a id="line.819">     * A variable with increment or decrement operator is considered used if it</a>
-<span class="sourceLineNo">820</span><a id="line.820">     * is used as an argument or as an array index or for assigning value</a>
-<span class="sourceLineNo">821</span><a id="line.821">     * to a variable.</a>
-<span class="sourceLineNo">822</span><a id="line.822">     *</a>
-<span class="sourceLineNo">823</span><a id="line.823">     * @param exprAst ast of type {@link TokenTypes#EXPR}</a>
-<span class="sourceLineNo">824</span><a id="line.824">     * @return true if variable nested in exprAst is used</a>
-<span class="sourceLineNo">825</span><a id="line.825">     */</a>
-<span class="sourceLineNo">826</span><a id="line.826">    private static boolean isIncrementOrDecrementVariableUsed(DetailAST exprAst) {</a>
-<span class="sourceLineNo">827</span><a id="line.827">        return TokenUtil.isOfType(exprAst.getParent(), INCREMENT_DECREMENT_VARIABLE_USAGE_TYPES)</a>
-<span class="sourceLineNo">828</span><a id="line.828">                &amp;&amp; exprAst.getParent().getParent().getType() != TokenTypes.FOR_ITERATOR;</a>
-<span class="sourceLineNo">829</span><a id="line.829">    }</a>
-<span class="sourceLineNo">830</span><a id="line.830"></a>
-<span class="sourceLineNo">831</span><a id="line.831">    /**</a>
-<span class="sourceLineNo">832</span><a id="line.832">     * Maintains information about the variable.</a>
-<span class="sourceLineNo">833</span><a id="line.833">     */</a>
-<span class="sourceLineNo">834</span><a id="line.834">    private static final class VariableDesc {</a>
-<span class="sourceLineNo">835</span><a id="line.835"></a>
-<span class="sourceLineNo">836</span><a id="line.836">        /**</a>
-<span class="sourceLineNo">837</span><a id="line.837">         * The name of the variable.</a>
-<span class="sourceLineNo">838</span><a id="line.838">         */</a>
-<span class="sourceLineNo">839</span><a id="line.839">        private final String name;</a>
-<span class="sourceLineNo">840</span><a id="line.840"></a>
-<span class="sourceLineNo">841</span><a id="line.841">        /**</a>
-<span class="sourceLineNo">842</span><a id="line.842">         * Ast of type {@link TokenTypes#TYPE}.</a>
-<span class="sourceLineNo">843</span><a id="line.843">         */</a>
-<span class="sourceLineNo">844</span><a id="line.844">        private final DetailAST typeAst;</a>
-<span class="sourceLineNo">845</span><a id="line.845"></a>
-<span class="sourceLineNo">846</span><a id="line.846">        /**</a>
-<span class="sourceLineNo">847</span><a id="line.847">         * The scope of variable is determined by the ast of type</a>
-<span class="sourceLineNo">848</span><a id="line.848">         * {@link TokenTypes#SLIST} or {@link TokenTypes#LITERAL_FOR}</a>
-<span class="sourceLineNo">849</span><a id="line.849">         * or {@link TokenTypes#OBJBLOCK} which is enclosing the variable.</a>
-<span class="sourceLineNo">850</span><a id="line.850">         */</a>
-<span class="sourceLineNo">851</span><a id="line.851">        private final DetailAST scope;</a>
-<span class="sourceLineNo">852</span><a id="line.852"></a>
-<span class="sourceLineNo">853</span><a id="line.853">        /**</a>
-<span class="sourceLineNo">854</span><a id="line.854">         * Is an instance variable or a class variable.</a>
-<span class="sourceLineNo">855</span><a id="line.855">         */</a>
-<span class="sourceLineNo">856</span><a id="line.856">        private boolean instVarOrClassVar;</a>
-<span class="sourceLineNo">857</span><a id="line.857"></a>
-<span class="sourceLineNo">858</span><a id="line.858">        /**</a>
-<span class="sourceLineNo">859</span><a id="line.859">         * Is the variable used.</a>
-<span class="sourceLineNo">860</span><a id="line.860">         */</a>
-<span class="sourceLineNo">861</span><a id="line.861">        private boolean used;</a>
-<span class="sourceLineNo">862</span><a id="line.862"></a>
-<span class="sourceLineNo">863</span><a id="line.863">        /**</a>
-<span class="sourceLineNo">864</span><a id="line.864">         * Create a new VariableDesc instance.</a>
-<span class="sourceLineNo">865</span><a id="line.865">         *</a>
-<span class="sourceLineNo">866</span><a id="line.866">         * @param name name of the variable</a>
-<span class="sourceLineNo">867</span><a id="line.867">         * @param typeAst ast of type {@link TokenTypes#TYPE}</a>
-<span class="sourceLineNo">868</span><a id="line.868">         * @param scope ast of type {@link TokenTypes#SLIST} or</a>
-<span class="sourceLineNo">869</span><a id="line.869">         *              {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}</a>
-<span class="sourceLineNo">870</span><a id="line.870">         *              which is enclosing the variable</a>
-<span class="sourceLineNo">871</span><a id="line.871">         */</a>
-<span class="sourceLineNo">872</span><a id="line.872">        private VariableDesc(String name, DetailAST typeAst, DetailAST scope) {</a>
-<span class="sourceLineNo">873</span><a id="line.873">            this.name = name;</a>
-<span class="sourceLineNo">874</span><a id="line.874">            this.typeAst = typeAst;</a>
-<span class="sourceLineNo">875</span><a id="line.875">            this.scope = scope;</a>
-<span class="sourceLineNo">876</span><a id="line.876">        }</a>
-<span class="sourceLineNo">877</span><a id="line.877"></a>
-<span class="sourceLineNo">878</span><a id="line.878">        /**</a>
-<span class="sourceLineNo">879</span><a id="line.879">         * Create a new VariableDesc instance.</a>
-<span class="sourceLineNo">880</span><a id="line.880">         *</a>
-<span class="sourceLineNo">881</span><a id="line.881">         * @param name name of the variable</a>
-<span class="sourceLineNo">882</span><a id="line.882">         */</a>
-<span class="sourceLineNo">883</span><a id="line.883">        private VariableDesc(String name) {</a>
-<span class="sourceLineNo">884</span><a id="line.884">            this(name, null, null);</a>
-<span class="sourceLineNo">885</span><a id="line.885">        }</a>
+<span class="sourceLineNo">732</span><a id="line.732">    private void iterateOverBlockContainingLocalAnonInnerClass(</a>
+<span class="sourceLineNo">733</span><a id="line.733">            DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {</a>
+<span class="sourceLineNo">734</span><a id="line.734">        DetailAST currNode = ast;</a>
+<span class="sourceLineNo">735</span><a id="line.735">        while (currNode != null) {</a>
+<span class="sourceLineNo">736</span><a id="line.736">            customVisitToken(currNode, variablesStack);</a>
+<span class="sourceLineNo">737</span><a id="line.737">            DetailAST toVisit = currNode.getFirstChild();</a>
+<span class="sourceLineNo">738</span><a id="line.738">            while (currNode != ast &amp;&amp; toVisit == null) {</a>
+<span class="sourceLineNo">739</span><a id="line.739">                customLeaveToken(currNode, variablesStack);</a>
+<span class="sourceLineNo">740</span><a id="line.740">                toVisit = currNode.getNextSibling();</a>
+<span class="sourceLineNo">741</span><a id="line.741">                currNode = currNode.getParent();</a>
+<span class="sourceLineNo">742</span><a id="line.742">            }</a>
+<span class="sourceLineNo">743</span><a id="line.743">            currNode = toVisit;</a>
+<span class="sourceLineNo">744</span><a id="line.744">        }</a>
+<span class="sourceLineNo">745</span><a id="line.745">    }</a>
+<span class="sourceLineNo">746</span><a id="line.746"></a>
+<span class="sourceLineNo">747</span><a id="line.747">    /**</a>
+<span class="sourceLineNo">748</span><a id="line.748">     * Visit all ast nodes under {@link UnusedLocalVariableCheck#anonInnerClassHolders} once</a>
+<span class="sourceLineNo">749</span><a id="line.749">     * again.</a>
+<span class="sourceLineNo">750</span><a id="line.750">     *</a>
+<span class="sourceLineNo">751</span><a id="line.751">     * @param ast ast</a>
+<span class="sourceLineNo">752</span><a id="line.752">     * @param variablesStack stack of all the relevant variables in the scope</a>
+<span class="sourceLineNo">753</span><a id="line.753">     */</a>
+<span class="sourceLineNo">754</span><a id="line.754">    private void customVisitToken(DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {</a>
+<span class="sourceLineNo">755</span><a id="line.755">        final int type = ast.getType();</a>
+<span class="sourceLineNo">756</span><a id="line.756">        if (type == TokenTypes.DOT) {</a>
+<span class="sourceLineNo">757</span><a id="line.757">            visitDotToken(ast, variablesStack);</a>
+<span class="sourceLineNo">758</span><a id="line.758">        }</a>
+<span class="sourceLineNo">759</span><a id="line.759">        else if (type == TokenTypes.VARIABLE_DEF) {</a>
+<span class="sourceLineNo">760</span><a id="line.760">            addLocalVariables(ast, variablesStack);</a>
+<span class="sourceLineNo">761</span><a id="line.761">        }</a>
+<span class="sourceLineNo">762</span><a id="line.762">        else if (type == TokenTypes.IDENT) {</a>
+<span class="sourceLineNo">763</span><a id="line.763">            visitIdentToken(ast, variablesStack);</a>
+<span class="sourceLineNo">764</span><a id="line.764">        }</a>
+<span class="sourceLineNo">765</span><a id="line.765">        else if (isInsideLocalAnonInnerClass(ast)) {</a>
+<span class="sourceLineNo">766</span><a id="line.766">            final TypeDeclDesc obtainedClass = getSuperClassOfAnonInnerClass(ast);</a>
+<span class="sourceLineNo">767</span><a id="line.767">            modifyVariablesStack(obtainedClass, variablesStack, ast);</a>
+<span class="sourceLineNo">768</span><a id="line.768">        }</a>
+<span class="sourceLineNo">769</span><a id="line.769">    }</a>
+<span class="sourceLineNo">770</span><a id="line.770"></a>
+<span class="sourceLineNo">771</span><a id="line.771">    /**</a>
+<span class="sourceLineNo">772</span><a id="line.772">     * Leave all ast nodes under {@link UnusedLocalVariableCheck#anonInnerClassHolders} once</a>
+<span class="sourceLineNo">773</span><a id="line.773">     * again.</a>
+<span class="sourceLineNo">774</span><a id="line.774">     *</a>
+<span class="sourceLineNo">775</span><a id="line.775">     * @param ast ast</a>
+<span class="sourceLineNo">776</span><a id="line.776">     * @param variablesStack stack of all the relevant variables in the scope</a>
+<span class="sourceLineNo">777</span><a id="line.777">     */</a>
+<span class="sourceLineNo">778</span><a id="line.778">    private void customLeaveToken(DetailAST ast, Deque&lt;VariableDesc&gt; variablesStack) {</a>
+<span class="sourceLineNo">779</span><a id="line.779">        logViolations(ast, variablesStack);</a>
+<span class="sourceLineNo">780</span><a id="line.780">    }</a>
+<span class="sourceLineNo">781</span><a id="line.781"></a>
+<span class="sourceLineNo">782</span><a id="line.782">    /**</a>
+<span class="sourceLineNo">783</span><a id="line.783">     * Whether to check identifier token nested under dotAst.</a>
+<span class="sourceLineNo">784</span><a id="line.784">     *</a>
+<span class="sourceLineNo">785</span><a id="line.785">     * @param dotAst dotAst</a>
+<span class="sourceLineNo">786</span><a id="line.786">     * @return true if ident nested under dotAst should be checked</a>
+<span class="sourceLineNo">787</span><a id="line.787">     */</a>
+<span class="sourceLineNo">788</span><a id="line.788">    private static boolean shouldCheckIdentTokenNestedUnderDot(DetailAST dotAst) {</a>
+<span class="sourceLineNo">789</span><a id="line.789"></a>
+<span class="sourceLineNo">790</span><a id="line.790">        return TokenUtil.findFirstTokenByPredicate(dotAst,</a>
+<span class="sourceLineNo">791</span><a id="line.791">                        childAst -&gt; {</a>
+<span class="sourceLineNo">792</span><a id="line.792">                            return TokenUtil.isOfType(childAst,</a>
+<span class="sourceLineNo">793</span><a id="line.793">                                    UNACCEPTABLE_CHILD_OF_DOT);</a>
+<span class="sourceLineNo">794</span><a id="line.794">                        })</a>
+<span class="sourceLineNo">795</span><a id="line.795">                .isEmpty();</a>
+<span class="sourceLineNo">796</span><a id="line.796">    }</a>
+<span class="sourceLineNo">797</span><a id="line.797"></a>
+<span class="sourceLineNo">798</span><a id="line.798">    /**</a>
+<span class="sourceLineNo">799</span><a id="line.799">     * Checks the identifier ast.</a>
+<span class="sourceLineNo">800</span><a id="line.800">     *</a>
+<span class="sourceLineNo">801</span><a id="line.801">     * @param identAst ast of type {@link TokenTypes#IDENT}</a>
+<span class="sourceLineNo">802</span><a id="line.802">     * @param variablesStack stack of all the relevant variables in the scope</a>
+<span class="sourceLineNo">803</span><a id="line.803">     */</a>
+<span class="sourceLineNo">804</span><a id="line.804">    private static void checkIdentifierAst(DetailAST identAst, Deque&lt;VariableDesc&gt; variablesStack) {</a>
+<span class="sourceLineNo">805</span><a id="line.805">        for (VariableDesc variableDesc : variablesStack) {</a>
+<span class="sourceLineNo">806</span><a id="line.806">            if (identAst.getText().equals(variableDesc.getName())</a>
+<span class="sourceLineNo">807</span><a id="line.807">                    &amp;&amp; !isLeftHandSideValue(identAst)) {</a>
+<span class="sourceLineNo">808</span><a id="line.808">                variableDesc.registerAsUsed();</a>
+<span class="sourceLineNo">809</span><a id="line.809">                break;</a>
+<span class="sourceLineNo">810</span><a id="line.810">            }</a>
+<span class="sourceLineNo">811</span><a id="line.811">        }</a>
+<span class="sourceLineNo">812</span><a id="line.812">    }</a>
+<span class="sourceLineNo">813</span><a id="line.813"></a>
+<span class="sourceLineNo">814</span><a id="line.814">    /**</a>
+<span class="sourceLineNo">815</span><a id="line.815">     * Find the scope of variable.</a>
+<span class="sourceLineNo">816</span><a id="line.816">     *</a>
+<span class="sourceLineNo">817</span><a id="line.817">     * @param variableDef ast of type {@link TokenTypes#VARIABLE_DEF}</a>
+<span class="sourceLineNo">818</span><a id="line.818">     * @return scope of variableDef</a>
+<span class="sourceLineNo">819</span><a id="line.819">     */</a>
+<span class="sourceLineNo">820</span><a id="line.820">    private static DetailAST findScopeOfVariable(DetailAST variableDef) {</a>
+<span class="sourceLineNo">821</span><a id="line.821">        final DetailAST result;</a>
+<span class="sourceLineNo">822</span><a id="line.822">        final DetailAST parentAst = variableDef.getParent();</a>
+<span class="sourceLineNo">823</span><a id="line.823">        if (TokenUtil.isOfType(parentAst, TokenTypes.SLIST, TokenTypes.OBJBLOCK)) {</a>
+<span class="sourceLineNo">824</span><a id="line.824">            result = parentAst;</a>
+<span class="sourceLineNo">825</span><a id="line.825">        }</a>
+<span class="sourceLineNo">826</span><a id="line.826">        else {</a>
+<span class="sourceLineNo">827</span><a id="line.827">            result = parentAst.getParent();</a>
+<span class="sourceLineNo">828</span><a id="line.828">        }</a>
+<span class="sourceLineNo">829</span><a id="line.829">        return result;</a>
+<span class="sourceLineNo">830</span><a id="line.830">    }</a>
+<span class="sourceLineNo">831</span><a id="line.831"></a>
+<span class="sourceLineNo">832</span><a id="line.832">    /**</a>
+<span class="sourceLineNo">833</span><a id="line.833">     * Checks whether the ast of type {@link TokenTypes#IDENT} is</a>
+<span class="sourceLineNo">834</span><a id="line.834">     * used as left-hand side value. An identifier is being used as a left-hand side</a>
+<span class="sourceLineNo">835</span><a id="line.835">     * value if it is used as the left operand of an assignment or as an</a>
+<span class="sourceLineNo">836</span><a id="line.836">     * operand of a stand-alone increment or decrement.</a>
+<span class="sourceLineNo">837</span><a id="line.837">     *</a>
+<span class="sourceLineNo">838</span><a id="line.838">     * @param identAst ast of type {@link TokenTypes#IDENT}</a>
+<span class="sourceLineNo">839</span><a id="line.839">     * @return true if identAst is used as a left-hand side value</a>
+<span class="sourceLineNo">840</span><a id="line.840">     */</a>
+<span class="sourceLineNo">841</span><a id="line.841">    private static boolean isLeftHandSideValue(DetailAST identAst) {</a>
+<span class="sourceLineNo">842</span><a id="line.842">        final DetailAST parent = identAst.getParent();</a>
+<span class="sourceLineNo">843</span><a id="line.843">        return isStandAloneIncrementOrDecrement(identAst)</a>
+<span class="sourceLineNo">844</span><a id="line.844">                || parent.getType() == TokenTypes.ASSIGN</a>
+<span class="sourceLineNo">845</span><a id="line.845">                &amp;&amp; identAst != parent.getLastChild();</a>
+<span class="sourceLineNo">846</span><a id="line.846">    }</a>
+<span class="sourceLineNo">847</span><a id="line.847"></a>
+<span class="sourceLineNo">848</span><a id="line.848">    /**</a>
+<span class="sourceLineNo">849</span><a id="line.849">     * Checks whether the ast of type {@link TokenTypes#IDENT} is used as</a>
+<span class="sourceLineNo">850</span><a id="line.850">     * an operand of a stand-alone increment or decrement.</a>
+<span class="sourceLineNo">851</span><a id="line.851">     *</a>
+<span class="sourceLineNo">852</span><a id="line.852">     * @param identAst ast of type {@link TokenTypes#IDENT}</a>
+<span class="sourceLineNo">853</span><a id="line.853">     * @return true if identAst is used as an operand of stand-alone</a>
+<span class="sourceLineNo">854</span><a id="line.854">     *         increment or decrement</a>
+<span class="sourceLineNo">855</span><a id="line.855">     */</a>
+<span class="sourceLineNo">856</span><a id="line.856">    private static boolean isStandAloneIncrementOrDecrement(DetailAST identAst) {</a>
+<span class="sourceLineNo">857</span><a id="line.857">        final DetailAST parent = identAst.getParent();</a>
+<span class="sourceLineNo">858</span><a id="line.858">        final DetailAST grandParent = parent.getParent();</a>
+<span class="sourceLineNo">859</span><a id="line.859">        return TokenUtil.isOfType(parent, INCREMENT_AND_DECREMENT_TOKENS)</a>
+<span class="sourceLineNo">860</span><a id="line.860">                &amp;&amp; TokenUtil.isOfType(grandParent, TokenTypes.EXPR)</a>
+<span class="sourceLineNo">861</span><a id="line.861">                &amp;&amp; !isIncrementOrDecrementVariableUsed(grandParent);</a>
+<span class="sourceLineNo">862</span><a id="line.862">    }</a>
+<span class="sourceLineNo">863</span><a id="line.863"></a>
+<span class="sourceLineNo">864</span><a id="line.864">    /**</a>
+<span class="sourceLineNo">865</span><a id="line.865">     * A variable with increment or decrement operator is considered used if it</a>
+<span class="sourceLineNo">866</span><a id="line.866">     * is used as an argument or as an array index or for assigning value</a>
+<span class="sourceLineNo">867</span><a id="line.867">     * to a variable.</a>
+<span class="sourceLineNo">868</span><a id="line.868">     *</a>
+<span class="sourceLineNo">869</span><a id="line.869">     * @param exprAst ast of type {@link TokenTypes#EXPR}</a>
+<span class="sourceLineNo">870</span><a id="line.870">     * @return true if variable nested in exprAst is used</a>
+<span class="sourceLineNo">871</span><a id="line.871">     */</a>
+<span class="sourceLineNo">872</span><a id="line.872">    private static boolean isIncrementOrDecrementVariableUsed(DetailAST exprAst) {</a>
+<span class="sourceLineNo">873</span><a id="line.873">        return TokenUtil.isOfType(exprAst.getParent(), INCREMENT_DECREMENT_VARIABLE_USAGE_TYPES)</a>
+<span class="sourceLineNo">874</span><a id="line.874">                &amp;&amp; exprAst.getParent().getParent().getType() != TokenTypes.FOR_ITERATOR;</a>
+<span class="sourceLineNo">875</span><a id="line.875">    }</a>
+<span class="sourceLineNo">876</span><a id="line.876"></a>
+<span class="sourceLineNo">877</span><a id="line.877">    /**</a>
+<span class="sourceLineNo">878</span><a id="line.878">     * Maintains information about the variable.</a>
+<span class="sourceLineNo">879</span><a id="line.879">     */</a>
+<span class="sourceLineNo">880</span><a id="line.880">    private static final class VariableDesc {</a>
+<span class="sourceLineNo">881</span><a id="line.881"></a>
+<span class="sourceLineNo">882</span><a id="line.882">        /**</a>
+<span class="sourceLineNo">883</span><a id="line.883">         * The name of the variable.</a>
+<span class="sourceLineNo">884</span><a id="line.884">         */</a>
+<span class="sourceLineNo">885</span><a id="line.885">        private final String name;</a>
 <span class="sourceLineNo">886</span><a id="line.886"></a>
 <span class="sourceLineNo">887</span><a id="line.887">        /**</a>
-<span class="sourceLineNo">888</span><a id="line.888">         * Create a new VariableDesc instance.</a>
-<span class="sourceLineNo">889</span><a id="line.889">         *</a>
-<span class="sourceLineNo">890</span><a id="line.890">         * @param name name of the variable</a>
-<span class="sourceLineNo">891</span><a id="line.891">         * @param scope ast of type {@link TokenTypes#SLIST} or</a>
-<span class="sourceLineNo">892</span><a id="line.892">         *              {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}</a>
-<span class="sourceLineNo">893</span><a id="line.893">         *              which is enclosing the variable</a>
-<span class="sourceLineNo">894</span><a id="line.894">         */</a>
-<span class="sourceLineNo">895</span><a id="line.895">        private VariableDesc(String name, DetailAST scope) {</a>
-<span class="sourceLineNo">896</span><a id="line.896">            this(name, null, scope);</a>
-<span class="sourceLineNo">897</span><a id="line.897">        }</a>
+<span class="sourceLineNo">888</span><a id="line.888">         * Ast of type {@link TokenTypes#TYPE}.</a>
+<span class="sourceLineNo">889</span><a id="line.889">         */</a>
+<span class="sourceLineNo">890</span><a id="line.890">        private final DetailAST typeAst;</a>
+<span class="sourceLineNo">891</span><a id="line.891"></a>
+<span class="sourceLineNo">892</span><a id="line.892">        /**</a>
+<span class="sourceLineNo">893</span><a id="line.893">         * The scope of variable is determined by the ast of type</a>
+<span class="sourceLineNo">894</span><a id="line.894">         * {@link TokenTypes#SLIST} or {@link TokenTypes#LITERAL_FOR}</a>
+<span class="sourceLineNo">895</span><a id="line.895">         * or {@link TokenTypes#OBJBLOCK} which is enclosing the variable.</a>
+<span class="sourceLineNo">896</span><a id="line.896">         */</a>
+<span class="sourceLineNo">897</span><a id="line.897">        private final DetailAST scope;</a>
 <span class="sourceLineNo">898</span><a id="line.898"></a>
 <span class="sourceLineNo">899</span><a id="line.899">        /**</a>
-<span class="sourceLineNo">900</span><a id="line.900">         * Get the name of variable.</a>
-<span class="sourceLineNo">901</span><a id="line.901">         *</a>
-<span class="sourceLineNo">902</span><a id="line.902">         * @return name of variable</a>
-<span class="sourceLineNo">903</span><a id="line.903">         */</a>
-<span class="sourceLineNo">904</span><a id="line.904">        public String getName() {</a>
-<span class="sourceLineNo">905</span><a id="line.905">            return name;</a>
-<span class="sourceLineNo">906</span><a id="line.906">        }</a>
-<span class="sourceLineNo">907</span><a id="line.907"></a>
-<span class="sourceLineNo">908</span><a id="line.908">        /**</a>
-<span class="sourceLineNo">909</span><a id="line.909">         * Get the associated ast node of type {@link TokenTypes#TYPE}.</a>
-<span class="sourceLineNo">910</span><a id="line.910">         *</a>
-<span class="sourceLineNo">911</span><a id="line.911">         * @return the associated ast node of type {@link TokenTypes#TYPE}</a>
-<span class="sourceLineNo">912</span><a id="line.912">         */</a>
-<span class="sourceLineNo">913</span><a id="line.913">        public DetailAST getTypeAst() {</a>
-<span class="sourceLineNo">914</span><a id="line.914">            return typeAst;</a>
-<span class="sourceLineNo">915</span><a id="line.915">        }</a>
-<span class="sourceLineNo">916</span><a id="line.916"></a>
-<span class="sourceLineNo">917</span><a id="line.917">        /**</a>
-<span class="sourceLineNo">918</span><a id="line.918">         * Get ast of type {@link TokenTypes#SLIST}</a>
-<span class="sourceLineNo">919</span><a id="line.919">         * or {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}</a>
-<span class="sourceLineNo">920</span><a id="line.920">         * which is enclosing the variable i.e. its scope.</a>
-<span class="sourceLineNo">921</span><a id="line.921">         *</a>
-<span class="sourceLineNo">922</span><a id="line.922">         * @return the scope associated with the variable</a>
-<span class="sourceLineNo">923</span><a id="line.923">         */</a>
-<span class="sourceLineNo">924</span><a id="line.924">        public DetailAST getScope() {</a>
-<span class="sourceLineNo">925</span><a id="line.925">            return scope;</a>
-<span class="sourceLineNo">926</span><a id="line.926">        }</a>
-<span class="sourceLineNo">927</span><a id="line.927"></a>
-<span class="sourceLineNo">928</span><a id="line.928">        /**</a>
-<span class="sourceLineNo">929</span><a id="line.929">         * Register the variable as used.</a>
-<span class="sourceLineNo">930</span><a id="line.930">         */</a>
-<span class="sourceLineNo">931</span><a id="line.931">        public void registerAsUsed() {</a>
-<span class="sourceLineNo">932</span><a id="line.932">            used = true;</a>
-<span class="sourceLineNo">933</span><a id="line.933">        }</a>
-<span class="sourceLineNo">934</span><a id="line.934"></a>
-<span class="sourceLineNo">935</span><a id="line.935">        /**</a>
-<span class="sourceLineNo">936</span><a id="line.936">         * Register the variable as an instance variable or</a>
-<span class="sourceLineNo">937</span><a id="line.937">         * class variable.</a>
-<span class="sourceLineNo">938</span><a id="line.938">         */</a>
-<span class="sourceLineNo">939</span><a id="line.939">        public void registerAsInstOrClassVar() {</a>
-<span class="sourceLineNo">940</span><a id="line.940">            instVarOrClassVar = true;</a>
-<span class="sourceLineNo">941</span><a id="line.941">        }</a>
-<span class="sourceLineNo">942</span><a id="line.942"></a>
-<span class="sourceLineNo">943</span><a id="line.943">        /**</a>
-<span class="sourceLineNo">944</span><a id="line.944">         * Is the variable used or not.</a>
-<span class="sourceLineNo">945</span><a id="line.945">         *</a>
-<span class="sourceLineNo">946</span><a id="line.946">         * @return true if variable is used</a>
-<span class="sourceLineNo">947</span><a id="line.947">         */</a>
-<span class="sourceLineNo">948</span><a id="line.948">        public boolean isUsed() {</a>
-<span class="sourceLineNo">949</span><a id="line.949">            return used;</a>
-<span class="sourceLineNo">950</span><a id="line.950">        }</a>
-<span class="sourceLineNo">951</span><a id="line.951"></a>
-<span class="sourceLineNo">952</span><a id="line.952">        /**</a>
-<span class="sourceLineNo">953</span><a id="line.953">         * Is an instance variable or a class variable.</a>
-<span class="sourceLineNo">954</span><a id="line.954">         *</a>
-<span class="sourceLineNo">955</span><a id="line.955">         * @return true if is an instance variable or a class variable</a>
-<span class="sourceLineNo">956</span><a id="line.956">         */</a>
-<span class="sourceLineNo">957</span><a id="line.957">        public boolean isInstVarOrClassVar() {</a>
-<span class="sourceLineNo">958</span><a id="line.958">            return instVarOrClassVar;</a>
-<span class="sourceLineNo">959</span><a id="line.959">        }</a>
-<span class="sourceLineNo">960</span><a id="line.960">    }</a>
-<span class="sourceLineNo">961</span><a id="line.961"></a>
-<span class="sourceLineNo">962</span><a id="line.962">    /**</a>
-<span class="sourceLineNo">963</span><a id="line.963">     * Maintains information about the type declaration.</a>
-<span class="sourceLineNo">964</span><a id="line.964">     * Any ast node of type {@link TokenTypes#CLASS_DEF} or {@link TokenTypes#INTERFACE_DEF}</a>
-<span class="sourceLineNo">965</span><a id="line.965">     * or {@link TokenTypes#ENUM_DEF} or {@link TokenTypes#ANNOTATION_DEF}</a>
-<span class="sourceLineNo">966</span><a id="line.966">     * or {@link TokenTypes#RECORD_DEF} is considered as a type declaration.</a>
-<span class="sourceLineNo">967</span><a id="line.967">     */</a>
-<span class="sourceLineNo">968</span><a id="line.968">    private static final class TypeDeclDesc {</a>
-<span class="sourceLineNo">969</span><a id="line.969"></a>
-<span class="sourceLineNo">970</span><a id="line.970">        /**</a>
-<span class="sourceLineNo">971</span><a id="line.971">         * Complete type declaration name with package name and outer type declaration name.</a>
-<span class="sourceLineNo">972</span><a id="line.972">         */</a>
-<span class="sourceLineNo">973</span><a id="line.973">        private final String qualifiedName;</a>
-<span class="sourceLineNo">974</span><a id="line.974"></a>
-<span class="sourceLineNo">975</span><a id="line.975">        /**</a>
-<span class="sourceLineNo">976</span><a id="line.976">         * Depth of nesting of type declaration.</a>
-<span class="sourceLineNo">977</span><a id="line.977">         */</a>
-<span class="sourceLineNo">978</span><a id="line.978">        private final int depth;</a>
-<span class="sourceLineNo">979</span><a id="line.979"></a>
-<span class="sourceLineNo">980</span><a id="line.980">        /**</a>
-<span class="sourceLineNo">981</span><a id="line.981">         * Type declaration ast node.</a>
-<span class="sourceLineNo">982</span><a id="line.982">         */</a>
-<span class="sourceLineNo">983</span><a id="line.983">        private final DetailAST typeDeclAst;</a>
-<span class="sourceLineNo">984</span><a id="line.984"></a>
-<span class="sourceLineNo">985</span><a id="line.985">        /**</a>
-<span class="sourceLineNo">986</span><a id="line.986">         * A stack of type declaration's instance and static variables.</a>
-<span class="sourceLineNo">987</span><a id="line.987">         */</a>
-<span class="sourceLineNo">988</span><a id="line.988">        private final Deque&lt;VariableDesc&gt; instanceAndClassVarStack;</a>
-<span class="sourceLineNo">989</span><a id="line.989"></a>
-<span class="sourceLineNo">990</span><a id="line.990">        /**</a>
-<span class="sourceLineNo">991</span><a id="line.991">         * Create a new TypeDeclDesc instance.</a>
-<span class="sourceLineNo">992</span><a id="line.992">         *</a>
-<span class="sourceLineNo">993</span><a id="line.993">         * @param qualifiedName qualified name</a>
-<span class="sourceLineNo">994</span><a id="line.994">         * @param depth depth of nesting</a>
-<span class="sourceLineNo">995</span><a id="line.995">         * @param typeDeclAst type declaration ast node</a>
-<span class="sourceLineNo">996</span><a id="line.996">         */</a>
-<span class="sourceLineNo">997</span><a id="line.997">        private TypeDeclDesc(String qualifiedName, int depth,</a>
-<span class="sourceLineNo">998</span><a id="line.998">                DetailAST typeDeclAst) {</a>
-<span class="sourceLineNo">999</span><a id="line.999">            this.qualifiedName = qualifiedName;</a>
-<span class="sourceLineNo">1000</span><a id="line.1000">            this.depth = depth;</a>
-<span class="sourceLineNo">1001</span><a id="line.1001">            this.typeDeclAst = typeDeclAst;</a>
-<span class="sourceLineNo">1002</span><a id="line.1002">            instanceAndClassVarStack = new ArrayDeque&lt;&gt;();</a>
-<span class="sourceLineNo">1003</span><a id="line.1003">        }</a>
-<span class="sourceLineNo">1004</span><a id="line.1004"></a>
-<span class="sourceLineNo">1005</span><a id="line.1005">        /**</a>
-<span class="sourceLineNo">1006</span><a id="line.1006">         * Get the complete type declaration name i.e. type declaration name with package name</a>
-<span class="sourceLineNo">1007</span><a id="line.1007">         * and outer type declaration name.</a>
-<span class="sourceLineNo">1008</span><a id="line.1008">         *</a>
-<span class="sourceLineNo">1009</span><a id="line.1009">         * @return qualified class name</a>
-<span class="sourceLineNo">1010</span><a id="line.1010">         */</a>
-<span class="sourceLineNo">1011</span><a id="line.1011">        public String getQualifiedName() {</a>
-<span class="sourceLineNo">1012</span><a id="line.1012">            return qualifiedName;</a>
-<span class="sourceLineNo">1013</span><a id="line.1013">        }</a>
-<span class="sourceLineNo">1014</span><a id="line.1014"></a>
-<span class="sourceLineNo">1015</span><a id="line.1015">        /**</a>
-<span class="sourceLineNo">1016</span><a id="line.1016">         * Get the depth of type declaration.</a>
-<span class="sourceLineNo">1017</span><a id="line.1017">         *</a>
-<span class="sourceLineNo">1018</span><a id="line.1018">         * @return the depth of nesting of type declaration</a>
-<span class="sourceLineNo">1019</span><a id="line.1019">         */</a>
-<span class="sourceLineNo">1020</span><a id="line.1020">        public int getDepth() {</a>
-<span class="sourceLineNo">1021</span><a id="line.1021">            return depth;</a>
-<span class="sourceLineNo">1022</span><a id="line.1022">        }</a>
-<span class="sourceLineNo">1023</span><a id="line.1023"></a>
-<span class="sourceLineNo">1024</span><a id="line.1024">        /**</a>
-<span class="sourceLineNo">1025</span><a id="line.1025">         * Get the type declaration ast node.</a>
-<span class="sourceLineNo">1026</span><a id="line.1026">         *</a>
-<span class="sourceLineNo">1027</span><a id="line.1027">         * @return ast node of the type declaration</a>
+<span class="sourceLineNo">900</span><a id="line.900">         * Is an instance variable or a class variable.</a>
+<span class="sourceLineNo">901</span><a id="line.901">         */</a>
+<span class="sourceLineNo">902</span><a id="line.902">        private boolean instVarOrClassVar;</a>
+<span class="sourceLineNo">903</span><a id="line.903"></a>
+<span class="sourceLineNo">904</span><a id="line.904">        /**</a>
+<span class="sourceLineNo">905</span><a id="line.905">         * Is the variable used.</a>
+<span class="sourceLineNo">906</span><a id="line.906">         */</a>
+<span class="sourceLineNo">907</span><a id="line.907">        private boolean used;</a>
+<span class="sourceLineNo">908</span><a id="line.908"></a>
+<span class="sourceLineNo">909</span><a id="line.909">        /**</a>
+<span class="sourceLineNo">910</span><a id="line.910">         * Create a new VariableDesc instance.</a>
+<span class="sourceLineNo">911</span><a id="line.911">         *</a>
+<span class="sourceLineNo">912</span><a id="line.912">         * @param name name of the variable</a>
+<span class="sourceLineNo">913</span><a id="line.913">         * @param typeAst ast of type {@link TokenTypes#TYPE}</a>
+<span class="sourceLineNo">914</span><a id="line.914">         * @param scope ast of type {@link TokenTypes#SLIST} or</a>
+<span class="sourceLineNo">915</span><a id="line.915">         *              {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}</a>
+<span class="sourceLineNo">916</span><a id="line.916">         *              which is enclosing the variable</a>
+<span class="sourceLineNo">917</span><a id="line.917">         */</a>
+<span class="sourceLineNo">918</span><a id="line.918">        private VariableDesc(String name, DetailAST typeAst, DetailAST scope) {</a>
+<span class="sourceLineNo">919</span><a id="line.919">            this.name = name;</a>
+<span class="sourceLineNo">920</span><a id="line.920">            this.typeAst = typeAst;</a>
+<span class="sourceLineNo">921</span><a id="line.921">            this.scope = scope;</a>
+<span class="sourceLineNo">922</span><a id="line.922">        }</a>
+<span class="sourceLineNo">923</span><a id="line.923"></a>
+<span class="sourceLineNo">924</span><a id="line.924">        /**</a>
+<span class="sourceLineNo">925</span><a id="line.925">         * Create a new VariableDesc instance.</a>
+<span class="sourceLineNo">926</span><a id="line.926">         *</a>
+<span class="sourceLineNo">927</span><a id="line.927">         * @param name name of the variable</a>
+<span class="sourceLineNo">928</span><a id="line.928">         */</a>
+<span class="sourceLineNo">929</span><a id="line.929">        private VariableDesc(String name) {</a>
+<span class="sourceLineNo">930</span><a id="line.930">            this(name, null, null);</a>
+<span class="sourceLineNo">931</span><a id="line.931">        }</a>
+<span class="sourceLineNo">932</span><a id="line.932"></a>
+<span class="sourceLineNo">933</span><a id="line.933">        /**</a>
+<span class="sourceLineNo">934</span><a id="line.934">         * Create a new VariableDesc instance.</a>
+<span class="sourceLineNo">935</span><a id="line.935">         *</a>
+<span class="sourceLineNo">936</span><a id="line.936">         * @param name name of the variable</a>
+<span class="sourceLineNo">937</span><a id="line.937">         * @param scope ast of type {@link TokenTypes#SLIST} or</a>
+<span class="sourceLineNo">938</span><a id="line.938">         *              {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}</a>
+<span class="sourceLineNo">939</span><a id="line.939">         *              which is enclosing the variable</a>
+<span class="sourceLineNo">940</span><a id="line.940">         */</a>
+<span class="sourceLineNo">941</span><a id="line.941">        private VariableDesc(String name, DetailAST scope) {</a>
+<span class="sourceLineNo">942</span><a id="line.942">            this(name, null, scope);</a>
+<span class="sourceLineNo">943</span><a id="line.943">        }</a>
+<span class="sourceLineNo">944</span><a id="line.944"></a>
+<span class="sourceLineNo">945</span><a id="line.945">        /**</a>
+<span class="sourceLineNo">946</span><a id="line.946">         * Get the name of variable.</a>
+<span class="sourceLineNo">947</span><a id="line.947">         *</a>
+<span class="sourceLineNo">948</span><a id="line.948">         * @return name of variable</a>
+<span class="sourceLineNo">949</span><a id="line.949">         */</a>
+<span class="sourceLineNo">950</span><a id="line.950">        public String getName() {</a>
+<span class="sourceLineNo">951</span><a id="line.951">            return name;</a>
+<span class="sourceLineNo">952</span><a id="line.952">        }</a>
+<span class="sourceLineNo">953</span><a id="line.953"></a>
+<span class="sourceLineNo">954</span><a id="line.954">        /**</a>
+<span class="sourceLineNo">955</span><a id="line.955">         * Get the associated ast node of type {@link TokenTypes#TYPE}.</a>
+<span class="sourceLineNo">956</span><a id="line.956">         *</a>
+<span class="sourceLineNo">957</span><a id="line.957">         * @return the associated ast node of type {@link TokenTypes#TYPE}</a>
+<span class="sourceLineNo">958</span><a id="line.958">         */</a>
+<span class="sourceLineNo">959</span><a id="line.959">        public DetailAST getTypeAst() {</a>
+<span class="sourceLineNo">960</span><a id="line.960">            return typeAst;</a>
+<span class="sourceLineNo">961</span><a id="line.961">        }</a>
+<span class="sourceLineNo">962</span><a id="line.962"></a>
+<span class="sourceLineNo">963</span><a id="line.963">        /**</a>
+<span class="sourceLineNo">964</span><a id="line.964">         * Get ast of type {@link TokenTypes#SLIST}</a>
+<span class="sourceLineNo">965</span><a id="line.965">         * or {@link TokenTypes#LITERAL_FOR} or {@link TokenTypes#OBJBLOCK}</a>
+<span class="sourceLineNo">966</span><a id="line.966">         * which is enclosing the variable i.e. its scope.</a>
+<span class="sourceLineNo">967</span><a id="line.967">         *</a>
+<span class="sourceLineNo">968</span><a id="line.968">         * @return the scope associated with the variable</a>
+<span class="sourceLineNo">969</span><a id="line.969">         */</a>
+<span class="sourceLineNo">970</span><a id="line.970">        public DetailAST getScope() {</a>
+<span class="sourceLineNo">971</span><a id="line.971">            return scope;</a>
+<span class="sourceLineNo">972</span><a id="line.972">        }</a>
+<span class="sourceLineNo">973</span><a id="line.973"></a>
+<span class="sourceLineNo">974</span><a id="line.974">        /**</a>
+<span class="sourceLineNo">975</span><a id="line.975">         * Register the variable as used.</a>
+<span class="sourceLineNo">976</span><a id="line.976">         */</a>
+<span class="sourceLineNo">977</span><a id="line.977">        public void registerAsUsed() {</a>
+<span class="sourceLineNo">978</span><a id="line.978">            used = true;</a>
+<span class="sourceLineNo">979</span><a id="line.979">        }</a>
+<span class="sourceLineNo">980</span><a id="line.980"></a>
+<span class="sourceLineNo">981</span><a id="line.981">        /**</a>
+<span class="sourceLineNo">982</span><a id="line.982">         * Register the variable as an instance variable or</a>
+<span class="sourceLineNo">983</span><a id="line.983">         * class variable.</a>
+<span class="sourceLineNo">984</span><a id="line.984">         */</a>
+<span class="sourceLineNo">985</span><a id="line.985">        public void registerAsInstOrClassVar() {</a>
+<span class="sourceLineNo">986</span><a id="line.986">            instVarOrClassVar = true;</a>
+<span class="sourceLineNo">987</span><a id="line.987">        }</a>
+<span class="sourceLineNo">988</span><a id="line.988"></a>
+<span class="sourceLineNo">989</span><a id="line.989">        /**</a>
+<span class="sourceLineNo">990</span><a id="line.990">         * Is the variable used or not.</a>
+<span class="sourceLineNo">991</span><a id="line.991">         *</a>
+<span class="sourceLineNo">992</span><a id="line.992">         * @return true if variable is used</a>
+<span class="sourceLineNo">993</span><a id="line.993">         */</a>
+<span class="sourceLineNo">994</span><a id="line.994">        public boolean isUsed() {</a>
+<span class="sourceLineNo">995</span><a id="line.995">            return used;</a>
+<span class="sourceLineNo">996</span><a id="line.996">        }</a>
+<span class="sourceLineNo">997</span><a id="line.997"></a>
+<span class="sourceLineNo">998</span><a id="line.998">        /**</a>
+<span class="sourceLineNo">999</span><a id="line.999">         * Is an instance variable or a class variable.</a>
+<span class="sourceLineNo">1000</span><a id="line.1000">         *</a>
+<span class="sourceLineNo">1001</span><a id="line.1001">         * @return true if is an instance variable or a class variable</a>
+<span class="sourceLineNo">1002</span><a id="line.1002">         */</a>
+<span class="sourceLineNo">1003</span><a id="line.1003">        public boolean isInstVarOrClassVar() {</a>
+<span class="sourceLineNo">1004</span><a id="line.1004">            return instVarOrClassVar;</a>
+<span class="sourceLineNo">1005</span><a id="line.1005">        }</a>
+<span class="sourceLineNo">1006</span><a id="line.1006">    }</a>
+<span class="sourceLineNo">1007</span><a id="line.1007"></a>
+<span class="sourceLineNo">1008</span><a id="line.1008">    /**</a>
+<span class="sourceLineNo">1009</span><a id="line.1009">     * Maintains information about the type declaration.</a>
+<span class="sourceLineNo">1010</span><a id="line.1010">     * Any ast node of type {@link TokenTypes#CLASS_DEF} or {@link TokenTypes#INTERFACE_DEF}</a>
+<span class="sourceLineNo">1011</span><a id="line.1011">     * or {@link TokenTypes#ENUM_DEF} or {@link TokenTypes#ANNOTATION_DEF}</a>
+<span class="sourceLineNo">1012</span><a id="line.1012">     * or {@link TokenTypes#RECORD_DEF} is considered as a type declaration.</a>
+<span class="sourceLineNo">1013</span><a id="line.1013">     */</a>
+<span class="sourceLineNo">1014</span><a id="line.1014">    private static final class TypeDeclDesc {</a>
+<span class="sourceLineNo">1015</span><a id="line.1015"></a>
+<span class="sourceLineNo">1016</span><a id="line.1016">        /**</a>
+<span class="sourceLineNo">1017</span><a id="line.1017">         * Complete type declaration name with package name and outer type declaration name.</a>
+<span class="sourceLineNo">1018</span><a id="line.1018">         */</a>
+<span class="sourceLineNo">1019</span><a id="line.1019">        private final String qualifiedName;</a>
+<span class="sourceLineNo">1020</span><a id="line.1020"></a>
+<span class="sourceLineNo">1021</span><a id="line.1021">        /**</a>
+<span class="sourceLineNo">1022</span><a id="line.1022">         * Depth of nesting of type declaration.</a>
+<span class="sourceLineNo">1023</span><a id="line.1023">         */</a>
+<span class="sourceLineNo">1024</span><a id="line.1024">        private final int depth;</a>
+<span class="sourceLineNo">1025</span><a id="line.1025"></a>
+<span class="sourceLineNo">1026</span><a id="line.1026">        /**</a>
+<span class="sourceLineNo">1027</span><a id="line.1027">         * Type declaration ast node.</a>
 <span class="sourceLineNo">1028</span><a id="line.1028">         */</a>
-<span class="sourceLineNo">1029</span><a id="line.1029">        public DetailAST getTypeDeclAst() {</a>
-<span class="sourceLineNo">1030</span><a id="line.1030">            return typeDeclAst;</a>
-<span class="sourceLineNo">1031</span><a id="line.1031">        }</a>
-<span class="sourceLineNo">1032</span><a id="line.1032"></a>
-<span class="sourceLineNo">1033</span><a id="line.1033">        /**</a>
-<span class="sourceLineNo">1034</span><a id="line.1034">         * Get the copy of variables in instanceAndClassVar stack with updated scope.</a>
-<span class="sourceLineNo">1035</span><a id="line.1035">         *</a>
-<span class="sourceLineNo">1036</span><a id="line.1036">         * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}</a>
-<span class="sourceLineNo">1037</span><a id="line.1037">         * @return copy of variables in instanceAndClassVar stack with updated scope.</a>
-<span class="sourceLineNo">1038</span><a id="line.1038">         */</a>
-<span class="sourceLineNo">1039</span><a id="line.1039">        public Deque&lt;VariableDesc&gt; getUpdatedCopyOfVarStack(DetailAST literalNewAst) {</a>
-<span class="sourceLineNo">1040</span><a id="line.1040">            final DetailAST updatedScope = literalNewAst;</a>
-<span class="sourceLineNo">1041</span><a id="line.1041">            final Deque&lt;VariableDesc&gt; instAndClassVarDeque = new ArrayDeque&lt;&gt;();</a>
-<span class="sourceLineNo">1042</span><a id="line.1042">            instanceAndClassVarStack.forEach(instVar -&gt; {</a>
-<span class="sourceLineNo">1043</span><a id="line.1043">                final VariableDesc variableDesc = new VariableDesc(instVar.getName(),</a>
-<span class="sourceLineNo">1044</span><a id="line.1044">                        updatedScope);</a>
-<span class="sourceLineNo">1045</span><a id="line.1045">                variableDesc.registerAsInstOrClassVar();</a>
-<span class="sourceLineNo">1046</span><a id="line.1046">                instAndClassVarDeque.push(variableDesc);</a>
-<span class="sourceLineNo">1047</span><a id="line.1047">            });</a>
-<span class="sourceLineNo">1048</span><a id="line.1048">            return instAndClassVarDeque;</a>
+<span class="sourceLineNo">1029</span><a id="line.1029">        private final DetailAST typeDeclAst;</a>
+<span class="sourceLineNo">1030</span><a id="line.1030"></a>
+<span class="sourceLineNo">1031</span><a id="line.1031">        /**</a>
+<span class="sourceLineNo">1032</span><a id="line.1032">         * A stack of type declaration's instance and static variables.</a>
+<span class="sourceLineNo">1033</span><a id="line.1033">         */</a>
+<span class="sourceLineNo">1034</span><a id="line.1034">        private final Deque&lt;VariableDesc&gt; instanceAndClassVarStack;</a>
+<span class="sourceLineNo">1035</span><a id="line.1035"></a>
+<span class="sourceLineNo">1036</span><a id="line.1036">        /**</a>
+<span class="sourceLineNo">1037</span><a id="line.1037">         * Create a new TypeDeclDesc instance.</a>
+<span class="sourceLineNo">1038</span><a id="line.1038">         *</a>
+<span class="sourceLineNo">1039</span><a id="line.1039">         * @param qualifiedName qualified name</a>
+<span class="sourceLineNo">1040</span><a id="line.1040">         * @param depth depth of nesting</a>
+<span class="sourceLineNo">1041</span><a id="line.1041">         * @param typeDeclAst type declaration ast node</a>
+<span class="sourceLineNo">1042</span><a id="line.1042">         */</a>
+<span class="sourceLineNo">1043</span><a id="line.1043">        private TypeDeclDesc(String qualifiedName, int depth,</a>
+<span class="sourceLineNo">1044</span><a id="line.1044">                DetailAST typeDeclAst) {</a>
+<span class="sourceLineNo">1045</span><a id="line.1045">            this.qualifiedName = qualifiedName;</a>
+<span class="sourceLineNo">1046</span><a id="line.1046">            this.depth = depth;</a>
+<span class="sourceLineNo">1047</span><a id="line.1047">            this.typeDeclAst = typeDeclAst;</a>
+<span class="sourceLineNo">1048</span><a id="line.1048">            instanceAndClassVarStack = new ArrayDeque&lt;&gt;();</a>
 <span class="sourceLineNo">1049</span><a id="line.1049">        }</a>
 <span class="sourceLineNo">1050</span><a id="line.1050"></a>
 <span class="sourceLineNo">1051</span><a id="line.1051">        /**</a>
-<span class="sourceLineNo">1052</span><a id="line.1052">         * Add an instance variable or class variable to the stack.</a>
-<span class="sourceLineNo">1053</span><a id="line.1053">         *</a>
-<span class="sourceLineNo">1054</span><a id="line.1054">         * @param variableDesc variable to be added</a>
-<span class="sourceLineNo">1055</span><a id="line.1055">         */</a>
-<span class="sourceLineNo">1056</span><a id="line.1056">        public void addInstOrClassVar(VariableDesc variableDesc) {</a>
-<span class="sourceLineNo">1057</span><a id="line.1057">            instanceAndClassVarStack.push(variableDesc);</a>
-<span class="sourceLineNo">1058</span><a id="line.1058">        }</a>
-<span class="sourceLineNo">1059</span><a id="line.1059">    }</a>
-<span class="sourceLineNo">1060</span><a id="line.1060">}</a>
+<span class="sourceLineNo">1052</span><a id="line.1052">         * Get the complete type declaration name i.e. type declaration name with package name</a>
+<span class="sourceLineNo">1053</span><a id="line.1053">         * and outer type declaration name.</a>
+<span class="sourceLineNo">1054</span><a id="line.1054">         *</a>
+<span class="sourceLineNo">1055</span><a id="line.1055">         * @return qualified class name</a>
+<span class="sourceLineNo">1056</span><a id="line.1056">         */</a>
+<span class="sourceLineNo">1057</span><a id="line.1057">        public String getQualifiedName() {</a>
+<span class="sourceLineNo">1058</span><a id="line.1058">            return qualifiedName;</a>
+<span class="sourceLineNo">1059</span><a id="line.1059">        }</a>
+<span class="sourceLineNo">1060</span><a id="line.1060"></a>
+<span class="sourceLineNo">1061</span><a id="line.1061">        /**</a>
+<span class="sourceLineNo">1062</span><a id="line.1062">         * Get the depth of type declaration.</a>
+<span class="sourceLineNo">1063</span><a id="line.1063">         *</a>
+<span class="sourceLineNo">1064</span><a id="line.1064">         * @return the depth of nesting of type declaration</a>
+<span class="sourceLineNo">1065</span><a id="line.1065">         */</a>
+<span class="sourceLineNo">1066</span><a id="line.1066">        public int getDepth() {</a>
+<span class="sourceLineNo">1067</span><a id="line.1067">            return depth;</a>
+<span class="sourceLineNo">1068</span><a id="line.1068">        }</a>
+<span class="sourceLineNo">1069</span><a id="line.1069"></a>
+<span class="sourceLineNo">1070</span><a id="line.1070">        /**</a>
+<span class="sourceLineNo">1071</span><a id="line.1071">         * Get the type declaration ast node.</a>
+<span class="sourceLineNo">1072</span><a id="line.1072">         *</a>
+<span class="sourceLineNo">1073</span><a id="line.1073">         * @return ast node of the type declaration</a>
+<span class="sourceLineNo">1074</span><a id="line.1074">         */</a>
+<span class="sourceLineNo">1075</span><a id="line.1075">        public DetailAST getTypeDeclAst() {</a>
+<span class="sourceLineNo">1076</span><a id="line.1076">            return typeDeclAst;</a>
+<span class="sourceLineNo">1077</span><a id="line.1077">        }</a>
+<span class="sourceLineNo">1078</span><a id="line.1078"></a>
+<span class="sourceLineNo">1079</span><a id="line.1079">        /**</a>
+<span class="sourceLineNo">1080</span><a id="line.1080">         * Get the copy of variables in instanceAndClassVar stack with updated scope.</a>
+<span class="sourceLineNo">1081</span><a id="line.1081">         *</a>
+<span class="sourceLineNo">1082</span><a id="line.1082">         * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}</a>
+<span class="sourceLineNo">1083</span><a id="line.1083">         * @return copy of variables in instanceAndClassVar stack with updated scope.</a>
+<span class="sourceLineNo">1084</span><a id="line.1084">         */</a>
+<span class="sourceLineNo">1085</span><a id="line.1085">        public Deque&lt;VariableDesc&gt; getUpdatedCopyOfVarStack(DetailAST literalNewAst) {</a>
+<span class="sourceLineNo">1086</span><a id="line.1086">            final DetailAST updatedScope = literalNewAst;</a>
+<span class="sourceLineNo">1087</span><a id="line.1087">            final Deque&lt;VariableDesc&gt; instAndClassVarDeque = new ArrayDeque&lt;&gt;();</a>
+<span class="sourceLineNo">1088</span><a id="line.1088">            instanceAndClassVarStack.forEach(instVar -&gt; {</a>
+<span class="sourceLineNo">1089</span><a id="line.1089">                final VariableDesc variableDesc = new VariableDesc(instVar.getName(),</a>
+<span class="sourceLineNo">1090</span><a id="line.1090">                        updatedScope);</a>
+<span class="sourceLineNo">1091</span><a id="line.1091">                variableDesc.registerAsInstOrClassVar();</a>
+<span class="sourceLineNo">1092</span><a id="line.1092">                instAndClassVarDeque.push(variableDesc);</a>
+<span class="sourceLineNo">1093</span><a id="line.1093">            });</a>
+<span class="sourceLineNo">1094</span><a id="line.1094">            return instAndClassVarDeque;</a>
+<span class="sourceLineNo">1095</span><a id="line.1095">        }</a>
+<span class="sourceLineNo">1096</span><a id="line.1096"></a>
+<span class="sourceLineNo">1097</span><a id="line.1097">        /**</a>
+<span class="sourceLineNo">1098</span><a id="line.1098">         * Add an instance variable or class variable to the stack.</a>
+<span class="sourceLineNo">1099</span><a id="line.1099">         *</a>
+<span class="sourceLineNo">1100</span><a id="line.1100">         * @param variableDesc variable to be added</a>
+<span class="sourceLineNo">1101</span><a id="line.1101">         */</a>
+<span class="sourceLineNo">1102</span><a id="line.1102">        public void addInstOrClassVar(VariableDesc variableDesc) {</a>
+<span class="sourceLineNo">1103</span><a id="line.1103">            instanceAndClassVarStack.push(variableDesc);</a>
+<span class="sourceLineNo">1104</span><a id="line.1104">        }</a>
+<span class="sourceLineNo">1105</span><a id="line.1105">    }</a>
+<span class="sourceLineNo">1106</span><a id="line.1106">}</a>
 
 
 
