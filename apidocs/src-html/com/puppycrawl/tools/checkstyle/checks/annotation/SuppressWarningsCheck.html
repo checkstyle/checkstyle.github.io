@@ -216,169 +216,180 @@
 <span class="source-line-no">203</span><span id="line-203">        if (annotation != null) {</span>
 <span class="source-line-no">204</span><span id="line-204">            final DetailAST warningHolder =</span>
 <span class="source-line-no">205</span><span id="line-205">                findWarningsHolder(annotation);</span>
-<span class="source-line-no">206</span><span id="line-206"></span>
-<span class="source-line-no">207</span><span id="line-207">            final DetailAST token =</span>
-<span class="source-line-no">208</span><span id="line-208">                    warningHolder.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
-<span class="source-line-no">209</span><span id="line-209"></span>
-<span class="source-line-no">210</span><span id="line-210">            // case like '@SuppressWarnings(value = UNUSED)'</span>
-<span class="source-line-no">211</span><span id="line-211">            final DetailAST parent = Objects.requireNonNullElse(token, warningHolder);</span>
-<span class="source-line-no">212</span><span id="line-212">            DetailAST warning = parent.findFirstToken(TokenTypes.EXPR);</span>
-<span class="source-line-no">213</span><span id="line-213"></span>
-<span class="source-line-no">214</span><span id="line-214">            // rare case with empty array ex: @SuppressWarnings({})</span>
-<span class="source-line-no">215</span><span id="line-215">            if (warning == null) {</span>
-<span class="source-line-no">216</span><span id="line-216">                // check to see if empty warnings are forbidden -- are by default</span>
-<span class="source-line-no">217</span><span id="line-217">                logMatch(warningHolder, "");</span>
-<span class="source-line-no">218</span><span id="line-218">            }</span>
-<span class="source-line-no">219</span><span id="line-219">            else {</span>
-<span class="source-line-no">220</span><span id="line-220">                while (warning != null) {</span>
-<span class="source-line-no">221</span><span id="line-221">                    if (warning.getType() == TokenTypes.EXPR) {</span>
-<span class="source-line-no">222</span><span id="line-222">                        final DetailAST fChild = warning.getFirstChild();</span>
-<span class="source-line-no">223</span><span id="line-223">                        switch (fChild.getType()) {</span>
-<span class="source-line-no">224</span><span id="line-224">                            // typical case</span>
-<span class="source-line-no">225</span><span id="line-225">                            case TokenTypes.STRING_LITERAL:</span>
-<span class="source-line-no">226</span><span id="line-226">                                final String warningText =</span>
-<span class="source-line-no">227</span><span id="line-227">                                    removeQuotes(warning.getFirstChild().getText());</span>
-<span class="source-line-no">228</span><span id="line-228">                                logMatch(warning, warningText);</span>
-<span class="source-line-no">229</span><span id="line-229">                                break;</span>
-<span class="source-line-no">230</span><span id="line-230">                            // conditional case</span>
-<span class="source-line-no">231</span><span id="line-231">                            // ex:</span>
-<span class="source-line-no">232</span><span id="line-232">                            // @SuppressWarnings((false) ? (true) ? "unchecked" : "foo" : "unused")</span>
-<span class="source-line-no">233</span><span id="line-233">                            case TokenTypes.QUESTION:</span>
-<span class="source-line-no">234</span><span id="line-234">                                walkConditional(fChild);</span>
-<span class="source-line-no">235</span><span id="line-235">                                break;</span>
-<span class="source-line-no">236</span><span id="line-236">                            default:</span>
-<span class="source-line-no">237</span><span id="line-237">                                // Known limitation: cases like @SuppressWarnings("un" + "used") or</span>
-<span class="source-line-no">238</span><span id="line-238">                                // @SuppressWarnings((String) "unused") are not properly supported,</span>
-<span class="source-line-no">239</span><span id="line-239">                                // but they should not cause exceptions.</span>
-<span class="source-line-no">240</span><span id="line-240">                                // Also constant as param</span>
-<span class="source-line-no">241</span><span id="line-241">                                // ex: public static final String UNCHECKED = "unchecked";</span>
-<span class="source-line-no">242</span><span id="line-242">                                // @SuppressWarnings(UNCHECKED)</span>
-<span class="source-line-no">243</span><span id="line-243">                                // or</span>
-<span class="source-line-no">244</span><span id="line-244">                                // @SuppressWarnings(SomeClass.UNCHECKED)</span>
-<span class="source-line-no">245</span><span id="line-245">                        }</span>
-<span class="source-line-no">246</span><span id="line-246">                    }</span>
-<span class="source-line-no">247</span><span id="line-247">                    warning = warning.getNextSibling();</span>
-<span class="source-line-no">248</span><span id="line-248">                }</span>
-<span class="source-line-no">249</span><span id="line-249">            }</span>
-<span class="source-line-no">250</span><span id="line-250">        }</span>
-<span class="source-line-no">251</span><span id="line-251">    }</span>
-<span class="source-line-no">252</span><span id="line-252"></span>
-<span class="source-line-no">253</span><span id="line-253">    /**</span>
-<span class="source-line-no">254</span><span id="line-254">     * Gets the {@link SuppressWarnings SuppressWarnings} annotation</span>
-<span class="source-line-no">255</span><span id="line-255">     * that is annotating the AST.  If the annotation does not exist</span>
-<span class="source-line-no">256</span><span id="line-256">     * this method will return {@code null}.</span>
-<span class="source-line-no">257</span><span id="line-257">     *</span>
-<span class="source-line-no">258</span><span id="line-258">     * @param ast the AST</span>
-<span class="source-line-no">259</span><span id="line-259">     * @return the {@link SuppressWarnings SuppressWarnings} annotation</span>
-<span class="source-line-no">260</span><span id="line-260">     */</span>
-<span class="source-line-no">261</span><span id="line-261">    private static DetailAST getSuppressWarnings(DetailAST ast) {</span>
-<span class="source-line-no">262</span><span id="line-262">        DetailAST annotation = AnnotationUtil.getAnnotation(ast, SUPPRESS_WARNINGS);</span>
+<span class="source-line-no">206</span><span id="line-206">            final DetailAST token =</span>
+<span class="source-line-no">207</span><span id="line-207">                    warningHolder.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+<span class="source-line-no">208</span><span id="line-208"></span>
+<span class="source-line-no">209</span><span id="line-209">            // case like '@SuppressWarnings(value = UNUSED)'</span>
+<span class="source-line-no">210</span><span id="line-210">            final DetailAST parent = Objects.requireNonNullElse(token, warningHolder);</span>
+<span class="source-line-no">211</span><span id="line-211">            final DetailAST warning = parent.findFirstToken(TokenTypes.EXPR);</span>
+<span class="source-line-no">212</span><span id="line-212"></span>
+<span class="source-line-no">213</span><span id="line-213">            if (warning == null) {</span>
+<span class="source-line-no">214</span><span id="line-214">                // check to see if empty warnings are forbidden -- are by default</span>
+<span class="source-line-no">215</span><span id="line-215">                logMatch(warningHolder, "");</span>
+<span class="source-line-no">216</span><span id="line-216">            }</span>
+<span class="source-line-no">217</span><span id="line-217">            else {</span>
+<span class="source-line-no">218</span><span id="line-218">                processWarnings(warning);</span>
+<span class="source-line-no">219</span><span id="line-219">            }</span>
+<span class="source-line-no">220</span><span id="line-220">        }</span>
+<span class="source-line-no">221</span><span id="line-221">    }</span>
+<span class="source-line-no">222</span><span id="line-222"></span>
+<span class="source-line-no">223</span><span id="line-223">    /**</span>
+<span class="source-line-no">224</span><span id="line-224">     * Processes all warning expressions starting from the given AST node.</span>
+<span class="source-line-no">225</span><span id="line-225">     *</span>
+<span class="source-line-no">226</span><span id="line-226">     * @param warning the first warning expression node to process</span>
+<span class="source-line-no">227</span><span id="line-227">     */</span>
+<span class="source-line-no">228</span><span id="line-228">    private void processWarnings(final DetailAST warning) {</span>
+<span class="source-line-no">229</span><span id="line-229">        for (DetailAST current = warning; current != null; current = current.getNextSibling()) {</span>
+<span class="source-line-no">230</span><span id="line-230">            if (current.getType() == TokenTypes.EXPR) {</span>
+<span class="source-line-no">231</span><span id="line-231">                processWarningExpr(current.getFirstChild(), current);</span>
+<span class="source-line-no">232</span><span id="line-232">            }</span>
+<span class="source-line-no">233</span><span id="line-233">        }</span>
+<span class="source-line-no">234</span><span id="line-234">    }</span>
+<span class="source-line-no">235</span><span id="line-235"></span>
+<span class="source-line-no">236</span><span id="line-236">    /**</span>
+<span class="source-line-no">237</span><span id="line-237">     * Processes a single warning expression.</span>
+<span class="source-line-no">238</span><span id="line-238">     *</span>
+<span class="source-line-no">239</span><span id="line-239">     * @param fChild  the first child AST of the expression</span>
+<span class="source-line-no">240</span><span id="line-240">     * @param warning the parent warning AST node</span>
+<span class="source-line-no">241</span><span id="line-241">     */</span>
+<span class="source-line-no">242</span><span id="line-242">    private void processWarningExpr(final DetailAST fChild, final DetailAST warning) {</span>
+<span class="source-line-no">243</span><span id="line-243">        switch (fChild.getType()) {</span>
+<span class="source-line-no">244</span><span id="line-244">            case TokenTypes.STRING_LITERAL -&gt; logMatch(warning,</span>
+<span class="source-line-no">245</span><span id="line-245">                    removeQuotes(warning.getFirstChild().getText()));</span>
+<span class="source-line-no">246</span><span id="line-246"></span>
+<span class="source-line-no">247</span><span id="line-247">            case TokenTypes.QUESTION -&gt;</span>
+<span class="source-line-no">248</span><span id="line-248">                // ex: @SuppressWarnings((false) ? (true) ? "unchecked" : "foo" : "unused")</span>
+<span class="source-line-no">249</span><span id="line-249">                walkConditional(fChild);</span>
+<span class="source-line-no">250</span><span id="line-250"></span>
+<span class="source-line-no">251</span><span id="line-251">            default -&gt; {</span>
+<span class="source-line-no">252</span><span id="line-252">            // Known limitation: cases like @SuppressWarnings("un" + "used") or</span>
+<span class="source-line-no">253</span><span id="line-253">            // @SuppressWarnings((String) "unused") are not properly supported,</span>
+<span class="source-line-no">254</span><span id="line-254">            // but they should not cause exceptions.</span>
+<span class="source-line-no">255</span><span id="line-255">            // Also constants as params:</span>
+<span class="source-line-no">256</span><span id="line-256">            // ex: public static final String UNCHECKED = "unchecked";</span>
+<span class="source-line-no">257</span><span id="line-257">            // @SuppressWarnings(UNCHECKED)</span>
+<span class="source-line-no">258</span><span id="line-258">            // or</span>
+<span class="source-line-no">259</span><span id="line-259">            // @SuppressWarnings(SomeClass.UNCHECKED)</span>
+<span class="source-line-no">260</span><span id="line-260">            }</span>
+<span class="source-line-no">261</span><span id="line-261">        }</span>
+<span class="source-line-no">262</span><span id="line-262">    }</span>
 <span class="source-line-no">263</span><span id="line-263"></span>
-<span class="source-line-no">264</span><span id="line-264">        if (annotation == null) {</span>
-<span class="source-line-no">265</span><span id="line-265">            annotation = AnnotationUtil.getAnnotation(ast, FQ_SUPPRESS_WARNINGS);</span>
-<span class="source-line-no">266</span><span id="line-266">        }</span>
-<span class="source-line-no">267</span><span id="line-267">        return annotation;</span>
-<span class="source-line-no">268</span><span id="line-268">    }</span>
-<span class="source-line-no">269</span><span id="line-269"></span>
-<span class="source-line-no">270</span><span id="line-270">    /**</span>
-<span class="source-line-no">271</span><span id="line-271">     * This method looks for a warning that matches a configured expression.</span>
-<span class="source-line-no">272</span><span id="line-272">     * If found it logs a violation at the given AST.</span>
-<span class="source-line-no">273</span><span id="line-273">     *</span>
-<span class="source-line-no">274</span><span id="line-274">     * @param ast the location to place the violation</span>
-<span class="source-line-no">275</span><span id="line-275">     * @param warningText the warning.</span>
-<span class="source-line-no">276</span><span id="line-276">     */</span>
-<span class="source-line-no">277</span><span id="line-277">    private void logMatch(DetailAST ast, final String warningText) {</span>
-<span class="source-line-no">278</span><span id="line-278">        final Matcher matcher = format.matcher(warningText);</span>
-<span class="source-line-no">279</span><span id="line-279">        if (matcher.matches()) {</span>
-<span class="source-line-no">280</span><span id="line-280">            log(ast,</span>
-<span class="source-line-no">281</span><span id="line-281">                    MSG_KEY_SUPPRESSED_WARNING_NOT_ALLOWED, warningText);</span>
-<span class="source-line-no">282</span><span id="line-282">        }</span>
-<span class="source-line-no">283</span><span id="line-283">    }</span>
-<span class="source-line-no">284</span><span id="line-284"></span>
-<span class="source-line-no">285</span><span id="line-285">    /**</span>
-<span class="source-line-no">286</span><span id="line-286">     * Find the parent (holder) of the of the warnings (Expr).</span>
-<span class="source-line-no">287</span><span id="line-287">     *</span>
-<span class="source-line-no">288</span><span id="line-288">     * @param annotation the annotation</span>
-<span class="source-line-no">289</span><span id="line-289">     * @return a Token representing the expr.</span>
-<span class="source-line-no">290</span><span id="line-290">     */</span>
-<span class="source-line-no">291</span><span id="line-291">    private static DetailAST findWarningsHolder(final DetailAST annotation) {</span>
-<span class="source-line-no">292</span><span id="line-292">        final DetailAST annValuePair =</span>
-<span class="source-line-no">293</span><span id="line-293">            annotation.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
-<span class="source-line-no">294</span><span id="line-294"></span>
-<span class="source-line-no">295</span><span id="line-295">        final DetailAST annArrayInitParent = Objects.requireNonNullElse(annValuePair, annotation);</span>
-<span class="source-line-no">296</span><span id="line-296">        final DetailAST annArrayInit = annArrayInitParent</span>
-<span class="source-line-no">297</span><span id="line-297">                .findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
-<span class="source-line-no">298</span><span id="line-298">        return Objects.requireNonNullElse(annArrayInit, annotation);</span>
-<span class="source-line-no">299</span><span id="line-299">    }</span>
-<span class="source-line-no">300</span><span id="line-300"></span>
-<span class="source-line-no">301</span><span id="line-301">    /**</span>
-<span class="source-line-no">302</span><span id="line-302">     * Strips a single double quote from the front and back of a string.</span>
-<span class="source-line-no">303</span><span id="line-303">     *</span>
-<span class="source-line-no">304</span><span id="line-304">     * &lt;p&gt;For example:&lt;/p&gt;</span>
-<span class="source-line-no">305</span><span id="line-305">     * &lt;pre&gt;</span>
-<span class="source-line-no">306</span><span id="line-306">     * Input String = "unchecked"</span>
-<span class="source-line-no">307</span><span id="line-307">     * &lt;/pre&gt;</span>
-<span class="source-line-no">308</span><span id="line-308">     * Output String = unchecked</span>
-<span class="source-line-no">309</span><span id="line-309">     *</span>
-<span class="source-line-no">310</span><span id="line-310">     * @param warning the warning string</span>
-<span class="source-line-no">311</span><span id="line-311">     * @return the string without two quotes</span>
-<span class="source-line-no">312</span><span id="line-312">     */</span>
-<span class="source-line-no">313</span><span id="line-313">    private static String removeQuotes(final String warning) {</span>
-<span class="source-line-no">314</span><span id="line-314">        return warning.substring(1, warning.length() - 1);</span>
-<span class="source-line-no">315</span><span id="line-315">    }</span>
-<span class="source-line-no">316</span><span id="line-316"></span>
-<span class="source-line-no">317</span><span id="line-317">    /**</span>
-<span class="source-line-no">318</span><span id="line-318">     * Walks a conditional expression checking the left</span>
-<span class="source-line-no">319</span><span id="line-319">     * and right sides, checking for matches and</span>
-<span class="source-line-no">320</span><span id="line-320">     * logging violations.</span>
-<span class="source-line-no">321</span><span id="line-321">     *</span>
-<span class="source-line-no">322</span><span id="line-322">     * @param cond a Conditional type</span>
-<span class="source-line-no">323</span><span id="line-323">     *     {@link TokenTypes#QUESTION QUESTION}</span>
-<span class="source-line-no">324</span><span id="line-324">     */</span>
-<span class="source-line-no">325</span><span id="line-325">    private void walkConditional(final DetailAST cond) {</span>
-<span class="source-line-no">326</span><span id="line-326">        final Deque&lt;DetailAST&gt; condStack = new ArrayDeque&lt;&gt;();</span>
-<span class="source-line-no">327</span><span id="line-327">        condStack.push(cond);</span>
-<span class="source-line-no">328</span><span id="line-328"></span>
-<span class="source-line-no">329</span><span id="line-329">        while (!condStack.isEmpty()) {</span>
-<span class="source-line-no">330</span><span id="line-330">            final DetailAST currentCond = condStack.pop();</span>
-<span class="source-line-no">331</span><span id="line-331">            if (currentCond.getType() == TokenTypes.QUESTION) {</span>
-<span class="source-line-no">332</span><span id="line-332">                condStack.push(getCondRight(currentCond));</span>
-<span class="source-line-no">333</span><span id="line-333">                condStack.push(getCondLeft(currentCond));</span>
-<span class="source-line-no">334</span><span id="line-334">            }</span>
-<span class="source-line-no">335</span><span id="line-335">            else {</span>
-<span class="source-line-no">336</span><span id="line-336">                final String warningText = removeQuotes(currentCond.getText());</span>
-<span class="source-line-no">337</span><span id="line-337">                logMatch(currentCond, warningText);</span>
-<span class="source-line-no">338</span><span id="line-338">            }</span>
-<span class="source-line-no">339</span><span id="line-339">        }</span>
-<span class="source-line-no">340</span><span id="line-340">    }</span>
-<span class="source-line-no">341</span><span id="line-341"></span>
-<span class="source-line-no">342</span><span id="line-342">    /**</span>
-<span class="source-line-no">343</span><span id="line-343">     * Retrieves the left side of a conditional.</span>
-<span class="source-line-no">344</span><span id="line-344">     *</span>
-<span class="source-line-no">345</span><span id="line-345">     * @param cond cond a conditional type</span>
-<span class="source-line-no">346</span><span id="line-346">     *     {@link TokenTypes#QUESTION QUESTION}</span>
-<span class="source-line-no">347</span><span id="line-347">     * @return either the value</span>
-<span class="source-line-no">348</span><span id="line-348">     *     or another conditional</span>
-<span class="source-line-no">349</span><span id="line-349">     */</span>
-<span class="source-line-no">350</span><span id="line-350">    private static DetailAST getCondLeft(final DetailAST cond) {</span>
-<span class="source-line-no">351</span><span id="line-351">        final DetailAST colon = cond.findFirstToken(TokenTypes.COLON);</span>
-<span class="source-line-no">352</span><span id="line-352">        return colon.getPreviousSibling();</span>
-<span class="source-line-no">353</span><span id="line-353">    }</span>
-<span class="source-line-no">354</span><span id="line-354"></span>
-<span class="source-line-no">355</span><span id="line-355">    /**</span>
-<span class="source-line-no">356</span><span id="line-356">     * Retrieves the right side of a conditional.</span>
-<span class="source-line-no">357</span><span id="line-357">     *</span>
-<span class="source-line-no">358</span><span id="line-358">     * @param cond a conditional type</span>
-<span class="source-line-no">359</span><span id="line-359">     *     {@link TokenTypes#QUESTION QUESTION}</span>
-<span class="source-line-no">360</span><span id="line-360">     * @return either the value</span>
-<span class="source-line-no">361</span><span id="line-361">     *     or another conditional</span>
-<span class="source-line-no">362</span><span id="line-362">     */</span>
-<span class="source-line-no">363</span><span id="line-363">    private static DetailAST getCondRight(final DetailAST cond) {</span>
-<span class="source-line-no">364</span><span id="line-364">        final DetailAST colon = cond.findFirstToken(TokenTypes.COLON);</span>
-<span class="source-line-no">365</span><span id="line-365">        return colon.getNextSibling();</span>
-<span class="source-line-no">366</span><span id="line-366">    }</span>
-<span class="source-line-no">367</span><span id="line-367"></span>
-<span class="source-line-no">368</span><span id="line-368">}</span>
+<span class="source-line-no">264</span><span id="line-264">    /**</span>
+<span class="source-line-no">265</span><span id="line-265">     * Gets the {@link SuppressWarnings SuppressWarnings} annotation</span>
+<span class="source-line-no">266</span><span id="line-266">     * that is annotating the AST.  If the annotation does not exist</span>
+<span class="source-line-no">267</span><span id="line-267">     * this method will return {@code null}.</span>
+<span class="source-line-no">268</span><span id="line-268">     *</span>
+<span class="source-line-no">269</span><span id="line-269">     * @param ast the AST</span>
+<span class="source-line-no">270</span><span id="line-270">     * @return the {@link SuppressWarnings SuppressWarnings} annotation</span>
+<span class="source-line-no">271</span><span id="line-271">     */</span>
+<span class="source-line-no">272</span><span id="line-272">    private static DetailAST getSuppressWarnings(DetailAST ast) {</span>
+<span class="source-line-no">273</span><span id="line-273">        DetailAST annotation = AnnotationUtil.getAnnotation(ast, SUPPRESS_WARNINGS);</span>
+<span class="source-line-no">274</span><span id="line-274"></span>
+<span class="source-line-no">275</span><span id="line-275">        if (annotation == null) {</span>
+<span class="source-line-no">276</span><span id="line-276">            annotation = AnnotationUtil.getAnnotation(ast, FQ_SUPPRESS_WARNINGS);</span>
+<span class="source-line-no">277</span><span id="line-277">        }</span>
+<span class="source-line-no">278</span><span id="line-278">        return annotation;</span>
+<span class="source-line-no">279</span><span id="line-279">    }</span>
+<span class="source-line-no">280</span><span id="line-280"></span>
+<span class="source-line-no">281</span><span id="line-281">    /**</span>
+<span class="source-line-no">282</span><span id="line-282">     * This method looks for a warning that matches a configured expression.</span>
+<span class="source-line-no">283</span><span id="line-283">     * If found it logs a violation at the given AST.</span>
+<span class="source-line-no">284</span><span id="line-284">     *</span>
+<span class="source-line-no">285</span><span id="line-285">     * @param ast the location to place the violation</span>
+<span class="source-line-no">286</span><span id="line-286">     * @param warningText the warning.</span>
+<span class="source-line-no">287</span><span id="line-287">     */</span>
+<span class="source-line-no">288</span><span id="line-288">    private void logMatch(DetailAST ast, final String warningText) {</span>
+<span class="source-line-no">289</span><span id="line-289">        final Matcher matcher = format.matcher(warningText);</span>
+<span class="source-line-no">290</span><span id="line-290">        if (matcher.matches()) {</span>
+<span class="source-line-no">291</span><span id="line-291">            log(ast,</span>
+<span class="source-line-no">292</span><span id="line-292">                    MSG_KEY_SUPPRESSED_WARNING_NOT_ALLOWED, warningText);</span>
+<span class="source-line-no">293</span><span id="line-293">        }</span>
+<span class="source-line-no">294</span><span id="line-294">    }</span>
+<span class="source-line-no">295</span><span id="line-295"></span>
+<span class="source-line-no">296</span><span id="line-296">    /**</span>
+<span class="source-line-no">297</span><span id="line-297">     * Find the parent (holder) of the of the warnings (Expr).</span>
+<span class="source-line-no">298</span><span id="line-298">     *</span>
+<span class="source-line-no">299</span><span id="line-299">     * @param annotation the annotation</span>
+<span class="source-line-no">300</span><span id="line-300">     * @return a Token representing the expr.</span>
+<span class="source-line-no">301</span><span id="line-301">     */</span>
+<span class="source-line-no">302</span><span id="line-302">    private static DetailAST findWarningsHolder(final DetailAST annotation) {</span>
+<span class="source-line-no">303</span><span id="line-303">        final DetailAST annValuePair =</span>
+<span class="source-line-no">304</span><span id="line-304">            annotation.findFirstToken(TokenTypes.ANNOTATION_MEMBER_VALUE_PAIR);</span>
+<span class="source-line-no">305</span><span id="line-305"></span>
+<span class="source-line-no">306</span><span id="line-306">        final DetailAST annArrayInitParent = Objects.requireNonNullElse(annValuePair, annotation);</span>
+<span class="source-line-no">307</span><span id="line-307">        final DetailAST annArrayInit = annArrayInitParent</span>
+<span class="source-line-no">308</span><span id="line-308">                .findFirstToken(TokenTypes.ANNOTATION_ARRAY_INIT);</span>
+<span class="source-line-no">309</span><span id="line-309">        return Objects.requireNonNullElse(annArrayInit, annotation);</span>
+<span class="source-line-no">310</span><span id="line-310">    }</span>
+<span class="source-line-no">311</span><span id="line-311"></span>
+<span class="source-line-no">312</span><span id="line-312">    /**</span>
+<span class="source-line-no">313</span><span id="line-313">     * Strips a single double quote from the front and back of a string.</span>
+<span class="source-line-no">314</span><span id="line-314">     *</span>
+<span class="source-line-no">315</span><span id="line-315">     * &lt;p&gt;For example:&lt;/p&gt;</span>
+<span class="source-line-no">316</span><span id="line-316">     * &lt;pre&gt;</span>
+<span class="source-line-no">317</span><span id="line-317">     * Input String = "unchecked"</span>
+<span class="source-line-no">318</span><span id="line-318">     * &lt;/pre&gt;</span>
+<span class="source-line-no">319</span><span id="line-319">     * Output String = unchecked</span>
+<span class="source-line-no">320</span><span id="line-320">     *</span>
+<span class="source-line-no">321</span><span id="line-321">     * @param warning the warning string</span>
+<span class="source-line-no">322</span><span id="line-322">     * @return the string without two quotes</span>
+<span class="source-line-no">323</span><span id="line-323">     */</span>
+<span class="source-line-no">324</span><span id="line-324">    private static String removeQuotes(final String warning) {</span>
+<span class="source-line-no">325</span><span id="line-325">        return warning.substring(1, warning.length() - 1);</span>
+<span class="source-line-no">326</span><span id="line-326">    }</span>
+<span class="source-line-no">327</span><span id="line-327"></span>
+<span class="source-line-no">328</span><span id="line-328">    /**</span>
+<span class="source-line-no">329</span><span id="line-329">     * Walks a conditional expression checking the left</span>
+<span class="source-line-no">330</span><span id="line-330">     * and right sides, checking for matches and</span>
+<span class="source-line-no">331</span><span id="line-331">     * logging violations.</span>
+<span class="source-line-no">332</span><span id="line-332">     *</span>
+<span class="source-line-no">333</span><span id="line-333">     * @param cond a Conditional type</span>
+<span class="source-line-no">334</span><span id="line-334">     *     {@link TokenTypes#QUESTION QUESTION}</span>
+<span class="source-line-no">335</span><span id="line-335">     */</span>
+<span class="source-line-no">336</span><span id="line-336">    private void walkConditional(final DetailAST cond) {</span>
+<span class="source-line-no">337</span><span id="line-337">        final Deque&lt;DetailAST&gt; condStack = new ArrayDeque&lt;&gt;();</span>
+<span class="source-line-no">338</span><span id="line-338">        condStack.push(cond);</span>
+<span class="source-line-no">339</span><span id="line-339"></span>
+<span class="source-line-no">340</span><span id="line-340">        while (!condStack.isEmpty()) {</span>
+<span class="source-line-no">341</span><span id="line-341">            final DetailAST currentCond = condStack.pop();</span>
+<span class="source-line-no">342</span><span id="line-342">            if (currentCond.getType() == TokenTypes.QUESTION) {</span>
+<span class="source-line-no">343</span><span id="line-343">                condStack.push(getCondRight(currentCond));</span>
+<span class="source-line-no">344</span><span id="line-344">                condStack.push(getCondLeft(currentCond));</span>
+<span class="source-line-no">345</span><span id="line-345">            }</span>
+<span class="source-line-no">346</span><span id="line-346">            else {</span>
+<span class="source-line-no">347</span><span id="line-347">                final String warningText = removeQuotes(currentCond.getText());</span>
+<span class="source-line-no">348</span><span id="line-348">                logMatch(currentCond, warningText);</span>
+<span class="source-line-no">349</span><span id="line-349">            }</span>
+<span class="source-line-no">350</span><span id="line-350">        }</span>
+<span class="source-line-no">351</span><span id="line-351">    }</span>
+<span class="source-line-no">352</span><span id="line-352"></span>
+<span class="source-line-no">353</span><span id="line-353">    /**</span>
+<span class="source-line-no">354</span><span id="line-354">     * Retrieves the left side of a conditional.</span>
+<span class="source-line-no">355</span><span id="line-355">     *</span>
+<span class="source-line-no">356</span><span id="line-356">     * @param cond cond a conditional type</span>
+<span class="source-line-no">357</span><span id="line-357">     *     {@link TokenTypes#QUESTION QUESTION}</span>
+<span class="source-line-no">358</span><span id="line-358">     * @return either the value</span>
+<span class="source-line-no">359</span><span id="line-359">     *     or another conditional</span>
+<span class="source-line-no">360</span><span id="line-360">     */</span>
+<span class="source-line-no">361</span><span id="line-361">    private static DetailAST getCondLeft(final DetailAST cond) {</span>
+<span class="source-line-no">362</span><span id="line-362">        final DetailAST colon = cond.findFirstToken(TokenTypes.COLON);</span>
+<span class="source-line-no">363</span><span id="line-363">        return colon.getPreviousSibling();</span>
+<span class="source-line-no">364</span><span id="line-364">    }</span>
+<span class="source-line-no">365</span><span id="line-365"></span>
+<span class="source-line-no">366</span><span id="line-366">    /**</span>
+<span class="source-line-no">367</span><span id="line-367">     * Retrieves the right side of a conditional.</span>
+<span class="source-line-no">368</span><span id="line-368">     *</span>
+<span class="source-line-no">369</span><span id="line-369">     * @param cond a conditional type</span>
+<span class="source-line-no">370</span><span id="line-370">     *     {@link TokenTypes#QUESTION QUESTION}</span>
+<span class="source-line-no">371</span><span id="line-371">     * @return either the value</span>
+<span class="source-line-no">372</span><span id="line-372">     *     or another conditional</span>
+<span class="source-line-no">373</span><span id="line-373">     */</span>
+<span class="source-line-no">374</span><span id="line-374">    private static DetailAST getCondRight(final DetailAST cond) {</span>
+<span class="source-line-no">375</span><span id="line-375">        final DetailAST colon = cond.findFirstToken(TokenTypes.COLON);</span>
+<span class="source-line-no">376</span><span id="line-376">        return colon.getNextSibling();</span>
+<span class="source-line-no">377</span><span id="line-377">    }</span>
+<span class="source-line-no">378</span><span id="line-378"></span>
+<span class="source-line-no">379</span><span id="line-379">}</span>
 
 
 
