@@ -83,369 +83,347 @@
 <span class="source-line-no">070</span><span id="line-70"> *  a[0]++;   // it will skip this violation</span>
 <span class="source-line-no">071</span><span id="line-71"> * }</span>
 <span class="source-line-no">072</span><span id="line-72"> * &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;</span>
-<span class="source-line-no">073</span><span id="line-73"> * &lt;ul&gt;</span>
-<span class="source-line-no">074</span><span id="line-74"> * &lt;li&gt;</span>
-<span class="source-line-no">075</span><span id="line-75"> * Property {@code skipEnhancedForLoopVariable} - Control whether to check</span>
-<span class="source-line-no">076</span><span id="line-76"> * &lt;a href="https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2"&gt;</span>
-<span class="source-line-no">077</span><span id="line-77"> * enhanced for-loop&lt;/a&gt; variable.</span>
-<span class="source-line-no">078</span><span id="line-78"> * Type is {@code boolean}.</span>
-<span class="source-line-no">079</span><span id="line-79"> * Default value is {@code false}.</span>
-<span class="source-line-no">080</span><span id="line-80"> * &lt;/li&gt;</span>
-<span class="source-line-no">081</span><span id="line-81"> * &lt;/ul&gt;</span>
-<span class="source-line-no">082</span><span id="line-82"> *</span>
-<span class="source-line-no">083</span><span id="line-83"> * &lt;p&gt;</span>
-<span class="source-line-no">084</span><span id="line-84"> * Parent is {@code com.puppycrawl.tools.checkstyle.TreeWalker}</span>
-<span class="source-line-no">085</span><span id="line-85"> * &lt;/p&gt;</span>
-<span class="source-line-no">086</span><span id="line-86"> *</span>
-<span class="source-line-no">087</span><span id="line-87"> * &lt;p&gt;</span>
-<span class="source-line-no">088</span><span id="line-88"> * Violation Message Keys:</span>
-<span class="source-line-no">089</span><span id="line-89"> * &lt;/p&gt;</span>
-<span class="source-line-no">090</span><span id="line-90"> * &lt;ul&gt;</span>
-<span class="source-line-no">091</span><span id="line-91"> * &lt;li&gt;</span>
-<span class="source-line-no">092</span><span id="line-92"> * {@code modified.control.variable}</span>
-<span class="source-line-no">093</span><span id="line-93"> * &lt;/li&gt;</span>
-<span class="source-line-no">094</span><span id="line-94"> * &lt;/ul&gt;</span>
-<span class="source-line-no">095</span><span id="line-95"> *</span>
-<span class="source-line-no">096</span><span id="line-96"> * @since 3.5</span>
-<span class="source-line-no">097</span><span id="line-97"> */</span>
-<span class="source-line-no">098</span><span id="line-98">@FileStatefulCheck</span>
-<span class="source-line-no">099</span><span id="line-99">public final class ModifiedControlVariableCheck extends AbstractCheck {</span>
+<span class="source-line-no">073</span><span id="line-73"> *</span>
+<span class="source-line-no">074</span><span id="line-74"> * @since 3.5</span>
+<span class="source-line-no">075</span><span id="line-75"> */</span>
+<span class="source-line-no">076</span><span id="line-76">@FileStatefulCheck</span>
+<span class="source-line-no">077</span><span id="line-77">public final class ModifiedControlVariableCheck extends AbstractCheck {</span>
+<span class="source-line-no">078</span><span id="line-78"></span>
+<span class="source-line-no">079</span><span id="line-79">    /**</span>
+<span class="source-line-no">080</span><span id="line-80">     * A key is pointing to the warning message text in "messages.properties"</span>
+<span class="source-line-no">081</span><span id="line-81">     * file.</span>
+<span class="source-line-no">082</span><span id="line-82">     */</span>
+<span class="source-line-no">083</span><span id="line-83">    public static final String MSG_KEY = "modified.control.variable";</span>
+<span class="source-line-no">084</span><span id="line-84"></span>
+<span class="source-line-no">085</span><span id="line-85">    /**</span>
+<span class="source-line-no">086</span><span id="line-86">     * Message thrown with IllegalStateException.</span>
+<span class="source-line-no">087</span><span id="line-87">     */</span>
+<span class="source-line-no">088</span><span id="line-88">    private static final String ILLEGAL_TYPE_OF_TOKEN = "Illegal type of token: ";</span>
+<span class="source-line-no">089</span><span id="line-89"></span>
+<span class="source-line-no">090</span><span id="line-90">    /** Operations which can change control variable in update part of the loop. */</span>
+<span class="source-line-no">091</span><span id="line-91">    private static final BitSet MUTATION_OPERATIONS = TokenUtil.asBitSet(</span>
+<span class="source-line-no">092</span><span id="line-92">            TokenTypes.POST_INC,</span>
+<span class="source-line-no">093</span><span id="line-93">            TokenTypes.POST_DEC,</span>
+<span class="source-line-no">094</span><span id="line-94">            TokenTypes.DEC,</span>
+<span class="source-line-no">095</span><span id="line-95">            TokenTypes.INC,</span>
+<span class="source-line-no">096</span><span id="line-96">            TokenTypes.ASSIGN);</span>
+<span class="source-line-no">097</span><span id="line-97"></span>
+<span class="source-line-no">098</span><span id="line-98">    /** Stack of block parameters. */</span>
+<span class="source-line-no">099</span><span id="line-99">    private final Deque&lt;Deque&lt;String&gt;&gt; variableStack = new ArrayDeque&lt;&gt;();</span>
 <span class="source-line-no">100</span><span id="line-100"></span>
 <span class="source-line-no">101</span><span id="line-101">    /**</span>
-<span class="source-line-no">102</span><span id="line-102">     * A key is pointing to the warning message text in "messages.properties"</span>
-<span class="source-line-no">103</span><span id="line-103">     * file.</span>
-<span class="source-line-no">104</span><span id="line-104">     */</span>
-<span class="source-line-no">105</span><span id="line-105">    public static final String MSG_KEY = "modified.control.variable";</span>
-<span class="source-line-no">106</span><span id="line-106"></span>
-<span class="source-line-no">107</span><span id="line-107">    /**</span>
-<span class="source-line-no">108</span><span id="line-108">     * Message thrown with IllegalStateException.</span>
-<span class="source-line-no">109</span><span id="line-109">     */</span>
-<span class="source-line-no">110</span><span id="line-110">    private static final String ILLEGAL_TYPE_OF_TOKEN = "Illegal type of token: ";</span>
-<span class="source-line-no">111</span><span id="line-111"></span>
-<span class="source-line-no">112</span><span id="line-112">    /** Operations which can change control variable in update part of the loop. */</span>
-<span class="source-line-no">113</span><span id="line-113">    private static final BitSet MUTATION_OPERATIONS = TokenUtil.asBitSet(</span>
-<span class="source-line-no">114</span><span id="line-114">            TokenTypes.POST_INC,</span>
-<span class="source-line-no">115</span><span id="line-115">            TokenTypes.POST_DEC,</span>
-<span class="source-line-no">116</span><span id="line-116">            TokenTypes.DEC,</span>
-<span class="source-line-no">117</span><span id="line-117">            TokenTypes.INC,</span>
-<span class="source-line-no">118</span><span id="line-118">            TokenTypes.ASSIGN);</span>
+<span class="source-line-no">102</span><span id="line-102">     * Control whether to check</span>
+<span class="source-line-no">103</span><span id="line-103">     * &lt;a href="https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2"&gt;</span>
+<span class="source-line-no">104</span><span id="line-104">     * enhanced for-loop&lt;/a&gt; variable.</span>
+<span class="source-line-no">105</span><span id="line-105">     */</span>
+<span class="source-line-no">106</span><span id="line-106">    private boolean skipEnhancedForLoopVariable;</span>
+<span class="source-line-no">107</span><span id="line-107"></span>
+<span class="source-line-no">108</span><span id="line-108">    /**</span>
+<span class="source-line-no">109</span><span id="line-109">     * Setter to control whether to check</span>
+<span class="source-line-no">110</span><span id="line-110">     * &lt;a href="https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2"&gt;</span>
+<span class="source-line-no">111</span><span id="line-111">     * enhanced for-loop&lt;/a&gt; variable.</span>
+<span class="source-line-no">112</span><span id="line-112">     *</span>
+<span class="source-line-no">113</span><span id="line-113">     * @param skipEnhancedForLoopVariable whether to skip enhanced for-loop variable</span>
+<span class="source-line-no">114</span><span id="line-114">     * @since 6.8</span>
+<span class="source-line-no">115</span><span id="line-115">     */</span>
+<span class="source-line-no">116</span><span id="line-116">    public void setSkipEnhancedForLoopVariable(boolean skipEnhancedForLoopVariable) {</span>
+<span class="source-line-no">117</span><span id="line-117">        this.skipEnhancedForLoopVariable = skipEnhancedForLoopVariable;</span>
+<span class="source-line-no">118</span><span id="line-118">    }</span>
 <span class="source-line-no">119</span><span id="line-119"></span>
-<span class="source-line-no">120</span><span id="line-120">    /** Stack of block parameters. */</span>
-<span class="source-line-no">121</span><span id="line-121">    private final Deque&lt;Deque&lt;String&gt;&gt; variableStack = new ArrayDeque&lt;&gt;();</span>
-<span class="source-line-no">122</span><span id="line-122"></span>
-<span class="source-line-no">123</span><span id="line-123">    /**</span>
-<span class="source-line-no">124</span><span id="line-124">     * Control whether to check</span>
-<span class="source-line-no">125</span><span id="line-125">     * &lt;a href="https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2"&gt;</span>
-<span class="source-line-no">126</span><span id="line-126">     * enhanced for-loop&lt;/a&gt; variable.</span>
-<span class="source-line-no">127</span><span id="line-127">     */</span>
-<span class="source-line-no">128</span><span id="line-128">    private boolean skipEnhancedForLoopVariable;</span>
-<span class="source-line-no">129</span><span id="line-129"></span>
-<span class="source-line-no">130</span><span id="line-130">    /**</span>
-<span class="source-line-no">131</span><span id="line-131">     * Setter to control whether to check</span>
-<span class="source-line-no">132</span><span id="line-132">     * &lt;a href="https://docs.oracle.com/javase/specs/jls/se11/html/jls-14.html#jls-14.14.2"&gt;</span>
-<span class="source-line-no">133</span><span id="line-133">     * enhanced for-loop&lt;/a&gt; variable.</span>
-<span class="source-line-no">134</span><span id="line-134">     *</span>
-<span class="source-line-no">135</span><span id="line-135">     * @param skipEnhancedForLoopVariable whether to skip enhanced for-loop variable</span>
-<span class="source-line-no">136</span><span id="line-136">     * @since 6.8</span>
-<span class="source-line-no">137</span><span id="line-137">     */</span>
-<span class="source-line-no">138</span><span id="line-138">    public void setSkipEnhancedForLoopVariable(boolean skipEnhancedForLoopVariable) {</span>
-<span class="source-line-no">139</span><span id="line-139">        this.skipEnhancedForLoopVariable = skipEnhancedForLoopVariable;</span>
-<span class="source-line-no">140</span><span id="line-140">    }</span>
-<span class="source-line-no">141</span><span id="line-141"></span>
-<span class="source-line-no">142</span><span id="line-142">    @Override</span>
-<span class="source-line-no">143</span><span id="line-143">    public int[] getDefaultTokens() {</span>
-<span class="source-line-no">144</span><span id="line-144">        return getRequiredTokens();</span>
-<span class="source-line-no">145</span><span id="line-145">    }</span>
-<span class="source-line-no">146</span><span id="line-146"></span>
-<span class="source-line-no">147</span><span id="line-147">    @Override</span>
-<span class="source-line-no">148</span><span id="line-148">    public int[] getRequiredTokens() {</span>
-<span class="source-line-no">149</span><span id="line-149">        return new int[] {</span>
-<span class="source-line-no">150</span><span id="line-150">            TokenTypes.OBJBLOCK,</span>
-<span class="source-line-no">151</span><span id="line-151">            TokenTypes.LITERAL_FOR,</span>
-<span class="source-line-no">152</span><span id="line-152">            TokenTypes.FOR_ITERATOR,</span>
-<span class="source-line-no">153</span><span id="line-153">            TokenTypes.FOR_EACH_CLAUSE,</span>
-<span class="source-line-no">154</span><span id="line-154">            TokenTypes.ASSIGN,</span>
-<span class="source-line-no">155</span><span id="line-155">            TokenTypes.PLUS_ASSIGN,</span>
-<span class="source-line-no">156</span><span id="line-156">            TokenTypes.MINUS_ASSIGN,</span>
-<span class="source-line-no">157</span><span id="line-157">            TokenTypes.STAR_ASSIGN,</span>
-<span class="source-line-no">158</span><span id="line-158">            TokenTypes.DIV_ASSIGN,</span>
-<span class="source-line-no">159</span><span id="line-159">            TokenTypes.MOD_ASSIGN,</span>
-<span class="source-line-no">160</span><span id="line-160">            TokenTypes.SR_ASSIGN,</span>
-<span class="source-line-no">161</span><span id="line-161">            TokenTypes.BSR_ASSIGN,</span>
-<span class="source-line-no">162</span><span id="line-162">            TokenTypes.SL_ASSIGN,</span>
-<span class="source-line-no">163</span><span id="line-163">            TokenTypes.BAND_ASSIGN,</span>
-<span class="source-line-no">164</span><span id="line-164">            TokenTypes.BXOR_ASSIGN,</span>
-<span class="source-line-no">165</span><span id="line-165">            TokenTypes.BOR_ASSIGN,</span>
-<span class="source-line-no">166</span><span id="line-166">            TokenTypes.INC,</span>
-<span class="source-line-no">167</span><span id="line-167">            TokenTypes.POST_INC,</span>
-<span class="source-line-no">168</span><span id="line-168">            TokenTypes.DEC,</span>
-<span class="source-line-no">169</span><span id="line-169">            TokenTypes.POST_DEC,</span>
-<span class="source-line-no">170</span><span id="line-170">        };</span>
-<span class="source-line-no">171</span><span id="line-171">    }</span>
-<span class="source-line-no">172</span><span id="line-172"></span>
-<span class="source-line-no">173</span><span id="line-173">    @Override</span>
-<span class="source-line-no">174</span><span id="line-174">    public int[] getAcceptableTokens() {</span>
-<span class="source-line-no">175</span><span id="line-175">        return getRequiredTokens();</span>
-<span class="source-line-no">176</span><span id="line-176">    }</span>
-<span class="source-line-no">177</span><span id="line-177"></span>
-<span class="source-line-no">178</span><span id="line-178">    @Override</span>
-<span class="source-line-no">179</span><span id="line-179">    public void beginTree(DetailAST rootAST) {</span>
-<span class="source-line-no">180</span><span id="line-180">        // clear data</span>
-<span class="source-line-no">181</span><span id="line-181">        variableStack.clear();</span>
-<span class="source-line-no">182</span><span id="line-182">    }</span>
-<span class="source-line-no">183</span><span id="line-183"></span>
-<span class="source-line-no">184</span><span id="line-184">    @Override</span>
-<span class="source-line-no">185</span><span id="line-185">    public void visitToken(DetailAST ast) {</span>
-<span class="source-line-no">186</span><span id="line-186">        switch (ast.getType()) {</span>
-<span class="source-line-no">187</span><span id="line-187">            case TokenTypes.OBJBLOCK:</span>
-<span class="source-line-no">188</span><span id="line-188">                enterBlock();</span>
-<span class="source-line-no">189</span><span id="line-189">                break;</span>
-<span class="source-line-no">190</span><span id="line-190">            case TokenTypes.LITERAL_FOR:</span>
-<span class="source-line-no">191</span><span id="line-191">            case TokenTypes.FOR_ITERATOR:</span>
-<span class="source-line-no">192</span><span id="line-192">            case TokenTypes.FOR_EACH_CLAUSE:</span>
-<span class="source-line-no">193</span><span id="line-193">                // we need that Tokens only at leaveToken()</span>
-<span class="source-line-no">194</span><span id="line-194">                break;</span>
-<span class="source-line-no">195</span><span id="line-195">            case TokenTypes.ASSIGN:</span>
-<span class="source-line-no">196</span><span id="line-196">            case TokenTypes.PLUS_ASSIGN:</span>
-<span class="source-line-no">197</span><span id="line-197">            case TokenTypes.MINUS_ASSIGN:</span>
-<span class="source-line-no">198</span><span id="line-198">            case TokenTypes.STAR_ASSIGN:</span>
-<span class="source-line-no">199</span><span id="line-199">            case TokenTypes.DIV_ASSIGN:</span>
-<span class="source-line-no">200</span><span id="line-200">            case TokenTypes.MOD_ASSIGN:</span>
-<span class="source-line-no">201</span><span id="line-201">            case TokenTypes.SR_ASSIGN:</span>
-<span class="source-line-no">202</span><span id="line-202">            case TokenTypes.BSR_ASSIGN:</span>
-<span class="source-line-no">203</span><span id="line-203">            case TokenTypes.SL_ASSIGN:</span>
-<span class="source-line-no">204</span><span id="line-204">            case TokenTypes.BAND_ASSIGN:</span>
-<span class="source-line-no">205</span><span id="line-205">            case TokenTypes.BXOR_ASSIGN:</span>
-<span class="source-line-no">206</span><span id="line-206">            case TokenTypes.BOR_ASSIGN:</span>
-<span class="source-line-no">207</span><span id="line-207">            case TokenTypes.INC:</span>
-<span class="source-line-no">208</span><span id="line-208">            case TokenTypes.POST_INC:</span>
-<span class="source-line-no">209</span><span id="line-209">            case TokenTypes.DEC:</span>
-<span class="source-line-no">210</span><span id="line-210">            case TokenTypes.POST_DEC:</span>
-<span class="source-line-no">211</span><span id="line-211">                checkIdent(ast);</span>
-<span class="source-line-no">212</span><span id="line-212">                break;</span>
-<span class="source-line-no">213</span><span id="line-213">            default:</span>
-<span class="source-line-no">214</span><span id="line-214">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
-<span class="source-line-no">215</span><span id="line-215">        }</span>
-<span class="source-line-no">216</span><span id="line-216">    }</span>
-<span class="source-line-no">217</span><span id="line-217"></span>
-<span class="source-line-no">218</span><span id="line-218">    @Override</span>
-<span class="source-line-no">219</span><span id="line-219">    public void leaveToken(DetailAST ast) {</span>
-<span class="source-line-no">220</span><span id="line-220">        switch (ast.getType()) {</span>
-<span class="source-line-no">221</span><span id="line-221">            case TokenTypes.FOR_ITERATOR:</span>
-<span class="source-line-no">222</span><span id="line-222">                leaveForIter(ast.getParent());</span>
-<span class="source-line-no">223</span><span id="line-223">                break;</span>
-<span class="source-line-no">224</span><span id="line-224">            case TokenTypes.FOR_EACH_CLAUSE:</span>
-<span class="source-line-no">225</span><span id="line-225">                if (!skipEnhancedForLoopVariable) {</span>
-<span class="source-line-no">226</span><span id="line-226">                    final DetailAST paramDef = ast.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
-<span class="source-line-no">227</span><span id="line-227">                    leaveForEach(paramDef);</span>
-<span class="source-line-no">228</span><span id="line-228">                }</span>
-<span class="source-line-no">229</span><span id="line-229">                break;</span>
-<span class="source-line-no">230</span><span id="line-230">            case TokenTypes.LITERAL_FOR:</span>
-<span class="source-line-no">231</span><span id="line-231">                leaveForDef(ast);</span>
-<span class="source-line-no">232</span><span id="line-232">                break;</span>
-<span class="source-line-no">233</span><span id="line-233">            case TokenTypes.OBJBLOCK:</span>
-<span class="source-line-no">234</span><span id="line-234">                exitBlock();</span>
-<span class="source-line-no">235</span><span id="line-235">                break;</span>
-<span class="source-line-no">236</span><span id="line-236">            case TokenTypes.ASSIGN:</span>
-<span class="source-line-no">237</span><span id="line-237">            case TokenTypes.PLUS_ASSIGN:</span>
-<span class="source-line-no">238</span><span id="line-238">            case TokenTypes.MINUS_ASSIGN:</span>
-<span class="source-line-no">239</span><span id="line-239">            case TokenTypes.STAR_ASSIGN:</span>
-<span class="source-line-no">240</span><span id="line-240">            case TokenTypes.DIV_ASSIGN:</span>
-<span class="source-line-no">241</span><span id="line-241">            case TokenTypes.MOD_ASSIGN:</span>
-<span class="source-line-no">242</span><span id="line-242">            case TokenTypes.SR_ASSIGN:</span>
-<span class="source-line-no">243</span><span id="line-243">            case TokenTypes.BSR_ASSIGN:</span>
-<span class="source-line-no">244</span><span id="line-244">            case TokenTypes.SL_ASSIGN:</span>
-<span class="source-line-no">245</span><span id="line-245">            case TokenTypes.BAND_ASSIGN:</span>
-<span class="source-line-no">246</span><span id="line-246">            case TokenTypes.BXOR_ASSIGN:</span>
-<span class="source-line-no">247</span><span id="line-247">            case TokenTypes.BOR_ASSIGN:</span>
-<span class="source-line-no">248</span><span id="line-248">            case TokenTypes.INC:</span>
-<span class="source-line-no">249</span><span id="line-249">            case TokenTypes.POST_INC:</span>
-<span class="source-line-no">250</span><span id="line-250">            case TokenTypes.DEC:</span>
-<span class="source-line-no">251</span><span id="line-251">            case TokenTypes.POST_DEC:</span>
-<span class="source-line-no">252</span><span id="line-252">                // we need that Tokens only at visitToken()</span>
-<span class="source-line-no">253</span><span id="line-253">                break;</span>
-<span class="source-line-no">254</span><span id="line-254">            default:</span>
-<span class="source-line-no">255</span><span id="line-255">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
-<span class="source-line-no">256</span><span id="line-256">        }</span>
-<span class="source-line-no">257</span><span id="line-257">    }</span>
-<span class="source-line-no">258</span><span id="line-258"></span>
-<span class="source-line-no">259</span><span id="line-259">    /**</span>
-<span class="source-line-no">260</span><span id="line-260">     * Enters an inner class, which requires a new variable set.</span>
-<span class="source-line-no">261</span><span id="line-261">     */</span>
-<span class="source-line-no">262</span><span id="line-262">    private void enterBlock() {</span>
-<span class="source-line-no">263</span><span id="line-263">        variableStack.push(new ArrayDeque&lt;&gt;());</span>
-<span class="source-line-no">264</span><span id="line-264">    }</span>
-<span class="source-line-no">265</span><span id="line-265"></span>
-<span class="source-line-no">266</span><span id="line-266">    /**</span>
-<span class="source-line-no">267</span><span id="line-267">     * Leave an inner class, so restore variable set.</span>
-<span class="source-line-no">268</span><span id="line-268">     */</span>
-<span class="source-line-no">269</span><span id="line-269">    private void exitBlock() {</span>
-<span class="source-line-no">270</span><span id="line-270">        variableStack.pop();</span>
-<span class="source-line-no">271</span><span id="line-271">    }</span>
-<span class="source-line-no">272</span><span id="line-272"></span>
-<span class="source-line-no">273</span><span id="line-273">    /**</span>
-<span class="source-line-no">274</span><span id="line-274">     * Get current variable stack.</span>
-<span class="source-line-no">275</span><span id="line-275">     *</span>
-<span class="source-line-no">276</span><span id="line-276">     * @return current variable stack</span>
-<span class="source-line-no">277</span><span id="line-277">     */</span>
-<span class="source-line-no">278</span><span id="line-278">    private Deque&lt;String&gt; getCurrentVariables() {</span>
-<span class="source-line-no">279</span><span id="line-279">        return variableStack.peek();</span>
-<span class="source-line-no">280</span><span id="line-280">    }</span>
-<span class="source-line-no">281</span><span id="line-281"></span>
-<span class="source-line-no">282</span><span id="line-282">    /**</span>
-<span class="source-line-no">283</span><span id="line-283">     * Check if ident is parameter.</span>
-<span class="source-line-no">284</span><span id="line-284">     *</span>
-<span class="source-line-no">285</span><span id="line-285">     * @param ast ident to check.</span>
-<span class="source-line-no">286</span><span id="line-286">     */</span>
-<span class="source-line-no">287</span><span id="line-287">    private void checkIdent(DetailAST ast) {</span>
-<span class="source-line-no">288</span><span id="line-288">        final Deque&lt;String&gt; currentVariables = getCurrentVariables();</span>
-<span class="source-line-no">289</span><span id="line-289">        final DetailAST identAST = ast.getFirstChild();</span>
-<span class="source-line-no">290</span><span id="line-290"></span>
-<span class="source-line-no">291</span><span id="line-291">        if (identAST != null &amp;&amp; identAST.getType() == TokenTypes.IDENT</span>
-<span class="source-line-no">292</span><span id="line-292">            &amp;&amp; currentVariables.contains(identAST.getText())) {</span>
-<span class="source-line-no">293</span><span id="line-293">            log(ast, MSG_KEY, identAST.getText());</span>
-<span class="source-line-no">294</span><span id="line-294">        }</span>
-<span class="source-line-no">295</span><span id="line-295">    }</span>
-<span class="source-line-no">296</span><span id="line-296"></span>
-<span class="source-line-no">297</span><span id="line-297">    /**</span>
-<span class="source-line-no">298</span><span id="line-298">     * Push current variables to the stack.</span>
-<span class="source-line-no">299</span><span id="line-299">     *</span>
-<span class="source-line-no">300</span><span id="line-300">     * @param ast a for definition.</span>
-<span class="source-line-no">301</span><span id="line-301">     */</span>
-<span class="source-line-no">302</span><span id="line-302">    private void leaveForIter(DetailAST ast) {</span>
-<span class="source-line-no">303</span><span id="line-303">        final Set&lt;String&gt; variablesToPutInScope = getVariablesManagedByForLoop(ast);</span>
-<span class="source-line-no">304</span><span id="line-304">        for (String variableName : variablesToPutInScope) {</span>
-<span class="source-line-no">305</span><span id="line-305">            getCurrentVariables().push(variableName);</span>
-<span class="source-line-no">306</span><span id="line-306">        }</span>
-<span class="source-line-no">307</span><span id="line-307">    }</span>
-<span class="source-line-no">308</span><span id="line-308"></span>
-<span class="source-line-no">309</span><span id="line-309">    /**</span>
-<span class="source-line-no">310</span><span id="line-310">     * Determines which variable are specific to for loop and should not be</span>
-<span class="source-line-no">311</span><span id="line-311">     * change by inner loop body.</span>
-<span class="source-line-no">312</span><span id="line-312">     *</span>
-<span class="source-line-no">313</span><span id="line-313">     * @param ast For Loop</span>
-<span class="source-line-no">314</span><span id="line-314">     * @return Set of Variable Name which are managed by for</span>
-<span class="source-line-no">315</span><span id="line-315">     */</span>
-<span class="source-line-no">316</span><span id="line-316">    private static Set&lt;String&gt; getVariablesManagedByForLoop(DetailAST ast) {</span>
-<span class="source-line-no">317</span><span id="line-317">        final Set&lt;String&gt; initializedVariables = getForInitVariables(ast);</span>
-<span class="source-line-no">318</span><span id="line-318">        final Set&lt;String&gt; iteratingVariables = getForIteratorVariables(ast);</span>
-<span class="source-line-no">319</span><span id="line-319">        return initializedVariables.stream().filter(iteratingVariables::contains)</span>
-<span class="source-line-no">320</span><span id="line-320">            .collect(Collectors.toUnmodifiableSet());</span>
-<span class="source-line-no">321</span><span id="line-321">    }</span>
-<span class="source-line-no">322</span><span id="line-322"></span>
-<span class="source-line-no">323</span><span id="line-323">    /**</span>
-<span class="source-line-no">324</span><span id="line-324">     * Push current variables to the stack.</span>
-<span class="source-line-no">325</span><span id="line-325">     *</span>
-<span class="source-line-no">326</span><span id="line-326">     * @param paramDef a for-each clause variable</span>
-<span class="source-line-no">327</span><span id="line-327">     */</span>
-<span class="source-line-no">328</span><span id="line-328">    private void leaveForEach(DetailAST paramDef) {</span>
-<span class="source-line-no">329</span><span id="line-329">        // When using record decomposition in enhanced for loops,</span>
-<span class="source-line-no">330</span><span id="line-330">        // we are not able to declare a 'control variable'.</span>
-<span class="source-line-no">331</span><span id="line-331">        final boolean isRecordPattern = paramDef == null;</span>
-<span class="source-line-no">332</span><span id="line-332"></span>
-<span class="source-line-no">333</span><span id="line-333">        if (!isRecordPattern) {</span>
-<span class="source-line-no">334</span><span id="line-334">            final DetailAST paramName = paramDef.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">335</span><span id="line-335">            getCurrentVariables().push(paramName.getText());</span>
-<span class="source-line-no">336</span><span id="line-336">        }</span>
-<span class="source-line-no">337</span><span id="line-337">    }</span>
-<span class="source-line-no">338</span><span id="line-338"></span>
-<span class="source-line-no">339</span><span id="line-339">    /**</span>
-<span class="source-line-no">340</span><span id="line-340">     * Pops the variables from the stack.</span>
-<span class="source-line-no">341</span><span id="line-341">     *</span>
-<span class="source-line-no">342</span><span id="line-342">     * @param ast a for definition.</span>
-<span class="source-line-no">343</span><span id="line-343">     */</span>
-<span class="source-line-no">344</span><span id="line-344">    private void leaveForDef(DetailAST ast) {</span>
-<span class="source-line-no">345</span><span id="line-345">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
-<span class="source-line-no">346</span><span id="line-346">        if (forInitAST == null) {</span>
-<span class="source-line-no">347</span><span id="line-347">            final Deque&lt;String&gt; currentVariables = getCurrentVariables();</span>
-<span class="source-line-no">348</span><span id="line-348">            if (!skipEnhancedForLoopVariable &amp;&amp; !currentVariables.isEmpty()) {</span>
-<span class="source-line-no">349</span><span id="line-349">                // this is for-each loop, just pop variables</span>
-<span class="source-line-no">350</span><span id="line-350">                currentVariables.pop();</span>
-<span class="source-line-no">351</span><span id="line-351">            }</span>
-<span class="source-line-no">352</span><span id="line-352">        }</span>
-<span class="source-line-no">353</span><span id="line-353">        else {</span>
-<span class="source-line-no">354</span><span id="line-354">            final Set&lt;String&gt; variablesManagedByForLoop = getVariablesManagedByForLoop(ast);</span>
-<span class="source-line-no">355</span><span id="line-355">            popCurrentVariables(variablesManagedByForLoop.size());</span>
-<span class="source-line-no">356</span><span id="line-356">        }</span>
-<span class="source-line-no">357</span><span id="line-357">    }</span>
-<span class="source-line-no">358</span><span id="line-358"></span>
-<span class="source-line-no">359</span><span id="line-359">    /**</span>
-<span class="source-line-no">360</span><span id="line-360">     * Pops given number of variables from currentVariables.</span>
-<span class="source-line-no">361</span><span id="line-361">     *</span>
-<span class="source-line-no">362</span><span id="line-362">     * @param count Count of variables to be popped from currentVariables</span>
-<span class="source-line-no">363</span><span id="line-363">     */</span>
-<span class="source-line-no">364</span><span id="line-364">    private void popCurrentVariables(int count) {</span>
-<span class="source-line-no">365</span><span id="line-365">        for (int i = 0; i &lt; count; i++) {</span>
-<span class="source-line-no">366</span><span id="line-366">            getCurrentVariables().pop();</span>
+<span class="source-line-no">120</span><span id="line-120">    @Override</span>
+<span class="source-line-no">121</span><span id="line-121">    public int[] getDefaultTokens() {</span>
+<span class="source-line-no">122</span><span id="line-122">        return getRequiredTokens();</span>
+<span class="source-line-no">123</span><span id="line-123">    }</span>
+<span class="source-line-no">124</span><span id="line-124"></span>
+<span class="source-line-no">125</span><span id="line-125">    @Override</span>
+<span class="source-line-no">126</span><span id="line-126">    public int[] getRequiredTokens() {</span>
+<span class="source-line-no">127</span><span id="line-127">        return new int[] {</span>
+<span class="source-line-no">128</span><span id="line-128">            TokenTypes.OBJBLOCK,</span>
+<span class="source-line-no">129</span><span id="line-129">            TokenTypes.LITERAL_FOR,</span>
+<span class="source-line-no">130</span><span id="line-130">            TokenTypes.FOR_ITERATOR,</span>
+<span class="source-line-no">131</span><span id="line-131">            TokenTypes.FOR_EACH_CLAUSE,</span>
+<span class="source-line-no">132</span><span id="line-132">            TokenTypes.ASSIGN,</span>
+<span class="source-line-no">133</span><span id="line-133">            TokenTypes.PLUS_ASSIGN,</span>
+<span class="source-line-no">134</span><span id="line-134">            TokenTypes.MINUS_ASSIGN,</span>
+<span class="source-line-no">135</span><span id="line-135">            TokenTypes.STAR_ASSIGN,</span>
+<span class="source-line-no">136</span><span id="line-136">            TokenTypes.DIV_ASSIGN,</span>
+<span class="source-line-no">137</span><span id="line-137">            TokenTypes.MOD_ASSIGN,</span>
+<span class="source-line-no">138</span><span id="line-138">            TokenTypes.SR_ASSIGN,</span>
+<span class="source-line-no">139</span><span id="line-139">            TokenTypes.BSR_ASSIGN,</span>
+<span class="source-line-no">140</span><span id="line-140">            TokenTypes.SL_ASSIGN,</span>
+<span class="source-line-no">141</span><span id="line-141">            TokenTypes.BAND_ASSIGN,</span>
+<span class="source-line-no">142</span><span id="line-142">            TokenTypes.BXOR_ASSIGN,</span>
+<span class="source-line-no">143</span><span id="line-143">            TokenTypes.BOR_ASSIGN,</span>
+<span class="source-line-no">144</span><span id="line-144">            TokenTypes.INC,</span>
+<span class="source-line-no">145</span><span id="line-145">            TokenTypes.POST_INC,</span>
+<span class="source-line-no">146</span><span id="line-146">            TokenTypes.DEC,</span>
+<span class="source-line-no">147</span><span id="line-147">            TokenTypes.POST_DEC,</span>
+<span class="source-line-no">148</span><span id="line-148">        };</span>
+<span class="source-line-no">149</span><span id="line-149">    }</span>
+<span class="source-line-no">150</span><span id="line-150"></span>
+<span class="source-line-no">151</span><span id="line-151">    @Override</span>
+<span class="source-line-no">152</span><span id="line-152">    public int[] getAcceptableTokens() {</span>
+<span class="source-line-no">153</span><span id="line-153">        return getRequiredTokens();</span>
+<span class="source-line-no">154</span><span id="line-154">    }</span>
+<span class="source-line-no">155</span><span id="line-155"></span>
+<span class="source-line-no">156</span><span id="line-156">    @Override</span>
+<span class="source-line-no">157</span><span id="line-157">    public void beginTree(DetailAST rootAST) {</span>
+<span class="source-line-no">158</span><span id="line-158">        // clear data</span>
+<span class="source-line-no">159</span><span id="line-159">        variableStack.clear();</span>
+<span class="source-line-no">160</span><span id="line-160">    }</span>
+<span class="source-line-no">161</span><span id="line-161"></span>
+<span class="source-line-no">162</span><span id="line-162">    @Override</span>
+<span class="source-line-no">163</span><span id="line-163">    public void visitToken(DetailAST ast) {</span>
+<span class="source-line-no">164</span><span id="line-164">        switch (ast.getType()) {</span>
+<span class="source-line-no">165</span><span id="line-165">            case TokenTypes.OBJBLOCK:</span>
+<span class="source-line-no">166</span><span id="line-166">                enterBlock();</span>
+<span class="source-line-no">167</span><span id="line-167">                break;</span>
+<span class="source-line-no">168</span><span id="line-168">            case TokenTypes.LITERAL_FOR:</span>
+<span class="source-line-no">169</span><span id="line-169">            case TokenTypes.FOR_ITERATOR:</span>
+<span class="source-line-no">170</span><span id="line-170">            case TokenTypes.FOR_EACH_CLAUSE:</span>
+<span class="source-line-no">171</span><span id="line-171">                // we need that Tokens only at leaveToken()</span>
+<span class="source-line-no">172</span><span id="line-172">                break;</span>
+<span class="source-line-no">173</span><span id="line-173">            case TokenTypes.ASSIGN:</span>
+<span class="source-line-no">174</span><span id="line-174">            case TokenTypes.PLUS_ASSIGN:</span>
+<span class="source-line-no">175</span><span id="line-175">            case TokenTypes.MINUS_ASSIGN:</span>
+<span class="source-line-no">176</span><span id="line-176">            case TokenTypes.STAR_ASSIGN:</span>
+<span class="source-line-no">177</span><span id="line-177">            case TokenTypes.DIV_ASSIGN:</span>
+<span class="source-line-no">178</span><span id="line-178">            case TokenTypes.MOD_ASSIGN:</span>
+<span class="source-line-no">179</span><span id="line-179">            case TokenTypes.SR_ASSIGN:</span>
+<span class="source-line-no">180</span><span id="line-180">            case TokenTypes.BSR_ASSIGN:</span>
+<span class="source-line-no">181</span><span id="line-181">            case TokenTypes.SL_ASSIGN:</span>
+<span class="source-line-no">182</span><span id="line-182">            case TokenTypes.BAND_ASSIGN:</span>
+<span class="source-line-no">183</span><span id="line-183">            case TokenTypes.BXOR_ASSIGN:</span>
+<span class="source-line-no">184</span><span id="line-184">            case TokenTypes.BOR_ASSIGN:</span>
+<span class="source-line-no">185</span><span id="line-185">            case TokenTypes.INC:</span>
+<span class="source-line-no">186</span><span id="line-186">            case TokenTypes.POST_INC:</span>
+<span class="source-line-no">187</span><span id="line-187">            case TokenTypes.DEC:</span>
+<span class="source-line-no">188</span><span id="line-188">            case TokenTypes.POST_DEC:</span>
+<span class="source-line-no">189</span><span id="line-189">                checkIdent(ast);</span>
+<span class="source-line-no">190</span><span id="line-190">                break;</span>
+<span class="source-line-no">191</span><span id="line-191">            default:</span>
+<span class="source-line-no">192</span><span id="line-192">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
+<span class="source-line-no">193</span><span id="line-193">        }</span>
+<span class="source-line-no">194</span><span id="line-194">    }</span>
+<span class="source-line-no">195</span><span id="line-195"></span>
+<span class="source-line-no">196</span><span id="line-196">    @Override</span>
+<span class="source-line-no">197</span><span id="line-197">    public void leaveToken(DetailAST ast) {</span>
+<span class="source-line-no">198</span><span id="line-198">        switch (ast.getType()) {</span>
+<span class="source-line-no">199</span><span id="line-199">            case TokenTypes.FOR_ITERATOR:</span>
+<span class="source-line-no">200</span><span id="line-200">                leaveForIter(ast.getParent());</span>
+<span class="source-line-no">201</span><span id="line-201">                break;</span>
+<span class="source-line-no">202</span><span id="line-202">            case TokenTypes.FOR_EACH_CLAUSE:</span>
+<span class="source-line-no">203</span><span id="line-203">                if (!skipEnhancedForLoopVariable) {</span>
+<span class="source-line-no">204</span><span id="line-204">                    final DetailAST paramDef = ast.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
+<span class="source-line-no">205</span><span id="line-205">                    leaveForEach(paramDef);</span>
+<span class="source-line-no">206</span><span id="line-206">                }</span>
+<span class="source-line-no">207</span><span id="line-207">                break;</span>
+<span class="source-line-no">208</span><span id="line-208">            case TokenTypes.LITERAL_FOR:</span>
+<span class="source-line-no">209</span><span id="line-209">                leaveForDef(ast);</span>
+<span class="source-line-no">210</span><span id="line-210">                break;</span>
+<span class="source-line-no">211</span><span id="line-211">            case TokenTypes.OBJBLOCK:</span>
+<span class="source-line-no">212</span><span id="line-212">                exitBlock();</span>
+<span class="source-line-no">213</span><span id="line-213">                break;</span>
+<span class="source-line-no">214</span><span id="line-214">            case TokenTypes.ASSIGN:</span>
+<span class="source-line-no">215</span><span id="line-215">            case TokenTypes.PLUS_ASSIGN:</span>
+<span class="source-line-no">216</span><span id="line-216">            case TokenTypes.MINUS_ASSIGN:</span>
+<span class="source-line-no">217</span><span id="line-217">            case TokenTypes.STAR_ASSIGN:</span>
+<span class="source-line-no">218</span><span id="line-218">            case TokenTypes.DIV_ASSIGN:</span>
+<span class="source-line-no">219</span><span id="line-219">            case TokenTypes.MOD_ASSIGN:</span>
+<span class="source-line-no">220</span><span id="line-220">            case TokenTypes.SR_ASSIGN:</span>
+<span class="source-line-no">221</span><span id="line-221">            case TokenTypes.BSR_ASSIGN:</span>
+<span class="source-line-no">222</span><span id="line-222">            case TokenTypes.SL_ASSIGN:</span>
+<span class="source-line-no">223</span><span id="line-223">            case TokenTypes.BAND_ASSIGN:</span>
+<span class="source-line-no">224</span><span id="line-224">            case TokenTypes.BXOR_ASSIGN:</span>
+<span class="source-line-no">225</span><span id="line-225">            case TokenTypes.BOR_ASSIGN:</span>
+<span class="source-line-no">226</span><span id="line-226">            case TokenTypes.INC:</span>
+<span class="source-line-no">227</span><span id="line-227">            case TokenTypes.POST_INC:</span>
+<span class="source-line-no">228</span><span id="line-228">            case TokenTypes.DEC:</span>
+<span class="source-line-no">229</span><span id="line-229">            case TokenTypes.POST_DEC:</span>
+<span class="source-line-no">230</span><span id="line-230">                // we need that Tokens only at visitToken()</span>
+<span class="source-line-no">231</span><span id="line-231">                break;</span>
+<span class="source-line-no">232</span><span id="line-232">            default:</span>
+<span class="source-line-no">233</span><span id="line-233">                throw new IllegalStateException(ILLEGAL_TYPE_OF_TOKEN + ast);</span>
+<span class="source-line-no">234</span><span id="line-234">        }</span>
+<span class="source-line-no">235</span><span id="line-235">    }</span>
+<span class="source-line-no">236</span><span id="line-236"></span>
+<span class="source-line-no">237</span><span id="line-237">    /**</span>
+<span class="source-line-no">238</span><span id="line-238">     * Enters an inner class, which requires a new variable set.</span>
+<span class="source-line-no">239</span><span id="line-239">     */</span>
+<span class="source-line-no">240</span><span id="line-240">    private void enterBlock() {</span>
+<span class="source-line-no">241</span><span id="line-241">        variableStack.push(new ArrayDeque&lt;&gt;());</span>
+<span class="source-line-no">242</span><span id="line-242">    }</span>
+<span class="source-line-no">243</span><span id="line-243"></span>
+<span class="source-line-no">244</span><span id="line-244">    /**</span>
+<span class="source-line-no">245</span><span id="line-245">     * Leave an inner class, so restore variable set.</span>
+<span class="source-line-no">246</span><span id="line-246">     */</span>
+<span class="source-line-no">247</span><span id="line-247">    private void exitBlock() {</span>
+<span class="source-line-no">248</span><span id="line-248">        variableStack.pop();</span>
+<span class="source-line-no">249</span><span id="line-249">    }</span>
+<span class="source-line-no">250</span><span id="line-250"></span>
+<span class="source-line-no">251</span><span id="line-251">    /**</span>
+<span class="source-line-no">252</span><span id="line-252">     * Get current variable stack.</span>
+<span class="source-line-no">253</span><span id="line-253">     *</span>
+<span class="source-line-no">254</span><span id="line-254">     * @return current variable stack</span>
+<span class="source-line-no">255</span><span id="line-255">     */</span>
+<span class="source-line-no">256</span><span id="line-256">    private Deque&lt;String&gt; getCurrentVariables() {</span>
+<span class="source-line-no">257</span><span id="line-257">        return variableStack.peek();</span>
+<span class="source-line-no">258</span><span id="line-258">    }</span>
+<span class="source-line-no">259</span><span id="line-259"></span>
+<span class="source-line-no">260</span><span id="line-260">    /**</span>
+<span class="source-line-no">261</span><span id="line-261">     * Check if ident is parameter.</span>
+<span class="source-line-no">262</span><span id="line-262">     *</span>
+<span class="source-line-no">263</span><span id="line-263">     * @param ast ident to check.</span>
+<span class="source-line-no">264</span><span id="line-264">     */</span>
+<span class="source-line-no">265</span><span id="line-265">    private void checkIdent(DetailAST ast) {</span>
+<span class="source-line-no">266</span><span id="line-266">        final Deque&lt;String&gt; currentVariables = getCurrentVariables();</span>
+<span class="source-line-no">267</span><span id="line-267">        final DetailAST identAST = ast.getFirstChild();</span>
+<span class="source-line-no">268</span><span id="line-268"></span>
+<span class="source-line-no">269</span><span id="line-269">        if (identAST != null &amp;&amp; identAST.getType() == TokenTypes.IDENT</span>
+<span class="source-line-no">270</span><span id="line-270">            &amp;&amp; currentVariables.contains(identAST.getText())) {</span>
+<span class="source-line-no">271</span><span id="line-271">            log(ast, MSG_KEY, identAST.getText());</span>
+<span class="source-line-no">272</span><span id="line-272">        }</span>
+<span class="source-line-no">273</span><span id="line-273">    }</span>
+<span class="source-line-no">274</span><span id="line-274"></span>
+<span class="source-line-no">275</span><span id="line-275">    /**</span>
+<span class="source-line-no">276</span><span id="line-276">     * Push current variables to the stack.</span>
+<span class="source-line-no">277</span><span id="line-277">     *</span>
+<span class="source-line-no">278</span><span id="line-278">     * @param ast a for definition.</span>
+<span class="source-line-no">279</span><span id="line-279">     */</span>
+<span class="source-line-no">280</span><span id="line-280">    private void leaveForIter(DetailAST ast) {</span>
+<span class="source-line-no">281</span><span id="line-281">        final Set&lt;String&gt; variablesToPutInScope = getVariablesManagedByForLoop(ast);</span>
+<span class="source-line-no">282</span><span id="line-282">        for (String variableName : variablesToPutInScope) {</span>
+<span class="source-line-no">283</span><span id="line-283">            getCurrentVariables().push(variableName);</span>
+<span class="source-line-no">284</span><span id="line-284">        }</span>
+<span class="source-line-no">285</span><span id="line-285">    }</span>
+<span class="source-line-no">286</span><span id="line-286"></span>
+<span class="source-line-no">287</span><span id="line-287">    /**</span>
+<span class="source-line-no">288</span><span id="line-288">     * Determines which variable are specific to for loop and should not be</span>
+<span class="source-line-no">289</span><span id="line-289">     * change by inner loop body.</span>
+<span class="source-line-no">290</span><span id="line-290">     *</span>
+<span class="source-line-no">291</span><span id="line-291">     * @param ast For Loop</span>
+<span class="source-line-no">292</span><span id="line-292">     * @return Set of Variable Name which are managed by for</span>
+<span class="source-line-no">293</span><span id="line-293">     */</span>
+<span class="source-line-no">294</span><span id="line-294">    private static Set&lt;String&gt; getVariablesManagedByForLoop(DetailAST ast) {</span>
+<span class="source-line-no">295</span><span id="line-295">        final Set&lt;String&gt; initializedVariables = getForInitVariables(ast);</span>
+<span class="source-line-no">296</span><span id="line-296">        final Set&lt;String&gt; iteratingVariables = getForIteratorVariables(ast);</span>
+<span class="source-line-no">297</span><span id="line-297">        return initializedVariables.stream().filter(iteratingVariables::contains)</span>
+<span class="source-line-no">298</span><span id="line-298">            .collect(Collectors.toUnmodifiableSet());</span>
+<span class="source-line-no">299</span><span id="line-299">    }</span>
+<span class="source-line-no">300</span><span id="line-300"></span>
+<span class="source-line-no">301</span><span id="line-301">    /**</span>
+<span class="source-line-no">302</span><span id="line-302">     * Push current variables to the stack.</span>
+<span class="source-line-no">303</span><span id="line-303">     *</span>
+<span class="source-line-no">304</span><span id="line-304">     * @param paramDef a for-each clause variable</span>
+<span class="source-line-no">305</span><span id="line-305">     */</span>
+<span class="source-line-no">306</span><span id="line-306">    private void leaveForEach(DetailAST paramDef) {</span>
+<span class="source-line-no">307</span><span id="line-307">        // When using record decomposition in enhanced for loops,</span>
+<span class="source-line-no">308</span><span id="line-308">        // we are not able to declare a 'control variable'.</span>
+<span class="source-line-no">309</span><span id="line-309">        final boolean isRecordPattern = paramDef == null;</span>
+<span class="source-line-no">310</span><span id="line-310"></span>
+<span class="source-line-no">311</span><span id="line-311">        if (!isRecordPattern) {</span>
+<span class="source-line-no">312</span><span id="line-312">            final DetailAST paramName = paramDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">313</span><span id="line-313">            getCurrentVariables().push(paramName.getText());</span>
+<span class="source-line-no">314</span><span id="line-314">        }</span>
+<span class="source-line-no">315</span><span id="line-315">    }</span>
+<span class="source-line-no">316</span><span id="line-316"></span>
+<span class="source-line-no">317</span><span id="line-317">    /**</span>
+<span class="source-line-no">318</span><span id="line-318">     * Pops the variables from the stack.</span>
+<span class="source-line-no">319</span><span id="line-319">     *</span>
+<span class="source-line-no">320</span><span id="line-320">     * @param ast a for definition.</span>
+<span class="source-line-no">321</span><span id="line-321">     */</span>
+<span class="source-line-no">322</span><span id="line-322">    private void leaveForDef(DetailAST ast) {</span>
+<span class="source-line-no">323</span><span id="line-323">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
+<span class="source-line-no">324</span><span id="line-324">        if (forInitAST == null) {</span>
+<span class="source-line-no">325</span><span id="line-325">            final Deque&lt;String&gt; currentVariables = getCurrentVariables();</span>
+<span class="source-line-no">326</span><span id="line-326">            if (!skipEnhancedForLoopVariable &amp;&amp; !currentVariables.isEmpty()) {</span>
+<span class="source-line-no">327</span><span id="line-327">                // this is for-each loop, just pop variables</span>
+<span class="source-line-no">328</span><span id="line-328">                currentVariables.pop();</span>
+<span class="source-line-no">329</span><span id="line-329">            }</span>
+<span class="source-line-no">330</span><span id="line-330">        }</span>
+<span class="source-line-no">331</span><span id="line-331">        else {</span>
+<span class="source-line-no">332</span><span id="line-332">            final Set&lt;String&gt; variablesManagedByForLoop = getVariablesManagedByForLoop(ast);</span>
+<span class="source-line-no">333</span><span id="line-333">            popCurrentVariables(variablesManagedByForLoop.size());</span>
+<span class="source-line-no">334</span><span id="line-334">        }</span>
+<span class="source-line-no">335</span><span id="line-335">    }</span>
+<span class="source-line-no">336</span><span id="line-336"></span>
+<span class="source-line-no">337</span><span id="line-337">    /**</span>
+<span class="source-line-no">338</span><span id="line-338">     * Pops given number of variables from currentVariables.</span>
+<span class="source-line-no">339</span><span id="line-339">     *</span>
+<span class="source-line-no">340</span><span id="line-340">     * @param count Count of variables to be popped from currentVariables</span>
+<span class="source-line-no">341</span><span id="line-341">     */</span>
+<span class="source-line-no">342</span><span id="line-342">    private void popCurrentVariables(int count) {</span>
+<span class="source-line-no">343</span><span id="line-343">        for (int i = 0; i &lt; count; i++) {</span>
+<span class="source-line-no">344</span><span id="line-344">            getCurrentVariables().pop();</span>
+<span class="source-line-no">345</span><span id="line-345">        }</span>
+<span class="source-line-no">346</span><span id="line-346">    }</span>
+<span class="source-line-no">347</span><span id="line-347"></span>
+<span class="source-line-no">348</span><span id="line-348">    /**</span>
+<span class="source-line-no">349</span><span id="line-349">     * Get all variables initialized In init part of for loop.</span>
+<span class="source-line-no">350</span><span id="line-350">     *</span>
+<span class="source-line-no">351</span><span id="line-351">     * @param ast for loop token</span>
+<span class="source-line-no">352</span><span id="line-352">     * @return set of variables initialized in for loop</span>
+<span class="source-line-no">353</span><span id="line-353">     */</span>
+<span class="source-line-no">354</span><span id="line-354">    private static Set&lt;String&gt; getForInitVariables(DetailAST ast) {</span>
+<span class="source-line-no">355</span><span id="line-355">        final Set&lt;String&gt; initializedVariables = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">356</span><span id="line-356">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
+<span class="source-line-no">357</span><span id="line-357"></span>
+<span class="source-line-no">358</span><span id="line-358">        for (DetailAST parameterDefAST = forInitAST.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
+<span class="source-line-no">359</span><span id="line-359">             parameterDefAST != null;</span>
+<span class="source-line-no">360</span><span id="line-360">             parameterDefAST = parameterDefAST.getNextSibling()) {</span>
+<span class="source-line-no">361</span><span id="line-361">            if (parameterDefAST.getType() == TokenTypes.VARIABLE_DEF) {</span>
+<span class="source-line-no">362</span><span id="line-362">                final DetailAST param =</span>
+<span class="source-line-no">363</span><span id="line-363">                        parameterDefAST.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">364</span><span id="line-364"></span>
+<span class="source-line-no">365</span><span id="line-365">                initializedVariables.add(param.getText());</span>
+<span class="source-line-no">366</span><span id="line-366">            }</span>
 <span class="source-line-no">367</span><span id="line-367">        }</span>
-<span class="source-line-no">368</span><span id="line-368">    }</span>
-<span class="source-line-no">369</span><span id="line-369"></span>
-<span class="source-line-no">370</span><span id="line-370">    /**</span>
-<span class="source-line-no">371</span><span id="line-371">     * Get all variables initialized In init part of for loop.</span>
-<span class="source-line-no">372</span><span id="line-372">     *</span>
-<span class="source-line-no">373</span><span id="line-373">     * @param ast for loop token</span>
-<span class="source-line-no">374</span><span id="line-374">     * @return set of variables initialized in for loop</span>
-<span class="source-line-no">375</span><span id="line-375">     */</span>
-<span class="source-line-no">376</span><span id="line-376">    private static Set&lt;String&gt; getForInitVariables(DetailAST ast) {</span>
-<span class="source-line-no">377</span><span id="line-377">        final Set&lt;String&gt; initializedVariables = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">378</span><span id="line-378">        final DetailAST forInitAST = ast.findFirstToken(TokenTypes.FOR_INIT);</span>
-<span class="source-line-no">379</span><span id="line-379"></span>
-<span class="source-line-no">380</span><span id="line-380">        for (DetailAST parameterDefAST = forInitAST.findFirstToken(TokenTypes.VARIABLE_DEF);</span>
-<span class="source-line-no">381</span><span id="line-381">             parameterDefAST != null;</span>
-<span class="source-line-no">382</span><span id="line-382">             parameterDefAST = parameterDefAST.getNextSibling()) {</span>
-<span class="source-line-no">383</span><span id="line-383">            if (parameterDefAST.getType() == TokenTypes.VARIABLE_DEF) {</span>
-<span class="source-line-no">384</span><span id="line-384">                final DetailAST param =</span>
-<span class="source-line-no">385</span><span id="line-385">                        parameterDefAST.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">386</span><span id="line-386"></span>
-<span class="source-line-no">387</span><span id="line-387">                initializedVariables.add(param.getText());</span>
-<span class="source-line-no">388</span><span id="line-388">            }</span>
-<span class="source-line-no">389</span><span id="line-389">        }</span>
-<span class="source-line-no">390</span><span id="line-390">        return initializedVariables;</span>
+<span class="source-line-no">368</span><span id="line-368">        return initializedVariables;</span>
+<span class="source-line-no">369</span><span id="line-369">    }</span>
+<span class="source-line-no">370</span><span id="line-370"></span>
+<span class="source-line-no">371</span><span id="line-371">    /**</span>
+<span class="source-line-no">372</span><span id="line-372">     * Get all variables which for loop iterating part change in every loop.</span>
+<span class="source-line-no">373</span><span id="line-373">     *</span>
+<span class="source-line-no">374</span><span id="line-374">     * @param ast for loop literal(TokenTypes.LITERAL_FOR)</span>
+<span class="source-line-no">375</span><span id="line-375">     * @return names of variables change in iterating part of for</span>
+<span class="source-line-no">376</span><span id="line-376">     */</span>
+<span class="source-line-no">377</span><span id="line-377">    private static Set&lt;String&gt; getForIteratorVariables(DetailAST ast) {</span>
+<span class="source-line-no">378</span><span id="line-378">        final Set&lt;String&gt; iteratorVariables = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">379</span><span id="line-379">        final DetailAST forIteratorAST = ast.findFirstToken(TokenTypes.FOR_ITERATOR);</span>
+<span class="source-line-no">380</span><span id="line-380">        final DetailAST forUpdateListAST = forIteratorAST.findFirstToken(TokenTypes.ELIST);</span>
+<span class="source-line-no">381</span><span id="line-381"></span>
+<span class="source-line-no">382</span><span id="line-382">        findChildrenOfExpressionType(forUpdateListAST).stream()</span>
+<span class="source-line-no">383</span><span id="line-383">            .filter(iteratingExpressionAST -&gt; {</span>
+<span class="source-line-no">384</span><span id="line-384">                return MUTATION_OPERATIONS.get(iteratingExpressionAST.getType());</span>
+<span class="source-line-no">385</span><span id="line-385">            }).forEach(iteratingExpressionAST -&gt; {</span>
+<span class="source-line-no">386</span><span id="line-386">                final DetailAST oneVariableOperatorChild = iteratingExpressionAST.getFirstChild();</span>
+<span class="source-line-no">387</span><span id="line-387">                iteratorVariables.add(oneVariableOperatorChild.getText());</span>
+<span class="source-line-no">388</span><span id="line-388">            });</span>
+<span class="source-line-no">389</span><span id="line-389"></span>
+<span class="source-line-no">390</span><span id="line-390">        return iteratorVariables;</span>
 <span class="source-line-no">391</span><span id="line-391">    }</span>
 <span class="source-line-no">392</span><span id="line-392"></span>
 <span class="source-line-no">393</span><span id="line-393">    /**</span>
-<span class="source-line-no">394</span><span id="line-394">     * Get all variables which for loop iterating part change in every loop.</span>
+<span class="source-line-no">394</span><span id="line-394">     * Find all child of given AST of type TokenType.EXPR.</span>
 <span class="source-line-no">395</span><span id="line-395">     *</span>
-<span class="source-line-no">396</span><span id="line-396">     * @param ast for loop literal(TokenTypes.LITERAL_FOR)</span>
-<span class="source-line-no">397</span><span id="line-397">     * @return names of variables change in iterating part of for</span>
+<span class="source-line-no">396</span><span id="line-396">     * @param ast parent of expressions to find</span>
+<span class="source-line-no">397</span><span id="line-397">     * @return all child of given ast</span>
 <span class="source-line-no">398</span><span id="line-398">     */</span>
-<span class="source-line-no">399</span><span id="line-399">    private static Set&lt;String&gt; getForIteratorVariables(DetailAST ast) {</span>
-<span class="source-line-no">400</span><span id="line-400">        final Set&lt;String&gt; iteratorVariables = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">401</span><span id="line-401">        final DetailAST forIteratorAST = ast.findFirstToken(TokenTypes.FOR_ITERATOR);</span>
-<span class="source-line-no">402</span><span id="line-402">        final DetailAST forUpdateListAST = forIteratorAST.findFirstToken(TokenTypes.ELIST);</span>
-<span class="source-line-no">403</span><span id="line-403"></span>
-<span class="source-line-no">404</span><span id="line-404">        findChildrenOfExpressionType(forUpdateListAST).stream()</span>
-<span class="source-line-no">405</span><span id="line-405">            .filter(iteratingExpressionAST -&gt; {</span>
-<span class="source-line-no">406</span><span id="line-406">                return MUTATION_OPERATIONS.get(iteratingExpressionAST.getType());</span>
-<span class="source-line-no">407</span><span id="line-407">            }).forEach(iteratingExpressionAST -&gt; {</span>
-<span class="source-line-no">408</span><span id="line-408">                final DetailAST oneVariableOperatorChild = iteratingExpressionAST.getFirstChild();</span>
-<span class="source-line-no">409</span><span id="line-409">                iteratorVariables.add(oneVariableOperatorChild.getText());</span>
-<span class="source-line-no">410</span><span id="line-410">            });</span>
-<span class="source-line-no">411</span><span id="line-411"></span>
-<span class="source-line-no">412</span><span id="line-412">        return iteratorVariables;</span>
-<span class="source-line-no">413</span><span id="line-413">    }</span>
-<span class="source-line-no">414</span><span id="line-414"></span>
-<span class="source-line-no">415</span><span id="line-415">    /**</span>
-<span class="source-line-no">416</span><span id="line-416">     * Find all child of given AST of type TokenType.EXPR.</span>
-<span class="source-line-no">417</span><span id="line-417">     *</span>
-<span class="source-line-no">418</span><span id="line-418">     * @param ast parent of expressions to find</span>
-<span class="source-line-no">419</span><span id="line-419">     * @return all child of given ast</span>
-<span class="source-line-no">420</span><span id="line-420">     */</span>
-<span class="source-line-no">421</span><span id="line-421">    private static List&lt;DetailAST&gt; findChildrenOfExpressionType(DetailAST ast) {</span>
-<span class="source-line-no">422</span><span id="line-422">        final List&lt;DetailAST&gt; foundExpressions = new LinkedList&lt;&gt;();</span>
-<span class="source-line-no">423</span><span id="line-423">        if (ast != null) {</span>
-<span class="source-line-no">424</span><span id="line-424">            for (DetailAST iteratingExpressionAST = ast.findFirstToken(TokenTypes.EXPR);</span>
-<span class="source-line-no">425</span><span id="line-425">                 iteratingExpressionAST != null;</span>
-<span class="source-line-no">426</span><span id="line-426">                 iteratingExpressionAST = iteratingExpressionAST.getNextSibling()) {</span>
-<span class="source-line-no">427</span><span id="line-427">                if (iteratingExpressionAST.getType() == TokenTypes.EXPR) {</span>
-<span class="source-line-no">428</span><span id="line-428">                    foundExpressions.add(iteratingExpressionAST.getFirstChild());</span>
-<span class="source-line-no">429</span><span id="line-429">                }</span>
-<span class="source-line-no">430</span><span id="line-430">            }</span>
-<span class="source-line-no">431</span><span id="line-431">        }</span>
-<span class="source-line-no">432</span><span id="line-432">        return foundExpressions;</span>
-<span class="source-line-no">433</span><span id="line-433">    }</span>
-<span class="source-line-no">434</span><span id="line-434"></span>
-<span class="source-line-no">435</span><span id="line-435">}</span>
+<span class="source-line-no">399</span><span id="line-399">    private static List&lt;DetailAST&gt; findChildrenOfExpressionType(DetailAST ast) {</span>
+<span class="source-line-no">400</span><span id="line-400">        final List&lt;DetailAST&gt; foundExpressions = new LinkedList&lt;&gt;();</span>
+<span class="source-line-no">401</span><span id="line-401">        if (ast != null) {</span>
+<span class="source-line-no">402</span><span id="line-402">            for (DetailAST iteratingExpressionAST = ast.findFirstToken(TokenTypes.EXPR);</span>
+<span class="source-line-no">403</span><span id="line-403">                 iteratingExpressionAST != null;</span>
+<span class="source-line-no">404</span><span id="line-404">                 iteratingExpressionAST = iteratingExpressionAST.getNextSibling()) {</span>
+<span class="source-line-no">405</span><span id="line-405">                if (iteratingExpressionAST.getType() == TokenTypes.EXPR) {</span>
+<span class="source-line-no">406</span><span id="line-406">                    foundExpressions.add(iteratingExpressionAST.getFirstChild());</span>
+<span class="source-line-no">407</span><span id="line-407">                }</span>
+<span class="source-line-no">408</span><span id="line-408">            }</span>
+<span class="source-line-no">409</span><span id="line-409">        }</span>
+<span class="source-line-no">410</span><span id="line-410">        return foundExpressions;</span>
+<span class="source-line-no">411</span><span id="line-411">    }</span>
+<span class="source-line-no">412</span><span id="line-412"></span>
+<span class="source-line-no">413</span><span id="line-413">}</span>
 
 
 
