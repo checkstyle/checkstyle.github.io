@@ -37,7 +37,7 @@
 <span class="source-line-no">024</span><span id="line-24">import com.puppycrawl.tools.checkstyle.StatelessCheck;</span>
 <span class="source-line-no">025</span><span id="line-25">import com.puppycrawl.tools.checkstyle.api.DetailAST;</span>
 <span class="source-line-no">026</span><span id="line-26">import com.puppycrawl.tools.checkstyle.api.DetailNode;</span>
-<span class="source-line-no">027</span><span id="line-27">import com.puppycrawl.tools.checkstyle.api.JavadocTokenTypes;</span>
+<span class="source-line-no">027</span><span id="line-27">import com.puppycrawl.tools.checkstyle.api.JavadocCommentsTokenTypes;</span>
 <span class="source-line-no">028</span><span id="line-28">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</span>
 <span class="source-line-no">029</span><span id="line-29">import com.puppycrawl.tools.checkstyle.checks.javadoc.AbstractJavadocCheck;</span>
 <span class="source-line-no">030</span><span id="line-30">import com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocTagInfo;</span>
@@ -122,7 +122,7 @@
 <span class="source-line-no">109</span><span id="line-109">    @Override</span>
 <span class="source-line-no">110</span><span id="line-110">    public int[] getRequiredJavadocTokens() {</span>
 <span class="source-line-no">111</span><span id="line-111">        return new int[] {</span>
-<span class="source-line-no">112</span><span id="line-112">            JavadocTokenTypes.JAVADOC,</span>
+<span class="source-line-no">112</span><span id="line-112">            JavadocCommentsTokenTypes.JAVADOC_CONTENT,</span>
 <span class="source-line-no">113</span><span id="line-113">        };</span>
 <span class="source-line-no">114</span><span id="line-114">    }</span>
 <span class="source-line-no">115</span><span id="line-115"></span>
@@ -166,49 +166,52 @@
 <span class="source-line-no">153</span><span id="line-153">     */</span>
 <span class="source-line-no">154</span><span id="line-154">    private boolean containsDeprecatedTag(DetailNode javadoc) {</span>
 <span class="source-line-no">155</span><span id="line-155">        boolean found = false;</span>
-<span class="source-line-no">156</span><span id="line-156">        for (DetailNode child : javadoc.getChildren()) {</span>
-<span class="source-line-no">157</span><span id="line-157">            if (child.getType() == JavadocTokenTypes.JAVADOC_TAG</span>
-<span class="source-line-no">158</span><span id="line-158">                    &amp;&amp; child.getChildren()[0].getType() == JavadocTokenTypes.DEPRECATED_LITERAL) {</span>
-<span class="source-line-no">159</span><span id="line-159">                if (found) {</span>
-<span class="source-line-no">160</span><span id="line-160">                    log(child.getLineNumber(), MSG_KEY_JAVADOC_DUPLICATE_TAG,</span>
-<span class="source-line-no">161</span><span id="line-161">                            JavadocTagInfo.DEPRECATED.getText());</span>
-<span class="source-line-no">162</span><span id="line-162">                }</span>
-<span class="source-line-no">163</span><span id="line-163">                found = true;</span>
-<span class="source-line-no">164</span><span id="line-164">            }</span>
-<span class="source-line-no">165</span><span id="line-165">        }</span>
-<span class="source-line-no">166</span><span id="line-166">        return found;</span>
-<span class="source-line-no">167</span><span id="line-167">    }</span>
-<span class="source-line-no">168</span><span id="line-168"></span>
-<span class="source-line-no">169</span><span id="line-169">    /**</span>
-<span class="source-line-no">170</span><span id="line-170">     * Returns the parent node of the comment.</span>
-<span class="source-line-no">171</span><span id="line-171">     *</span>
-<span class="source-line-no">172</span><span id="line-172">     * @param commentBlock child node.</span>
-<span class="source-line-no">173</span><span id="line-173">     * @return parent node.</span>
-<span class="source-line-no">174</span><span id="line-174">     */</span>
-<span class="source-line-no">175</span><span id="line-175">    private static DetailAST getParent(DetailAST commentBlock) {</span>
-<span class="source-line-no">176</span><span id="line-176">        DetailAST result = commentBlock.getParent();</span>
-<span class="source-line-no">177</span><span id="line-177"></span>
-<span class="source-line-no">178</span><span id="line-178">        if (TokenUtil.isRootNode(result)) {</span>
-<span class="source-line-no">179</span><span id="line-179">            result = commentBlock.getNextSibling();</span>
-<span class="source-line-no">180</span><span id="line-180">        }</span>
-<span class="source-line-no">181</span><span id="line-181"></span>
-<span class="source-line-no">182</span><span id="line-182">        while (true) {</span>
-<span class="source-line-no">183</span><span id="line-183">            final int type = result.getType();</span>
-<span class="source-line-no">184</span><span id="line-184">            if (TYPES_HASH_SET.get(type)) {</span>
-<span class="source-line-no">185</span><span id="line-185">                result = result.getParent();</span>
-<span class="source-line-no">186</span><span id="line-186">            }</span>
-<span class="source-line-no">187</span><span id="line-187">            else if (type == TokenTypes.SINGLE_LINE_COMMENT) {</span>
-<span class="source-line-no">188</span><span id="line-188">                result = result.getNextSibling();</span>
+<span class="source-line-no">156</span><span id="line-156">        DetailNode node = javadoc.getFirstChild();</span>
+<span class="source-line-no">157</span><span id="line-157">        while (node != null) {</span>
+<span class="source-line-no">158</span><span id="line-158">            if (node.getType() == JavadocCommentsTokenTypes.JAVADOC_BLOCK_TAG</span>
+<span class="source-line-no">159</span><span id="line-159">                    &amp;&amp; node.getFirstChild().getType()</span>
+<span class="source-line-no">160</span><span id="line-160">                            == JavadocCommentsTokenTypes.DEPRECATED_BLOCK_TAG) {</span>
+<span class="source-line-no">161</span><span id="line-161">                if (found) {</span>
+<span class="source-line-no">162</span><span id="line-162">                    log(node.getLineNumber(), MSG_KEY_JAVADOC_DUPLICATE_TAG,</span>
+<span class="source-line-no">163</span><span id="line-163">                            JavadocTagInfo.DEPRECATED.getText());</span>
+<span class="source-line-no">164</span><span id="line-164">                }</span>
+<span class="source-line-no">165</span><span id="line-165">                found = true;</span>
+<span class="source-line-no">166</span><span id="line-166">            }</span>
+<span class="source-line-no">167</span><span id="line-167">            node = node.getNextSibling();</span>
+<span class="source-line-no">168</span><span id="line-168">        }</span>
+<span class="source-line-no">169</span><span id="line-169">        return found;</span>
+<span class="source-line-no">170</span><span id="line-170">    }</span>
+<span class="source-line-no">171</span><span id="line-171"></span>
+<span class="source-line-no">172</span><span id="line-172">    /**</span>
+<span class="source-line-no">173</span><span id="line-173">     * Returns the parent node of the comment.</span>
+<span class="source-line-no">174</span><span id="line-174">     *</span>
+<span class="source-line-no">175</span><span id="line-175">     * @param commentBlock child node.</span>
+<span class="source-line-no">176</span><span id="line-176">     * @return parent node.</span>
+<span class="source-line-no">177</span><span id="line-177">     */</span>
+<span class="source-line-no">178</span><span id="line-178">    private static DetailAST getParent(DetailAST commentBlock) {</span>
+<span class="source-line-no">179</span><span id="line-179">        DetailAST result = commentBlock.getParent();</span>
+<span class="source-line-no">180</span><span id="line-180"></span>
+<span class="source-line-no">181</span><span id="line-181">        if (TokenUtil.isRootNode(result)) {</span>
+<span class="source-line-no">182</span><span id="line-182">            result = commentBlock.getNextSibling();</span>
+<span class="source-line-no">183</span><span id="line-183">        }</span>
+<span class="source-line-no">184</span><span id="line-184"></span>
+<span class="source-line-no">185</span><span id="line-185">        while (true) {</span>
+<span class="source-line-no">186</span><span id="line-186">            final int type = result.getType();</span>
+<span class="source-line-no">187</span><span id="line-187">            if (TYPES_HASH_SET.get(type)) {</span>
+<span class="source-line-no">188</span><span id="line-188">                result = result.getParent();</span>
 <span class="source-line-no">189</span><span id="line-189">            }</span>
-<span class="source-line-no">190</span><span id="line-190">            else {</span>
-<span class="source-line-no">191</span><span id="line-191">                break;</span>
+<span class="source-line-no">190</span><span id="line-190">            else if (type == TokenTypes.SINGLE_LINE_COMMENT) {</span>
+<span class="source-line-no">191</span><span id="line-191">                result = result.getNextSibling();</span>
 <span class="source-line-no">192</span><span id="line-192">            }</span>
-<span class="source-line-no">193</span><span id="line-193">        }</span>
-<span class="source-line-no">194</span><span id="line-194"></span>
-<span class="source-line-no">195</span><span id="line-195">        return result;</span>
-<span class="source-line-no">196</span><span id="line-196">    }</span>
+<span class="source-line-no">193</span><span id="line-193">            else {</span>
+<span class="source-line-no">194</span><span id="line-194">                break;</span>
+<span class="source-line-no">195</span><span id="line-195">            }</span>
+<span class="source-line-no">196</span><span id="line-196">        }</span>
 <span class="source-line-no">197</span><span id="line-197"></span>
-<span class="source-line-no">198</span><span id="line-198">}</span>
+<span class="source-line-no">198</span><span id="line-198">        return result;</span>
+<span class="source-line-no">199</span><span id="line-199">    }</span>
+<span class="source-line-no">200</span><span id="line-200"></span>
+<span class="source-line-no">201</span><span id="line-201">}</span>
 
 
 
