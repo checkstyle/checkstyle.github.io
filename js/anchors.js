@@ -80,5 +80,26 @@
             anchor.appendChild(a);
             exampleDiv.appendChild(anchor);
         });
+        function enableSmoothScroll(root = document) {
+  root.querySelectorAll('a[href^="#"]').forEach(link => {
+    link.addEventListener('click', e => {
+      const target = document.querySelector(link.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.pushState(null, '', link.getAttribute('href'));
+      }
+    });
+  });
+}
+enableSmoothScroll();
+new MutationObserver(mutations => {
+  mutations.forEach(mutation => {
+    mutation.addedNodes.forEach(node => {
+      if (node.nodeType === 1) enableSmoothScroll(node);
+    });
+  });
+}).observe(document.body, { childList: true, subtree: true });
+document.body.classList.add('loaded');
     });
 }());
