@@ -17,6 +17,37 @@ window.addEventListener("load", function () {
     });
 });
 
+document.addEventListener("DOMContentLoaded", () => {
+    const url = new URL(window.location.href);
+    if (!url.pathname.endsWith("/releasenotes.html")
+            || !url.hash.startsWith("#Release_")
+            || document.getElementById(url.hash.replace("#", ""))) {
+        return;
+    }
+
+    const version = url.hash.split('_')[1];
+    const versionParts = version.split(".");
+    if (!versionParts.length >= 2) {
+        return;
+    }
+
+    let major = parseInt(versionParts[0], 10);
+    let minor = parseInt(versionParts[1], 10);
+
+    if (major >= 1 && major < 6) {
+        window.location.replace(`./releasenotes_old_1-0_5-9.html${url.hash}`);
+    }
+    else if (major === 6 || major === 7) {
+        window.location.replace(`./releasenotes_old_6-0_7-8.html${url.hash}`);
+    }
+    else if (major === 8 && minor >= 0 && minor <= 34) {
+        window.location.replace(`./releasenotes_old_8-0_8-34.html${url.hash}`);
+    }
+    else if (major >= 8 && major <= 10) {
+        window.location.replace(`./releasenotes_old_8-35_10-26.html${url.hash}`);
+    }
+});
+
 window.addEventListener("load", function () {
     const currentUrl = window.location.href;
 
@@ -55,7 +86,6 @@ window.addEventListener("load", function () {
     externalLinks.forEach((link) => {
         link.setAttribute("target", "_blank");
     });
-    prettyPrint();
 });
 
 window.addEventListener("scroll", function () {
@@ -150,45 +180,20 @@ window.addEventListener("load", function () {
 });
 
 function trimCodeBlock(codeBlock) {
-    const walker = document.createTreeWalker(
-      codeBlock,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false
-    );
-    const textNodes = [];
-    let node;
-    while ((node = walker.nextNode())) {
-      textNodes.push(node);
-    }
-
-    for (let i = 0; i < textNodes.length; i++) {
-      const txt = textNodes[i].textContent;
-      const trimmed = txt.trim();
-      if (trimmed.length === 0) {
-        // If whole node is whitespace remove it.
-        if (textNodes[i].parentNode) {
-          textNodes[i].parentNode.removeChild(textNodes[i]);
-        }
-      } else {
-        textNodes[i].textContent = trimmed;
-        break;
-      }
-    }
-
-    for (let i = textNodes.length - 1; i >= 0; i--) {
-      const txt = textNodes[i].textContent;
-      const trimmed = txt.trim();
-      if (trimmed.length === 0) {
-        if (textNodes[i].parentNode) {
-          textNodes[i].parentNode.removeChild(textNodes[i]);
-        }
-      } else {
-        textNodes[i].textContent = trimmed;
-        break;
-      }
+    const textNodes = codeBlock.children;
+    if (textNodes.length > 0) {
+        const firstNodeIdx = 0;
+        const lastNodeIdx = textNodes.length - 1;
+        textNodes[firstNodeIdx].textContent = textNodes[firstNodeIdx].textContent.trimStart();
+        textNodes[lastNodeIdx].textContent = textNodes[lastNodeIdx].textContent.trimEnd();
     }
 }
 
-window.addEventListener("load", setBodyColumnMargin);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setBodyColumnMargin);
+}
+else {
+    setBodyColumnMargin();
+}
+
 window.addEventListener("resize", setBodyColumnMargin);
