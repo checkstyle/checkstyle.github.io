@@ -47,8 +47,8 @@
 <span class="source-line-no">034</span><span id="line-34"> * considered redundant if:</span>
 <span class="source-line-no">035</span><span id="line-35"> * &lt;/div&gt;</span>
 <span class="source-line-no">036</span><span id="line-36"> * &lt;ul&gt;</span>
-<span class="source-line-no">037</span><span id="line-37"> *   &lt;li&gt;It is a duplicate of another import. This is, when a class is imported</span>
-<span class="source-line-no">038</span><span id="line-38"> *   more than once.&lt;/li&gt;</span>
+<span class="source-line-no">037</span><span id="line-37"> *   &lt;li&gt;It is a duplicate of another import. This is, when a class or a module</span>
+<span class="source-line-no">038</span><span id="line-38"> *   is imported more than once.&lt;/li&gt;</span>
 <span class="source-line-no">039</span><span id="line-39"> *   &lt;li&gt;The class non-statically imported is from the {@code java.lang}</span>
 <span class="source-line-no">040</span><span id="line-40"> *   package, e.g. importing {@code java.lang.String}.&lt;/li&gt;</span>
 <span class="source-line-no">041</span><span id="line-41"> *   &lt;li&gt;The class non-statically imported is from the same package as the</span>
@@ -81,8 +81,8 @@
 <span class="source-line-no">068</span><span id="line-68"></span>
 <span class="source-line-no">069</span><span id="line-69">    /** Set of the imports. */</span>
 <span class="source-line-no">070</span><span id="line-70">    private final Set&lt;FullIdent&gt; imports = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">071</span><span id="line-71">    /** Set of static imports. */</span>
-<span class="source-line-no">072</span><span id="line-72">    private final Set&lt;FullIdent&gt; staticImports = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">071</span><span id="line-71">    /** Set of static and module imports. */</span>
+<span class="source-line-no">072</span><span id="line-72">    private final Set&lt;FullIdent&gt; staticAndModuleImports = new HashSet&lt;&gt;();</span>
 <span class="source-line-no">073</span><span id="line-73"></span>
 <span class="source-line-no">074</span><span id="line-74">    /** Name of package in file. */</span>
 <span class="source-line-no">075</span><span id="line-75">    private String pkgName;</span>
@@ -91,7 +91,7 @@
 <span class="source-line-no">078</span><span id="line-78">    public void beginTree(DetailAST aRootAST) {</span>
 <span class="source-line-no">079</span><span id="line-79">        pkgName = null;</span>
 <span class="source-line-no">080</span><span id="line-80">        imports.clear();</span>
-<span class="source-line-no">081</span><span id="line-81">        staticImports.clear();</span>
+<span class="source-line-no">081</span><span id="line-81">        staticAndModuleImports.clear();</span>
 <span class="source-line-no">082</span><span id="line-82">    }</span>
 <span class="source-line-no">083</span><span id="line-83"></span>
 <span class="source-line-no">084</span><span id="line-84">    @Override</span>
@@ -107,62 +107,70 @@
 <span class="source-line-no">094</span><span id="line-94">    @Override</span>
 <span class="source-line-no">095</span><span id="line-95">    public int[] getRequiredTokens() {</span>
 <span class="source-line-no">096</span><span id="line-96">        return new int[] {</span>
-<span class="source-line-no">097</span><span id="line-97">            TokenTypes.IMPORT, TokenTypes.STATIC_IMPORT, TokenTypes.PACKAGE_DEF,</span>
-<span class="source-line-no">098</span><span id="line-98">        };</span>
-<span class="source-line-no">099</span><span id="line-99">    }</span>
-<span class="source-line-no">100</span><span id="line-100"></span>
-<span class="source-line-no">101</span><span id="line-101">    @Override</span>
-<span class="source-line-no">102</span><span id="line-102">    public void visitToken(DetailAST ast) {</span>
-<span class="source-line-no">103</span><span id="line-103">        if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
-<span class="source-line-no">104</span><span id="line-104">            pkgName = FullIdent.createFullIdent(</span>
-<span class="source-line-no">105</span><span id="line-105">                    ast.getLastChild().getPreviousSibling()).getText();</span>
-<span class="source-line-no">106</span><span id="line-106">        }</span>
-<span class="source-line-no">107</span><span id="line-107">        else if (ast.getType() == TokenTypes.IMPORT) {</span>
-<span class="source-line-no">108</span><span id="line-108">            final FullIdent imp = FullIdent.createFullIdentBelow(ast);</span>
-<span class="source-line-no">109</span><span id="line-109">            final String importText = imp.getText();</span>
-<span class="source-line-no">110</span><span id="line-110">            if (isFromPackage(importText, "java.lang")) {</span>
-<span class="source-line-no">111</span><span id="line-111">                log(ast, MSG_LANG, importText);</span>
-<span class="source-line-no">112</span><span id="line-112">            }</span>
-<span class="source-line-no">113</span><span id="line-113">            // imports from unnamed package are not allowed,</span>
-<span class="source-line-no">114</span><span id="line-114">            // so we are checking SAME rule only for named packages</span>
-<span class="source-line-no">115</span><span id="line-115">            else if (pkgName != null &amp;&amp; isFromPackage(importText, pkgName)) {</span>
-<span class="source-line-no">116</span><span id="line-116">                log(ast, MSG_SAME, importText);</span>
-<span class="source-line-no">117</span><span id="line-117">            }</span>
-<span class="source-line-no">118</span><span id="line-118">            // Check for a duplicate import</span>
-<span class="source-line-no">119</span><span id="line-119">            imports.stream().filter(full -&gt; importText.equals(full.getText()))</span>
-<span class="source-line-no">120</span><span id="line-120">                .forEach(full -&gt; log(ast, MSG_DUPLICATE, full.getLineNo(), importText));</span>
-<span class="source-line-no">121</span><span id="line-121"></span>
-<span class="source-line-no">122</span><span id="line-122">            imports.add(imp);</span>
-<span class="source-line-no">123</span><span id="line-123">        }</span>
-<span class="source-line-no">124</span><span id="line-124">        else {</span>
-<span class="source-line-no">125</span><span id="line-125">            // Check for a duplicate static import</span>
-<span class="source-line-no">126</span><span id="line-126">            final FullIdent imp =</span>
-<span class="source-line-no">127</span><span id="line-127">                FullIdent.createFullIdent(</span>
-<span class="source-line-no">128</span><span id="line-128">                    ast.getLastChild().getPreviousSibling());</span>
-<span class="source-line-no">129</span><span id="line-129">            staticImports.stream().filter(full -&gt; imp.getText().equals(full.getText()))</span>
-<span class="source-line-no">130</span><span id="line-130">                .forEach(full -&gt; log(ast, MSG_DUPLICATE, full.getLineNo(), imp.getText()));</span>
-<span class="source-line-no">131</span><span id="line-131"></span>
-<span class="source-line-no">132</span><span id="line-132">            staticImports.add(imp);</span>
-<span class="source-line-no">133</span><span id="line-133">        }</span>
-<span class="source-line-no">134</span><span id="line-134">    }</span>
-<span class="source-line-no">135</span><span id="line-135"></span>
-<span class="source-line-no">136</span><span id="line-136">    /**</span>
-<span class="source-line-no">137</span><span id="line-137">     * Determines if an import statement is for types from a specified package.</span>
-<span class="source-line-no">138</span><span id="line-138">     *</span>
-<span class="source-line-no">139</span><span id="line-139">     * @param importName the import name</span>
-<span class="source-line-no">140</span><span id="line-140">     * @param pkg the package name</span>
-<span class="source-line-no">141</span><span id="line-141">     * @return whether from the package</span>
-<span class="source-line-no">142</span><span id="line-142">     */</span>
-<span class="source-line-no">143</span><span id="line-143">    private static boolean isFromPackage(String importName, String pkg) {</span>
-<span class="source-line-no">144</span><span id="line-144">        // imports from unnamed package are not allowed:</span>
-<span class="source-line-no">145</span><span id="line-145">        // https://docs.oracle.com/javase/specs/jls/se7/html/jls-7.html#jls-7.5</span>
-<span class="source-line-no">146</span><span id="line-146">        // So '.' must be present in member name and we are not checking for it</span>
-<span class="source-line-no">147</span><span id="line-147">        final int index = importName.lastIndexOf('.');</span>
-<span class="source-line-no">148</span><span id="line-148">        final String front = importName.substring(0, index);</span>
-<span class="source-line-no">149</span><span id="line-149">        return pkg.equals(front);</span>
-<span class="source-line-no">150</span><span id="line-150">    }</span>
-<span class="source-line-no">151</span><span id="line-151"></span>
-<span class="source-line-no">152</span><span id="line-152">}</span>
+<span class="source-line-no">097</span><span id="line-97">            TokenTypes.IMPORT,</span>
+<span class="source-line-no">098</span><span id="line-98">            TokenTypes.STATIC_IMPORT,</span>
+<span class="source-line-no">099</span><span id="line-99">            TokenTypes.PACKAGE_DEF,</span>
+<span class="source-line-no">100</span><span id="line-100">            TokenTypes.MODULE_IMPORT,</span>
+<span class="source-line-no">101</span><span id="line-101">        };</span>
+<span class="source-line-no">102</span><span id="line-102">    }</span>
+<span class="source-line-no">103</span><span id="line-103"></span>
+<span class="source-line-no">104</span><span id="line-104">    @Override</span>
+<span class="source-line-no">105</span><span id="line-105">    public void visitToken(DetailAST ast) {</span>
+<span class="source-line-no">106</span><span id="line-106">        if (ast.getType() == TokenTypes.PACKAGE_DEF) {</span>
+<span class="source-line-no">107</span><span id="line-107">            pkgName = FullIdent.createFullIdent(</span>
+<span class="source-line-no">108</span><span id="line-108">                    ast.getLastChild().getPreviousSibling()).getText();</span>
+<span class="source-line-no">109</span><span id="line-109">        }</span>
+<span class="source-line-no">110</span><span id="line-110">        else if (ast.getType() == TokenTypes.IMPORT) {</span>
+<span class="source-line-no">111</span><span id="line-111">            final FullIdent imp = FullIdent.createFullIdentBelow(ast);</span>
+<span class="source-line-no">112</span><span id="line-112">            final String importText = imp.getText();</span>
+<span class="source-line-no">113</span><span id="line-113">            if (isFromPackage(importText, "java.lang")) {</span>
+<span class="source-line-no">114</span><span id="line-114">                log(ast, MSG_LANG, importText);</span>
+<span class="source-line-no">115</span><span id="line-115">            }</span>
+<span class="source-line-no">116</span><span id="line-116">            // imports from unnamed package are not allowed,</span>
+<span class="source-line-no">117</span><span id="line-117">            // so we are checking SAME rule only for named packages</span>
+<span class="source-line-no">118</span><span id="line-118">            else if (pkgName != null &amp;&amp; isFromPackage(importText, pkgName)) {</span>
+<span class="source-line-no">119</span><span id="line-119">                log(ast, MSG_SAME, importText);</span>
+<span class="source-line-no">120</span><span id="line-120">            }</span>
+<span class="source-line-no">121</span><span id="line-121">            // Check for a duplicate import</span>
+<span class="source-line-no">122</span><span id="line-122">            imports.stream().filter(full -&gt; importText.equals(full.getText()))</span>
+<span class="source-line-no">123</span><span id="line-123">                .forEach(full -&gt; log(ast, MSG_DUPLICATE, full.getLineNo(), importText));</span>
+<span class="source-line-no">124</span><span id="line-124"></span>
+<span class="source-line-no">125</span><span id="line-125">            imports.add(imp);</span>
+<span class="source-line-no">126</span><span id="line-126">        }</span>
+<span class="source-line-no">127</span><span id="line-127">        else {</span>
+<span class="source-line-no">128</span><span id="line-128">            // Check for a duplicate static or module import</span>
+<span class="source-line-no">129</span><span id="line-129">            final DetailAST identNode = ast.getLastChild().getPreviousSibling();</span>
+<span class="source-line-no">130</span><span id="line-130">            final FullIdent importFullIdent = FullIdent.createFullIdent(identNode);</span>
+<span class="source-line-no">131</span><span id="line-131">            final String importText = importFullIdent.getText();</span>
+<span class="source-line-no">132</span><span id="line-132"></span>
+<span class="source-line-no">133</span><span id="line-133">            staticAndModuleImports</span>
+<span class="source-line-no">134</span><span id="line-134">                    .stream()</span>
+<span class="source-line-no">135</span><span id="line-135">                    .filter(existingImport -&gt; importText.equals(existingImport.getText()))</span>
+<span class="source-line-no">136</span><span id="line-136">                    .forEach(existingImport -&gt; {</span>
+<span class="source-line-no">137</span><span id="line-137">                        log(ast, MSG_DUPLICATE, existingImport.getLineNo(), importText);</span>
+<span class="source-line-no">138</span><span id="line-138">                    });</span>
+<span class="source-line-no">139</span><span id="line-139"></span>
+<span class="source-line-no">140</span><span id="line-140">            staticAndModuleImports.add(importFullIdent);</span>
+<span class="source-line-no">141</span><span id="line-141">        }</span>
+<span class="source-line-no">142</span><span id="line-142">    }</span>
+<span class="source-line-no">143</span><span id="line-143"></span>
+<span class="source-line-no">144</span><span id="line-144">    /**</span>
+<span class="source-line-no">145</span><span id="line-145">     * Determines if an import statement is for types from a specified package.</span>
+<span class="source-line-no">146</span><span id="line-146">     *</span>
+<span class="source-line-no">147</span><span id="line-147">     * @param importName the import name</span>
+<span class="source-line-no">148</span><span id="line-148">     * @param pkg the package name</span>
+<span class="source-line-no">149</span><span id="line-149">     * @return whether from the package</span>
+<span class="source-line-no">150</span><span id="line-150">     */</span>
+<span class="source-line-no">151</span><span id="line-151">    private static boolean isFromPackage(String importName, String pkg) {</span>
+<span class="source-line-no">152</span><span id="line-152">        // imports from unnamed package are not allowed:</span>
+<span class="source-line-no">153</span><span id="line-153">        // https://docs.oracle.com/javase/specs/jls/se7/html/jls-7.html#jls-7.5</span>
+<span class="source-line-no">154</span><span id="line-154">        // So '.' must be present in member name and we are not checking for it</span>
+<span class="source-line-no">155</span><span id="line-155">        final int index = importName.lastIndexOf('.');</span>
+<span class="source-line-no">156</span><span id="line-156">        final String front = importName.substring(0, index);</span>
+<span class="source-line-no">157</span><span id="line-157">        return pkg.equals(front);</span>
+<span class="source-line-no">158</span><span id="line-158">    }</span>
+<span class="source-line-no">159</span><span id="line-159"></span>
+<span class="source-line-no">160</span><span id="line-160">}</span>
 
 
 
