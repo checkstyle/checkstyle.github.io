@@ -41,140 +41,201 @@
 <span class="source-line-no">028</span><span id="line-28"> */</span>
 <span class="source-line-no">029</span><span id="line-29">public class NewHandler extends AbstractExpressionHandler {</span>
 <span class="source-line-no">030</span><span id="line-30"></span>
-<span class="source-line-no">031</span><span id="line-31">    /** The AST which is handled by this handler. */</span>
-<span class="source-line-no">032</span><span id="line-32">    private final DetailAST mainAst;</span>
-<span class="source-line-no">033</span><span id="line-33"></span>
-<span class="source-line-no">034</span><span id="line-34">    /**</span>
-<span class="source-line-no">035</span><span id="line-35">     * Construct an instance of this handler with the given indentation check,</span>
-<span class="source-line-no">036</span><span id="line-36">     * abstract syntax tree, and parent handler.</span>
-<span class="source-line-no">037</span><span id="line-37">     *</span>
-<span class="source-line-no">038</span><span id="line-38">     * @param indentCheck   the indentation check</span>
-<span class="source-line-no">039</span><span id="line-39">     * @param ast           the abstract syntax tree</span>
-<span class="source-line-no">040</span><span id="line-40">     * @param parent        the parent handler</span>
-<span class="source-line-no">041</span><span id="line-41">     */</span>
-<span class="source-line-no">042</span><span id="line-42">    public NewHandler(IndentationCheck indentCheck,</span>
-<span class="source-line-no">043</span><span id="line-43">                      DetailAST ast,</span>
-<span class="source-line-no">044</span><span id="line-44">                      AbstractExpressionHandler parent) {</span>
-<span class="source-line-no">045</span><span id="line-45">        super(indentCheck, "new", ast, parent);</span>
-<span class="source-line-no">046</span><span id="line-46">        mainAst = ast;</span>
-<span class="source-line-no">047</span><span id="line-47">    }</span>
-<span class="source-line-no">048</span><span id="line-48"></span>
-<span class="source-line-no">049</span><span id="line-49">    @Override</span>
-<span class="source-line-no">050</span><span id="line-50">    public void checkIndentation() {</span>
-<span class="source-line-no">051</span><span id="line-51">        // if new is on the line start and it is not the part of assignment.</span>
-<span class="source-line-no">052</span><span id="line-52">        if (isOnStartOfLine(mainAst)) {</span>
-<span class="source-line-no">053</span><span id="line-53">            final int columnNo = expandedTabsColumnNo(mainAst);</span>
-<span class="source-line-no">054</span><span id="line-54">            final IndentLevel level = getIndentImpl();</span>
-<span class="source-line-no">055</span><span id="line-55"></span>
-<span class="source-line-no">056</span><span id="line-56">            final boolean forceStrictCondition = getIndentCheck().isForceStrictCondition();</span>
-<span class="source-line-no">057</span><span id="line-57">            if (forceStrictCondition &amp;&amp; !level.isAcceptable(columnNo)</span>
-<span class="source-line-no">058</span><span id="line-58">                || !forceStrictCondition &amp;&amp; level.isGreaterThan(columnNo)) {</span>
-<span class="source-line-no">059</span><span id="line-59">                logError(mainAst, "", columnNo, level);</span>
-<span class="source-line-no">060</span><span id="line-60">            }</span>
-<span class="source-line-no">061</span><span id="line-61">        }</span>
-<span class="source-line-no">062</span><span id="line-62"></span>
-<span class="source-line-no">063</span><span id="line-63">        final DetailAST firstChild = mainAst.getFirstChild();</span>
-<span class="source-line-no">064</span><span id="line-64">        if (firstChild != null) {</span>
-<span class="source-line-no">065</span><span id="line-65">            checkExpressionSubtree(firstChild, getIndent(), false, false);</span>
-<span class="source-line-no">066</span><span id="line-66">        }</span>
-<span class="source-line-no">067</span><span id="line-67"></span>
-<span class="source-line-no">068</span><span id="line-68">        final DetailAST expression = mainAst.findFirstToken(TokenTypes.ELIST);</span>
-<span class="source-line-no">069</span><span id="line-69">        if (checkNestedNew(expression) &amp;&amp; isOnStartOfLine(expression)) {</span>
-<span class="source-line-no">070</span><span id="line-70">            final IndentLevel indentLevel = new IndentLevel(getIndent(),</span>
-<span class="source-line-no">071</span><span id="line-71">                    getLineWrappingIndent());</span>
-<span class="source-line-no">072</span><span id="line-72">            checkExpressionSubtree(expression, indentLevel, false, false);</span>
-<span class="source-line-no">073</span><span id="line-73">        }</span>
-<span class="source-line-no">074</span><span id="line-74"></span>
-<span class="source-line-no">075</span><span id="line-75">        final DetailAST lparen = mainAst.findFirstToken(TokenTypes.LPAREN);</span>
-<span class="source-line-no">076</span><span id="line-76">        checkLeftParen(lparen);</span>
-<span class="source-line-no">077</span><span id="line-77">    }</span>
-<span class="source-line-no">078</span><span id="line-78"></span>
-<span class="source-line-no">079</span><span id="line-79">    /**</span>
-<span class="source-line-no">080</span><span id="line-80">     * Check if nested {@code new} present.</span>
-<span class="source-line-no">081</span><span id="line-81">     *</span>
-<span class="source-line-no">082</span><span id="line-82">     * @param expression expression</span>
-<span class="source-line-no">083</span><span id="line-83">     *</span>
-<span class="source-line-no">084</span><span id="line-84">     * @return true if nested new is present.</span>
-<span class="source-line-no">085</span><span id="line-85">     */</span>
-<span class="source-line-no">086</span><span id="line-86">    public boolean checkNestedNew(DetailAST expression) {</span>
-<span class="source-line-no">087</span><span id="line-87">        boolean result = false;</span>
-<span class="source-line-no">088</span><span id="line-88">        if (expression != null &amp;&amp; expression.getFirstChild() != null) {</span>
-<span class="source-line-no">089</span><span id="line-89">            final boolean isNestedNewPresent = expression.getFirstChild()</span>
-<span class="source-line-no">090</span><span id="line-90">                .findFirstToken(TokenTypes.LITERAL_NEW) != null;</span>
-<span class="source-line-no">091</span><span id="line-91">            if (!isNestedNewPresent) {</span>
-<span class="source-line-no">092</span><span id="line-92">                result = true;</span>
-<span class="source-line-no">093</span><span id="line-93">            }</span>
-<span class="source-line-no">094</span><span id="line-94">        }</span>
-<span class="source-line-no">095</span><span id="line-95">        return result;</span>
-<span class="source-line-no">096</span><span id="line-96">    }</span>
-<span class="source-line-no">097</span><span id="line-97"></span>
-<span class="source-line-no">098</span><span id="line-98">    @Override</span>
-<span class="source-line-no">099</span><span id="line-99">    public IndentLevel getSuggestedChildIndent(AbstractExpressionHandler child) {</span>
-<span class="source-line-no">100</span><span id="line-100">        final int offset;</span>
-<span class="source-line-no">101</span><span id="line-101">        if (TokenUtil.isOfType(child.getMainAst(), TokenTypes.OBJBLOCK)) {</span>
-<span class="source-line-no">102</span><span id="line-102">            offset = getBasicOffset();</span>
+<span class="source-line-no">031</span><span id="line-31">    /**</span>
+<span class="source-line-no">032</span><span id="line-32">     * Token types that require line wrapping indentation for new keyword.</span>
+<span class="source-line-no">033</span><span id="line-33">     */</span>
+<span class="source-line-no">034</span><span id="line-34">    private static final int[] LINE_WRAP_NEW_PARENT_TYPES = {</span>
+<span class="source-line-no">035</span><span id="line-35">        TokenTypes.ASSIGN,</span>
+<span class="source-line-no">036</span><span id="line-36">        TokenTypes.LITERAL_RETURN,</span>
+<span class="source-line-no">037</span><span id="line-37">        TokenTypes.LITERAL_THROW,</span>
+<span class="source-line-no">038</span><span id="line-38">    };</span>
+<span class="source-line-no">039</span><span id="line-39"></span>
+<span class="source-line-no">040</span><span id="line-40">    /** The AST which is handled by this handler. */</span>
+<span class="source-line-no">041</span><span id="line-41">    private final DetailAST mainAst;</span>
+<span class="source-line-no">042</span><span id="line-42"></span>
+<span class="source-line-no">043</span><span id="line-43">    /**</span>
+<span class="source-line-no">044</span><span id="line-44">     * Construct an instance of this handler with the given indentation check,</span>
+<span class="source-line-no">045</span><span id="line-45">     * abstract syntax tree, and parent handler.</span>
+<span class="source-line-no">046</span><span id="line-46">     *</span>
+<span class="source-line-no">047</span><span id="line-47">     * @param indentCheck   the indentation check</span>
+<span class="source-line-no">048</span><span id="line-48">     * @param ast           the abstract syntax tree</span>
+<span class="source-line-no">049</span><span id="line-49">     * @param parent        the parent handler</span>
+<span class="source-line-no">050</span><span id="line-50">     */</span>
+<span class="source-line-no">051</span><span id="line-51">    public NewHandler(IndentationCheck indentCheck,</span>
+<span class="source-line-no">052</span><span id="line-52">                      DetailAST ast,</span>
+<span class="source-line-no">053</span><span id="line-53">                      AbstractExpressionHandler parent) {</span>
+<span class="source-line-no">054</span><span id="line-54">        super(indentCheck, "new", ast, parent);</span>
+<span class="source-line-no">055</span><span id="line-55">        mainAst = ast;</span>
+<span class="source-line-no">056</span><span id="line-56">    }</span>
+<span class="source-line-no">057</span><span id="line-57"></span>
+<span class="source-line-no">058</span><span id="line-58">    @Override</span>
+<span class="source-line-no">059</span><span id="line-59">    public void checkIndentation() {</span>
+<span class="source-line-no">060</span><span id="line-60">        // if new is on the line start and it is not the part of assignment.</span>
+<span class="source-line-no">061</span><span id="line-61">        if (isOnStartOfLine(mainAst)) {</span>
+<span class="source-line-no">062</span><span id="line-62">            final int columnNo = expandedTabsColumnNo(mainAst);</span>
+<span class="source-line-no">063</span><span id="line-63">            final IndentLevel level = getIndentImpl();</span>
+<span class="source-line-no">064</span><span id="line-64"></span>
+<span class="source-line-no">065</span><span id="line-65">            final boolean forceStrictCondition = getIndentCheck().isForceStrictCondition();</span>
+<span class="source-line-no">066</span><span id="line-66">            if (forceStrictCondition &amp;&amp; !level.isAcceptable(columnNo)</span>
+<span class="source-line-no">067</span><span id="line-67">                || !forceStrictCondition &amp;&amp; level.isGreaterThan(columnNo)) {</span>
+<span class="source-line-no">068</span><span id="line-68">                logError(mainAst, "", columnNo, level);</span>
+<span class="source-line-no">069</span><span id="line-69">            }</span>
+<span class="source-line-no">070</span><span id="line-70">        }</span>
+<span class="source-line-no">071</span><span id="line-71"></span>
+<span class="source-line-no">072</span><span id="line-72">        final DetailAST firstChild = mainAst.getFirstChild();</span>
+<span class="source-line-no">073</span><span id="line-73">        if (firstChild != null) {</span>
+<span class="source-line-no">074</span><span id="line-74">            checkExpressionSubtree(firstChild, getIndent(), false, false);</span>
+<span class="source-line-no">075</span><span id="line-75">        }</span>
+<span class="source-line-no">076</span><span id="line-76"></span>
+<span class="source-line-no">077</span><span id="line-77">        final DetailAST expression = mainAst.findFirstToken(TokenTypes.ELIST);</span>
+<span class="source-line-no">078</span><span id="line-78">        if (checkNestedNew(expression) &amp;&amp; isOnStartOfLine(expression)) {</span>
+<span class="source-line-no">079</span><span id="line-79">            final IndentLevel indentLevel = new IndentLevel(getIndent(),</span>
+<span class="source-line-no">080</span><span id="line-80">                    getLineWrappingIndent());</span>
+<span class="source-line-no">081</span><span id="line-81">            checkExpressionSubtree(expression, indentLevel, false, false);</span>
+<span class="source-line-no">082</span><span id="line-82">        }</span>
+<span class="source-line-no">083</span><span id="line-83"></span>
+<span class="source-line-no">084</span><span id="line-84">        final DetailAST lparen = mainAst.findFirstToken(TokenTypes.LPAREN);</span>
+<span class="source-line-no">085</span><span id="line-85">        checkLeftParen(lparen);</span>
+<span class="source-line-no">086</span><span id="line-86">    }</span>
+<span class="source-line-no">087</span><span id="line-87"></span>
+<span class="source-line-no">088</span><span id="line-88">    /**</span>
+<span class="source-line-no">089</span><span id="line-89">     * Check if nested {@code new} present.</span>
+<span class="source-line-no">090</span><span id="line-90">     *</span>
+<span class="source-line-no">091</span><span id="line-91">     * @param expression expression</span>
+<span class="source-line-no">092</span><span id="line-92">     *</span>
+<span class="source-line-no">093</span><span id="line-93">     * @return true if nested new is present.</span>
+<span class="source-line-no">094</span><span id="line-94">     */</span>
+<span class="source-line-no">095</span><span id="line-95">    public boolean checkNestedNew(DetailAST expression) {</span>
+<span class="source-line-no">096</span><span id="line-96">        boolean result = false;</span>
+<span class="source-line-no">097</span><span id="line-97">        if (expression != null &amp;&amp; expression.getFirstChild() != null) {</span>
+<span class="source-line-no">098</span><span id="line-98">            final boolean isNestedNewPresent = expression.getFirstChild()</span>
+<span class="source-line-no">099</span><span id="line-99">                .findFirstToken(TokenTypes.LITERAL_NEW) != null;</span>
+<span class="source-line-no">100</span><span id="line-100">            if (!isNestedNewPresent) {</span>
+<span class="source-line-no">101</span><span id="line-101">                result = true;</span>
+<span class="source-line-no">102</span><span id="line-102">            }</span>
 <span class="source-line-no">103</span><span id="line-103">        }</span>
-<span class="source-line-no">104</span><span id="line-104">        else {</span>
-<span class="source-line-no">105</span><span id="line-105">            offset = getLineWrappingIndent();</span>
-<span class="source-line-no">106</span><span id="line-106">        }</span>
-<span class="source-line-no">107</span><span id="line-107">        return new IndentLevel(getIndent(), offset);</span>
-<span class="source-line-no">108</span><span id="line-108">    }</span>
-<span class="source-line-no">109</span><span id="line-109"></span>
-<span class="source-line-no">110</span><span id="line-110">    @Override</span>
-<span class="source-line-no">111</span><span id="line-111">    protected IndentLevel getIndentImpl() {</span>
-<span class="source-line-no">112</span><span id="line-112">        IndentLevel result;</span>
-<span class="source-line-no">113</span><span id="line-113">        // if our expression isn't first on the line, just use the start</span>
-<span class="source-line-no">114</span><span id="line-114">        // of the line</span>
-<span class="source-line-no">115</span><span id="line-115">        if (getLineStart(mainAst) == mainAst.getColumnNo()) {</span>
-<span class="source-line-no">116</span><span id="line-116">            result = super.getIndentImpl();</span>
-<span class="source-line-no">117</span><span id="line-117"></span>
-<span class="source-line-no">118</span><span id="line-118">            final boolean isLineWrappedNew = TokenUtil.isOfType(mainAst.getParent().getParent(),</span>
-<span class="source-line-no">119</span><span id="line-119">                                        TokenTypes.ASSIGN, TokenTypes.LITERAL_RETURN);</span>
-<span class="source-line-no">120</span><span id="line-120"></span>
-<span class="source-line-no">121</span><span id="line-121">            if (isLineWrappedNew || doesChainedMethodNeedsLineWrapping()) {</span>
-<span class="source-line-no">122</span><span id="line-122">                result = new IndentLevel(result, getLineWrappingIndent());</span>
-<span class="source-line-no">123</span><span id="line-123">            }</span>
-<span class="source-line-no">124</span><span id="line-124">        }</span>
-<span class="source-line-no">125</span><span id="line-125">        else {</span>
-<span class="source-line-no">126</span><span id="line-126">            result = new IndentLevel(getLineStart(mainAst));</span>
-<span class="source-line-no">127</span><span id="line-127">        }</span>
-<span class="source-line-no">128</span><span id="line-128"></span>
-<span class="source-line-no">129</span><span id="line-129">        return result;</span>
-<span class="source-line-no">130</span><span id="line-130">    }</span>
+<span class="source-line-no">104</span><span id="line-104">        return result;</span>
+<span class="source-line-no">105</span><span id="line-105">    }</span>
+<span class="source-line-no">106</span><span id="line-106"></span>
+<span class="source-line-no">107</span><span id="line-107">    @Override</span>
+<span class="source-line-no">108</span><span id="line-108">    public IndentLevel getSuggestedChildIndent(AbstractExpressionHandler child) {</span>
+<span class="source-line-no">109</span><span id="line-109">        final int offset;</span>
+<span class="source-line-no">110</span><span id="line-110">        if (TokenUtil.isOfType(child.getMainAst(), TokenTypes.OBJBLOCK)) {</span>
+<span class="source-line-no">111</span><span id="line-111">            offset = getBasicOffset();</span>
+<span class="source-line-no">112</span><span id="line-112">        }</span>
+<span class="source-line-no">113</span><span id="line-113">        else {</span>
+<span class="source-line-no">114</span><span id="line-114">            offset = getLineWrappingIndent();</span>
+<span class="source-line-no">115</span><span id="line-115">        }</span>
+<span class="source-line-no">116</span><span id="line-116">        return new IndentLevel(getIndent(), offset);</span>
+<span class="source-line-no">117</span><span id="line-117">    }</span>
+<span class="source-line-no">118</span><span id="line-118"></span>
+<span class="source-line-no">119</span><span id="line-119">    @Override</span>
+<span class="source-line-no">120</span><span id="line-120">    protected IndentLevel getIndentImpl() {</span>
+<span class="source-line-no">121</span><span id="line-121">        IndentLevel result;</span>
+<span class="source-line-no">122</span><span id="line-122">        // if our expression isn't first on the line, just use the start</span>
+<span class="source-line-no">123</span><span id="line-123">        // of the line</span>
+<span class="source-line-no">124</span><span id="line-124">        if (getLineStart(mainAst) == mainAst.getColumnNo()) {</span>
+<span class="source-line-no">125</span><span id="line-125">            result = super.getIndentImpl();</span>
+<span class="source-line-no">126</span><span id="line-126"></span>
+<span class="source-line-no">127</span><span id="line-127">            final boolean isLineWrappedNew = TokenUtil.isOfType(mainAst.getParent().getParent(),</span>
+<span class="source-line-no">128</span><span id="line-128">                LINE_WRAP_NEW_PARENT_TYPES);</span>
+<span class="source-line-no">129</span><span id="line-129"></span>
+<span class="source-line-no">130</span><span id="line-130">            final int ternaryLevel = getTernaryNestingLevel();</span>
 <span class="source-line-no">131</span><span id="line-131"></span>
-<span class="source-line-no">132</span><span id="line-132">    /**</span>
-<span class="source-line-no">133</span><span id="line-133">     * A shortcut for {@code IndentationCheck} property.</span>
-<span class="source-line-no">134</span><span id="line-134">     *</span>
-<span class="source-line-no">135</span><span id="line-135">     * @return value of lineWrappingIndentation property</span>
-<span class="source-line-no">136</span><span id="line-136">     *         of {@code IndentationCheck}</span>
-<span class="source-line-no">137</span><span id="line-137">     */</span>
-<span class="source-line-no">138</span><span id="line-138">    private int getLineWrappingIndent() {</span>
-<span class="source-line-no">139</span><span id="line-139">        return getIndentCheck().getLineWrappingIndentation();</span>
-<span class="source-line-no">140</span><span id="line-140">    }</span>
-<span class="source-line-no">141</span><span id="line-141"></span>
-<span class="source-line-no">142</span><span id="line-142">    @Override</span>
-<span class="source-line-no">143</span><span id="line-143">    protected boolean shouldIncreaseIndent() {</span>
-<span class="source-line-no">144</span><span id="line-144">        return false;</span>
-<span class="source-line-no">145</span><span id="line-145">    }</span>
-<span class="source-line-no">146</span><span id="line-146"></span>
-<span class="source-line-no">147</span><span id="line-147">    /**</span>
-<span class="source-line-no">148</span><span id="line-148">     * The function checks if the new keyword is a child of chained method calls,</span>
-<span class="source-line-no">149</span><span id="line-149">     * it checks if the new is directly followed by equal operator or return operator.</span>
-<span class="source-line-no">150</span><span id="line-150">     *</span>
-<span class="source-line-no">151</span><span id="line-151">     * @return true if the new it is chained method calls and new keyword is directly followed</span>
-<span class="source-line-no">152</span><span id="line-152">     *         by assign or return</span>
-<span class="source-line-no">153</span><span id="line-153">     */</span>
-<span class="source-line-no">154</span><span id="line-154">    private boolean doesChainedMethodNeedsLineWrapping() {</span>
-<span class="source-line-no">155</span><span id="line-155">        DetailAST ast = mainAst.getParent();</span>
-<span class="source-line-no">156</span><span id="line-156"></span>
-<span class="source-line-no">157</span><span id="line-157">        while (TokenUtil.isOfType(ast, TokenTypes.DOT, TokenTypes.METHOD_CALL, TokenTypes.EXPR)) {</span>
-<span class="source-line-no">158</span><span id="line-158">            ast = ast.getParent();</span>
-<span class="source-line-no">159</span><span id="line-159">        }</span>
-<span class="source-line-no">160</span><span id="line-160"></span>
-<span class="source-line-no">161</span><span id="line-161">        return TokenUtil.isOfType(ast, TokenTypes.ASSIGN, TokenTypes.LITERAL_RETURN);</span>
+<span class="source-line-no">132</span><span id="line-132">            if (isLineWrappedNew || doesNewNeedLineWrappingIndent()) {</span>
+<span class="source-line-no">133</span><span id="line-133">                result = new IndentLevel(result, getLineWrappingIndent());</span>
+<span class="source-line-no">134</span><span id="line-134">            }</span>
+<span class="source-line-no">135</span><span id="line-135"></span>
+<span class="source-line-no">136</span><span id="line-136">            if (ternaryLevel &gt;= 2) {</span>
+<span class="source-line-no">137</span><span id="line-137">                for (int idx = 1; idx &lt; ternaryLevel; idx++) {</span>
+<span class="source-line-no">138</span><span id="line-138">                    result = new IndentLevel(result, getLineWrappingIndent());</span>
+<span class="source-line-no">139</span><span id="line-139">                }</span>
+<span class="source-line-no">140</span><span id="line-140">            }</span>
+<span class="source-line-no">141</span><span id="line-141">        }</span>
+<span class="source-line-no">142</span><span id="line-142">        else {</span>
+<span class="source-line-no">143</span><span id="line-143">            result = new IndentLevel(getLineStart(mainAst));</span>
+<span class="source-line-no">144</span><span id="line-144">        }</span>
+<span class="source-line-no">145</span><span id="line-145"></span>
+<span class="source-line-no">146</span><span id="line-146">        return result;</span>
+<span class="source-line-no">147</span><span id="line-147">    }</span>
+<span class="source-line-no">148</span><span id="line-148"></span>
+<span class="source-line-no">149</span><span id="line-149">    /**</span>
+<span class="source-line-no">150</span><span id="line-150">     * A shortcut for {@code IndentationCheck} property.</span>
+<span class="source-line-no">151</span><span id="line-151">     *</span>
+<span class="source-line-no">152</span><span id="line-152">     * @return value of lineWrappingIndentation property</span>
+<span class="source-line-no">153</span><span id="line-153">     *         of {@code IndentationCheck}</span>
+<span class="source-line-no">154</span><span id="line-154">     */</span>
+<span class="source-line-no">155</span><span id="line-155">    private int getLineWrappingIndent() {</span>
+<span class="source-line-no">156</span><span id="line-156">        return getIndentCheck().getLineWrappingIndentation();</span>
+<span class="source-line-no">157</span><span id="line-157">    }</span>
+<span class="source-line-no">158</span><span id="line-158"></span>
+<span class="source-line-no">159</span><span id="line-159">    @Override</span>
+<span class="source-line-no">160</span><span id="line-160">    protected boolean shouldIncreaseIndent() {</span>
+<span class="source-line-no">161</span><span id="line-161">        return false;</span>
 <span class="source-line-no">162</span><span id="line-162">    }</span>
 <span class="source-line-no">163</span><span id="line-163"></span>
-<span class="source-line-no">164</span><span id="line-164">}</span>
+<span class="source-line-no">164</span><span id="line-164">    /**</span>
+<span class="source-line-no">165</span><span id="line-165">     * Checks if the new keyword needs line wrapping indentation.</span>
+<span class="source-line-no">166</span><span id="line-166">     * This applies when new is within an assignment, return, throw, or ternary operator</span>
+<span class="source-line-no">167</span><span id="line-167">     * (where the ternary is part of an assignment, return, or throw statement).</span>
+<span class="source-line-no">168</span><span id="line-168">     *</span>
+<span class="source-line-no">169</span><span id="line-169">     * @return true if the new keyword needs line wrapping indentation</span>
+<span class="source-line-no">170</span><span id="line-170">     */</span>
+<span class="source-line-no">171</span><span id="line-171">    private boolean doesNewNeedLineWrappingIndent() {</span>
+<span class="source-line-no">172</span><span id="line-172">        DetailAST ast = mainAst.getParent();</span>
+<span class="source-line-no">173</span><span id="line-173"></span>
+<span class="source-line-no">174</span><span id="line-174">        while (TokenUtil.isOfType(ast, TokenTypes.DOT, TokenTypes.METHOD_CALL, TokenTypes.EXPR)) {</span>
+<span class="source-line-no">175</span><span id="line-175">            ast = ast.getParent();</span>
+<span class="source-line-no">176</span><span id="line-176">        }</span>
+<span class="source-line-no">177</span><span id="line-177"></span>
+<span class="source-line-no">178</span><span id="line-178">        return TokenUtil.isOfType(ast, LINE_WRAP_NEW_PARENT_TYPES)</span>
+<span class="source-line-no">179</span><span id="line-179">                || ast.getType() == TokenTypes.QUESTION &amp;&amp; isParentAssignReturnOrThrow(ast);</span>
+<span class="source-line-no">180</span><span id="line-180">    }</span>
+<span class="source-line-no">181</span><span id="line-181"></span>
+<span class="source-line-no">182</span><span id="line-182">    /**</span>
+<span class="source-line-no">183</span><span id="line-183">     * Checks if the parent of the given AST is an assignment, return or throw statement.</span>
+<span class="source-line-no">184</span><span id="line-184">     *</span>
+<span class="source-line-no">185</span><span id="line-185">     * @param ast the AST node to check</span>
+<span class="source-line-no">186</span><span id="line-186">     * @return true if the parent is ASSIGN, LITERAL_RETURN or LITERAL_THROW</span>
+<span class="source-line-no">187</span><span id="line-187">     */</span>
+<span class="source-line-no">188</span><span id="line-188">    private static boolean isParentAssignReturnOrThrow(DetailAST ast) {</span>
+<span class="source-line-no">189</span><span id="line-189">        DetailAST parent = ast.getParent();</span>
+<span class="source-line-no">190</span><span id="line-190">        while (TokenUtil.isOfType(parent, TokenTypes.EXPR, TokenTypes.QUESTION)) {</span>
+<span class="source-line-no">191</span><span id="line-191">            parent = parent.getParent();</span>
+<span class="source-line-no">192</span><span id="line-192">        }</span>
+<span class="source-line-no">193</span><span id="line-193">        return TokenUtil.isOfType(parent, LINE_WRAP_NEW_PARENT_TYPES);</span>
+<span class="source-line-no">194</span><span id="line-194">    }</span>
+<span class="source-line-no">195</span><span id="line-195"></span>
+<span class="source-line-no">196</span><span id="line-196">    /**</span>
+<span class="source-line-no">197</span><span id="line-197">     * Counts how many ternary operator levels the new keyword is nested in,</span>
+<span class="source-line-no">198</span><span id="line-198">     * where the outermost ternary is part of an assignment, return, or throw.</span>
+<span class="source-line-no">199</span><span id="line-199">     *</span>
+<span class="source-line-no">200</span><span id="line-200">     * @return the number of ternary nesting levels, or 0 if not in a valid ternary context</span>
+<span class="source-line-no">201</span><span id="line-201">     */</span>
+<span class="source-line-no">202</span><span id="line-202">    private int getTernaryNestingLevel() {</span>
+<span class="source-line-no">203</span><span id="line-203">        DetailAST ast = mainAst.getParent();</span>
+<span class="source-line-no">204</span><span id="line-204"></span>
+<span class="source-line-no">205</span><span id="line-205">        while (TokenUtil.isOfType(ast, TokenTypes.DOT, TokenTypes.METHOD_CALL, TokenTypes.EXPR)) {</span>
+<span class="source-line-no">206</span><span id="line-206">            ast = ast.getParent();</span>
+<span class="source-line-no">207</span><span id="line-207">        }</span>
+<span class="source-line-no">208</span><span id="line-208"></span>
+<span class="source-line-no">209</span><span id="line-209">        int level = 0;</span>
+<span class="source-line-no">210</span><span id="line-210">        while (ast.getType() == TokenTypes.QUESTION) {</span>
+<span class="source-line-no">211</span><span id="line-211">            level++;</span>
+<span class="source-line-no">212</span><span id="line-212">            do {</span>
+<span class="source-line-no">213</span><span id="line-213">                ast = ast.getParent();</span>
+<span class="source-line-no">214</span><span id="line-214">            } while (ast.getType() == TokenTypes.EXPR);</span>
+<span class="source-line-no">215</span><span id="line-215">        }</span>
+<span class="source-line-no">216</span><span id="line-216"></span>
+<span class="source-line-no">217</span><span id="line-217">        int result = 0;</span>
+<span class="source-line-no">218</span><span id="line-218">        if (TokenUtil.isOfType(ast, LINE_WRAP_NEW_PARENT_TYPES)) {</span>
+<span class="source-line-no">219</span><span id="line-219">            result = level;</span>
+<span class="source-line-no">220</span><span id="line-220">        }</span>
+<span class="source-line-no">221</span><span id="line-221"></span>
+<span class="source-line-no">222</span><span id="line-222">        return result;</span>
+<span class="source-line-no">223</span><span id="line-223">    }</span>
+<span class="source-line-no">224</span><span id="line-224"></span>
+<span class="source-line-no">225</span><span id="line-225">}</span>
 
 
 

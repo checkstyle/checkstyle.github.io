@@ -36,551 +36,785 @@
 <span class="source-line-no">023</span><span id="line-23">import java.util.ArrayList;</span>
 <span class="source-line-no">024</span><span id="line-24">import java.util.Arrays;</span>
 <span class="source-line-no">025</span><span id="line-25">import java.util.Collection;</span>
-<span class="source-line-no">026</span><span id="line-26">import java.util.List;</span>
-<span class="source-line-no">027</span><span id="line-27">import java.util.Optional;</span>
-<span class="source-line-no">028</span><span id="line-28">import java.util.Set;</span>
-<span class="source-line-no">029</span><span id="line-29">import java.util.function.Predicate;</span>
-<span class="source-line-no">030</span><span id="line-30">import java.util.regex.Pattern;</span>
-<span class="source-line-no">031</span><span id="line-31">import java.util.stream.Collectors;</span>
-<span class="source-line-no">032</span><span id="line-32">import java.util.stream.Stream;</span>
-<span class="source-line-no">033</span><span id="line-33"></span>
-<span class="source-line-no">034</span><span id="line-34">import com.puppycrawl.tools.checkstyle.api.DetailAST;</span>
-<span class="source-line-no">035</span><span id="line-35">import com.puppycrawl.tools.checkstyle.api.FullIdent;</span>
-<span class="source-line-no">036</span><span id="line-36">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</span>
-<span class="source-line-no">037</span><span id="line-37">import com.puppycrawl.tools.checkstyle.checks.naming.AccessModifierOption;</span>
-<span class="source-line-no">038</span><span id="line-38"></span>
-<span class="source-line-no">039</span><span id="line-39">/**</span>
-<span class="source-line-no">040</span><span id="line-40"> * Contains utility methods for the checks.</span>
-<span class="source-line-no">041</span><span id="line-41"> *</span>
-<span class="source-line-no">042</span><span id="line-42"> */</span>
-<span class="source-line-no">043</span><span id="line-43">public final class CheckUtil {</span>
-<span class="source-line-no">044</span><span id="line-44"></span>
-<span class="source-line-no">045</span><span id="line-45">    // constants for parseDouble()</span>
-<span class="source-line-no">046</span><span id="line-46">    /** Binary radix. */</span>
-<span class="source-line-no">047</span><span id="line-47">    private static final int BASE_2 = 2;</span>
-<span class="source-line-no">048</span><span id="line-48"></span>
-<span class="source-line-no">049</span><span id="line-49">    /** Octal radix. */</span>
-<span class="source-line-no">050</span><span id="line-50">    private static final int BASE_8 = 8;</span>
-<span class="source-line-no">051</span><span id="line-51"></span>
-<span class="source-line-no">052</span><span id="line-52">    /** Decimal radix. */</span>
-<span class="source-line-no">053</span><span id="line-53">    private static final int BASE_10 = 10;</span>
-<span class="source-line-no">054</span><span id="line-54"></span>
-<span class="source-line-no">055</span><span id="line-55">    /** Hex radix. */</span>
-<span class="source-line-no">056</span><span id="line-56">    private static final int BASE_16 = 16;</span>
-<span class="source-line-no">057</span><span id="line-57"></span>
-<span class="source-line-no">058</span><span id="line-58">    /** Pattern matching underscore characters ('_'). */</span>
-<span class="source-line-no">059</span><span id="line-59">    private static final Pattern UNDERSCORE_PATTERN = Pattern.compile("_");</span>
-<span class="source-line-no">060</span><span id="line-60"></span>
-<span class="source-line-no">061</span><span id="line-61">    /** Compiled pattern for all system newlines. */</span>
-<span class="source-line-no">062</span><span id="line-62">    private static final Pattern ALL_NEW_LINES = Pattern.compile("\\R");</span>
-<span class="source-line-no">063</span><span id="line-63"></span>
-<span class="source-line-no">064</span><span id="line-64">    /** Package separator. */</span>
-<span class="source-line-no">065</span><span id="line-65">    private static final char PACKAGE_SEPARATOR = '.';</span>
-<span class="source-line-no">066</span><span id="line-66"></span>
-<span class="source-line-no">067</span><span id="line-67">    /** Prevent instances. */</span>
-<span class="source-line-no">068</span><span id="line-68">    private CheckUtil() {</span>
-<span class="source-line-no">069</span><span id="line-69">    }</span>
-<span class="source-line-no">070</span><span id="line-70"></span>
-<span class="source-line-no">071</span><span id="line-71">    /**</span>
-<span class="source-line-no">072</span><span id="line-72">     * Tests whether a method definition AST defines an equals covariant.</span>
-<span class="source-line-no">073</span><span id="line-73">     *</span>
-<span class="source-line-no">074</span><span id="line-74">     * @param ast the method definition AST to test.</span>
-<span class="source-line-no">075</span><span id="line-75">     *     Precondition: ast is a TokenTypes.METHOD_DEF node.</span>
-<span class="source-line-no">076</span><span id="line-76">     * @return true if ast defines an equals covariant.</span>
-<span class="source-line-no">077</span><span id="line-77">     */</span>
-<span class="source-line-no">078</span><span id="line-78">    public static boolean isEqualsMethod(DetailAST ast) {</span>
-<span class="source-line-no">079</span><span id="line-79">        boolean equalsMethod = false;</span>
-<span class="source-line-no">080</span><span id="line-80"></span>
-<span class="source-line-no">081</span><span id="line-81">        if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
-<span class="source-line-no">082</span><span id="line-82">            final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="source-line-no">083</span><span id="line-83">            final boolean staticOrAbstract =</span>
-<span class="source-line-no">084</span><span id="line-84">                    modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null</span>
-<span class="source-line-no">085</span><span id="line-85">                    || modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</span>
-<span class="source-line-no">086</span><span id="line-86"></span>
-<span class="source-line-no">087</span><span id="line-87">            if (!staticOrAbstract) {</span>
-<span class="source-line-no">088</span><span id="line-88">                final DetailAST nameNode = ast.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">089</span><span id="line-89">                final String name = nameNode.getText();</span>
-<span class="source-line-no">090</span><span id="line-90"></span>
-<span class="source-line-no">091</span><span id="line-91">                if ("equals".equals(name)) {</span>
-<span class="source-line-no">092</span><span id="line-92">                    // one parameter?</span>
-<span class="source-line-no">093</span><span id="line-93">                    final DetailAST paramsNode = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
-<span class="source-line-no">094</span><span id="line-94">                    equalsMethod = paramsNode.getChildCount() == 1;</span>
-<span class="source-line-no">095</span><span id="line-95">                }</span>
-<span class="source-line-no">096</span><span id="line-96">            }</span>
-<span class="source-line-no">097</span><span id="line-97">        }</span>
-<span class="source-line-no">098</span><span id="line-98">        return equalsMethod;</span>
-<span class="source-line-no">099</span><span id="line-99">    }</span>
-<span class="source-line-no">100</span><span id="line-100"></span>
-<span class="source-line-no">101</span><span id="line-101">    /**</span>
-<span class="source-line-no">102</span><span id="line-102">     * Returns the value represented by the specified string of the specified</span>
-<span class="source-line-no">103</span><span id="line-103">     * type. Returns 0 for types other than float, double, int, and long.</span>
-<span class="source-line-no">104</span><span id="line-104">     *</span>
-<span class="source-line-no">105</span><span id="line-105">     * @param text the string to be parsed.</span>
-<span class="source-line-no">106</span><span id="line-106">     * @param type the token type of the text. Should be a constant of</span>
-<span class="source-line-no">107</span><span id="line-107">     *     {@link TokenTypes}.</span>
-<span class="source-line-no">108</span><span id="line-108">     * @return the double value represented by the string argument.</span>
-<span class="source-line-no">109</span><span id="line-109">     */</span>
-<span class="source-line-no">110</span><span id="line-110">    public static double parseDouble(String text, int type) {</span>
-<span class="source-line-no">111</span><span id="line-111">        String txt = UNDERSCORE_PATTERN.matcher(text).replaceAll("");</span>
-<span class="source-line-no">112</span><span id="line-112"></span>
-<span class="source-line-no">113</span><span id="line-113">        return switch (type) {</span>
-<span class="source-line-no">114</span><span id="line-114">            case TokenTypes.NUM_FLOAT, TokenTypes.NUM_DOUBLE -&gt; Double.parseDouble(txt);</span>
-<span class="source-line-no">115</span><span id="line-115"></span>
-<span class="source-line-no">116</span><span id="line-116">            case TokenTypes.NUM_INT, TokenTypes.NUM_LONG -&gt; {</span>
-<span class="source-line-no">117</span><span id="line-117">                int radix = BASE_10;</span>
-<span class="source-line-no">118</span><span id="line-118">                if (txt.startsWith("0x") || txt.startsWith("0X")) {</span>
-<span class="source-line-no">119</span><span id="line-119">                    radix = BASE_16;</span>
-<span class="source-line-no">120</span><span id="line-120">                    txt = txt.substring(2);</span>
-<span class="source-line-no">121</span><span id="line-121">                }</span>
-<span class="source-line-no">122</span><span id="line-122">                else if (txt.startsWith("0b") || txt.startsWith("0B")) {</span>
-<span class="source-line-no">123</span><span id="line-123">                    radix = BASE_2;</span>
-<span class="source-line-no">124</span><span id="line-124">                    txt = txt.substring(2);</span>
-<span class="source-line-no">125</span><span id="line-125">                }</span>
-<span class="source-line-no">126</span><span id="line-126">                else if (txt.startsWith("0")) {</span>
-<span class="source-line-no">127</span><span id="line-127">                    radix = BASE_8;</span>
-<span class="source-line-no">128</span><span id="line-128">                }</span>
-<span class="source-line-no">129</span><span id="line-129">                yield parseNumber(txt, radix, type);</span>
-<span class="source-line-no">130</span><span id="line-130">            }</span>
-<span class="source-line-no">131</span><span id="line-131"></span>
-<span class="source-line-no">132</span><span id="line-132">            default -&gt; Double.NaN;</span>
-<span class="source-line-no">133</span><span id="line-133">        };</span>
-<span class="source-line-no">134</span><span id="line-134">    }</span>
-<span class="source-line-no">135</span><span id="line-135"></span>
-<span class="source-line-no">136</span><span id="line-136">    /**</span>
-<span class="source-line-no">137</span><span id="line-137">     * Parses the string argument as an integer or a long in the radix specified by</span>
-<span class="source-line-no">138</span><span id="line-138">     * the second argument. The characters in the string must all be digits of</span>
-<span class="source-line-no">139</span><span id="line-139">     * the specified radix.</span>
-<span class="source-line-no">140</span><span id="line-140">     *</span>
-<span class="source-line-no">141</span><span id="line-141">     * @param text the String containing the integer representation to be</span>
-<span class="source-line-no">142</span><span id="line-142">     *     parsed. Precondition: text contains a parsable int.</span>
-<span class="source-line-no">143</span><span id="line-143">     * @param radix the radix to be used while parsing text.</span>
-<span class="source-line-no">144</span><span id="line-144">     * @param type the token type of the text. Should be a constant of</span>
-<span class="source-line-no">145</span><span id="line-145">     *     {@link TokenTypes}.</span>
-<span class="source-line-no">146</span><span id="line-146">     * @return the number represented by the string argument in the specified radix.</span>
-<span class="source-line-no">147</span><span id="line-147">     */</span>
-<span class="source-line-no">148</span><span id="line-148">    private static double parseNumber(final String text, final int radix, final int type) {</span>
-<span class="source-line-no">149</span><span id="line-149">        String txt = text;</span>
-<span class="source-line-no">150</span><span id="line-150">        if (txt.endsWith("L") || txt.endsWith("l")) {</span>
-<span class="source-line-no">151</span><span id="line-151">            txt = txt.substring(0, txt.length() - 1);</span>
-<span class="source-line-no">152</span><span id="line-152">        }</span>
-<span class="source-line-no">153</span><span id="line-153">        final double result;</span>
-<span class="source-line-no">154</span><span id="line-154"></span>
-<span class="source-line-no">155</span><span id="line-155">        final boolean negative = txt.charAt(0) == '-';</span>
-<span class="source-line-no">156</span><span id="line-156">        if (type == TokenTypes.NUM_INT) {</span>
-<span class="source-line-no">157</span><span id="line-157">            if (negative) {</span>
-<span class="source-line-no">158</span><span id="line-158">                result = Integer.parseInt(txt, radix);</span>
-<span class="source-line-no">159</span><span id="line-159">            }</span>
-<span class="source-line-no">160</span><span id="line-160">            else {</span>
-<span class="source-line-no">161</span><span id="line-161">                result = Integer.parseUnsignedInt(txt, radix);</span>
-<span class="source-line-no">162</span><span id="line-162">            }</span>
-<span class="source-line-no">163</span><span id="line-163">        }</span>
-<span class="source-line-no">164</span><span id="line-164">        else {</span>
-<span class="source-line-no">165</span><span id="line-165">            if (negative) {</span>
-<span class="source-line-no">166</span><span id="line-166">                result = Long.parseLong(txt, radix);</span>
-<span class="source-line-no">167</span><span id="line-167">            }</span>
-<span class="source-line-no">168</span><span id="line-168">            else {</span>
-<span class="source-line-no">169</span><span id="line-169">                result = Long.parseUnsignedLong(txt, radix);</span>
-<span class="source-line-no">170</span><span id="line-170">            }</span>
-<span class="source-line-no">171</span><span id="line-171">        }</span>
-<span class="source-line-no">172</span><span id="line-172"></span>
-<span class="source-line-no">173</span><span id="line-173">        return result;</span>
-<span class="source-line-no">174</span><span id="line-174">    }</span>
-<span class="source-line-no">175</span><span id="line-175"></span>
-<span class="source-line-no">176</span><span id="line-176">    /**</span>
-<span class="source-line-no">177</span><span id="line-177">     * Finds sub-node for given node minimal (line, column) pair.</span>
-<span class="source-line-no">178</span><span id="line-178">     *</span>
-<span class="source-line-no">179</span><span id="line-179">     * @param node the root of tree for search.</span>
-<span class="source-line-no">180</span><span id="line-180">     * @return sub-node with minimal (line, column) pair.</span>
-<span class="source-line-no">181</span><span id="line-181">     */</span>
-<span class="source-line-no">182</span><span id="line-182">    public static DetailAST getFirstNode(final DetailAST node) {</span>
-<span class="source-line-no">183</span><span id="line-183">        DetailAST currentNode = node;</span>
-<span class="source-line-no">184</span><span id="line-184">        DetailAST child = node.getFirstChild();</span>
-<span class="source-line-no">185</span><span id="line-185">        while (child != null) {</span>
-<span class="source-line-no">186</span><span id="line-186">            final DetailAST newNode = getFirstNode(child);</span>
-<span class="source-line-no">187</span><span id="line-187">            if (isBeforeInSource(newNode, currentNode)) {</span>
-<span class="source-line-no">188</span><span id="line-188">                currentNode = newNode;</span>
-<span class="source-line-no">189</span><span id="line-189">            }</span>
-<span class="source-line-no">190</span><span id="line-190">            child = child.getNextSibling();</span>
-<span class="source-line-no">191</span><span id="line-191">        }</span>
-<span class="source-line-no">192</span><span id="line-192"></span>
-<span class="source-line-no">193</span><span id="line-193">        return currentNode;</span>
-<span class="source-line-no">194</span><span id="line-194">    }</span>
-<span class="source-line-no">195</span><span id="line-195"></span>
-<span class="source-line-no">196</span><span id="line-196">    /**</span>
-<span class="source-line-no">197</span><span id="line-197">     * Retrieves whether ast1 is located before ast2.</span>
-<span class="source-line-no">198</span><span id="line-198">     *</span>
-<span class="source-line-no">199</span><span id="line-199">     * @param ast1 the first node.</span>
-<span class="source-line-no">200</span><span id="line-200">     * @param ast2 the second node.</span>
-<span class="source-line-no">201</span><span id="line-201">     * @return true, if ast1 is located before ast2.</span>
-<span class="source-line-no">202</span><span id="line-202">     */</span>
-<span class="source-line-no">203</span><span id="line-203">    public static boolean isBeforeInSource(DetailAST ast1, DetailAST ast2) {</span>
-<span class="source-line-no">204</span><span id="line-204">        return ast1.getLineNo() &lt; ast2.getLineNo()</span>
-<span class="source-line-no">205</span><span id="line-205">            || TokenUtil.areOnSameLine(ast1, ast2)</span>
-<span class="source-line-no">206</span><span id="line-206">                &amp;&amp; ast1.getColumnNo() &lt; ast2.getColumnNo();</span>
-<span class="source-line-no">207</span><span id="line-207">    }</span>
-<span class="source-line-no">208</span><span id="line-208"></span>
-<span class="source-line-no">209</span><span id="line-209">    /**</span>
-<span class="source-line-no">210</span><span id="line-210">     * Retrieves the names of the type parameters to the node.</span>
-<span class="source-line-no">211</span><span id="line-211">     *</span>
-<span class="source-line-no">212</span><span id="line-212">     * @param node the parameterized AST node</span>
-<span class="source-line-no">213</span><span id="line-213">     * @return a list of type parameter names</span>
-<span class="source-line-no">214</span><span id="line-214">     */</span>
-<span class="source-line-no">215</span><span id="line-215">    public static List&lt;String&gt; getTypeParameterNames(final DetailAST node) {</span>
-<span class="source-line-no">216</span><span id="line-216">        final DetailAST typeParameters =</span>
-<span class="source-line-no">217</span><span id="line-217">            node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
-<span class="source-line-no">218</span><span id="line-218"></span>
-<span class="source-line-no">219</span><span id="line-219">        final List&lt;String&gt; typeParameterNames = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">220</span><span id="line-220">        if (typeParameters != null) {</span>
-<span class="source-line-no">221</span><span id="line-221">            final DetailAST typeParam =</span>
-<span class="source-line-no">222</span><span id="line-222">                typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
-<span class="source-line-no">223</span><span id="line-223">            typeParameterNames.add(</span>
-<span class="source-line-no">224</span><span id="line-224">                    typeParam.findFirstToken(TokenTypes.IDENT).getText());</span>
-<span class="source-line-no">225</span><span id="line-225"></span>
-<span class="source-line-no">226</span><span id="line-226">            DetailAST sibling = typeParam.getNextSibling();</span>
-<span class="source-line-no">227</span><span id="line-227">            while (sibling != null) {</span>
-<span class="source-line-no">228</span><span id="line-228">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
-<span class="source-line-no">229</span><span id="line-229">                    typeParameterNames.add(</span>
-<span class="source-line-no">230</span><span id="line-230">                            sibling.findFirstToken(TokenTypes.IDENT).getText());</span>
-<span class="source-line-no">231</span><span id="line-231">                }</span>
-<span class="source-line-no">232</span><span id="line-232">                sibling = sibling.getNextSibling();</span>
-<span class="source-line-no">233</span><span id="line-233">            }</span>
-<span class="source-line-no">234</span><span id="line-234">        }</span>
-<span class="source-line-no">235</span><span id="line-235"></span>
-<span class="source-line-no">236</span><span id="line-236">        return typeParameterNames;</span>
-<span class="source-line-no">237</span><span id="line-237">    }</span>
-<span class="source-line-no">238</span><span id="line-238"></span>
-<span class="source-line-no">239</span><span id="line-239">    /**</span>
-<span class="source-line-no">240</span><span id="line-240">     * Retrieves the type parameters to the node.</span>
-<span class="source-line-no">241</span><span id="line-241">     *</span>
-<span class="source-line-no">242</span><span id="line-242">     * @param node the parameterized AST node</span>
-<span class="source-line-no">243</span><span id="line-243">     * @return a list of type parameter names</span>
-<span class="source-line-no">244</span><span id="line-244">     */</span>
-<span class="source-line-no">245</span><span id="line-245">    public static List&lt;DetailAST&gt; getTypeParameters(final DetailAST node) {</span>
-<span class="source-line-no">246</span><span id="line-246">        final DetailAST typeParameters =</span>
-<span class="source-line-no">247</span><span id="line-247">            node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
-<span class="source-line-no">248</span><span id="line-248"></span>
-<span class="source-line-no">249</span><span id="line-249">        final List&lt;DetailAST&gt; typeParams = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">250</span><span id="line-250">        if (typeParameters != null) {</span>
-<span class="source-line-no">251</span><span id="line-251">            final DetailAST typeParam =</span>
-<span class="source-line-no">252</span><span id="line-252">                typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
-<span class="source-line-no">253</span><span id="line-253">            typeParams.add(typeParam);</span>
-<span class="source-line-no">254</span><span id="line-254"></span>
-<span class="source-line-no">255</span><span id="line-255">            DetailAST sibling = typeParam.getNextSibling();</span>
-<span class="source-line-no">256</span><span id="line-256">            while (sibling != null) {</span>
-<span class="source-line-no">257</span><span id="line-257">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
-<span class="source-line-no">258</span><span id="line-258">                    typeParams.add(sibling);</span>
-<span class="source-line-no">259</span><span id="line-259">                }</span>
-<span class="source-line-no">260</span><span id="line-260">                sibling = sibling.getNextSibling();</span>
-<span class="source-line-no">261</span><span id="line-261">            }</span>
-<span class="source-line-no">262</span><span id="line-262">        }</span>
-<span class="source-line-no">263</span><span id="line-263"></span>
-<span class="source-line-no">264</span><span id="line-264">        return typeParams;</span>
-<span class="source-line-no">265</span><span id="line-265">    }</span>
-<span class="source-line-no">266</span><span id="line-266"></span>
-<span class="source-line-no">267</span><span id="line-267">    /**</span>
-<span class="source-line-no">268</span><span id="line-268">     * Checks whether a method is a not void one.</span>
-<span class="source-line-no">269</span><span id="line-269">     *</span>
-<span class="source-line-no">270</span><span id="line-270">     * @param methodDefAst the method node.</span>
-<span class="source-line-no">271</span><span id="line-271">     * @return true if method is a not void one.</span>
-<span class="source-line-no">272</span><span id="line-272">     */</span>
-<span class="source-line-no">273</span><span id="line-273">    public static boolean isNonVoidMethod(DetailAST methodDefAst) {</span>
-<span class="source-line-no">274</span><span id="line-274">        boolean returnValue = false;</span>
-<span class="source-line-no">275</span><span id="line-275">        if (methodDefAst.getType() == TokenTypes.METHOD_DEF) {</span>
-<span class="source-line-no">276</span><span id="line-276">            final DetailAST typeAST = methodDefAst.findFirstToken(TokenTypes.TYPE);</span>
-<span class="source-line-no">277</span><span id="line-277">            if (typeAST.findFirstToken(TokenTypes.LITERAL_VOID) == null) {</span>
-<span class="source-line-no">278</span><span id="line-278">                returnValue = true;</span>
-<span class="source-line-no">279</span><span id="line-279">            }</span>
-<span class="source-line-no">280</span><span id="line-280">        }</span>
-<span class="source-line-no">281</span><span id="line-281">        return returnValue;</span>
-<span class="source-line-no">282</span><span id="line-282">    }</span>
-<span class="source-line-no">283</span><span id="line-283"></span>
-<span class="source-line-no">284</span><span id="line-284">    /**</span>
-<span class="source-line-no">285</span><span id="line-285">     * Checks whether a parameter is a receiver.</span>
-<span class="source-line-no">286</span><span id="line-286">     *</span>
-<span class="source-line-no">287</span><span id="line-287">     * &lt;p&gt;A receiver parameter is a special parameter that</span>
-<span class="source-line-no">288</span><span id="line-288">     * represents the object for which the method is invoked.</span>
-<span class="source-line-no">289</span><span id="line-289">     * It is denoted by the reserved keyword {@code this}</span>
-<span class="source-line-no">290</span><span id="line-290">     * in the method declaration. Check</span>
-<span class="source-line-no">291</span><span id="line-291">     * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#PARAMETER_DEF"&gt;</span>
-<span class="source-line-no">292</span><span id="line-292">     * PARAMETER_DEF&lt;/a&gt;</span>
-<span class="source-line-no">293</span><span id="line-293">     * &lt;/p&gt;</span>
-<span class="source-line-no">294</span><span id="line-294">     *</span>
-<span class="source-line-no">295</span><span id="line-295">     * @param parameterDefAst the parameter node.</span>
-<span class="source-line-no">296</span><span id="line-296">     * @return true if the parameter is a receiver.</span>
-<span class="source-line-no">297</span><span id="line-297">     * @see &lt;a href="https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.1"&gt;</span>
-<span class="source-line-no">298</span><span id="line-298">     *     ReceiverParameter&lt;/a&gt;</span>
-<span class="source-line-no">299</span><span id="line-299">     */</span>
-<span class="source-line-no">300</span><span id="line-300">    public static boolean isReceiverParameter(DetailAST parameterDefAst) {</span>
-<span class="source-line-no">301</span><span id="line-301">        return parameterDefAst.findFirstToken(TokenTypes.IDENT) == null;</span>
-<span class="source-line-no">302</span><span id="line-302">    }</span>
-<span class="source-line-no">303</span><span id="line-303"></span>
-<span class="source-line-no">304</span><span id="line-304">    /**</span>
-<span class="source-line-no">305</span><span id="line-305">     * Returns the access modifier of the method/constructor at the specified AST. If</span>
-<span class="source-line-no">306</span><span id="line-306">     * the method is in an interface or annotation block, the access modifier is assumed</span>
-<span class="source-line-no">307</span><span id="line-307">     * to be public.</span>
-<span class="source-line-no">308</span><span id="line-308">     *</span>
-<span class="source-line-no">309</span><span id="line-309">     * @param ast the token of the method/constructor.</span>
-<span class="source-line-no">310</span><span id="line-310">     * @return the access modifier of the method/constructor.</span>
-<span class="source-line-no">311</span><span id="line-311">     */</span>
-<span class="source-line-no">312</span><span id="line-312">    public static AccessModifierOption getAccessModifierFromModifiersToken(DetailAST ast) {</span>
-<span class="source-line-no">313</span><span id="line-313">        AccessModifierOption accessModifier;</span>
-<span class="source-line-no">314</span><span id="line-314">        if (ast.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
-<span class="source-line-no">315</span><span id="line-315">            accessModifier = AccessModifierOption.PUBLIC;</span>
-<span class="source-line-no">316</span><span id="line-316">        }</span>
-<span class="source-line-no">317</span><span id="line-317">        else {</span>
-<span class="source-line-no">318</span><span id="line-318">            final DetailAST modsToken = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
-<span class="source-line-no">319</span><span id="line-319">            accessModifier = getAccessModifierFromModifiersTokenDirectly(modsToken);</span>
-<span class="source-line-no">320</span><span id="line-320">        }</span>
-<span class="source-line-no">321</span><span id="line-321"></span>
-<span class="source-line-no">322</span><span id="line-322">        if (accessModifier == AccessModifierOption.PACKAGE) {</span>
-<span class="source-line-no">323</span><span id="line-323">            if (ScopeUtil.isInEnumBlock(ast) &amp;&amp; ast.getType() == TokenTypes.CTOR_DEF) {</span>
-<span class="source-line-no">324</span><span id="line-324">                accessModifier = AccessModifierOption.PRIVATE;</span>
-<span class="source-line-no">325</span><span id="line-325">            }</span>
-<span class="source-line-no">326</span><span id="line-326">            else if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
-<span class="source-line-no">327</span><span id="line-327">                accessModifier = AccessModifierOption.PUBLIC;</span>
-<span class="source-line-no">328</span><span id="line-328">            }</span>
-<span class="source-line-no">329</span><span id="line-329">        }</span>
-<span class="source-line-no">330</span><span id="line-330"></span>
-<span class="source-line-no">331</span><span id="line-331">        return accessModifier;</span>
-<span class="source-line-no">332</span><span id="line-332">    }</span>
-<span class="source-line-no">333</span><span id="line-333"></span>
-<span class="source-line-no">334</span><span id="line-334">    /**</span>
-<span class="source-line-no">335</span><span id="line-335">     * Returns {@link AccessModifierOption} based on the information about access modifier</span>
-<span class="source-line-no">336</span><span id="line-336">     * taken from the given token of type {@link TokenTypes#MODIFIERS}.</span>
-<span class="source-line-no">337</span><span id="line-337">     *</span>
-<span class="source-line-no">338</span><span id="line-338">     * @param modifiersToken token of type {@link TokenTypes#MODIFIERS}.</span>
-<span class="source-line-no">339</span><span id="line-339">     * @return {@link AccessModifierOption}.</span>
-<span class="source-line-no">340</span><span id="line-340">     * @throws IllegalArgumentException when expected non-null modifiersToken with type 'MODIFIERS'</span>
-<span class="source-line-no">341</span><span id="line-341">     */</span>
-<span class="source-line-no">342</span><span id="line-342">    private static AccessModifierOption getAccessModifierFromModifiersTokenDirectly(</span>
-<span class="source-line-no">343</span><span id="line-343">            DetailAST modifiersToken) {</span>
-<span class="source-line-no">344</span><span id="line-344">        if (modifiersToken == null) {</span>
-<span class="source-line-no">345</span><span id="line-345">            throw new IllegalArgumentException("expected non-null AST-token with type 'MODIFIERS'");</span>
-<span class="source-line-no">346</span><span id="line-346">        }</span>
-<span class="source-line-no">347</span><span id="line-347"></span>
-<span class="source-line-no">348</span><span id="line-348">        AccessModifierOption accessModifier = AccessModifierOption.PACKAGE;</span>
-<span class="source-line-no">349</span><span id="line-349">        for (DetailAST token = modifiersToken.getFirstChild(); token != null;</span>
-<span class="source-line-no">350</span><span id="line-350">             token = token.getNextSibling()) {</span>
-<span class="source-line-no">351</span><span id="line-351">            final int tokenType = token.getType();</span>
-<span class="source-line-no">352</span><span id="line-352">            if (tokenType == TokenTypes.LITERAL_PUBLIC) {</span>
-<span class="source-line-no">353</span><span id="line-353">                accessModifier = AccessModifierOption.PUBLIC;</span>
-<span class="source-line-no">354</span><span id="line-354">            }</span>
-<span class="source-line-no">355</span><span id="line-355">            else if (tokenType == TokenTypes.LITERAL_PROTECTED) {</span>
-<span class="source-line-no">356</span><span id="line-356">                accessModifier = AccessModifierOption.PROTECTED;</span>
-<span class="source-line-no">357</span><span id="line-357">            }</span>
-<span class="source-line-no">358</span><span id="line-358">            else if (tokenType == TokenTypes.LITERAL_PRIVATE) {</span>
-<span class="source-line-no">359</span><span id="line-359">                accessModifier = AccessModifierOption.PRIVATE;</span>
-<span class="source-line-no">360</span><span id="line-360">            }</span>
-<span class="source-line-no">361</span><span id="line-361">        }</span>
-<span class="source-line-no">362</span><span id="line-362">        return accessModifier;</span>
-<span class="source-line-no">363</span><span id="line-363">    }</span>
-<span class="source-line-no">364</span><span id="line-364"></span>
-<span class="source-line-no">365</span><span id="line-365">    /**</span>
-<span class="source-line-no">366</span><span id="line-366">     * Returns the access modifier of the surrounding "block".</span>
-<span class="source-line-no">367</span><span id="line-367">     *</span>
-<span class="source-line-no">368</span><span id="line-368">     * @param node the node to return the access modifier for</span>
-<span class="source-line-no">369</span><span id="line-369">     * @return the access modifier of the surrounding block</span>
-<span class="source-line-no">370</span><span id="line-370">     */</span>
-<span class="source-line-no">371</span><span id="line-371">    public static Optional&lt;AccessModifierOption&gt; getSurroundingAccessModifier(DetailAST node) {</span>
-<span class="source-line-no">372</span><span id="line-372">        Optional&lt;AccessModifierOption&gt; returnValue = Optional.empty();</span>
-<span class="source-line-no">373</span><span id="line-373">        for (DetailAST token = node;</span>
-<span class="source-line-no">374</span><span id="line-374">             returnValue.isEmpty() &amp;&amp; !TokenUtil.isRootNode(token);</span>
-<span class="source-line-no">375</span><span id="line-375">             token = token.getParent()) {</span>
-<span class="source-line-no">376</span><span id="line-376">            final int type = token.getType();</span>
-<span class="source-line-no">377</span><span id="line-377">            if (type == TokenTypes.CLASS_DEF</span>
-<span class="source-line-no">378</span><span id="line-378">                || type == TokenTypes.INTERFACE_DEF</span>
-<span class="source-line-no">379</span><span id="line-379">                || type == TokenTypes.ANNOTATION_DEF</span>
-<span class="source-line-no">380</span><span id="line-380">                || type == TokenTypes.ENUM_DEF) {</span>
-<span class="source-line-no">381</span><span id="line-381">                returnValue = Optional.ofNullable(getAccessModifierFromModifiersToken(token));</span>
-<span class="source-line-no">382</span><span id="line-382">            }</span>
-<span class="source-line-no">383</span><span id="line-383">            else if (type == TokenTypes.LITERAL_NEW) {</span>
-<span class="source-line-no">384</span><span id="line-384">                break;</span>
-<span class="source-line-no">385</span><span id="line-385">            }</span>
-<span class="source-line-no">386</span><span id="line-386">        }</span>
-<span class="source-line-no">387</span><span id="line-387"></span>
-<span class="source-line-no">388</span><span id="line-388">        return returnValue;</span>
-<span class="source-line-no">389</span><span id="line-389">    }</span>
-<span class="source-line-no">390</span><span id="line-390"></span>
-<span class="source-line-no">391</span><span id="line-391">    /**</span>
-<span class="source-line-no">392</span><span id="line-392">     * Create set of class names and short class names.</span>
-<span class="source-line-no">393</span><span id="line-393">     *</span>
-<span class="source-line-no">394</span><span id="line-394">     * @param classNames array of class names.</span>
-<span class="source-line-no">395</span><span id="line-395">     * @return set of class names and short class names.</span>
-<span class="source-line-no">396</span><span id="line-396">     */</span>
-<span class="source-line-no">397</span><span id="line-397">    public static Set&lt;String&gt; parseClassNames(String... classNames) {</span>
-<span class="source-line-no">398</span><span id="line-398">        return Arrays.stream(classNames)</span>
-<span class="source-line-no">399</span><span id="line-399">                .flatMap(className -&gt; Stream.of(className, CommonUtil.baseClassName(className)))</span>
-<span class="source-line-no">400</span><span id="line-400">                .filter(Predicate.not(String::isEmpty))</span>
-<span class="source-line-no">401</span><span id="line-401">                .collect(Collectors.toUnmodifiableSet());</span>
-<span class="source-line-no">402</span><span id="line-402">    }</span>
-<span class="source-line-no">403</span><span id="line-403"></span>
-<span class="source-line-no">404</span><span id="line-404">    /**</span>
-<span class="source-line-no">405</span><span id="line-405">     * Strip initial newline and preceding whitespace on each line from text block content.</span>
-<span class="source-line-no">406</span><span id="line-406">     * In order to be consistent with how javac handles this task, we have modeled this</span>
-<span class="source-line-no">407</span><span id="line-407">     * implementation after the code from:</span>
-<span class="source-line-no">408</span><span id="line-408">     * github.com/openjdk/jdk14u/blob/master/src/java.base/share/classes/java/lang/String.java</span>
-<span class="source-line-no">409</span><span id="line-409">     *</span>
-<span class="source-line-no">410</span><span id="line-410">     * @param textBlockContent the actual content of the text block.</span>
-<span class="source-line-no">411</span><span id="line-411">     * @return string consistent with javac representation.</span>
-<span class="source-line-no">412</span><span id="line-412">     */</span>
-<span class="source-line-no">413</span><span id="line-413">    public static String stripIndentAndInitialNewLineFromTextBlock(String textBlockContent) {</span>
-<span class="source-line-no">414</span><span id="line-414">        final String contentWithInitialNewLineRemoved =</span>
-<span class="source-line-no">415</span><span id="line-415">            ALL_NEW_LINES.matcher(textBlockContent).replaceFirst("");</span>
-<span class="source-line-no">416</span><span id="line-416">        final List&lt;String&gt; lines =</span>
-<span class="source-line-no">417</span><span id="line-417">            Arrays.asList(ALL_NEW_LINES.split(contentWithInitialNewLineRemoved));</span>
-<span class="source-line-no">418</span><span id="line-418">        final int indent = getSmallestIndent(lines);</span>
-<span class="source-line-no">419</span><span id="line-419">        final String suffix = "";</span>
-<span class="source-line-no">420</span><span id="line-420"></span>
-<span class="source-line-no">421</span><span id="line-421">        return lines.stream()</span>
-<span class="source-line-no">422</span><span id="line-422">                .map(line -&gt; stripIndentAndTrailingWhitespaceFromLine(line, indent))</span>
-<span class="source-line-no">423</span><span id="line-423">                .collect(Collectors.joining(System.lineSeparator(), suffix, suffix));</span>
-<span class="source-line-no">424</span><span id="line-424">    }</span>
-<span class="source-line-no">425</span><span id="line-425"></span>
-<span class="source-line-no">426</span><span id="line-426">    /**</span>
-<span class="source-line-no">427</span><span id="line-427">     * Helper method for stripIndentAndInitialNewLineFromTextBlock, strips correct indent</span>
-<span class="source-line-no">428</span><span id="line-428">     * from string, and trailing whitespace, or returns empty string if no text.</span>
-<span class="source-line-no">429</span><span id="line-429">     *</span>
-<span class="source-line-no">430</span><span id="line-430">     * @param line the string to strip indent and trailing whitespace from</span>
-<span class="source-line-no">431</span><span id="line-431">     * @param indent the amount of indent to remove</span>
-<span class="source-line-no">432</span><span id="line-432">     * @return modified string with removed indent and trailing whitespace, or empty string.</span>
-<span class="source-line-no">433</span><span id="line-433">     */</span>
-<span class="source-line-no">434</span><span id="line-434">    private static String stripIndentAndTrailingWhitespaceFromLine(String line, int indent) {</span>
-<span class="source-line-no">435</span><span id="line-435">        final int lastNonWhitespace = lastIndexOfNonWhitespace(line);</span>
-<span class="source-line-no">436</span><span id="line-436">        String returnString = "";</span>
-<span class="source-line-no">437</span><span id="line-437">        if (lastNonWhitespace &gt; 0) {</span>
-<span class="source-line-no">438</span><span id="line-438">            returnString = line.substring(indent, lastNonWhitespace);</span>
-<span class="source-line-no">439</span><span id="line-439">        }</span>
-<span class="source-line-no">440</span><span id="line-440">        return returnString;</span>
-<span class="source-line-no">441</span><span id="line-441">    }</span>
-<span class="source-line-no">442</span><span id="line-442"></span>
-<span class="source-line-no">443</span><span id="line-443">    /**</span>
-<span class="source-line-no">444</span><span id="line-444">     * Helper method for stripIndentAndInitialNewLineFromTextBlock, to determine the smallest</span>
-<span class="source-line-no">445</span><span id="line-445">     * indent in a text block string literal.</span>
-<span class="source-line-no">446</span><span id="line-446">     *</span>
-<span class="source-line-no">447</span><span id="line-447">     * @param lines collection of actual text block content, split by line.</span>
-<span class="source-line-no">448</span><span id="line-448">     * @return number of spaces representing the smallest indent in this text block.</span>
-<span class="source-line-no">449</span><span id="line-449">     */</span>
-<span class="source-line-no">450</span><span id="line-450">    private static int getSmallestIndent(Collection&lt;String&gt; lines) {</span>
-<span class="source-line-no">451</span><span id="line-451">        return lines.stream()</span>
-<span class="source-line-no">452</span><span id="line-452">            .mapToInt(CommonUtil::indexOfNonWhitespace)</span>
-<span class="source-line-no">453</span><span id="line-453">            .min()</span>
-<span class="source-line-no">454</span><span id="line-454">            .orElse(0);</span>
-<span class="source-line-no">455</span><span id="line-455">    }</span>
-<span class="source-line-no">456</span><span id="line-456"></span>
-<span class="source-line-no">457</span><span id="line-457">    /**</span>
-<span class="source-line-no">458</span><span id="line-458">     * Helper method to find the index of the last non-whitespace character in a string.</span>
-<span class="source-line-no">459</span><span id="line-459">     *</span>
-<span class="source-line-no">460</span><span id="line-460">     * @param line the string to find the last index of a non-whitespace character for.</span>
-<span class="source-line-no">461</span><span id="line-461">     * @return the index of the last non-whitespace character.</span>
-<span class="source-line-no">462</span><span id="line-462">     */</span>
-<span class="source-line-no">463</span><span id="line-463">    private static int lastIndexOfNonWhitespace(String line) {</span>
-<span class="source-line-no">464</span><span id="line-464">        int length;</span>
-<span class="source-line-no">465</span><span id="line-465">        for (length = line.length(); length &gt; 0; length--) {</span>
-<span class="source-line-no">466</span><span id="line-466">            if (!Character.isWhitespace(line.charAt(length - 1))) {</span>
-<span class="source-line-no">467</span><span id="line-467">                break;</span>
-<span class="source-line-no">468</span><span id="line-468">            }</span>
-<span class="source-line-no">469</span><span id="line-469">        }</span>
-<span class="source-line-no">470</span><span id="line-470">        return length;</span>
-<span class="source-line-no">471</span><span id="line-471">    }</span>
-<span class="source-line-no">472</span><span id="line-472"></span>
-<span class="source-line-no">473</span><span id="line-473">    /**</span>
-<span class="source-line-no">474</span><span id="line-474">     * Calculates and returns the type declaration name matching count.</span>
-<span class="source-line-no">475</span><span id="line-475">     *</span>
-<span class="source-line-no">476</span><span id="line-476">     * &lt;p&gt;</span>
-<span class="source-line-no">477</span><span id="line-477">     * Suppose our pattern class is {@code foo.a.b} and class to be matched is</span>
-<span class="source-line-no">478</span><span id="line-478">     * {@code foo.a.ball} then type declaration name matching count would be calculated by</span>
-<span class="source-line-no">479</span><span id="line-479">     * comparing every character, and updating main counter when we hit "." to prevent matching</span>
-<span class="source-line-no">480</span><span id="line-480">     * "a.b" with "a.ball". In this case type declaration name matching count</span>
-<span class="source-line-no">481</span><span id="line-481">     * would be equal to 6 and not 7 (b of ball is not counted).</span>
-<span class="source-line-no">482</span><span id="line-482">     * &lt;/p&gt;</span>
-<span class="source-line-no">483</span><span id="line-483">     *</span>
-<span class="source-line-no">484</span><span id="line-484">     * @param patternClass class against which the given class has to be matched</span>
-<span class="source-line-no">485</span><span id="line-485">     * @param classToBeMatched class to be matched</span>
-<span class="source-line-no">486</span><span id="line-486">     * @return class name matching count</span>
-<span class="source-line-no">487</span><span id="line-487">     */</span>
-<span class="source-line-no">488</span><span id="line-488">    public static int typeDeclarationNameMatchingCount(String patternClass,</span>
-<span class="source-line-no">489</span><span id="line-489">                                                       String classToBeMatched) {</span>
-<span class="source-line-no">490</span><span id="line-490">        final int length = Math.min(classToBeMatched.length(), patternClass.length());</span>
-<span class="source-line-no">491</span><span id="line-491">        int result = 0;</span>
-<span class="source-line-no">492</span><span id="line-492">        for (int i = 0; i &lt; length &amp;&amp; patternClass.charAt(i) == classToBeMatched.charAt(i); ++i) {</span>
-<span class="source-line-no">493</span><span id="line-493">            if (patternClass.charAt(i) == PACKAGE_SEPARATOR) {</span>
-<span class="source-line-no">494</span><span id="line-494">                result = i;</span>
-<span class="source-line-no">495</span><span id="line-495">            }</span>
-<span class="source-line-no">496</span><span id="line-496">        }</span>
-<span class="source-line-no">497</span><span id="line-497">        return result;</span>
-<span class="source-line-no">498</span><span id="line-498">    }</span>
-<span class="source-line-no">499</span><span id="line-499"></span>
-<span class="source-line-no">500</span><span id="line-500">    /**</span>
-<span class="source-line-no">501</span><span id="line-501">     * Get the qualified name of type declaration by combining {@code packageName},</span>
-<span class="source-line-no">502</span><span id="line-502">     * {@code outerClassQualifiedName} and {@code className}.</span>
-<span class="source-line-no">503</span><span id="line-503">     *</span>
-<span class="source-line-no">504</span><span id="line-504">     * @param packageName packageName</span>
-<span class="source-line-no">505</span><span id="line-505">     * @param outerClassQualifiedName outerClassQualifiedName</span>
-<span class="source-line-no">506</span><span id="line-506">     * @param className className</span>
-<span class="source-line-no">507</span><span id="line-507">     * @return the qualified name of type declaration by combining {@code packageName},</span>
-<span class="source-line-no">508</span><span id="line-508">     *         {@code outerClassQualifiedName} and {@code className}</span>
-<span class="source-line-no">509</span><span id="line-509">     */</span>
-<span class="source-line-no">510</span><span id="line-510">    public static String getQualifiedTypeDeclarationName(String packageName,</span>
-<span class="source-line-no">511</span><span id="line-511">                                                         String outerClassQualifiedName,</span>
-<span class="source-line-no">512</span><span id="line-512">                                                         String className) {</span>
-<span class="source-line-no">513</span><span id="line-513">        final String qualifiedClassName;</span>
-<span class="source-line-no">514</span><span id="line-514"></span>
-<span class="source-line-no">515</span><span id="line-515">        if (outerClassQualifiedName == null) {</span>
-<span class="source-line-no">516</span><span id="line-516">            if (packageName == null) {</span>
-<span class="source-line-no">517</span><span id="line-517">                qualifiedClassName = className;</span>
-<span class="source-line-no">518</span><span id="line-518">            }</span>
-<span class="source-line-no">519</span><span id="line-519">            else {</span>
-<span class="source-line-no">520</span><span id="line-520">                qualifiedClassName = packageName + PACKAGE_SEPARATOR + className;</span>
-<span class="source-line-no">521</span><span id="line-521">            }</span>
-<span class="source-line-no">522</span><span id="line-522">        }</span>
-<span class="source-line-no">523</span><span id="line-523">        else {</span>
-<span class="source-line-no">524</span><span id="line-524">            qualifiedClassName = outerClassQualifiedName + PACKAGE_SEPARATOR + className;</span>
-<span class="source-line-no">525</span><span id="line-525">        }</span>
-<span class="source-line-no">526</span><span id="line-526">        return qualifiedClassName;</span>
-<span class="source-line-no">527</span><span id="line-527">    }</span>
-<span class="source-line-no">528</span><span id="line-528"></span>
-<span class="source-line-no">529</span><span id="line-529">    /**</span>
-<span class="source-line-no">530</span><span id="line-530">     * Get name of package and super class of anon inner class by concatenating</span>
-<span class="source-line-no">531</span><span id="line-531">     * the identifier values under {@link TokenTypes#DOT}.</span>
-<span class="source-line-no">532</span><span id="line-532">     *</span>
-<span class="source-line-no">533</span><span id="line-533">     * @param ast ast to extract superclass or package name from</span>
-<span class="source-line-no">534</span><span id="line-534">     * @return qualified name</span>
-<span class="source-line-no">535</span><span id="line-535">     */</span>
-<span class="source-line-no">536</span><span id="line-536">    public static String extractQualifiedName(DetailAST ast) {</span>
-<span class="source-line-no">537</span><span id="line-537">        return FullIdent.createFullIdent(ast).getText();</span>
-<span class="source-line-no">538</span><span id="line-538">    }</span>
-<span class="source-line-no">539</span><span id="line-539"></span>
-<span class="source-line-no">540</span><span id="line-540">    /**</span>
-<span class="source-line-no">541</span><span id="line-541">     * Get the short name of super class of anonymous inner class.</span>
-<span class="source-line-no">542</span><span id="line-542">     * Example:</span>
-<span class="source-line-no">543</span><span id="line-543">     * &lt;pre&gt;</span>
-<span class="source-line-no">544</span><span id="line-544">     * TestClass.NestedClass obj = new Test().new NestedClass() {};</span>
-<span class="source-line-no">545</span><span id="line-545">     * // Short name will be Test.NestedClass</span>
-<span class="source-line-no">546</span><span id="line-546">     * &lt;/pre&gt;</span>
-<span class="source-line-no">547</span><span id="line-547">     *</span>
-<span class="source-line-no">548</span><span id="line-548">     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}</span>
-<span class="source-line-no">549</span><span id="line-549">     * @return short name of base class of anonymous inner class</span>
-<span class="source-line-no">550</span><span id="line-550">     */</span>
-<span class="source-line-no">551</span><span id="line-551">    public static String getShortNameOfAnonInnerClass(DetailAST literalNewAst) {</span>
-<span class="source-line-no">552</span><span id="line-552">        DetailAST parentAst = literalNewAst;</span>
-<span class="source-line-no">553</span><span id="line-553">        while (TokenUtil.isOfType(parentAst, TokenTypes.LITERAL_NEW, TokenTypes.DOT)) {</span>
-<span class="source-line-no">554</span><span id="line-554">            parentAst = parentAst.getParent();</span>
-<span class="source-line-no">555</span><span id="line-555">        }</span>
-<span class="source-line-no">556</span><span id="line-556">        final DetailAST firstChild = parentAst.getFirstChild();</span>
-<span class="source-line-no">557</span><span id="line-557">        return extractQualifiedName(firstChild);</span>
-<span class="source-line-no">558</span><span id="line-558">    }</span>
-<span class="source-line-no">559</span><span id="line-559"></span>
-<span class="source-line-no">560</span><span id="line-560">    /**</span>
-<span class="source-line-no">561</span><span id="line-561">     * Checks if the given file path is a package-info.java file.</span>
-<span class="source-line-no">562</span><span id="line-562">     *</span>
-<span class="source-line-no">563</span><span id="line-563">     * @param filePath path to the file.</span>
-<span class="source-line-no">564</span><span id="line-564">     * @return true if the package file.</span>
-<span class="source-line-no">565</span><span id="line-565">     */</span>
-<span class="source-line-no">566</span><span id="line-566">    public static boolean isPackageInfo(String filePath) {</span>
-<span class="source-line-no">567</span><span id="line-567">        final Path filename = Path.of(filePath).getFileName();</span>
-<span class="source-line-no">568</span><span id="line-568">        return filename != null &amp;&amp; "package-info.java".equals(filename.toString());</span>
-<span class="source-line-no">569</span><span id="line-569">    }</span>
-<span class="source-line-no">570</span><span id="line-570">}</span>
+<span class="source-line-no">026</span><span id="line-26">import java.util.HashSet;</span>
+<span class="source-line-no">027</span><span id="line-27">import java.util.List;</span>
+<span class="source-line-no">028</span><span id="line-28">import java.util.Optional;</span>
+<span class="source-line-no">029</span><span id="line-29">import java.util.Set;</span>
+<span class="source-line-no">030</span><span id="line-30">import java.util.function.Predicate;</span>
+<span class="source-line-no">031</span><span id="line-31">import java.util.regex.Pattern;</span>
+<span class="source-line-no">032</span><span id="line-32">import java.util.stream.Collectors;</span>
+<span class="source-line-no">033</span><span id="line-33">import java.util.stream.Stream;</span>
+<span class="source-line-no">034</span><span id="line-34"></span>
+<span class="source-line-no">035</span><span id="line-35">import com.puppycrawl.tools.checkstyle.api.DetailAST;</span>
+<span class="source-line-no">036</span><span id="line-36">import com.puppycrawl.tools.checkstyle.api.FullIdent;</span>
+<span class="source-line-no">037</span><span id="line-37">import com.puppycrawl.tools.checkstyle.api.TokenTypes;</span>
+<span class="source-line-no">038</span><span id="line-38">import com.puppycrawl.tools.checkstyle.checks.naming.AccessModifierOption;</span>
+<span class="source-line-no">039</span><span id="line-39"></span>
+<span class="source-line-no">040</span><span id="line-40">/**</span>
+<span class="source-line-no">041</span><span id="line-41"> * Contains utility methods for the checks.</span>
+<span class="source-line-no">042</span><span id="line-42"> *</span>
+<span class="source-line-no">043</span><span id="line-43"> */</span>
+<span class="source-line-no">044</span><span id="line-44">public final class CheckUtil {</span>
+<span class="source-line-no">045</span><span id="line-45"></span>
+<span class="source-line-no">046</span><span id="line-46">    // constants for parseDouble()</span>
+<span class="source-line-no">047</span><span id="line-47">    /** Binary radix. */</span>
+<span class="source-line-no">048</span><span id="line-48">    private static final int BASE_2 = 2;</span>
+<span class="source-line-no">049</span><span id="line-49"></span>
+<span class="source-line-no">050</span><span id="line-50">    /** Octal radix. */</span>
+<span class="source-line-no">051</span><span id="line-51">    private static final int BASE_8 = 8;</span>
+<span class="source-line-no">052</span><span id="line-52"></span>
+<span class="source-line-no">053</span><span id="line-53">    /** Decimal radix. */</span>
+<span class="source-line-no">054</span><span id="line-54">    private static final int BASE_10 = 10;</span>
+<span class="source-line-no">055</span><span id="line-55"></span>
+<span class="source-line-no">056</span><span id="line-56">    /** Hex radix. */</span>
+<span class="source-line-no">057</span><span id="line-57">    private static final int BASE_16 = 16;</span>
+<span class="source-line-no">058</span><span id="line-58"></span>
+<span class="source-line-no">059</span><span id="line-59">    /** Pattern matching underscore characters ('_'). */</span>
+<span class="source-line-no">060</span><span id="line-60">    private static final Pattern UNDERSCORE_PATTERN = Pattern.compile("_");</span>
+<span class="source-line-no">061</span><span id="line-61"></span>
+<span class="source-line-no">062</span><span id="line-62">    /** Compiled pattern for all system newlines. */</span>
+<span class="source-line-no">063</span><span id="line-63">    private static final Pattern ALL_NEW_LINES = Pattern.compile("\\R");</span>
+<span class="source-line-no">064</span><span id="line-64"></span>
+<span class="source-line-no">065</span><span id="line-65">    /** Package separator. */</span>
+<span class="source-line-no">066</span><span id="line-66">    private static final char PACKAGE_SEPARATOR = '.';</span>
+<span class="source-line-no">067</span><span id="line-67"></span>
+<span class="source-line-no">068</span><span id="line-68">    /** Prevent instances. */</span>
+<span class="source-line-no">069</span><span id="line-69">    private CheckUtil() {</span>
+<span class="source-line-no">070</span><span id="line-70">    }</span>
+<span class="source-line-no">071</span><span id="line-71"></span>
+<span class="source-line-no">072</span><span id="line-72">    /**</span>
+<span class="source-line-no">073</span><span id="line-73">     * Tests whether a method definition AST defines an equals covariant.</span>
+<span class="source-line-no">074</span><span id="line-74">     *</span>
+<span class="source-line-no">075</span><span id="line-75">     * @param ast the method definition AST to test.</span>
+<span class="source-line-no">076</span><span id="line-76">     *     Precondition: ast is a TokenTypes.METHOD_DEF node.</span>
+<span class="source-line-no">077</span><span id="line-77">     * @return true if ast defines an equals covariant.</span>
+<span class="source-line-no">078</span><span id="line-78">     */</span>
+<span class="source-line-no">079</span><span id="line-79">    public static boolean isEqualsMethod(DetailAST ast) {</span>
+<span class="source-line-no">080</span><span id="line-80">        boolean equalsMethod = false;</span>
+<span class="source-line-no">081</span><span id="line-81"></span>
+<span class="source-line-no">082</span><span id="line-82">        if (ast.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="source-line-no">083</span><span id="line-83">            final DetailAST modifiers = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="source-line-no">084</span><span id="line-84">            final boolean staticOrAbstract =</span>
+<span class="source-line-no">085</span><span id="line-85">                    modifiers.findFirstToken(TokenTypes.LITERAL_STATIC) != null</span>
+<span class="source-line-no">086</span><span id="line-86">                    || modifiers.findFirstToken(TokenTypes.ABSTRACT) != null;</span>
+<span class="source-line-no">087</span><span id="line-87"></span>
+<span class="source-line-no">088</span><span id="line-88">            if (!staticOrAbstract) {</span>
+<span class="source-line-no">089</span><span id="line-89">                final DetailAST nameNode = ast.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">090</span><span id="line-90">                final String name = nameNode.getText();</span>
+<span class="source-line-no">091</span><span id="line-91"></span>
+<span class="source-line-no">092</span><span id="line-92">                if ("equals".equals(name)) {</span>
+<span class="source-line-no">093</span><span id="line-93">                    // one parameter?</span>
+<span class="source-line-no">094</span><span id="line-94">                    final DetailAST paramsNode = ast.findFirstToken(TokenTypes.PARAMETERS);</span>
+<span class="source-line-no">095</span><span id="line-95">                    equalsMethod = paramsNode.getChildCount() == 1;</span>
+<span class="source-line-no">096</span><span id="line-96">                }</span>
+<span class="source-line-no">097</span><span id="line-97">            }</span>
+<span class="source-line-no">098</span><span id="line-98">        }</span>
+<span class="source-line-no">099</span><span id="line-99">        return equalsMethod;</span>
+<span class="source-line-no">100</span><span id="line-100">    }</span>
+<span class="source-line-no">101</span><span id="line-101"></span>
+<span class="source-line-no">102</span><span id="line-102">    /**</span>
+<span class="source-line-no">103</span><span id="line-103">     * Returns the value represented by the specified string of the specified</span>
+<span class="source-line-no">104</span><span id="line-104">     * type. Returns 0 for types other than float, double, int, and long.</span>
+<span class="source-line-no">105</span><span id="line-105">     *</span>
+<span class="source-line-no">106</span><span id="line-106">     * @param text the string to be parsed.</span>
+<span class="source-line-no">107</span><span id="line-107">     * @param type the token type of the text. Should be a constant of</span>
+<span class="source-line-no">108</span><span id="line-108">     *     {@link TokenTypes}.</span>
+<span class="source-line-no">109</span><span id="line-109">     * @return the double value represented by the string argument.</span>
+<span class="source-line-no">110</span><span id="line-110">     */</span>
+<span class="source-line-no">111</span><span id="line-111">    public static double parseDouble(String text, int type) {</span>
+<span class="source-line-no">112</span><span id="line-112">        String txt = UNDERSCORE_PATTERN.matcher(text).replaceAll("");</span>
+<span class="source-line-no">113</span><span id="line-113"></span>
+<span class="source-line-no">114</span><span id="line-114">        return switch (type) {</span>
+<span class="source-line-no">115</span><span id="line-115">            case TokenTypes.NUM_FLOAT, TokenTypes.NUM_DOUBLE -&gt; Double.parseDouble(txt);</span>
+<span class="source-line-no">116</span><span id="line-116"></span>
+<span class="source-line-no">117</span><span id="line-117">            case TokenTypes.NUM_INT, TokenTypes.NUM_LONG -&gt; {</span>
+<span class="source-line-no">118</span><span id="line-118">                int radix = BASE_10;</span>
+<span class="source-line-no">119</span><span id="line-119">                if (txt.startsWith("0x") || txt.startsWith("0X")) {</span>
+<span class="source-line-no">120</span><span id="line-120">                    radix = BASE_16;</span>
+<span class="source-line-no">121</span><span id="line-121">                    txt = txt.substring(2);</span>
+<span class="source-line-no">122</span><span id="line-122">                }</span>
+<span class="source-line-no">123</span><span id="line-123">                else if (txt.startsWith("0b") || txt.startsWith("0B")) {</span>
+<span class="source-line-no">124</span><span id="line-124">                    radix = BASE_2;</span>
+<span class="source-line-no">125</span><span id="line-125">                    txt = txt.substring(2);</span>
+<span class="source-line-no">126</span><span id="line-126">                }</span>
+<span class="source-line-no">127</span><span id="line-127">                else if (txt.startsWith("0")) {</span>
+<span class="source-line-no">128</span><span id="line-128">                    radix = BASE_8;</span>
+<span class="source-line-no">129</span><span id="line-129">                }</span>
+<span class="source-line-no">130</span><span id="line-130">                yield parseNumber(txt, radix, type);</span>
+<span class="source-line-no">131</span><span id="line-131">            }</span>
+<span class="source-line-no">132</span><span id="line-132"></span>
+<span class="source-line-no">133</span><span id="line-133">            default -&gt; Double.NaN;</span>
+<span class="source-line-no">134</span><span id="line-134">        };</span>
+<span class="source-line-no">135</span><span id="line-135">    }</span>
+<span class="source-line-no">136</span><span id="line-136"></span>
+<span class="source-line-no">137</span><span id="line-137">    /**</span>
+<span class="source-line-no">138</span><span id="line-138">     * Parses the string argument as an integer or a long in the radix specified by</span>
+<span class="source-line-no">139</span><span id="line-139">     * the second argument. The characters in the string must all be digits of</span>
+<span class="source-line-no">140</span><span id="line-140">     * the specified radix.</span>
+<span class="source-line-no">141</span><span id="line-141">     *</span>
+<span class="source-line-no">142</span><span id="line-142">     * @param text the String containing the integer representation to be</span>
+<span class="source-line-no">143</span><span id="line-143">     *     parsed. Precondition: text contains a parsable int.</span>
+<span class="source-line-no">144</span><span id="line-144">     * @param radix the radix to be used while parsing text.</span>
+<span class="source-line-no">145</span><span id="line-145">     * @param type the token type of the text. Should be a constant of</span>
+<span class="source-line-no">146</span><span id="line-146">     *     {@link TokenTypes}.</span>
+<span class="source-line-no">147</span><span id="line-147">     * @return the number represented by the string argument in the specified radix.</span>
+<span class="source-line-no">148</span><span id="line-148">     */</span>
+<span class="source-line-no">149</span><span id="line-149">    private static double parseNumber(final String text, final int radix, final int type) {</span>
+<span class="source-line-no">150</span><span id="line-150">        String txt = text;</span>
+<span class="source-line-no">151</span><span id="line-151">        if (txt.endsWith("L") || txt.endsWith("l")) {</span>
+<span class="source-line-no">152</span><span id="line-152">            txt = txt.substring(0, txt.length() - 1);</span>
+<span class="source-line-no">153</span><span id="line-153">        }</span>
+<span class="source-line-no">154</span><span id="line-154">        final double result;</span>
+<span class="source-line-no">155</span><span id="line-155"></span>
+<span class="source-line-no">156</span><span id="line-156">        final boolean negative = txt.charAt(0) == '-';</span>
+<span class="source-line-no">157</span><span id="line-157">        if (type == TokenTypes.NUM_INT) {</span>
+<span class="source-line-no">158</span><span id="line-158">            if (negative) {</span>
+<span class="source-line-no">159</span><span id="line-159">                result = Integer.parseInt(txt, radix);</span>
+<span class="source-line-no">160</span><span id="line-160">            }</span>
+<span class="source-line-no">161</span><span id="line-161">            else {</span>
+<span class="source-line-no">162</span><span id="line-162">                result = Integer.parseUnsignedInt(txt, radix);</span>
+<span class="source-line-no">163</span><span id="line-163">            }</span>
+<span class="source-line-no">164</span><span id="line-164">        }</span>
+<span class="source-line-no">165</span><span id="line-165">        else {</span>
+<span class="source-line-no">166</span><span id="line-166">            if (negative) {</span>
+<span class="source-line-no">167</span><span id="line-167">                result = Long.parseLong(txt, radix);</span>
+<span class="source-line-no">168</span><span id="line-168">            }</span>
+<span class="source-line-no">169</span><span id="line-169">            else {</span>
+<span class="source-line-no">170</span><span id="line-170">                result = Long.parseUnsignedLong(txt, radix);</span>
+<span class="source-line-no">171</span><span id="line-171">            }</span>
+<span class="source-line-no">172</span><span id="line-172">        }</span>
+<span class="source-line-no">173</span><span id="line-173"></span>
+<span class="source-line-no">174</span><span id="line-174">        return result;</span>
+<span class="source-line-no">175</span><span id="line-175">    }</span>
+<span class="source-line-no">176</span><span id="line-176"></span>
+<span class="source-line-no">177</span><span id="line-177">    /**</span>
+<span class="source-line-no">178</span><span id="line-178">     * Finds sub-node for given node minimal (line, column) pair.</span>
+<span class="source-line-no">179</span><span id="line-179">     *</span>
+<span class="source-line-no">180</span><span id="line-180">     * @param node the root of tree for search.</span>
+<span class="source-line-no">181</span><span id="line-181">     * @return sub-node with minimal (line, column) pair.</span>
+<span class="source-line-no">182</span><span id="line-182">     */</span>
+<span class="source-line-no">183</span><span id="line-183">    public static DetailAST getFirstNode(final DetailAST node) {</span>
+<span class="source-line-no">184</span><span id="line-184">        DetailAST currentNode = node;</span>
+<span class="source-line-no">185</span><span id="line-185">        DetailAST child = node.getFirstChild();</span>
+<span class="source-line-no">186</span><span id="line-186">        while (child != null) {</span>
+<span class="source-line-no">187</span><span id="line-187">            final DetailAST newNode = getFirstNode(child);</span>
+<span class="source-line-no">188</span><span id="line-188">            if (isBeforeInSource(newNode, currentNode)) {</span>
+<span class="source-line-no">189</span><span id="line-189">                currentNode = newNode;</span>
+<span class="source-line-no">190</span><span id="line-190">            }</span>
+<span class="source-line-no">191</span><span id="line-191">            child = child.getNextSibling();</span>
+<span class="source-line-no">192</span><span id="line-192">        }</span>
+<span class="source-line-no">193</span><span id="line-193"></span>
+<span class="source-line-no">194</span><span id="line-194">        return currentNode;</span>
+<span class="source-line-no">195</span><span id="line-195">    }</span>
+<span class="source-line-no">196</span><span id="line-196"></span>
+<span class="source-line-no">197</span><span id="line-197">    /**</span>
+<span class="source-line-no">198</span><span id="line-198">     * Retrieves whether ast1 is located before ast2.</span>
+<span class="source-line-no">199</span><span id="line-199">     *</span>
+<span class="source-line-no">200</span><span id="line-200">     * @param ast1 the first node.</span>
+<span class="source-line-no">201</span><span id="line-201">     * @param ast2 the second node.</span>
+<span class="source-line-no">202</span><span id="line-202">     * @return true, if ast1 is located before ast2.</span>
+<span class="source-line-no">203</span><span id="line-203">     */</span>
+<span class="source-line-no">204</span><span id="line-204">    public static boolean isBeforeInSource(DetailAST ast1, DetailAST ast2) {</span>
+<span class="source-line-no">205</span><span id="line-205">        return ast1.getLineNo() &lt; ast2.getLineNo()</span>
+<span class="source-line-no">206</span><span id="line-206">            || TokenUtil.areOnSameLine(ast1, ast2)</span>
+<span class="source-line-no">207</span><span id="line-207">                &amp;&amp; ast1.getColumnNo() &lt; ast2.getColumnNo();</span>
+<span class="source-line-no">208</span><span id="line-208">    }</span>
+<span class="source-line-no">209</span><span id="line-209"></span>
+<span class="source-line-no">210</span><span id="line-210">    /**</span>
+<span class="source-line-no">211</span><span id="line-211">     * Retrieves the names of the type parameters to the node.</span>
+<span class="source-line-no">212</span><span id="line-212">     *</span>
+<span class="source-line-no">213</span><span id="line-213">     * @param node the parameterized AST node</span>
+<span class="source-line-no">214</span><span id="line-214">     * @return a list of type parameter names</span>
+<span class="source-line-no">215</span><span id="line-215">     */</span>
+<span class="source-line-no">216</span><span id="line-216">    public static List&lt;String&gt; getTypeParameterNames(final DetailAST node) {</span>
+<span class="source-line-no">217</span><span id="line-217">        final DetailAST typeParameters =</span>
+<span class="source-line-no">218</span><span id="line-218">            node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
+<span class="source-line-no">219</span><span id="line-219"></span>
+<span class="source-line-no">220</span><span id="line-220">        final List&lt;String&gt; typeParameterNames = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">221</span><span id="line-221">        if (typeParameters != null) {</span>
+<span class="source-line-no">222</span><span id="line-222">            final DetailAST typeParam =</span>
+<span class="source-line-no">223</span><span id="line-223">                typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
+<span class="source-line-no">224</span><span id="line-224">            typeParameterNames.add(</span>
+<span class="source-line-no">225</span><span id="line-225">                    typeParam.findFirstToken(TokenTypes.IDENT).getText());</span>
+<span class="source-line-no">226</span><span id="line-226"></span>
+<span class="source-line-no">227</span><span id="line-227">            DetailAST sibling = typeParam.getNextSibling();</span>
+<span class="source-line-no">228</span><span id="line-228">            while (sibling != null) {</span>
+<span class="source-line-no">229</span><span id="line-229">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
+<span class="source-line-no">230</span><span id="line-230">                    typeParameterNames.add(</span>
+<span class="source-line-no">231</span><span id="line-231">                            sibling.findFirstToken(TokenTypes.IDENT).getText());</span>
+<span class="source-line-no">232</span><span id="line-232">                }</span>
+<span class="source-line-no">233</span><span id="line-233">                sibling = sibling.getNextSibling();</span>
+<span class="source-line-no">234</span><span id="line-234">            }</span>
+<span class="source-line-no">235</span><span id="line-235">        }</span>
+<span class="source-line-no">236</span><span id="line-236"></span>
+<span class="source-line-no">237</span><span id="line-237">        return typeParameterNames;</span>
+<span class="source-line-no">238</span><span id="line-238">    }</span>
+<span class="source-line-no">239</span><span id="line-239"></span>
+<span class="source-line-no">240</span><span id="line-240">    /**</span>
+<span class="source-line-no">241</span><span id="line-241">     * Retrieves the type parameters to the node.</span>
+<span class="source-line-no">242</span><span id="line-242">     *</span>
+<span class="source-line-no">243</span><span id="line-243">     * @param node the parameterized AST node</span>
+<span class="source-line-no">244</span><span id="line-244">     * @return a list of type parameter names</span>
+<span class="source-line-no">245</span><span id="line-245">     */</span>
+<span class="source-line-no">246</span><span id="line-246">    public static List&lt;DetailAST&gt; getTypeParameters(final DetailAST node) {</span>
+<span class="source-line-no">247</span><span id="line-247">        final DetailAST typeParameters =</span>
+<span class="source-line-no">248</span><span id="line-248">            node.findFirstToken(TokenTypes.TYPE_PARAMETERS);</span>
+<span class="source-line-no">249</span><span id="line-249"></span>
+<span class="source-line-no">250</span><span id="line-250">        final List&lt;DetailAST&gt; typeParams = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">251</span><span id="line-251">        if (typeParameters != null) {</span>
+<span class="source-line-no">252</span><span id="line-252">            final DetailAST typeParam =</span>
+<span class="source-line-no">253</span><span id="line-253">                typeParameters.findFirstToken(TokenTypes.TYPE_PARAMETER);</span>
+<span class="source-line-no">254</span><span id="line-254">            typeParams.add(typeParam);</span>
+<span class="source-line-no">255</span><span id="line-255"></span>
+<span class="source-line-no">256</span><span id="line-256">            DetailAST sibling = typeParam.getNextSibling();</span>
+<span class="source-line-no">257</span><span id="line-257">            while (sibling != null) {</span>
+<span class="source-line-no">258</span><span id="line-258">                if (sibling.getType() == TokenTypes.TYPE_PARAMETER) {</span>
+<span class="source-line-no">259</span><span id="line-259">                    typeParams.add(sibling);</span>
+<span class="source-line-no">260</span><span id="line-260">                }</span>
+<span class="source-line-no">261</span><span id="line-261">                sibling = sibling.getNextSibling();</span>
+<span class="source-line-no">262</span><span id="line-262">            }</span>
+<span class="source-line-no">263</span><span id="line-263">        }</span>
+<span class="source-line-no">264</span><span id="line-264"></span>
+<span class="source-line-no">265</span><span id="line-265">        return typeParams;</span>
+<span class="source-line-no">266</span><span id="line-266">    }</span>
+<span class="source-line-no">267</span><span id="line-267"></span>
+<span class="source-line-no">268</span><span id="line-268">    /**</span>
+<span class="source-line-no">269</span><span id="line-269">     * Checks whether a method is a not void one.</span>
+<span class="source-line-no">270</span><span id="line-270">     *</span>
+<span class="source-line-no">271</span><span id="line-271">     * @param methodDefAst the method node.</span>
+<span class="source-line-no">272</span><span id="line-272">     * @return true if method is a not void one.</span>
+<span class="source-line-no">273</span><span id="line-273">     */</span>
+<span class="source-line-no">274</span><span id="line-274">    public static boolean isNonVoidMethod(DetailAST methodDefAst) {</span>
+<span class="source-line-no">275</span><span id="line-275">        boolean returnValue = false;</span>
+<span class="source-line-no">276</span><span id="line-276">        if (methodDefAst.getType() == TokenTypes.METHOD_DEF) {</span>
+<span class="source-line-no">277</span><span id="line-277">            final DetailAST typeAST = methodDefAst.findFirstToken(TokenTypes.TYPE);</span>
+<span class="source-line-no">278</span><span id="line-278">            if (typeAST.findFirstToken(TokenTypes.LITERAL_VOID) == null) {</span>
+<span class="source-line-no">279</span><span id="line-279">                returnValue = true;</span>
+<span class="source-line-no">280</span><span id="line-280">            }</span>
+<span class="source-line-no">281</span><span id="line-281">        }</span>
+<span class="source-line-no">282</span><span id="line-282">        return returnValue;</span>
+<span class="source-line-no">283</span><span id="line-283">    }</span>
+<span class="source-line-no">284</span><span id="line-284"></span>
+<span class="source-line-no">285</span><span id="line-285">    /**</span>
+<span class="source-line-no">286</span><span id="line-286">     * Checks whether a parameter is a receiver.</span>
+<span class="source-line-no">287</span><span id="line-287">     *</span>
+<span class="source-line-no">288</span><span id="line-288">     * &lt;p&gt;A receiver parameter is a special parameter that</span>
+<span class="source-line-no">289</span><span id="line-289">     * represents the object for which the method is invoked.</span>
+<span class="source-line-no">290</span><span id="line-290">     * It is denoted by the reserved keyword {@code this}</span>
+<span class="source-line-no">291</span><span id="line-291">     * in the method declaration. Check</span>
+<span class="source-line-no">292</span><span id="line-292">     * &lt;a href="https://checkstyle.org/apidocs/com/puppycrawl/tools/checkstyle/api/TokenTypes.html#PARAMETER_DEF"&gt;</span>
+<span class="source-line-no">293</span><span id="line-293">     * PARAMETER_DEF&lt;/a&gt;</span>
+<span class="source-line-no">294</span><span id="line-294">     * &lt;/p&gt;</span>
+<span class="source-line-no">295</span><span id="line-295">     *</span>
+<span class="source-line-no">296</span><span id="line-296">     * @param parameterDefAst the parameter node.</span>
+<span class="source-line-no">297</span><span id="line-297">     * @return true if the parameter is a receiver.</span>
+<span class="source-line-no">298</span><span id="line-298">     * @see &lt;a href="https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.1"&gt;</span>
+<span class="source-line-no">299</span><span id="line-299">     *     ReceiverParameter&lt;/a&gt;</span>
+<span class="source-line-no">300</span><span id="line-300">     */</span>
+<span class="source-line-no">301</span><span id="line-301">    public static boolean isReceiverParameter(DetailAST parameterDefAst) {</span>
+<span class="source-line-no">302</span><span id="line-302">        return parameterDefAst.findFirstToken(TokenTypes.IDENT) == null;</span>
+<span class="source-line-no">303</span><span id="line-303">    }</span>
+<span class="source-line-no">304</span><span id="line-304"></span>
+<span class="source-line-no">305</span><span id="line-305">    /**</span>
+<span class="source-line-no">306</span><span id="line-306">     * Returns the access modifier of the method/constructor at the specified AST. If</span>
+<span class="source-line-no">307</span><span id="line-307">     * the method is in an interface or annotation block, the access modifier is assumed</span>
+<span class="source-line-no">308</span><span id="line-308">     * to be public.</span>
+<span class="source-line-no">309</span><span id="line-309">     *</span>
+<span class="source-line-no">310</span><span id="line-310">     * @param ast the token of the method/constructor.</span>
+<span class="source-line-no">311</span><span id="line-311">     * @return the access modifier of the method/constructor.</span>
+<span class="source-line-no">312</span><span id="line-312">     */</span>
+<span class="source-line-no">313</span><span id="line-313">    public static AccessModifierOption getAccessModifierFromModifiersToken(DetailAST ast) {</span>
+<span class="source-line-no">314</span><span id="line-314">        AccessModifierOption accessModifier;</span>
+<span class="source-line-no">315</span><span id="line-315">        if (ast.getType() == TokenTypes.ENUM_CONSTANT_DEF) {</span>
+<span class="source-line-no">316</span><span id="line-316">            accessModifier = AccessModifierOption.PUBLIC;</span>
+<span class="source-line-no">317</span><span id="line-317">        }</span>
+<span class="source-line-no">318</span><span id="line-318">        else {</span>
+<span class="source-line-no">319</span><span id="line-319">            final DetailAST modsToken = ast.findFirstToken(TokenTypes.MODIFIERS);</span>
+<span class="source-line-no">320</span><span id="line-320">            accessModifier = getAccessModifierFromModifiersTokenDirectly(modsToken);</span>
+<span class="source-line-no">321</span><span id="line-321">        }</span>
+<span class="source-line-no">322</span><span id="line-322"></span>
+<span class="source-line-no">323</span><span id="line-323">        if (accessModifier == AccessModifierOption.PACKAGE) {</span>
+<span class="source-line-no">324</span><span id="line-324">            if (ScopeUtil.isInEnumBlock(ast) &amp;&amp; ast.getType() == TokenTypes.CTOR_DEF) {</span>
+<span class="source-line-no">325</span><span id="line-325">                accessModifier = AccessModifierOption.PRIVATE;</span>
+<span class="source-line-no">326</span><span id="line-326">            }</span>
+<span class="source-line-no">327</span><span id="line-327">            else if (ScopeUtil.isInInterfaceOrAnnotationBlock(ast)) {</span>
+<span class="source-line-no">328</span><span id="line-328">                accessModifier = AccessModifierOption.PUBLIC;</span>
+<span class="source-line-no">329</span><span id="line-329">            }</span>
+<span class="source-line-no">330</span><span id="line-330">        }</span>
+<span class="source-line-no">331</span><span id="line-331"></span>
+<span class="source-line-no">332</span><span id="line-332">        return accessModifier;</span>
+<span class="source-line-no">333</span><span id="line-333">    }</span>
+<span class="source-line-no">334</span><span id="line-334"></span>
+<span class="source-line-no">335</span><span id="line-335">    /**</span>
+<span class="source-line-no">336</span><span id="line-336">     * Returns {@link AccessModifierOption} based on the information about access modifier</span>
+<span class="source-line-no">337</span><span id="line-337">     * taken from the given token of type {@link TokenTypes#MODIFIERS}.</span>
+<span class="source-line-no">338</span><span id="line-338">     *</span>
+<span class="source-line-no">339</span><span id="line-339">     * @param modifiersToken token of type {@link TokenTypes#MODIFIERS}.</span>
+<span class="source-line-no">340</span><span id="line-340">     * @return {@link AccessModifierOption}.</span>
+<span class="source-line-no">341</span><span id="line-341">     * @throws IllegalArgumentException when expected non-null modifiersToken with type 'MODIFIERS'</span>
+<span class="source-line-no">342</span><span id="line-342">     */</span>
+<span class="source-line-no">343</span><span id="line-343">    private static AccessModifierOption getAccessModifierFromModifiersTokenDirectly(</span>
+<span class="source-line-no">344</span><span id="line-344">            DetailAST modifiersToken) {</span>
+<span class="source-line-no">345</span><span id="line-345">        if (modifiersToken == null) {</span>
+<span class="source-line-no">346</span><span id="line-346">            throw new IllegalArgumentException("expected non-null AST-token with type 'MODIFIERS'");</span>
+<span class="source-line-no">347</span><span id="line-347">        }</span>
+<span class="source-line-no">348</span><span id="line-348"></span>
+<span class="source-line-no">349</span><span id="line-349">        AccessModifierOption accessModifier = AccessModifierOption.PACKAGE;</span>
+<span class="source-line-no">350</span><span id="line-350">        for (DetailAST token = modifiersToken.getFirstChild(); token != null;</span>
+<span class="source-line-no">351</span><span id="line-351">             token = token.getNextSibling()) {</span>
+<span class="source-line-no">352</span><span id="line-352">            final int tokenType = token.getType();</span>
+<span class="source-line-no">353</span><span id="line-353">            if (tokenType == TokenTypes.LITERAL_PUBLIC) {</span>
+<span class="source-line-no">354</span><span id="line-354">                accessModifier = AccessModifierOption.PUBLIC;</span>
+<span class="source-line-no">355</span><span id="line-355">            }</span>
+<span class="source-line-no">356</span><span id="line-356">            else if (tokenType == TokenTypes.LITERAL_PROTECTED) {</span>
+<span class="source-line-no">357</span><span id="line-357">                accessModifier = AccessModifierOption.PROTECTED;</span>
+<span class="source-line-no">358</span><span id="line-358">            }</span>
+<span class="source-line-no">359</span><span id="line-359">            else if (tokenType == TokenTypes.LITERAL_PRIVATE) {</span>
+<span class="source-line-no">360</span><span id="line-360">                accessModifier = AccessModifierOption.PRIVATE;</span>
+<span class="source-line-no">361</span><span id="line-361">            }</span>
+<span class="source-line-no">362</span><span id="line-362">        }</span>
+<span class="source-line-no">363</span><span id="line-363">        return accessModifier;</span>
+<span class="source-line-no">364</span><span id="line-364">    }</span>
+<span class="source-line-no">365</span><span id="line-365"></span>
+<span class="source-line-no">366</span><span id="line-366">    /**</span>
+<span class="source-line-no">367</span><span id="line-367">     * Returns the access modifier of the surrounding "block".</span>
+<span class="source-line-no">368</span><span id="line-368">     *</span>
+<span class="source-line-no">369</span><span id="line-369">     * @param node the node to return the access modifier for</span>
+<span class="source-line-no">370</span><span id="line-370">     * @return the access modifier of the surrounding block</span>
+<span class="source-line-no">371</span><span id="line-371">     */</span>
+<span class="source-line-no">372</span><span id="line-372">    public static Optional&lt;AccessModifierOption&gt; getSurroundingAccessModifier(DetailAST node) {</span>
+<span class="source-line-no">373</span><span id="line-373">        Optional&lt;AccessModifierOption&gt; returnValue = Optional.empty();</span>
+<span class="source-line-no">374</span><span id="line-374">        for (DetailAST token = node;</span>
+<span class="source-line-no">375</span><span id="line-375">             returnValue.isEmpty() &amp;&amp; !TokenUtil.isRootNode(token);</span>
+<span class="source-line-no">376</span><span id="line-376">             token = token.getParent()) {</span>
+<span class="source-line-no">377</span><span id="line-377">            final int type = token.getType();</span>
+<span class="source-line-no">378</span><span id="line-378">            if (type == TokenTypes.CLASS_DEF</span>
+<span class="source-line-no">379</span><span id="line-379">                || type == TokenTypes.INTERFACE_DEF</span>
+<span class="source-line-no">380</span><span id="line-380">                || type == TokenTypes.ANNOTATION_DEF</span>
+<span class="source-line-no">381</span><span id="line-381">                || type == TokenTypes.ENUM_DEF) {</span>
+<span class="source-line-no">382</span><span id="line-382">                returnValue = Optional.ofNullable(getAccessModifierFromModifiersToken(token));</span>
+<span class="source-line-no">383</span><span id="line-383">            }</span>
+<span class="source-line-no">384</span><span id="line-384">            else if (type == TokenTypes.LITERAL_NEW) {</span>
+<span class="source-line-no">385</span><span id="line-385">                break;</span>
+<span class="source-line-no">386</span><span id="line-386">            }</span>
+<span class="source-line-no">387</span><span id="line-387">        }</span>
+<span class="source-line-no">388</span><span id="line-388"></span>
+<span class="source-line-no">389</span><span id="line-389">        return returnValue;</span>
+<span class="source-line-no">390</span><span id="line-390">    }</span>
+<span class="source-line-no">391</span><span id="line-391"></span>
+<span class="source-line-no">392</span><span id="line-392">    /**</span>
+<span class="source-line-no">393</span><span id="line-393">     * Create set of class names and short class names.</span>
+<span class="source-line-no">394</span><span id="line-394">     *</span>
+<span class="source-line-no">395</span><span id="line-395">     * @param classNames array of class names.</span>
+<span class="source-line-no">396</span><span id="line-396">     * @return set of class names and short class names.</span>
+<span class="source-line-no">397</span><span id="line-397">     */</span>
+<span class="source-line-no">398</span><span id="line-398">    public static Set&lt;String&gt; parseClassNames(String... classNames) {</span>
+<span class="source-line-no">399</span><span id="line-399">        return Arrays.stream(classNames)</span>
+<span class="source-line-no">400</span><span id="line-400">                .flatMap(className -&gt; Stream.of(className, CommonUtil.baseClassName(className)))</span>
+<span class="source-line-no">401</span><span id="line-401">                .filter(Predicate.not(String::isEmpty))</span>
+<span class="source-line-no">402</span><span id="line-402">                .collect(Collectors.toUnmodifiableSet());</span>
+<span class="source-line-no">403</span><span id="line-403">    }</span>
+<span class="source-line-no">404</span><span id="line-404"></span>
+<span class="source-line-no">405</span><span id="line-405">    /**</span>
+<span class="source-line-no">406</span><span id="line-406">     * Strip initial newline and preceding whitespace on each line from text block content.</span>
+<span class="source-line-no">407</span><span id="line-407">     * In order to be consistent with how javac handles this task, we have modeled this</span>
+<span class="source-line-no">408</span><span id="line-408">     * implementation after the code from:</span>
+<span class="source-line-no">409</span><span id="line-409">     * github.com/openjdk/jdk14u/blob/master/src/java.base/share/classes/java/lang/String.java</span>
+<span class="source-line-no">410</span><span id="line-410">     *</span>
+<span class="source-line-no">411</span><span id="line-411">     * @param textBlockContent the actual content of the text block.</span>
+<span class="source-line-no">412</span><span id="line-412">     * @return string consistent with javac representation.</span>
+<span class="source-line-no">413</span><span id="line-413">     */</span>
+<span class="source-line-no">414</span><span id="line-414">    public static String stripIndentAndInitialNewLineFromTextBlock(String textBlockContent) {</span>
+<span class="source-line-no">415</span><span id="line-415">        final String contentWithInitialNewLineRemoved =</span>
+<span class="source-line-no">416</span><span id="line-416">            ALL_NEW_LINES.matcher(textBlockContent).replaceFirst("");</span>
+<span class="source-line-no">417</span><span id="line-417">        final List&lt;String&gt; lines =</span>
+<span class="source-line-no">418</span><span id="line-418">            Arrays.asList(ALL_NEW_LINES.split(contentWithInitialNewLineRemoved));</span>
+<span class="source-line-no">419</span><span id="line-419">        final int indent = getSmallestIndent(lines);</span>
+<span class="source-line-no">420</span><span id="line-420">        final String suffix = "";</span>
+<span class="source-line-no">421</span><span id="line-421"></span>
+<span class="source-line-no">422</span><span id="line-422">        return lines.stream()</span>
+<span class="source-line-no">423</span><span id="line-423">                .map(line -&gt; stripIndentAndTrailingWhitespaceFromLine(line, indent))</span>
+<span class="source-line-no">424</span><span id="line-424">                .collect(Collectors.joining(System.lineSeparator(), suffix, suffix));</span>
+<span class="source-line-no">425</span><span id="line-425">    }</span>
+<span class="source-line-no">426</span><span id="line-426"></span>
+<span class="source-line-no">427</span><span id="line-427">    /**</span>
+<span class="source-line-no">428</span><span id="line-428">     * Helper method for stripIndentAndInitialNewLineFromTextBlock, strips correct indent</span>
+<span class="source-line-no">429</span><span id="line-429">     * from string, and trailing whitespace, or returns empty string if no text.</span>
+<span class="source-line-no">430</span><span id="line-430">     *</span>
+<span class="source-line-no">431</span><span id="line-431">     * @param line the string to strip indent and trailing whitespace from</span>
+<span class="source-line-no">432</span><span id="line-432">     * @param indent the amount of indent to remove</span>
+<span class="source-line-no">433</span><span id="line-433">     * @return modified string with removed indent and trailing whitespace, or empty string.</span>
+<span class="source-line-no">434</span><span id="line-434">     */</span>
+<span class="source-line-no">435</span><span id="line-435">    private static String stripIndentAndTrailingWhitespaceFromLine(String line, int indent) {</span>
+<span class="source-line-no">436</span><span id="line-436">        final int lastNonWhitespace = lastIndexOfNonWhitespace(line);</span>
+<span class="source-line-no">437</span><span id="line-437">        String returnString = "";</span>
+<span class="source-line-no">438</span><span id="line-438">        if (lastNonWhitespace &gt; 0) {</span>
+<span class="source-line-no">439</span><span id="line-439">            returnString = line.substring(indent, lastNonWhitespace);</span>
+<span class="source-line-no">440</span><span id="line-440">        }</span>
+<span class="source-line-no">441</span><span id="line-441">        return returnString;</span>
+<span class="source-line-no">442</span><span id="line-442">    }</span>
+<span class="source-line-no">443</span><span id="line-443"></span>
+<span class="source-line-no">444</span><span id="line-444">    /**</span>
+<span class="source-line-no">445</span><span id="line-445">     * Helper method for stripIndentAndInitialNewLineFromTextBlock, to determine the smallest</span>
+<span class="source-line-no">446</span><span id="line-446">     * indent in a text block string literal.</span>
+<span class="source-line-no">447</span><span id="line-447">     *</span>
+<span class="source-line-no">448</span><span id="line-448">     * @param lines collection of actual text block content, split by line.</span>
+<span class="source-line-no">449</span><span id="line-449">     * @return number of spaces representing the smallest indent in this text block.</span>
+<span class="source-line-no">450</span><span id="line-450">     */</span>
+<span class="source-line-no">451</span><span id="line-451">    private static int getSmallestIndent(Collection&lt;String&gt; lines) {</span>
+<span class="source-line-no">452</span><span id="line-452">        return lines.stream()</span>
+<span class="source-line-no">453</span><span id="line-453">            .mapToInt(CommonUtil::indexOfNonWhitespace)</span>
+<span class="source-line-no">454</span><span id="line-454">            .min()</span>
+<span class="source-line-no">455</span><span id="line-455">            .orElse(0);</span>
+<span class="source-line-no">456</span><span id="line-456">    }</span>
+<span class="source-line-no">457</span><span id="line-457"></span>
+<span class="source-line-no">458</span><span id="line-458">    /**</span>
+<span class="source-line-no">459</span><span id="line-459">     * Helper method to find the index of the last non-whitespace character in a string.</span>
+<span class="source-line-no">460</span><span id="line-460">     *</span>
+<span class="source-line-no">461</span><span id="line-461">     * @param line the string to find the last index of a non-whitespace character for.</span>
+<span class="source-line-no">462</span><span id="line-462">     * @return the index of the last non-whitespace character.</span>
+<span class="source-line-no">463</span><span id="line-463">     */</span>
+<span class="source-line-no">464</span><span id="line-464">    private static int lastIndexOfNonWhitespace(String line) {</span>
+<span class="source-line-no">465</span><span id="line-465">        int length;</span>
+<span class="source-line-no">466</span><span id="line-466">        for (length = line.length(); length &gt; 0; length--) {</span>
+<span class="source-line-no">467</span><span id="line-467">            if (!Character.isWhitespace(line.charAt(length - 1))) {</span>
+<span class="source-line-no">468</span><span id="line-468">                break;</span>
+<span class="source-line-no">469</span><span id="line-469">            }</span>
+<span class="source-line-no">470</span><span id="line-470">        }</span>
+<span class="source-line-no">471</span><span id="line-471">        return length;</span>
+<span class="source-line-no">472</span><span id="line-472">    }</span>
+<span class="source-line-no">473</span><span id="line-473"></span>
+<span class="source-line-no">474</span><span id="line-474">    /**</span>
+<span class="source-line-no">475</span><span id="line-475">     * Calculates and returns the type declaration name matching count.</span>
+<span class="source-line-no">476</span><span id="line-476">     *</span>
+<span class="source-line-no">477</span><span id="line-477">     * &lt;p&gt;</span>
+<span class="source-line-no">478</span><span id="line-478">     * Suppose our pattern class is {@code foo.a.b} and class to be matched is</span>
+<span class="source-line-no">479</span><span id="line-479">     * {@code foo.a.ball} then type declaration name matching count would be calculated by</span>
+<span class="source-line-no">480</span><span id="line-480">     * comparing every character, and updating main counter when we hit "." to prevent matching</span>
+<span class="source-line-no">481</span><span id="line-481">     * "a.b" with "a.ball". In this case type declaration name matching count</span>
+<span class="source-line-no">482</span><span id="line-482">     * would be equal to 6 and not 7 (b of ball is not counted).</span>
+<span class="source-line-no">483</span><span id="line-483">     * &lt;/p&gt;</span>
+<span class="source-line-no">484</span><span id="line-484">     *</span>
+<span class="source-line-no">485</span><span id="line-485">     * @param patternClass class against which the given class has to be matched</span>
+<span class="source-line-no">486</span><span id="line-486">     * @param classToBeMatched class to be matched</span>
+<span class="source-line-no">487</span><span id="line-487">     * @return class name matching count</span>
+<span class="source-line-no">488</span><span id="line-488">     */</span>
+<span class="source-line-no">489</span><span id="line-489">    public static int typeDeclarationNameMatchingCount(String patternClass,</span>
+<span class="source-line-no">490</span><span id="line-490">                                                       String classToBeMatched) {</span>
+<span class="source-line-no">491</span><span id="line-491">        final int length = Math.min(classToBeMatched.length(), patternClass.length());</span>
+<span class="source-line-no">492</span><span id="line-492">        int result = 0;</span>
+<span class="source-line-no">493</span><span id="line-493">        for (int i = 0; i &lt; length &amp;&amp; patternClass.charAt(i) == classToBeMatched.charAt(i); ++i) {</span>
+<span class="source-line-no">494</span><span id="line-494">            if (patternClass.charAt(i) == PACKAGE_SEPARATOR) {</span>
+<span class="source-line-no">495</span><span id="line-495">                result = i;</span>
+<span class="source-line-no">496</span><span id="line-496">            }</span>
+<span class="source-line-no">497</span><span id="line-497">        }</span>
+<span class="source-line-no">498</span><span id="line-498">        return result;</span>
+<span class="source-line-no">499</span><span id="line-499">    }</span>
+<span class="source-line-no">500</span><span id="line-500"></span>
+<span class="source-line-no">501</span><span id="line-501">    /**</span>
+<span class="source-line-no">502</span><span id="line-502">     * Get the qualified name of type declaration by combining {@code packageName},</span>
+<span class="source-line-no">503</span><span id="line-503">     * {@code outerClassQualifiedName} and {@code className}.</span>
+<span class="source-line-no">504</span><span id="line-504">     *</span>
+<span class="source-line-no">505</span><span id="line-505">     * @param packageName packageName</span>
+<span class="source-line-no">506</span><span id="line-506">     * @param outerClassQualifiedName outerClassQualifiedName</span>
+<span class="source-line-no">507</span><span id="line-507">     * @param className className</span>
+<span class="source-line-no">508</span><span id="line-508">     * @return the qualified name of type declaration by combining {@code packageName},</span>
+<span class="source-line-no">509</span><span id="line-509">     *         {@code outerClassQualifiedName} and {@code className}</span>
+<span class="source-line-no">510</span><span id="line-510">     */</span>
+<span class="source-line-no">511</span><span id="line-511">    public static String getQualifiedTypeDeclarationName(String packageName,</span>
+<span class="source-line-no">512</span><span id="line-512">                                                         String outerClassQualifiedName,</span>
+<span class="source-line-no">513</span><span id="line-513">                                                         String className) {</span>
+<span class="source-line-no">514</span><span id="line-514">        final String qualifiedClassName;</span>
+<span class="source-line-no">515</span><span id="line-515"></span>
+<span class="source-line-no">516</span><span id="line-516">        if (outerClassQualifiedName == null) {</span>
+<span class="source-line-no">517</span><span id="line-517">            if (packageName == null) {</span>
+<span class="source-line-no">518</span><span id="line-518">                qualifiedClassName = className;</span>
+<span class="source-line-no">519</span><span id="line-519">            }</span>
+<span class="source-line-no">520</span><span id="line-520">            else {</span>
+<span class="source-line-no">521</span><span id="line-521">                qualifiedClassName = packageName + PACKAGE_SEPARATOR + className;</span>
+<span class="source-line-no">522</span><span id="line-522">            }</span>
+<span class="source-line-no">523</span><span id="line-523">        }</span>
+<span class="source-line-no">524</span><span id="line-524">        else {</span>
+<span class="source-line-no">525</span><span id="line-525">            qualifiedClassName = outerClassQualifiedName + PACKAGE_SEPARATOR + className;</span>
+<span class="source-line-no">526</span><span id="line-526">        }</span>
+<span class="source-line-no">527</span><span id="line-527">        return qualifiedClassName;</span>
+<span class="source-line-no">528</span><span id="line-528">    }</span>
+<span class="source-line-no">529</span><span id="line-529"></span>
+<span class="source-line-no">530</span><span id="line-530">    /**</span>
+<span class="source-line-no">531</span><span id="line-531">     * Get name of package and super class of anon inner class by concatenating</span>
+<span class="source-line-no">532</span><span id="line-532">     * the identifier values under {@link TokenTypes#DOT}.</span>
+<span class="source-line-no">533</span><span id="line-533">     *</span>
+<span class="source-line-no">534</span><span id="line-534">     * @param ast ast to extract superclass or package name from</span>
+<span class="source-line-no">535</span><span id="line-535">     * @return qualified name</span>
+<span class="source-line-no">536</span><span id="line-536">     */</span>
+<span class="source-line-no">537</span><span id="line-537">    public static String extractQualifiedName(DetailAST ast) {</span>
+<span class="source-line-no">538</span><span id="line-538">        return FullIdent.createFullIdent(ast).getText();</span>
+<span class="source-line-no">539</span><span id="line-539">    }</span>
+<span class="source-line-no">540</span><span id="line-540"></span>
+<span class="source-line-no">541</span><span id="line-541">    /**</span>
+<span class="source-line-no">542</span><span id="line-542">     * Get the short name of super class of anonymous inner class.</span>
+<span class="source-line-no">543</span><span id="line-543">     * Example:</span>
+<span class="source-line-no">544</span><span id="line-544">     * &lt;pre&gt;</span>
+<span class="source-line-no">545</span><span id="line-545">     * TestClass.NestedClass obj = new Test().new NestedClass() {};</span>
+<span class="source-line-no">546</span><span id="line-546">     * // Short name will be Test.NestedClass</span>
+<span class="source-line-no">547</span><span id="line-547">     * &lt;/pre&gt;</span>
+<span class="source-line-no">548</span><span id="line-548">     *</span>
+<span class="source-line-no">549</span><span id="line-549">     * @param literalNewAst ast node of type {@link TokenTypes#LITERAL_NEW}</span>
+<span class="source-line-no">550</span><span id="line-550">     * @return short name of base class of anonymous inner class</span>
+<span class="source-line-no">551</span><span id="line-551">     */</span>
+<span class="source-line-no">552</span><span id="line-552">    public static String getShortNameOfAnonInnerClass(DetailAST literalNewAst) {</span>
+<span class="source-line-no">553</span><span id="line-553">        DetailAST parentAst = literalNewAst;</span>
+<span class="source-line-no">554</span><span id="line-554">        while (TokenUtil.isOfType(parentAst, TokenTypes.LITERAL_NEW, TokenTypes.DOT)) {</span>
+<span class="source-line-no">555</span><span id="line-555">            parentAst = parentAst.getParent();</span>
+<span class="source-line-no">556</span><span id="line-556">        }</span>
+<span class="source-line-no">557</span><span id="line-557">        final DetailAST firstChild = parentAst.getFirstChild();</span>
+<span class="source-line-no">558</span><span id="line-558">        return extractQualifiedName(firstChild);</span>
+<span class="source-line-no">559</span><span id="line-559">    }</span>
+<span class="source-line-no">560</span><span id="line-560"></span>
+<span class="source-line-no">561</span><span id="line-561">    /**</span>
+<span class="source-line-no">562</span><span id="line-562">     * Checks if the given file path is a package-info.java file.</span>
+<span class="source-line-no">563</span><span id="line-563">     *</span>
+<span class="source-line-no">564</span><span id="line-564">     * @param filePath path to the file.</span>
+<span class="source-line-no">565</span><span id="line-565">     * @return true if the package file.</span>
+<span class="source-line-no">566</span><span id="line-566">     */</span>
+<span class="source-line-no">567</span><span id="line-567">    public static boolean isPackageInfo(String filePath) {</span>
+<span class="source-line-no">568</span><span id="line-568">        final Path filename = Path.of(filePath).getFileName();</span>
+<span class="source-line-no">569</span><span id="line-569">        return filename != null &amp;&amp; "package-info.java".equals(filename.toString());</span>
+<span class="source-line-no">570</span><span id="line-570">    }</span>
+<span class="source-line-no">571</span><span id="line-571"></span>
+<span class="source-line-no">572</span><span id="line-572">    /**</span>
+<span class="source-line-no">573</span><span id="line-573">     * Checks if a given subtree is terminated by return, throw, break, continue, or yield.</span>
+<span class="source-line-no">574</span><span id="line-574">     *</span>
+<span class="source-line-no">575</span><span id="line-575">     * @param ast root of given subtree</span>
+<span class="source-line-no">576</span><span id="line-576">     * @return true if the subtree is terminated.</span>
+<span class="source-line-no">577</span><span id="line-577">     */</span>
+<span class="source-line-no">578</span><span id="line-578">    public static boolean isTerminated(final DetailAST ast) {</span>
+<span class="source-line-no">579</span><span id="line-579">        return isTerminated(ast, true, true, new HashSet&lt;&gt;());</span>
+<span class="source-line-no">580</span><span id="line-580">    }</span>
+<span class="source-line-no">581</span><span id="line-581"></span>
+<span class="source-line-no">582</span><span id="line-582">    /**</span>
+<span class="source-line-no">583</span><span id="line-583">     * Checks if a given subtree terminated by return, throw, yield or,</span>
+<span class="source-line-no">584</span><span id="line-584">     * if allowed break, continue.</span>
+<span class="source-line-no">585</span><span id="line-585">     * When analyzing fall-through cases in switch statements, a Set of String labels</span>
+<span class="source-line-no">586</span><span id="line-586">     * is used to keep track of the labels encountered in the enclosing switch statements.</span>
+<span class="source-line-no">587</span><span id="line-587">     *</span>
+<span class="source-line-no">588</span><span id="line-588">     * @param ast root of given subtree</span>
+<span class="source-line-no">589</span><span id="line-589">     * @param useBreak should we consider break as terminator</span>
+<span class="source-line-no">590</span><span id="line-590">     * @param useContinue should we consider continue as terminator</span>
+<span class="source-line-no">591</span><span id="line-591">     * @param labelsForCurrentSwitchScope the Set labels for the current scope of the switch</span>
+<span class="source-line-no">592</span><span id="line-592">     * @return true if the subtree is terminated.</span>
+<span class="source-line-no">593</span><span id="line-593">     */</span>
+<span class="source-line-no">594</span><span id="line-594">    private static boolean isTerminated(final DetailAST ast, boolean useBreak, boolean useContinue,</span>
+<span class="source-line-no">595</span><span id="line-595">                                        Set&lt;String&gt; labelsForCurrentSwitchScope) {</span>
+<span class="source-line-no">596</span><span id="line-596"></span>
+<span class="source-line-no">597</span><span id="line-597">        return switch (ast.getType()) {</span>
+<span class="source-line-no">598</span><span id="line-598">            case TokenTypes.LITERAL_RETURN, TokenTypes.LITERAL_YIELD,</span>
+<span class="source-line-no">599</span><span id="line-599">                    TokenTypes.LITERAL_THROW -&gt; true;</span>
+<span class="source-line-no">600</span><span id="line-600">            case TokenTypes.LITERAL_BREAK -&gt; useBreak</span>
+<span class="source-line-no">601</span><span id="line-601">                    || hasLabel(ast, labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">602</span><span id="line-602">            case TokenTypes.LITERAL_CONTINUE -&gt; useContinue</span>
+<span class="source-line-no">603</span><span id="line-603">                    || hasLabel(ast, labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">604</span><span id="line-604">            case TokenTypes.SLIST -&gt; checkSlist(ast, useBreak, useContinue,</span>
+<span class="source-line-no">605</span><span id="line-605">                    labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">606</span><span id="line-606">            case TokenTypes.LITERAL_IF -&gt; checkIf(ast, useBreak, useContinue,</span>
+<span class="source-line-no">607</span><span id="line-607">                    labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">608</span><span id="line-608">            case TokenTypes.LITERAL_FOR, TokenTypes.LITERAL_WHILE, TokenTypes.LITERAL_DO -&gt;</span>
+<span class="source-line-no">609</span><span id="line-609">                checkLoop(ast, labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">610</span><span id="line-610">            case TokenTypes.LITERAL_TRY -&gt; checkTry(ast, useBreak, useContinue,</span>
+<span class="source-line-no">611</span><span id="line-611">                    labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">612</span><span id="line-612">            case TokenTypes.LITERAL_SWITCH -&gt; checkSwitch(ast, useContinue,</span>
+<span class="source-line-no">613</span><span id="line-613">                    labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">614</span><span id="line-614">            case TokenTypes.LITERAL_SYNCHRONIZED -&gt;</span>
+<span class="source-line-no">615</span><span id="line-615">                checkSynchronized(ast, useBreak, useContinue,</span>
+<span class="source-line-no">616</span><span id="line-616">                    labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">617</span><span id="line-617">            case TokenTypes.LABELED_STAT -&gt; {</span>
+<span class="source-line-no">618</span><span id="line-618">                labelsForCurrentSwitchScope.add(ast.getFirstChild().getText());</span>
+<span class="source-line-no">619</span><span id="line-619">                yield isTerminated(ast.getLastChild(), useBreak, useContinue,</span>
+<span class="source-line-no">620</span><span id="line-620">                        labelsForCurrentSwitchScope);</span>
+<span class="source-line-no">621</span><span id="line-621">            }</span>
+<span class="source-line-no">622</span><span id="line-622">            default -&gt; false;</span>
+<span class="source-line-no">623</span><span id="line-623">        };</span>
+<span class="source-line-no">624</span><span id="line-624">    }</span>
+<span class="source-line-no">625</span><span id="line-625"></span>
+<span class="source-line-no">626</span><span id="line-626">    /**</span>
+<span class="source-line-no">627</span><span id="line-627">     * Checks if given break or continue ast has outer label.</span>
+<span class="source-line-no">628</span><span id="line-628">     *</span>
+<span class="source-line-no">629</span><span id="line-629">     * @param statement break or continue node</span>
+<span class="source-line-no">630</span><span id="line-630">     * @param labelsForCurrentSwitchScope the Set labels for the current scope of the switch</span>
+<span class="source-line-no">631</span><span id="line-631">     * @return true if local label used</span>
+<span class="source-line-no">632</span><span id="line-632">     */</span>
+<span class="source-line-no">633</span><span id="line-633">    private static boolean hasLabel(DetailAST statement, Set&lt;String&gt; labelsForCurrentSwitchScope) {</span>
+<span class="source-line-no">634</span><span id="line-634">        return Optional.ofNullable(statement)</span>
+<span class="source-line-no">635</span><span id="line-635">                .map(DetailAST::getFirstChild)</span>
+<span class="source-line-no">636</span><span id="line-636">                .filter(child -&gt; child.getType() == TokenTypes.IDENT)</span>
+<span class="source-line-no">637</span><span id="line-637">                .map(DetailAST::getText)</span>
+<span class="source-line-no">638</span><span id="line-638">                .filter(label -&gt; !labelsForCurrentSwitchScope.contains(label))</span>
+<span class="source-line-no">639</span><span id="line-639">                .isPresent();</span>
+<span class="source-line-no">640</span><span id="line-640">    }</span>
+<span class="source-line-no">641</span><span id="line-641"></span>
+<span class="source-line-no">642</span><span id="line-642">    /**</span>
+<span class="source-line-no">643</span><span id="line-643">     * Checks if a given SLIST terminated by return, throw or,</span>
+<span class="source-line-no">644</span><span id="line-644">     * if allowed break, continue.</span>
+<span class="source-line-no">645</span><span id="line-645">     *</span>
+<span class="source-line-no">646</span><span id="line-646">     * @param slistAst SLIST to check</span>
+<span class="source-line-no">647</span><span id="line-647">     * @param useBreak should we consider break as terminator</span>
+<span class="source-line-no">648</span><span id="line-648">     * @param useContinue should we consider continue as terminator</span>
+<span class="source-line-no">649</span><span id="line-649">     * @param labels label names</span>
+<span class="source-line-no">650</span><span id="line-650">     * @return true if SLIST is terminated.</span>
+<span class="source-line-no">651</span><span id="line-651">     */</span>
+<span class="source-line-no">652</span><span id="line-652">    private static boolean checkSlist(final DetailAST slistAst, boolean useBreak,</span>
+<span class="source-line-no">653</span><span id="line-653">                                      boolean useContinue, Set&lt;String&gt; labels) {</span>
+<span class="source-line-no">654</span><span id="line-654">        DetailAST lastStmt = slistAst.getLastChild();</span>
+<span class="source-line-no">655</span><span id="line-655"></span>
+<span class="source-line-no">656</span><span id="line-656">        if (lastStmt.getType() == TokenTypes.RCURLY) {</span>
+<span class="source-line-no">657</span><span id="line-657">            lastStmt = lastStmt.getPreviousSibling();</span>
+<span class="source-line-no">658</span><span id="line-658">        }</span>
+<span class="source-line-no">659</span><span id="line-659"></span>
+<span class="source-line-no">660</span><span id="line-660">        while (TokenUtil.isOfType(lastStmt, TokenTypes.SINGLE_LINE_COMMENT,</span>
+<span class="source-line-no">661</span><span id="line-661">                TokenTypes.BLOCK_COMMENT_BEGIN)) {</span>
+<span class="source-line-no">662</span><span id="line-662">            lastStmt = lastStmt.getPreviousSibling();</span>
+<span class="source-line-no">663</span><span id="line-663">        }</span>
+<span class="source-line-no">664</span><span id="line-664"></span>
+<span class="source-line-no">665</span><span id="line-665">        return lastStmt != null</span>
+<span class="source-line-no">666</span><span id="line-666">            &amp;&amp; isTerminated(lastStmt, useBreak, useContinue, labels);</span>
+<span class="source-line-no">667</span><span id="line-667">    }</span>
+<span class="source-line-no">668</span><span id="line-668"></span>
+<span class="source-line-no">669</span><span id="line-669">    /**</span>
+<span class="source-line-no">670</span><span id="line-670">     * Checks if a given IF terminated by return, throw or,</span>
+<span class="source-line-no">671</span><span id="line-671">     * if allowed break, continue.</span>
+<span class="source-line-no">672</span><span id="line-672">     *</span>
+<span class="source-line-no">673</span><span id="line-673">     * @param ast IF to check</span>
+<span class="source-line-no">674</span><span id="line-674">     * @param useBreak should we consider break as terminator</span>
+<span class="source-line-no">675</span><span id="line-675">     * @param useContinue should we consider continue as terminator</span>
+<span class="source-line-no">676</span><span id="line-676">     * @param labels label names</span>
+<span class="source-line-no">677</span><span id="line-677">     * @return true if IF is terminated.</span>
+<span class="source-line-no">678</span><span id="line-678">     */</span>
+<span class="source-line-no">679</span><span id="line-679">    private static boolean checkIf(final DetailAST ast, boolean useBreak,</span>
+<span class="source-line-no">680</span><span id="line-680">                                   boolean useContinue, Set&lt;String&gt; labels) {</span>
+<span class="source-line-no">681</span><span id="line-681">        final DetailAST thenStmt = getNextNonCommentAst(ast.findFirstToken(TokenTypes.RPAREN));</span>
+<span class="source-line-no">682</span><span id="line-682"></span>
+<span class="source-line-no">683</span><span id="line-683">        final DetailAST elseStmt = getNextNonCommentAst(thenStmt);</span>
+<span class="source-line-no">684</span><span id="line-684"></span>
+<span class="source-line-no">685</span><span id="line-685">        return elseStmt != null</span>
+<span class="source-line-no">686</span><span id="line-686">                &amp;&amp; isTerminated(thenStmt, useBreak, useContinue, labels)</span>
+<span class="source-line-no">687</span><span id="line-687">                &amp;&amp; isTerminated(elseStmt.getLastChild(), useBreak, useContinue, labels);</span>
+<span class="source-line-no">688</span><span id="line-688">    }</span>
+<span class="source-line-no">689</span><span id="line-689"></span>
+<span class="source-line-no">690</span><span id="line-690">    /**</span>
+<span class="source-line-no">691</span><span id="line-691">     * This method will skip the comment content while finding the next ast of current ast.</span>
+<span class="source-line-no">692</span><span id="line-692">     *</span>
+<span class="source-line-no">693</span><span id="line-693">     * @param ast current ast</span>
+<span class="source-line-no">694</span><span id="line-694">     * @return next ast after skipping comment</span>
+<span class="source-line-no">695</span><span id="line-695">     */</span>
+<span class="source-line-no">696</span><span id="line-696">    public static DetailAST getNextNonCommentAst(DetailAST ast) {</span>
+<span class="source-line-no">697</span><span id="line-697">        DetailAST nextSibling = ast.getNextSibling();</span>
+<span class="source-line-no">698</span><span id="line-698">        while (TokenUtil.isOfType(nextSibling, TokenTypes.SINGLE_LINE_COMMENT,</span>
+<span class="source-line-no">699</span><span id="line-699">                TokenTypes.BLOCK_COMMENT_BEGIN)) {</span>
+<span class="source-line-no">700</span><span id="line-700">            nextSibling = nextSibling.getNextSibling();</span>
+<span class="source-line-no">701</span><span id="line-701">        }</span>
+<span class="source-line-no">702</span><span id="line-702">        return nextSibling;</span>
+<span class="source-line-no">703</span><span id="line-703">    }</span>
+<span class="source-line-no">704</span><span id="line-704"></span>
+<span class="source-line-no">705</span><span id="line-705">    /**</span>
+<span class="source-line-no">706</span><span id="line-706">     * Checks if a given loop terminated by return, throw or,</span>
+<span class="source-line-no">707</span><span id="line-707">     * if allowed break, continue.</span>
+<span class="source-line-no">708</span><span id="line-708">     *</span>
+<span class="source-line-no">709</span><span id="line-709">     * @param ast loop to check</span>
+<span class="source-line-no">710</span><span id="line-710">     * @param labels label names</span>
+<span class="source-line-no">711</span><span id="line-711">     * @return true if loop is terminated.</span>
+<span class="source-line-no">712</span><span id="line-712">     */</span>
+<span class="source-line-no">713</span><span id="line-713">    private static boolean checkLoop(final DetailAST ast, Set&lt;String&gt; labels) {</span>
+<span class="source-line-no">714</span><span id="line-714">        final DetailAST loopBody;</span>
+<span class="source-line-no">715</span><span id="line-715">        if (ast.getType() == TokenTypes.LITERAL_DO) {</span>
+<span class="source-line-no">716</span><span id="line-716">            final DetailAST lparen = ast.findFirstToken(TokenTypes.DO_WHILE);</span>
+<span class="source-line-no">717</span><span id="line-717">            loopBody = lparen.getPreviousSibling();</span>
+<span class="source-line-no">718</span><span id="line-718">        }</span>
+<span class="source-line-no">719</span><span id="line-719">        else {</span>
+<span class="source-line-no">720</span><span id="line-720">            final DetailAST rparen = ast.findFirstToken(TokenTypes.RPAREN);</span>
+<span class="source-line-no">721</span><span id="line-721">            loopBody = rparen.getNextSibling();</span>
+<span class="source-line-no">722</span><span id="line-722">        }</span>
+<span class="source-line-no">723</span><span id="line-723">        return isTerminated(loopBody, false, false, labels);</span>
+<span class="source-line-no">724</span><span id="line-724">    }</span>
+<span class="source-line-no">725</span><span id="line-725"></span>
+<span class="source-line-no">726</span><span id="line-726">    /**</span>
+<span class="source-line-no">727</span><span id="line-727">     * Checks if a given try/catch/finally block terminated by return, throw or,</span>
+<span class="source-line-no">728</span><span id="line-728">     * if allowed break, continue.</span>
+<span class="source-line-no">729</span><span id="line-729">     *</span>
+<span class="source-line-no">730</span><span id="line-730">     * @param ast loop to check</span>
+<span class="source-line-no">731</span><span id="line-731">     * @param useBreak should we consider break as terminator</span>
+<span class="source-line-no">732</span><span id="line-732">     * @param useContinue should we consider continue as terminator</span>
+<span class="source-line-no">733</span><span id="line-733">     * @param labels label names</span>
+<span class="source-line-no">734</span><span id="line-734">     * @return true if try/catch/finally block is terminated</span>
+<span class="source-line-no">735</span><span id="line-735">     */</span>
+<span class="source-line-no">736</span><span id="line-736">    private static boolean checkTry(final DetailAST ast, boolean useBreak,</span>
+<span class="source-line-no">737</span><span id="line-737">                                    boolean useContinue, Set&lt;String&gt; labels) {</span>
+<span class="source-line-no">738</span><span id="line-738">        final DetailAST finalStmt = ast.getLastChild();</span>
+<span class="source-line-no">739</span><span id="line-739">        boolean isTerminated = finalStmt.getType() == TokenTypes.LITERAL_FINALLY</span>
+<span class="source-line-no">740</span><span id="line-740">                &amp;&amp; isTerminated(finalStmt.findFirstToken(TokenTypes.SLIST),</span>
+<span class="source-line-no">741</span><span id="line-741">                useBreak, useContinue, labels);</span>
+<span class="source-line-no">742</span><span id="line-742"></span>
+<span class="source-line-no">743</span><span id="line-743">        if (!isTerminated) {</span>
+<span class="source-line-no">744</span><span id="line-744">            DetailAST firstChild = ast.getFirstChild();</span>
+<span class="source-line-no">745</span><span id="line-745"></span>
+<span class="source-line-no">746</span><span id="line-746">            if (firstChild.getType() == TokenTypes.RESOURCE_SPECIFICATION) {</span>
+<span class="source-line-no">747</span><span id="line-747">                firstChild = firstChild.getNextSibling();</span>
+<span class="source-line-no">748</span><span id="line-748">            }</span>
+<span class="source-line-no">749</span><span id="line-749"></span>
+<span class="source-line-no">750</span><span id="line-750">            isTerminated = isTerminated(firstChild,</span>
+<span class="source-line-no">751</span><span id="line-751">                    useBreak, useContinue, labels);</span>
+<span class="source-line-no">752</span><span id="line-752"></span>
+<span class="source-line-no">753</span><span id="line-753">            DetailAST catchStmt = ast.findFirstToken(TokenTypes.LITERAL_CATCH);</span>
+<span class="source-line-no">754</span><span id="line-754">            while (catchStmt != null</span>
+<span class="source-line-no">755</span><span id="line-755">                    &amp;&amp; isTerminated</span>
+<span class="source-line-no">756</span><span id="line-756">                    &amp;&amp; catchStmt.getType() == TokenTypes.LITERAL_CATCH) {</span>
+<span class="source-line-no">757</span><span id="line-757">                final DetailAST catchBody =</span>
+<span class="source-line-no">758</span><span id="line-758">                        catchStmt.findFirstToken(TokenTypes.SLIST);</span>
+<span class="source-line-no">759</span><span id="line-759">                isTerminated = isTerminated(catchBody, useBreak, useContinue, labels);</span>
+<span class="source-line-no">760</span><span id="line-760">                catchStmt = catchStmt.getNextSibling();</span>
+<span class="source-line-no">761</span><span id="line-761">            }</span>
+<span class="source-line-no">762</span><span id="line-762">        }</span>
+<span class="source-line-no">763</span><span id="line-763">        return isTerminated;</span>
+<span class="source-line-no">764</span><span id="line-764">    }</span>
+<span class="source-line-no">765</span><span id="line-765"></span>
+<span class="source-line-no">766</span><span id="line-766">    /**</span>
+<span class="source-line-no">767</span><span id="line-767">     * Checks if a given switch terminated by return, throw or,</span>
+<span class="source-line-no">768</span><span id="line-768">     * if allowed break, continue.</span>
+<span class="source-line-no">769</span><span id="line-769">     *</span>
+<span class="source-line-no">770</span><span id="line-770">     * @param literalSwitchAst loop to check</span>
+<span class="source-line-no">771</span><span id="line-771">     * @param useContinue should we consider continue as terminator</span>
+<span class="source-line-no">772</span><span id="line-772">     * @param labels label names</span>
+<span class="source-line-no">773</span><span id="line-773">     * @return true if switch is terminated</span>
+<span class="source-line-no">774</span><span id="line-774">     */</span>
+<span class="source-line-no">775</span><span id="line-775">    private static boolean checkSwitch(DetailAST literalSwitchAst,</span>
+<span class="source-line-no">776</span><span id="line-776">                                       boolean useContinue, Set&lt;String&gt; labels) {</span>
+<span class="source-line-no">777</span><span id="line-777">        DetailAST caseGroup = literalSwitchAst.findFirstToken(TokenTypes.CASE_GROUP);</span>
+<span class="source-line-no">778</span><span id="line-778">        boolean isTerminated = caseGroup != null;</span>
+<span class="source-line-no">779</span><span id="line-779">        while (isTerminated &amp;&amp; caseGroup.getType() != TokenTypes.RCURLY) {</span>
+<span class="source-line-no">780</span><span id="line-780">            final DetailAST caseBody =</span>
+<span class="source-line-no">781</span><span id="line-781">                caseGroup.findFirstToken(TokenTypes.SLIST);</span>
+<span class="source-line-no">782</span><span id="line-782">            isTerminated = caseBody != null</span>
+<span class="source-line-no">783</span><span id="line-783">                    &amp;&amp; isTerminated(caseBody, false, useContinue, labels);</span>
+<span class="source-line-no">784</span><span id="line-784">            caseGroup = caseGroup.getNextSibling();</span>
+<span class="source-line-no">785</span><span id="line-785">        }</span>
+<span class="source-line-no">786</span><span id="line-786">        return isTerminated;</span>
+<span class="source-line-no">787</span><span id="line-787">    }</span>
+<span class="source-line-no">788</span><span id="line-788"></span>
+<span class="source-line-no">789</span><span id="line-789">    /**</span>
+<span class="source-line-no">790</span><span id="line-790">     * Checks if a given synchronized block terminated by return, throw or,</span>
+<span class="source-line-no">791</span><span id="line-791">     * if allowed break, continue.</span>
+<span class="source-line-no">792</span><span id="line-792">     *</span>
+<span class="source-line-no">793</span><span id="line-793">     * @param synchronizedAst synchronized block to check.</span>
+<span class="source-line-no">794</span><span id="line-794">     * @param useBreak should we consider break as terminator</span>
+<span class="source-line-no">795</span><span id="line-795">     * @param useContinue should we consider continue as terminator</span>
+<span class="source-line-no">796</span><span id="line-796">     * @param labels label names</span>
+<span class="source-line-no">797</span><span id="line-797">     * @return true if synchronized block is terminated</span>
+<span class="source-line-no">798</span><span id="line-798">     */</span>
+<span class="source-line-no">799</span><span id="line-799">    private static boolean checkSynchronized(final DetailAST synchronizedAst, boolean useBreak,</span>
+<span class="source-line-no">800</span><span id="line-800">                                      boolean useContinue, Set&lt;String&gt; labels) {</span>
+<span class="source-line-no">801</span><span id="line-801">        return isTerminated(</span>
+<span class="source-line-no">802</span><span id="line-802">            synchronizedAst.findFirstToken(TokenTypes.SLIST), useBreak, useContinue, labels);</span>
+<span class="source-line-no">803</span><span id="line-803">    }</span>
+<span class="source-line-no">804</span><span id="line-804">}</span>
 
 
 
