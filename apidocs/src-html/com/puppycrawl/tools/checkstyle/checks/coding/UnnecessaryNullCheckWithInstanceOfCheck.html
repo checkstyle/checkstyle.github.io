@@ -87,114 +87,227 @@
 <span class="source-line-no">074</span><span id="line-74">     * @return the identifier if the check is redundant, otherwise {@code null}</span>
 <span class="source-line-no">075</span><span id="line-75">     */</span>
 <span class="source-line-no">076</span><span id="line-76">    private static Optional&lt;DetailAST&gt; findUnnecessaryNullCheck(DetailAST instanceOfNode) {</span>
-<span class="source-line-no">077</span><span id="line-77">        DetailAST currentParent = instanceOfNode;</span>
+<span class="source-line-no">077</span><span id="line-77">        final DetailAST topLevelExpr = findTopLevelLogicalExpression(instanceOfNode);</span>
 <span class="source-line-no">078</span><span id="line-78"></span>
-<span class="source-line-no">079</span><span id="line-79">        while (currentParent.getParent().getType() == TokenTypes.LAND) {</span>
-<span class="source-line-no">080</span><span id="line-80">            currentParent = currentParent.getParent();</span>
-<span class="source-line-no">081</span><span id="line-81">        }</span>
-<span class="source-line-no">082</span><span id="line-82">        return findRedundantNullCheck(currentParent, instanceOfNode)</span>
-<span class="source-line-no">083</span><span id="line-83">            .map(DetailAST::getFirstChild);</span>
-<span class="source-line-no">084</span><span id="line-84">    }</span>
-<span class="source-line-no">085</span><span id="line-85"></span>
-<span class="source-line-no">086</span><span id="line-86">    /**</span>
-<span class="source-line-no">087</span><span id="line-87">     * Finds a redundant null check in a logical AND expression combined with an instanceof check.</span>
-<span class="source-line-no">088</span><span id="line-88">     *</span>
-<span class="source-line-no">089</span><span id="line-89">     * @param logicalAndNode the root node of the logical AND expression</span>
-<span class="source-line-no">090</span><span id="line-90">     * @param instanceOfNode the instanceof expression node</span>
-<span class="source-line-no">091</span><span id="line-91">     * @return the AST node representing the redundant null check, or null if not found</span>
+<span class="source-line-no">079</span><span id="line-79">        Optional&lt;DetailAST&gt; result = Optional.empty();</span>
+<span class="source-line-no">080</span><span id="line-80">        if (topLevelExpr.getType() == TokenTypes.LAND) {</span>
+<span class="source-line-no">081</span><span id="line-81">            result = findRedundantNullCheck(topLevelExpr, instanceOfNode)</span>
+<span class="source-line-no">082</span><span id="line-82">                    .map(DetailAST::getFirstChild);</span>
+<span class="source-line-no">083</span><span id="line-83">        }</span>
+<span class="source-line-no">084</span><span id="line-84">        return result;</span>
+<span class="source-line-no">085</span><span id="line-85">    }</span>
+<span class="source-line-no">086</span><span id="line-86"></span>
+<span class="source-line-no">087</span><span id="line-87">    /**</span>
+<span class="source-line-no">088</span><span id="line-88">     * Traverses up through LAND and LOR operators to find the top-level logical expression.</span>
+<span class="source-line-no">089</span><span id="line-89">     *</span>
+<span class="source-line-no">090</span><span id="line-90">     * @param node the starting node</span>
+<span class="source-line-no">091</span><span id="line-91">     * @return the top-level logical expression node</span>
 <span class="source-line-no">092</span><span id="line-92">     */</span>
-<span class="source-line-no">093</span><span id="line-93">    private static Optional&lt;DetailAST&gt; findRedundantNullCheck(DetailAST logicalAndNode,</span>
-<span class="source-line-no">094</span><span id="line-94">        DetailAST instanceOfNode) {</span>
-<span class="source-line-no">095</span><span id="line-95"></span>
-<span class="source-line-no">096</span><span id="line-96">        DetailAST nullCheckNode = null;</span>
-<span class="source-line-no">097</span><span id="line-97">        final DetailAST instanceOfIdent = instanceOfNode.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">098</span><span id="line-98"></span>
-<span class="source-line-no">099</span><span id="line-99">        if (instanceOfIdent != null</span>
-<span class="source-line-no">100</span><span id="line-100">            &amp;&amp; !containsVariableDereference(logicalAndNode, instanceOfIdent.getText())) {</span>
+<span class="source-line-no">093</span><span id="line-93">    private static DetailAST findTopLevelLogicalExpression(DetailAST node) {</span>
+<span class="source-line-no">094</span><span id="line-94">        DetailAST currentParent = node;</span>
+<span class="source-line-no">095</span><span id="line-95">        while (currentParent.getParent().getType() == TokenTypes.LAND</span>
+<span class="source-line-no">096</span><span id="line-96">                || currentParent.getParent().getType() == TokenTypes.LOR) {</span>
+<span class="source-line-no">097</span><span id="line-97">            currentParent = currentParent.getParent();</span>
+<span class="source-line-no">098</span><span id="line-98">        }</span>
+<span class="source-line-no">099</span><span id="line-99">        return currentParent;</span>
+<span class="source-line-no">100</span><span id="line-100">    }</span>
 <span class="source-line-no">101</span><span id="line-101"></span>
-<span class="source-line-no">102</span><span id="line-102">            DetailAST currentChild = logicalAndNode.getFirstChild();</span>
-<span class="source-line-no">103</span><span id="line-103">            while (currentChild != null) {</span>
-<span class="source-line-no">104</span><span id="line-104">                if (isNotEqual(currentChild)</span>
-<span class="source-line-no">105</span><span id="line-105">                        &amp;&amp; isNullCheckRedundant(instanceOfIdent, currentChild)) {</span>
-<span class="source-line-no">106</span><span id="line-106">                    nullCheckNode = currentChild;</span>
-<span class="source-line-no">107</span><span id="line-107">                }</span>
-<span class="source-line-no">108</span><span id="line-108">                else if (nullCheckNode == null &amp;&amp; currentChild.getType() == TokenTypes.LAND) {</span>
-<span class="source-line-no">109</span><span id="line-109">                    nullCheckNode = findRedundantNullCheck(currentChild, instanceOfNode)</span>
-<span class="source-line-no">110</span><span id="line-110">                            .orElse(null);</span>
-<span class="source-line-no">111</span><span id="line-111">                }</span>
-<span class="source-line-no">112</span><span id="line-112">                currentChild = currentChild.getNextSibling();</span>
-<span class="source-line-no">113</span><span id="line-113">            }</span>
-<span class="source-line-no">114</span><span id="line-114">        }</span>
-<span class="source-line-no">115</span><span id="line-115">        return Optional.ofNullable(nullCheckNode);</span>
-<span class="source-line-no">116</span><span id="line-116">    }</span>
+<span class="source-line-no">102</span><span id="line-102">    /**</span>
+<span class="source-line-no">103</span><span id="line-103">     * Finds a redundant null check in a logical AND expression combined with an instanceof check.</span>
+<span class="source-line-no">104</span><span id="line-104">     *</span>
+<span class="source-line-no">105</span><span id="line-105">     * @param logicalAndNode the root node of the logical AND expression</span>
+<span class="source-line-no">106</span><span id="line-106">     * @param instanceOfNode the instanceof expression node</span>
+<span class="source-line-no">107</span><span id="line-107">     * @return the AST node representing the redundant null check, or null if not found</span>
+<span class="source-line-no">108</span><span id="line-108">     */</span>
+<span class="source-line-no">109</span><span id="line-109">    private static Optional&lt;DetailAST&gt; findRedundantNullCheck(DetailAST logicalAndNode,</span>
+<span class="source-line-no">110</span><span id="line-110">        DetailAST instanceOfNode) {</span>
+<span class="source-line-no">111</span><span id="line-111"></span>
+<span class="source-line-no">112</span><span id="line-112">        Optional&lt;DetailAST&gt; nullCheckNode = Optional.empty();</span>
+<span class="source-line-no">113</span><span id="line-113">        final DetailAST instanceOfIdent = instanceOfNode.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">114</span><span id="line-114"></span>
+<span class="source-line-no">115</span><span id="line-115">        if (instanceOfIdent != null</span>
+<span class="source-line-no">116</span><span id="line-116">            &amp;&amp; !containsVariableDereference(logicalAndNode, instanceOfIdent.getText())) {</span>
 <span class="source-line-no">117</span><span id="line-117"></span>
-<span class="source-line-no">118</span><span id="line-118">    /**</span>
-<span class="source-line-no">119</span><span id="line-119">     * Checks if the given AST node contains a method call or field access</span>
-<span class="source-line-no">120</span><span id="line-120">     * on the specified variable.</span>
-<span class="source-line-no">121</span><span id="line-121">     *</span>
-<span class="source-line-no">122</span><span id="line-122">     * @param node the AST node to check</span>
-<span class="source-line-no">123</span><span id="line-123">     * @param variableName the name of the variable</span>
-<span class="source-line-no">124</span><span id="line-124">     * @return true if the variable is dereferenced, false otherwise</span>
-<span class="source-line-no">125</span><span id="line-125">     */</span>
-<span class="source-line-no">126</span><span id="line-126">    private static boolean containsVariableDereference(DetailAST node, String variableName) {</span>
-<span class="source-line-no">127</span><span id="line-127"></span>
-<span class="source-line-no">128</span><span id="line-128">        boolean found = false;</span>
-<span class="source-line-no">129</span><span id="line-129"></span>
-<span class="source-line-no">130</span><span id="line-130">        if (node.getType() == TokenTypes.DOT</span>
-<span class="source-line-no">131</span><span id="line-131">            || node.getType() == TokenTypes.METHOD_CALL || node.getType() == TokenTypes.LAND) {</span>
-<span class="source-line-no">132</span><span id="line-132"></span>
-<span class="source-line-no">133</span><span id="line-133">            DetailAST firstChild = node.getFirstChild();</span>
-<span class="source-line-no">134</span><span id="line-134"></span>
-<span class="source-line-no">135</span><span id="line-135">            while (firstChild != null) {</span>
-<span class="source-line-no">136</span><span id="line-136">                if (variableName.equals(firstChild.getText())</span>
-<span class="source-line-no">137</span><span id="line-137">                        &amp;&amp; firstChild.getNextSibling().getType() != TokenTypes.ELIST</span>
-<span class="source-line-no">138</span><span id="line-138">                            || containsVariableDereference(firstChild, variableName)) {</span>
-<span class="source-line-no">139</span><span id="line-139">                    found = true;</span>
-<span class="source-line-no">140</span><span id="line-140">                    break;</span>
-<span class="source-line-no">141</span><span id="line-141">                }</span>
-<span class="source-line-no">142</span><span id="line-142">                firstChild = firstChild.getNextSibling();</span>
-<span class="source-line-no">143</span><span id="line-143">            }</span>
-<span class="source-line-no">144</span><span id="line-144">        }</span>
-<span class="source-line-no">145</span><span id="line-145">        return found;</span>
-<span class="source-line-no">146</span><span id="line-146">    }</span>
-<span class="source-line-no">147</span><span id="line-147"></span>
-<span class="source-line-no">148</span><span id="line-148">    /**</span>
-<span class="source-line-no">149</span><span id="line-149">     * Checks if the given AST node represents a {@code !=} (not equal) operator.</span>
-<span class="source-line-no">150</span><span id="line-150">     *</span>
-<span class="source-line-no">151</span><span id="line-151">     * @param node the AST node to check</span>
-<span class="source-line-no">152</span><span id="line-152">     * @return {@code true} if the node is a not equal operator, otherwise {@code false}</span>
-<span class="source-line-no">153</span><span id="line-153">     */</span>
-<span class="source-line-no">154</span><span id="line-154">    private static boolean isNotEqual(DetailAST node) {</span>
-<span class="source-line-no">155</span><span id="line-155">        return node.getType() == TokenTypes.NOT_EQUAL;</span>
-<span class="source-line-no">156</span><span id="line-156">    }</span>
-<span class="source-line-no">157</span><span id="line-157"></span>
-<span class="source-line-no">158</span><span id="line-158">    /**</span>
-<span class="source-line-no">159</span><span id="line-159">     * Checks if the given AST node is a null literal.</span>
-<span class="source-line-no">160</span><span id="line-160">     *</span>
-<span class="source-line-no">161</span><span id="line-161">     * @param node AST node to check</span>
-<span class="source-line-no">162</span><span id="line-162">     * @return true if the node is a null literal, false otherwise</span>
-<span class="source-line-no">163</span><span id="line-163">     */</span>
-<span class="source-line-no">164</span><span id="line-164">    private static boolean isNullLiteral(DetailAST node) {</span>
-<span class="source-line-no">165</span><span id="line-165">        return node.getType() == TokenTypes.LITERAL_NULL;</span>
-<span class="source-line-no">166</span><span id="line-166">    }</span>
-<span class="source-line-no">167</span><span id="line-167"></span>
-<span class="source-line-no">168</span><span id="line-168">    /**</span>
-<span class="source-line-no">169</span><span id="line-169">     * Determines if the null check is redundant with the instanceof check.</span>
-<span class="source-line-no">170</span><span id="line-170">     *</span>
-<span class="source-line-no">171</span><span id="line-171">     * @param instanceOfIdent the identifier from the instanceof check</span>
-<span class="source-line-no">172</span><span id="line-172">     * @param nullCheckNode the node representing the null check</span>
-<span class="source-line-no">173</span><span id="line-173">     * @return true if the null check is unnecessary, false otherwise</span>
-<span class="source-line-no">174</span><span id="line-174">     */</span>
-<span class="source-line-no">175</span><span id="line-175">    private static boolean isNullCheckRedundant(DetailAST instanceOfIdent,</span>
-<span class="source-line-no">176</span><span id="line-176">        final DetailAST nullCheckNode) {</span>
-<span class="source-line-no">177</span><span id="line-177"></span>
-<span class="source-line-no">178</span><span id="line-178">        final DetailAST nullCheckIdent = nullCheckNode.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">179</span><span id="line-179">        return nullCheckIdent != null</span>
-<span class="source-line-no">180</span><span id="line-180">                &amp;&amp; (isNullLiteral(nullCheckNode.getFirstChild().getNextSibling())</span>
-<span class="source-line-no">181</span><span id="line-181">                    || isNullLiteral(nullCheckNode.getFirstChild()))</span>
-<span class="source-line-no">182</span><span id="line-182">                &amp;&amp; instanceOfIdent.getText().equals(nullCheckIdent.getText());</span>
-<span class="source-line-no">183</span><span id="line-183">    }</span>
-<span class="source-line-no">184</span><span id="line-184">}</span>
+<span class="source-line-no">118</span><span id="line-118">            nullCheckNode = searchForNullCheck(logicalAndNode, instanceOfNode, instanceOfIdent);</span>
+<span class="source-line-no">119</span><span id="line-119">        }</span>
+<span class="source-line-no">120</span><span id="line-120">        return nullCheckNode;</span>
+<span class="source-line-no">121</span><span id="line-121">    }</span>
+<span class="source-line-no">122</span><span id="line-122"></span>
+<span class="source-line-no">123</span><span id="line-123">    /**</span>
+<span class="source-line-no">124</span><span id="line-124">     * Searches for a redundant null check in the children of a logical AND node.</span>
+<span class="source-line-no">125</span><span id="line-125">     *</span>
+<span class="source-line-no">126</span><span id="line-126">     * @param logicalAndNode the LAND node to search</span>
+<span class="source-line-no">127</span><span id="line-127">     * @param instanceOfNode the instanceof expression node</span>
+<span class="source-line-no">128</span><span id="line-128">     * @param instanceOfIdent the identifier from the instanceof expression</span>
+<span class="source-line-no">129</span><span id="line-129">     * @return the null check node if found, null otherwise</span>
+<span class="source-line-no">130</span><span id="line-130">     */</span>
+<span class="source-line-no">131</span><span id="line-131">    private static Optional&lt;DetailAST&gt; searchForNullCheck(DetailAST logicalAndNode,</span>
+<span class="source-line-no">132</span><span id="line-132">        DetailAST instanceOfNode, DetailAST instanceOfIdent) {</span>
+<span class="source-line-no">133</span><span id="line-133"></span>
+<span class="source-line-no">134</span><span id="line-134">        Optional&lt;DetailAST&gt; nullCheckNode = Optional.empty();</span>
+<span class="source-line-no">135</span><span id="line-135"></span>
+<span class="source-line-no">136</span><span id="line-136">        final Optional&lt;DetailAST&gt; instanceOfSubtree =</span>
+<span class="source-line-no">137</span><span id="line-137">                findDirectChildContaining(logicalAndNode, instanceOfNode);</span>
+<span class="source-line-no">138</span><span id="line-138"></span>
+<span class="source-line-no">139</span><span id="line-139">        final DetailAST instanceOfSubtreeNode =</span>
+<span class="source-line-no">140</span><span id="line-140">                instanceOfSubtree.orElse(null);</span>
+<span class="source-line-no">141</span><span id="line-141"></span>
+<span class="source-line-no">142</span><span id="line-142">        final boolean instanceOfInLor =</span>
+<span class="source-line-no">143</span><span id="line-143">                instanceOfSubtreeNode != null</span>
+<span class="source-line-no">144</span><span id="line-144">                        &amp;&amp; instanceOfSubtreeNode.getType() == TokenTypes.LOR;</span>
+<span class="source-line-no">145</span><span id="line-145"></span>
+<span class="source-line-no">146</span><span id="line-146">        DetailAST currentChild = logicalAndNode.getFirstChild();</span>
+<span class="source-line-no">147</span><span id="line-147">        while (currentChild != null) {</span>
+<span class="source-line-no">148</span><span id="line-148">            if (instanceOfInLor &amp;&amp; currentChild.equals(instanceOfSubtreeNode)) {</span>
+<span class="source-line-no">149</span><span id="line-149">                break;</span>
+<span class="source-line-no">150</span><span id="line-150">            }</span>
+<span class="source-line-no">151</span><span id="line-151"></span>
+<span class="source-line-no">152</span><span id="line-152">            if (nullCheckNode.isEmpty()) {</span>
+<span class="source-line-no">153</span><span id="line-153">                nullCheckNode = checkChildForNullCheck(</span>
+<span class="source-line-no">154</span><span id="line-154">                        currentChild, instanceOfNode, instanceOfIdent);</span>
+<span class="source-line-no">155</span><span id="line-155">            }</span>
+<span class="source-line-no">156</span><span id="line-156"></span>
+<span class="source-line-no">157</span><span id="line-157">            currentChild = currentChild.getNextSibling();</span>
+<span class="source-line-no">158</span><span id="line-158">        }</span>
+<span class="source-line-no">159</span><span id="line-159"></span>
+<span class="source-line-no">160</span><span id="line-160">        return nullCheckNode;</span>
+<span class="source-line-no">161</span><span id="line-161">    }</span>
+<span class="source-line-no">162</span><span id="line-162"></span>
+<span class="source-line-no">163</span><span id="line-163">    /**</span>
+<span class="source-line-no">164</span><span id="line-164">     * Checks a child node for a redundant null check.</span>
+<span class="source-line-no">165</span><span id="line-165">     *</span>
+<span class="source-line-no">166</span><span id="line-166">     * @param currentChild the child node to check</span>
+<span class="source-line-no">167</span><span id="line-167">     * @param instanceOfNode the instanceof expression node</span>
+<span class="source-line-no">168</span><span id="line-168">     * @param instanceOfIdent the identifier from the instanceof expression</span>
+<span class="source-line-no">169</span><span id="line-169">     * @return the null check node if found, otherwise empty</span>
+<span class="source-line-no">170</span><span id="line-170">     */</span>
+<span class="source-line-no">171</span><span id="line-171">    private static Optional&lt;DetailAST&gt; checkChildForNullCheck(DetailAST currentChild,</span>
+<span class="source-line-no">172</span><span id="line-172">        DetailAST instanceOfNode, DetailAST instanceOfIdent) {</span>
+<span class="source-line-no">173</span><span id="line-173"></span>
+<span class="source-line-no">174</span><span id="line-174">        Optional&lt;DetailAST&gt; result = Optional.empty();</span>
+<span class="source-line-no">175</span><span id="line-175"></span>
+<span class="source-line-no">176</span><span id="line-176">        if (isNotEqual(currentChild)</span>
+<span class="source-line-no">177</span><span id="line-177">                &amp;&amp; isNullCheckRedundant(instanceOfIdent, currentChild)) {</span>
+<span class="source-line-no">178</span><span id="line-178">            result = Optional.of(currentChild);</span>
+<span class="source-line-no">179</span><span id="line-179">        }</span>
+<span class="source-line-no">180</span><span id="line-180">        else if (currentChild.getType() == TokenTypes.LAND) {</span>
+<span class="source-line-no">181</span><span id="line-181">            result = findRedundantNullCheck(currentChild, instanceOfNode);</span>
+<span class="source-line-no">182</span><span id="line-182">        }</span>
+<span class="source-line-no">183</span><span id="line-183"></span>
+<span class="source-line-no">184</span><span id="line-184">        return result;</span>
+<span class="source-line-no">185</span><span id="line-185">    }</span>
+<span class="source-line-no">186</span><span id="line-186"></span>
+<span class="source-line-no">187</span><span id="line-187">    /**</span>
+<span class="source-line-no">188</span><span id="line-188">     * Finds the direct child of parent that contains the target node.</span>
+<span class="source-line-no">189</span><span id="line-189">     *</span>
+<span class="source-line-no">190</span><span id="line-190">     * @param parent the parent node</span>
+<span class="source-line-no">191</span><span id="line-191">     * @param target the target node to find</span>
+<span class="source-line-no">192</span><span id="line-192">     * @return the direct child containing target, or null if not found</span>
+<span class="source-line-no">193</span><span id="line-193">     */</span>
+<span class="source-line-no">194</span><span id="line-194">    private static Optional&lt;DetailAST&gt; findDirectChildContaining(DetailAST parent,</span>
+<span class="source-line-no">195</span><span id="line-195">        DetailAST target) {</span>
+<span class="source-line-no">196</span><span id="line-196"></span>
+<span class="source-line-no">197</span><span id="line-197">        DetailAST result = null;</span>
+<span class="source-line-no">198</span><span id="line-198">        DetailAST child = parent.getFirstChild();</span>
+<span class="source-line-no">199</span><span id="line-199">        while (child != null) {</span>
+<span class="source-line-no">200</span><span id="line-200">            if (isAncestorOf(child, target)) {</span>
+<span class="source-line-no">201</span><span id="line-201">                result = child;</span>
+<span class="source-line-no">202</span><span id="line-202">                break;</span>
+<span class="source-line-no">203</span><span id="line-203">            }</span>
+<span class="source-line-no">204</span><span id="line-204">            child = child.getNextSibling();</span>
+<span class="source-line-no">205</span><span id="line-205">        }</span>
+<span class="source-line-no">206</span><span id="line-206">        return Optional.ofNullable(result);</span>
+<span class="source-line-no">207</span><span id="line-207">    }</span>
+<span class="source-line-no">208</span><span id="line-208"></span>
+<span class="source-line-no">209</span><span id="line-209">    /**</span>
+<span class="source-line-no">210</span><span id="line-210">     * Checks if the given node is an ancestor of (or the same as) the target node.</span>
+<span class="source-line-no">211</span><span id="line-211">     *</span>
+<span class="source-line-no">212</span><span id="line-212">     * @param node the potential ancestor node</span>
+<span class="source-line-no">213</span><span id="line-213">     * @param target the target node to check</span>
+<span class="source-line-no">214</span><span id="line-214">     * @return true if node is an ancestor of target, false otherwise</span>
+<span class="source-line-no">215</span><span id="line-215">     */</span>
+<span class="source-line-no">216</span><span id="line-216">    private static boolean isAncestorOf(DetailAST node, DetailAST target) {</span>
+<span class="source-line-no">217</span><span id="line-217">        boolean found = false;</span>
+<span class="source-line-no">218</span><span id="line-218">        DetailAST current = target;</span>
+<span class="source-line-no">219</span><span id="line-219">        while (current != null) {</span>
+<span class="source-line-no">220</span><span id="line-220">            if (current.equals(node)) {</span>
+<span class="source-line-no">221</span><span id="line-221">                found = true;</span>
+<span class="source-line-no">222</span><span id="line-222">                break;</span>
+<span class="source-line-no">223</span><span id="line-223">            }</span>
+<span class="source-line-no">224</span><span id="line-224">            current = current.getParent();</span>
+<span class="source-line-no">225</span><span id="line-225">        }</span>
+<span class="source-line-no">226</span><span id="line-226">        return found;</span>
+<span class="source-line-no">227</span><span id="line-227">    }</span>
+<span class="source-line-no">228</span><span id="line-228"></span>
+<span class="source-line-no">229</span><span id="line-229">    /**</span>
+<span class="source-line-no">230</span><span id="line-230">     * Checks if the given AST node contains a method call or field access</span>
+<span class="source-line-no">231</span><span id="line-231">     * on the specified variable.</span>
+<span class="source-line-no">232</span><span id="line-232">     *</span>
+<span class="source-line-no">233</span><span id="line-233">     * @param node the AST node to check</span>
+<span class="source-line-no">234</span><span id="line-234">     * @param variableName the name of the variable</span>
+<span class="source-line-no">235</span><span id="line-235">     * @return true if the variable is dereferenced, false otherwise</span>
+<span class="source-line-no">236</span><span id="line-236">     */</span>
+<span class="source-line-no">237</span><span id="line-237">    private static boolean containsVariableDereference(DetailAST node, String variableName) {</span>
+<span class="source-line-no">238</span><span id="line-238"></span>
+<span class="source-line-no">239</span><span id="line-239">        boolean found = false;</span>
+<span class="source-line-no">240</span><span id="line-240"></span>
+<span class="source-line-no">241</span><span id="line-241">        if (node.getType() == TokenTypes.DOT</span>
+<span class="source-line-no">242</span><span id="line-242">            || node.getType() == TokenTypes.METHOD_CALL</span>
+<span class="source-line-no">243</span><span id="line-243">            || node.getType() == TokenTypes.LAND</span>
+<span class="source-line-no">244</span><span id="line-244">            || node.getType() == TokenTypes.LOR) {</span>
+<span class="source-line-no">245</span><span id="line-245"></span>
+<span class="source-line-no">246</span><span id="line-246">            DetailAST firstChild = node.getFirstChild();</span>
+<span class="source-line-no">247</span><span id="line-247"></span>
+<span class="source-line-no">248</span><span id="line-248">            while (firstChild != null) {</span>
+<span class="source-line-no">249</span><span id="line-249">                if (variableName.equals(firstChild.getText())</span>
+<span class="source-line-no">250</span><span id="line-250">                        &amp;&amp; firstChild.getNextSibling().getType() != TokenTypes.ELIST</span>
+<span class="source-line-no">251</span><span id="line-251">                            || containsVariableDereference(firstChild, variableName)) {</span>
+<span class="source-line-no">252</span><span id="line-252">                    found = true;</span>
+<span class="source-line-no">253</span><span id="line-253">                    break;</span>
+<span class="source-line-no">254</span><span id="line-254">                }</span>
+<span class="source-line-no">255</span><span id="line-255">                firstChild = firstChild.getNextSibling();</span>
+<span class="source-line-no">256</span><span id="line-256">            }</span>
+<span class="source-line-no">257</span><span id="line-257">        }</span>
+<span class="source-line-no">258</span><span id="line-258">        return found;</span>
+<span class="source-line-no">259</span><span id="line-259">    }</span>
+<span class="source-line-no">260</span><span id="line-260"></span>
+<span class="source-line-no">261</span><span id="line-261">    /**</span>
+<span class="source-line-no">262</span><span id="line-262">     * Checks if the given AST node represents a {@code !=} (not equal) operator.</span>
+<span class="source-line-no">263</span><span id="line-263">     *</span>
+<span class="source-line-no">264</span><span id="line-264">     * @param node the AST node to check</span>
+<span class="source-line-no">265</span><span id="line-265">     * @return {@code true} if the node is a not equal operator, otherwise {@code false}</span>
+<span class="source-line-no">266</span><span id="line-266">     */</span>
+<span class="source-line-no">267</span><span id="line-267">    private static boolean isNotEqual(DetailAST node) {</span>
+<span class="source-line-no">268</span><span id="line-268">        return node.getType() == TokenTypes.NOT_EQUAL;</span>
+<span class="source-line-no">269</span><span id="line-269">    }</span>
+<span class="source-line-no">270</span><span id="line-270"></span>
+<span class="source-line-no">271</span><span id="line-271">    /**</span>
+<span class="source-line-no">272</span><span id="line-272">     * Checks if the given AST node is a null literal.</span>
+<span class="source-line-no">273</span><span id="line-273">     *</span>
+<span class="source-line-no">274</span><span id="line-274">     * @param node AST node to check</span>
+<span class="source-line-no">275</span><span id="line-275">     * @return true if the node is a null literal, false otherwise</span>
+<span class="source-line-no">276</span><span id="line-276">     */</span>
+<span class="source-line-no">277</span><span id="line-277">    private static boolean isNullLiteral(DetailAST node) {</span>
+<span class="source-line-no">278</span><span id="line-278">        return node.getType() == TokenTypes.LITERAL_NULL;</span>
+<span class="source-line-no">279</span><span id="line-279">    }</span>
+<span class="source-line-no">280</span><span id="line-280"></span>
+<span class="source-line-no">281</span><span id="line-281">    /**</span>
+<span class="source-line-no">282</span><span id="line-282">     * Determines if the null check is redundant with the instanceof check.</span>
+<span class="source-line-no">283</span><span id="line-283">     *</span>
+<span class="source-line-no">284</span><span id="line-284">     * @param instanceOfIdent the identifier from the instanceof check</span>
+<span class="source-line-no">285</span><span id="line-285">     * @param nullCheckNode the node representing the null check</span>
+<span class="source-line-no">286</span><span id="line-286">     * @return true if the null check is unnecessary, false otherwise</span>
+<span class="source-line-no">287</span><span id="line-287">     */</span>
+<span class="source-line-no">288</span><span id="line-288">    private static boolean isNullCheckRedundant(DetailAST instanceOfIdent,</span>
+<span class="source-line-no">289</span><span id="line-289">        final DetailAST nullCheckNode) {</span>
+<span class="source-line-no">290</span><span id="line-290"></span>
+<span class="source-line-no">291</span><span id="line-291">        final DetailAST nullCheckIdent = nullCheckNode.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">292</span><span id="line-292">        return nullCheckIdent != null</span>
+<span class="source-line-no">293</span><span id="line-293">                &amp;&amp; (isNullLiteral(nullCheckNode.getFirstChild().getNextSibling())</span>
+<span class="source-line-no">294</span><span id="line-294">                    || isNullLiteral(nullCheckNode.getFirstChild()))</span>
+<span class="source-line-no">295</span><span id="line-295">                &amp;&amp; instanceOfIdent.getText().equals(nullCheckIdent.getText());</span>
+<span class="source-line-no">296</span><span id="line-296">    }</span>
+<span class="source-line-no">297</span><span id="line-297">}</span>
 
 
 
