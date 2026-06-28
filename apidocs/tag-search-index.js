@@ -1,1 +1,1 @@
-tagSearchIndex = [{"l":"Constant Field Values","h":"","u":"constant-values.html"},{"l":"Serialized Form","h":"","u":"serialized-form.html"}];updateSearchResults();
+tagSearchIndex = [{"l":"Constant Field Values","h":"","u":"constant-values.html"},{"l":"Key design decisions","h":"class com.puppycrawl.tools.checkstyle.site.SearchIndexGenerator","d":"Section","u":"com/puppycrawl/tools/checkstyle/site/SearchIndexGenerator.html#key-design-decisions-heading"},{"l":"Serialized Form","h":"","u":"serialized-form.html"}];updateSearchResults();
