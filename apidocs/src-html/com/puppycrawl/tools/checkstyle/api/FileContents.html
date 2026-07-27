@@ -43,355 +43,365 @@
 <span class="source-line-no">030</span><span id="line-30">import com.puppycrawl.tools.checkstyle.grammar.CommentListener;</span>
 <span class="source-line-no">031</span><span id="line-31">import com.puppycrawl.tools.checkstyle.utils.CheckUtil;</span>
 <span class="source-line-no">032</span><span id="line-32">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</span>
-<span class="source-line-no">033</span><span id="line-33"></span>
-<span class="source-line-no">034</span><span id="line-34">/**</span>
-<span class="source-line-no">035</span><span id="line-35"> * Represents the contents of a file.</span>
-<span class="source-line-no">036</span><span id="line-36"> *</span>
-<span class="source-line-no">037</span><span id="line-37"> */</span>
-<span class="source-line-no">038</span><span id="line-38">public final class FileContents implements CommentListener {</span>
-<span class="source-line-no">039</span><span id="line-39"></span>
-<span class="source-line-no">040</span><span id="line-40">    /**</span>
-<span class="source-line-no">041</span><span id="line-41">     * The pattern to match a single-line comment containing only the comment</span>
-<span class="source-line-no">042</span><span id="line-42">     * itself -- no code.</span>
-<span class="source-line-no">043</span><span id="line-43">     */</span>
-<span class="source-line-no">044</span><span id="line-44">    private static final String MATCH_SINGLELINE_COMMENT_PAT = "^\\s*//.*$";</span>
-<span class="source-line-no">045</span><span id="line-45">    /** Compiled regexp to match a single-line comment line. */</span>
-<span class="source-line-no">046</span><span id="line-46">    private static final Pattern MATCH_SINGLELINE_COMMENT = Pattern</span>
-<span class="source-line-no">047</span><span id="line-47">            .compile(MATCH_SINGLELINE_COMMENT_PAT);</span>
-<span class="source-line-no">048</span><span id="line-48"></span>
-<span class="source-line-no">049</span><span id="line-49">    /** The text. */</span>
-<span class="source-line-no">050</span><span id="line-50">    private final FileText text;</span>
-<span class="source-line-no">051</span><span id="line-51"></span>
-<span class="source-line-no">052</span><span id="line-52">    /**</span>
-<span class="source-line-no">053</span><span id="line-53">     * Map of the Javadoc comments indexed on the last line of the comment.</span>
-<span class="source-line-no">054</span><span id="line-54">     * The hack is it assumes that there is only one Javadoc comment per line.</span>
-<span class="source-line-no">055</span><span id="line-55">     */</span>
-<span class="source-line-no">056</span><span id="line-56">    private final Map&lt;Integer, TextBlock&gt; javadocComments = new HashMap&lt;&gt;();</span>
-<span class="source-line-no">057</span><span id="line-57">    /** Map of the C++ comments indexed on the first line of the comment. */</span>
-<span class="source-line-no">058</span><span id="line-58">    private final Map&lt;Integer, TextBlock&gt; cppComments = new HashMap&lt;&gt;();</span>
-<span class="source-line-no">059</span><span id="line-59"></span>
-<span class="source-line-no">060</span><span id="line-60">    /**</span>
-<span class="source-line-no">061</span><span id="line-61">     * Map of the C comments indexed on the first line of the comment to a list</span>
-<span class="source-line-no">062</span><span id="line-62">     * of comments on that line.</span>
-<span class="source-line-no">063</span><span id="line-63">     */</span>
-<span class="source-line-no">064</span><span id="line-64">    private final Map&lt;Integer, List&lt;TextBlock&gt;&gt; clangComments = new HashMap&lt;&gt;();</span>
-<span class="source-line-no">065</span><span id="line-65"></span>
-<span class="source-line-no">066</span><span id="line-66">    /**</span>
-<span class="source-line-no">067</span><span id="line-67">     * Creates a new {@code FileContents} instance.</span>
-<span class="source-line-no">068</span><span id="line-68">     *</span>
-<span class="source-line-no">069</span><span id="line-69">     * @param text the contents of the file</span>
-<span class="source-line-no">070</span><span id="line-70">     */</span>
-<span class="source-line-no">071</span><span id="line-71">    public FileContents(FileText text) {</span>
-<span class="source-line-no">072</span><span id="line-72">        this.text = new FileText(text);</span>
-<span class="source-line-no">073</span><span id="line-73">    }</span>
-<span class="source-line-no">074</span><span id="line-74"></span>
-<span class="source-line-no">075</span><span id="line-75">    /**</span>
-<span class="source-line-no">076</span><span id="line-76">     * Get the full text of the file.</span>
-<span class="source-line-no">077</span><span id="line-77">     *</span>
-<span class="source-line-no">078</span><span id="line-78">     * @return an object containing the full text of the file</span>
-<span class="source-line-no">079</span><span id="line-79">     */</span>
-<span class="source-line-no">080</span><span id="line-80">    public FileText getText() {</span>
-<span class="source-line-no">081</span><span id="line-81">        return new FileText(text);</span>
-<span class="source-line-no">082</span><span id="line-82">    }</span>
-<span class="source-line-no">083</span><span id="line-83"></span>
-<span class="source-line-no">084</span><span id="line-84">    /**</span>
-<span class="source-line-no">085</span><span id="line-85">     * Gets the lines in the file.</span>
-<span class="source-line-no">086</span><span id="line-86">     *</span>
-<span class="source-line-no">087</span><span id="line-87">     * @return the lines in the file</span>
-<span class="source-line-no">088</span><span id="line-88">     */</span>
-<span class="source-line-no">089</span><span id="line-89">    public String[] getLines() {</span>
-<span class="source-line-no">090</span><span id="line-90">        return text.toLinesArray();</span>
-<span class="source-line-no">091</span><span id="line-91">    }</span>
-<span class="source-line-no">092</span><span id="line-92"></span>
-<span class="source-line-no">093</span><span id="line-93">    /**</span>
-<span class="source-line-no">094</span><span id="line-94">     * Get the line from text of the file.</span>
-<span class="source-line-no">095</span><span id="line-95">     *</span>
-<span class="source-line-no">096</span><span id="line-96">     * @param index index of the line</span>
-<span class="source-line-no">097</span><span id="line-97">     * @return line from text of the file</span>
-<span class="source-line-no">098</span><span id="line-98">     */</span>
-<span class="source-line-no">099</span><span id="line-99">    public String getLine(int index) {</span>
-<span class="source-line-no">100</span><span id="line-100">        return text.get(index);</span>
-<span class="source-line-no">101</span><span id="line-101">    }</span>
-<span class="source-line-no">102</span><span id="line-102"></span>
-<span class="source-line-no">103</span><span id="line-103">    /**</span>
-<span class="source-line-no">104</span><span id="line-104">     * Gets the name of the file.</span>
-<span class="source-line-no">105</span><span id="line-105">     *</span>
-<span class="source-line-no">106</span><span id="line-106">     * @return the name of the file</span>
-<span class="source-line-no">107</span><span id="line-107">     */</span>
-<span class="source-line-no">108</span><span id="line-108">    public String getFileName() {</span>
-<span class="source-line-no">109</span><span id="line-109">        return text.getFile().toString();</span>
-<span class="source-line-no">110</span><span id="line-110">    }</span>
-<span class="source-line-no">111</span><span id="line-111"></span>
-<span class="source-line-no">112</span><span id="line-112">    /**</span>
-<span class="source-line-no">113</span><span id="line-113">     * Report the location of a single-line comment.</span>
-<span class="source-line-no">114</span><span id="line-114">     *</span>
-<span class="source-line-no">115</span><span id="line-115">     * @param startLineNo the starting line number</span>
-<span class="source-line-no">116</span><span id="line-116">     * @param startColNo the starting column number</span>
-<span class="source-line-no">117</span><span id="line-117">     **/</span>
-<span class="source-line-no">118</span><span id="line-118">    public void reportSingleLineComment(int startLineNo, int startColNo) {</span>
-<span class="source-line-no">119</span><span id="line-119">        final String line = line(startLineNo - 1);</span>
-<span class="source-line-no">120</span><span id="line-120">        final String[] txt = {line.substring(startColNo)};</span>
-<span class="source-line-no">121</span><span id="line-121">        final Comment comment = new Comment(txt, startColNo, startLineNo,</span>
-<span class="source-line-no">122</span><span id="line-122">                line.length() - 1);</span>
-<span class="source-line-no">123</span><span id="line-123">        cppComments.put(startLineNo, comment);</span>
-<span class="source-line-no">124</span><span id="line-124">    }</span>
-<span class="source-line-no">125</span><span id="line-125"></span>
-<span class="source-line-no">126</span><span id="line-126">    @Override</span>
-<span class="source-line-no">127</span><span id="line-127">    public void reportSingleLineComment(String type, int startLineNo,</span>
-<span class="source-line-no">128</span><span id="line-128">            int startColNo) {</span>
-<span class="source-line-no">129</span><span id="line-129">        reportSingleLineComment(startLineNo, startColNo);</span>
-<span class="source-line-no">130</span><span id="line-130">    }</span>
-<span class="source-line-no">131</span><span id="line-131"></span>
-<span class="source-line-no">132</span><span id="line-132">    /**</span>
-<span class="source-line-no">133</span><span id="line-133">     * Report the location of a block comment.</span>
-<span class="source-line-no">134</span><span id="line-134">     *</span>
-<span class="source-line-no">135</span><span id="line-135">     * @param startLineNo the starting line number</span>
-<span class="source-line-no">136</span><span id="line-136">     * @param startColNo the starting column number</span>
-<span class="source-line-no">137</span><span id="line-137">     * @param endLineNo the ending line number</span>
-<span class="source-line-no">138</span><span id="line-138">     * @param endColNo the ending column number</span>
-<span class="source-line-no">139</span><span id="line-139">     **/</span>
-<span class="source-line-no">140</span><span id="line-140">    public void reportBlockComment(int startLineNo, int startColNo,</span>
-<span class="source-line-no">141</span><span id="line-141">            int endLineNo, int endColNo) {</span>
-<span class="source-line-no">142</span><span id="line-142">        final String[] cComment = extractBlockComment(startLineNo, startColNo,</span>
-<span class="source-line-no">143</span><span id="line-143">                endLineNo, endColNo);</span>
-<span class="source-line-no">144</span><span id="line-144">        final Comment comment = new Comment(cComment, startColNo, endLineNo,</span>
-<span class="source-line-no">145</span><span id="line-145">                endColNo);</span>
-<span class="source-line-no">146</span><span id="line-146"></span>
-<span class="source-line-no">147</span><span id="line-147">        // save the comment</span>
-<span class="source-line-no">148</span><span id="line-148">        final List&lt;TextBlock&gt; entries = clangComments.computeIfAbsent(startLineNo,</span>
-<span class="source-line-no">149</span><span id="line-149">                empty -&gt; new ArrayList&lt;&gt;());</span>
-<span class="source-line-no">150</span><span id="line-150"></span>
-<span class="source-line-no">151</span><span id="line-151">        entries.add(comment);</span>
-<span class="source-line-no">152</span><span id="line-152"></span>
-<span class="source-line-no">153</span><span id="line-153">        // Remember if possible Javadoc comment</span>
-<span class="source-line-no">154</span><span id="line-154">        final String firstLine = line(startLineNo - 1);</span>
-<span class="source-line-no">155</span><span id="line-155">        if (firstLine.contains("/**") &amp;&amp; !firstLine.contains("/**/")) {</span>
-<span class="source-line-no">156</span><span id="line-156">            javadocComments.put(endLineNo - 1, comment);</span>
-<span class="source-line-no">157</span><span id="line-157">        }</span>
-<span class="source-line-no">158</span><span id="line-158">    }</span>
-<span class="source-line-no">159</span><span id="line-159"></span>
-<span class="source-line-no">160</span><span id="line-160">    @Override</span>
-<span class="source-line-no">161</span><span id="line-161">    public void reportBlockComment(String type, int startLineNo,</span>
-<span class="source-line-no">162</span><span id="line-162">            int startColNo, int endLineNo, int endColNo) {</span>
-<span class="source-line-no">163</span><span id="line-163">        reportBlockComment(startLineNo, startColNo, endLineNo, endColNo);</span>
-<span class="source-line-no">164</span><span id="line-164">    }</span>
-<span class="source-line-no">165</span><span id="line-165"></span>
-<span class="source-line-no">166</span><span id="line-166">    /**</span>
-<span class="source-line-no">167</span><span id="line-167">     * Returns the specified block comment as a String array.</span>
-<span class="source-line-no">168</span><span id="line-168">     *</span>
-<span class="source-line-no">169</span><span id="line-169">     * @param startLineNo the starting line number</span>
-<span class="source-line-no">170</span><span id="line-170">     * @param startColNo the starting column number</span>
-<span class="source-line-no">171</span><span id="line-171">     * @param endLineNo the ending line number</span>
-<span class="source-line-no">172</span><span id="line-172">     * @param endColNo the ending column number</span>
-<span class="source-line-no">173</span><span id="line-173">     * @return block comment as an array</span>
-<span class="source-line-no">174</span><span id="line-174">     **/</span>
-<span class="source-line-no">175</span><span id="line-175">    private String[] extractBlockComment(int startLineNo, int startColNo,</span>
-<span class="source-line-no">176</span><span id="line-176">            int endLineNo, int endColNo) {</span>
-<span class="source-line-no">177</span><span id="line-177">        final String[] returnValue;</span>
-<span class="source-line-no">178</span><span id="line-178">        if (startLineNo == endLineNo) {</span>
-<span class="source-line-no">179</span><span id="line-179">            returnValue = new String[1];</span>
-<span class="source-line-no">180</span><span id="line-180">            returnValue[0] = line(startLineNo - 1).substring(startColNo,</span>
-<span class="source-line-no">181</span><span id="line-181">                    endColNo + 1);</span>
-<span class="source-line-no">182</span><span id="line-182">        }</span>
-<span class="source-line-no">183</span><span id="line-183">        else {</span>
-<span class="source-line-no">184</span><span id="line-184">            returnValue = new String[endLineNo - startLineNo + 1];</span>
-<span class="source-line-no">185</span><span id="line-185">            returnValue[0] = line(startLineNo - 1).substring(startColNo);</span>
-<span class="source-line-no">186</span><span id="line-186">            for (int i = startLineNo; i &lt; endLineNo; i++) {</span>
-<span class="source-line-no">187</span><span id="line-187">                returnValue[i - startLineNo + 1] = line(i);</span>
-<span class="source-line-no">188</span><span id="line-188">            }</span>
-<span class="source-line-no">189</span><span id="line-189">            returnValue[returnValue.length - 1] = line(endLineNo - 1).substring(0,</span>
-<span class="source-line-no">190</span><span id="line-190">                    endColNo + 1);</span>
-<span class="source-line-no">191</span><span id="line-191">        }</span>
-<span class="source-line-no">192</span><span id="line-192">        return returnValue;</span>
-<span class="source-line-no">193</span><span id="line-193">    }</span>
-<span class="source-line-no">194</span><span id="line-194"></span>
-<span class="source-line-no">195</span><span id="line-195">    /**</span>
-<span class="source-line-no">196</span><span id="line-196">     * Get a single-line.</span>
-<span class="source-line-no">197</span><span id="line-197">     * For internal use only, as getText().get(lineNo) is just as</span>
-<span class="source-line-no">198</span><span id="line-198">     * suitable for external use and avoids method duplication.</span>
-<span class="source-line-no">199</span><span id="line-199">     *</span>
-<span class="source-line-no">200</span><span id="line-200">     * @param lineNo the number of the line to get</span>
-<span class="source-line-no">201</span><span id="line-201">     * @return the corresponding line, without terminator</span>
-<span class="source-line-no">202</span><span id="line-202">     * @throws IndexOutOfBoundsException if lineNo is invalid</span>
-<span class="source-line-no">203</span><span id="line-203">     */</span>
-<span class="source-line-no">204</span><span id="line-204">    private String line(int lineNo) {</span>
-<span class="source-line-no">205</span><span id="line-205">        return text.get(lineNo);</span>
-<span class="source-line-no">206</span><span id="line-206">    }</span>
-<span class="source-line-no">207</span><span id="line-207"></span>
-<span class="source-line-no">208</span><span id="line-208">    /**</span>
-<span class="source-line-no">209</span><span id="line-209">     * Returns the Javadoc comment before the specified line.</span>
-<span class="source-line-no">210</span><span id="line-210">     * A return value of {@code null} means there is no such comment.</span>
-<span class="source-line-no">211</span><span id="line-211">     *</span>
-<span class="source-line-no">212</span><span id="line-212">     * @param lineNoBefore the line number to check before</span>
-<span class="source-line-no">213</span><span id="line-213">     * @return the Javadoc comment, or {@code null} if none</span>
-<span class="source-line-no">214</span><span id="line-214">     **/</span>
-<span class="source-line-no">215</span><span id="line-215">    public TextBlock getJavadocBefore(int lineNoBefore) {</span>
-<span class="source-line-no">216</span><span id="line-216">        // Lines start at 1 to the callers perspective, so need to take off 2</span>
-<span class="source-line-no">217</span><span id="line-217">        int lineNo = lineNoBefore - 2;</span>
-<span class="source-line-no">218</span><span id="line-218"></span>
-<span class="source-line-no">219</span><span id="line-219">        // skip blank lines and comments</span>
-<span class="source-line-no">220</span><span id="line-220">        while (lineNo &gt; 0 &amp;&amp; (lineIsBlank(lineNo) || lineIsComment(lineNo)</span>
-<span class="source-line-no">221</span><span id="line-221">                            || lineInsideBlockComment(lineNo + 1))) {</span>
-<span class="source-line-no">222</span><span id="line-222">            lineNo--;</span>
-<span class="source-line-no">223</span><span id="line-223">        }</span>
-<span class="source-line-no">224</span><span id="line-224"></span>
-<span class="source-line-no">225</span><span id="line-225">        return javadocComments.get(lineNo);</span>
-<span class="source-line-no">226</span><span id="line-226">    }</span>
+<span class="source-line-no">033</span><span id="line-33">import com.puppycrawl.tools.checkstyle.utils.JavadocUtil;</span>
+<span class="source-line-no">034</span><span id="line-34"></span>
+<span class="source-line-no">035</span><span id="line-35">/**</span>
+<span class="source-line-no">036</span><span id="line-36"> * Represents the contents of a file.</span>
+<span class="source-line-no">037</span><span id="line-37"> *</span>
+<span class="source-line-no">038</span><span id="line-38"> */</span>
+<span class="source-line-no">039</span><span id="line-39">public final class FileContents implements CommentListener {</span>
+<span class="source-line-no">040</span><span id="line-40"></span>
+<span class="source-line-no">041</span><span id="line-41">    /**</span>
+<span class="source-line-no">042</span><span id="line-42">     * The pattern to match a single-line comment containing only the comment</span>
+<span class="source-line-no">043</span><span id="line-43">     * itself -- no code.</span>
+<span class="source-line-no">044</span><span id="line-44">     */</span>
+<span class="source-line-no">045</span><span id="line-45">    private static final String MATCH_SINGLELINE_COMMENT_PAT = "^\\s*//.*$";</span>
+<span class="source-line-no">046</span><span id="line-46">    /** Compiled regexp to match a single-line comment line. */</span>
+<span class="source-line-no">047</span><span id="line-47">    private static final Pattern MATCH_SINGLELINE_COMMENT = Pattern</span>
+<span class="source-line-no">048</span><span id="line-48">            .compile(MATCH_SINGLELINE_COMMENT_PAT);</span>
+<span class="source-line-no">049</span><span id="line-49"></span>
+<span class="source-line-no">050</span><span id="line-50">    /** The text. */</span>
+<span class="source-line-no">051</span><span id="line-51">    private final FileText text;</span>
+<span class="source-line-no">052</span><span id="line-52"></span>
+<span class="source-line-no">053</span><span id="line-53">    /**</span>
+<span class="source-line-no">054</span><span id="line-54">     * Map of the Javadoc comments indexed on the last line of the comment.</span>
+<span class="source-line-no">055</span><span id="line-55">     * The hack is it assumes that there is only one Javadoc comment per line.</span>
+<span class="source-line-no">056</span><span id="line-56">     */</span>
+<span class="source-line-no">057</span><span id="line-57">    private final Map&lt;Integer, TextBlock&gt; javadocComments = new HashMap&lt;&gt;();</span>
+<span class="source-line-no">058</span><span id="line-58">    /** Map of the C++ comments indexed on the first line of the comment. */</span>
+<span class="source-line-no">059</span><span id="line-59">    private final Map&lt;Integer, TextBlock&gt; cppComments = new HashMap&lt;&gt;();</span>
+<span class="source-line-no">060</span><span id="line-60"></span>
+<span class="source-line-no">061</span><span id="line-61">    /**</span>
+<span class="source-line-no">062</span><span id="line-62">     * Map of the C comments indexed on the first line of the comment to a list</span>
+<span class="source-line-no">063</span><span id="line-63">     * of comments on that line.</span>
+<span class="source-line-no">064</span><span id="line-64">     */</span>
+<span class="source-line-no">065</span><span id="line-65">    private final Map&lt;Integer, List&lt;TextBlock&gt;&gt; clangComments = new HashMap&lt;&gt;();</span>
+<span class="source-line-no">066</span><span id="line-66"></span>
+<span class="source-line-no">067</span><span id="line-67">    /**</span>
+<span class="source-line-no">068</span><span id="line-68">     * Creates a new {@code FileContents} instance.</span>
+<span class="source-line-no">069</span><span id="line-69">     *</span>
+<span class="source-line-no">070</span><span id="line-70">     * @param text the contents of the file</span>
+<span class="source-line-no">071</span><span id="line-71">     */</span>
+<span class="source-line-no">072</span><span id="line-72">    public FileContents(FileText text) {</span>
+<span class="source-line-no">073</span><span id="line-73">        this.text = new FileText(text);</span>
+<span class="source-line-no">074</span><span id="line-74">    }</span>
+<span class="source-line-no">075</span><span id="line-75"></span>
+<span class="source-line-no">076</span><span id="line-76">    /**</span>
+<span class="source-line-no">077</span><span id="line-77">     * Get the full text of the file.</span>
+<span class="source-line-no">078</span><span id="line-78">     *</span>
+<span class="source-line-no">079</span><span id="line-79">     * @return an object containing the full text of the file</span>
+<span class="source-line-no">080</span><span id="line-80">     */</span>
+<span class="source-line-no">081</span><span id="line-81">    public FileText getText() {</span>
+<span class="source-line-no">082</span><span id="line-82">        return new FileText(text);</span>
+<span class="source-line-no">083</span><span id="line-83">    }</span>
+<span class="source-line-no">084</span><span id="line-84"></span>
+<span class="source-line-no">085</span><span id="line-85">    /**</span>
+<span class="source-line-no">086</span><span id="line-86">     * Gets the lines in the file.</span>
+<span class="source-line-no">087</span><span id="line-87">     *</span>
+<span class="source-line-no">088</span><span id="line-88">     * @return the lines in the file</span>
+<span class="source-line-no">089</span><span id="line-89">     */</span>
+<span class="source-line-no">090</span><span id="line-90">    public String[] getLines() {</span>
+<span class="source-line-no">091</span><span id="line-91">        return text.toLinesArray();</span>
+<span class="source-line-no">092</span><span id="line-92">    }</span>
+<span class="source-line-no">093</span><span id="line-93"></span>
+<span class="source-line-no">094</span><span id="line-94">    /**</span>
+<span class="source-line-no">095</span><span id="line-95">     * Get the line from text of the file.</span>
+<span class="source-line-no">096</span><span id="line-96">     *</span>
+<span class="source-line-no">097</span><span id="line-97">     * @param index index of the line</span>
+<span class="source-line-no">098</span><span id="line-98">     * @return line from text of the file</span>
+<span class="source-line-no">099</span><span id="line-99">     */</span>
+<span class="source-line-no">100</span><span id="line-100">    public String getLine(int index) {</span>
+<span class="source-line-no">101</span><span id="line-101">        return text.get(index);</span>
+<span class="source-line-no">102</span><span id="line-102">    }</span>
+<span class="source-line-no">103</span><span id="line-103"></span>
+<span class="source-line-no">104</span><span id="line-104">    /**</span>
+<span class="source-line-no">105</span><span id="line-105">     * Gets the name of the file.</span>
+<span class="source-line-no">106</span><span id="line-106">     *</span>
+<span class="source-line-no">107</span><span id="line-107">     * @return the name of the file</span>
+<span class="source-line-no">108</span><span id="line-108">     */</span>
+<span class="source-line-no">109</span><span id="line-109">    public String getFileName() {</span>
+<span class="source-line-no">110</span><span id="line-110">        return text.getFile().toString();</span>
+<span class="source-line-no">111</span><span id="line-111">    }</span>
+<span class="source-line-no">112</span><span id="line-112"></span>
+<span class="source-line-no">113</span><span id="line-113">    /**</span>
+<span class="source-line-no">114</span><span id="line-114">     * Report the location of a single-line comment.</span>
+<span class="source-line-no">115</span><span id="line-115">     *</span>
+<span class="source-line-no">116</span><span id="line-116">     * @param startLineNo the starting line number</span>
+<span class="source-line-no">117</span><span id="line-117">     * @param startColNo the starting column number</span>
+<span class="source-line-no">118</span><span id="line-118">     **/</span>
+<span class="source-line-no">119</span><span id="line-119">    public void reportSingleLineComment(int startLineNo, int startColNo) {</span>
+<span class="source-line-no">120</span><span id="line-120">        final String line = line(startLineNo - 1);</span>
+<span class="source-line-no">121</span><span id="line-121">        final String[] txt = {line.substring(startColNo)};</span>
+<span class="source-line-no">122</span><span id="line-122">        final Comment comment = new Comment(txt, startColNo, startLineNo,</span>
+<span class="source-line-no">123</span><span id="line-123">                line.length() - 1);</span>
+<span class="source-line-no">124</span><span id="line-124">        cppComments.put(startLineNo, comment);</span>
+<span class="source-line-no">125</span><span id="line-125">    }</span>
+<span class="source-line-no">126</span><span id="line-126"></span>
+<span class="source-line-no">127</span><span id="line-127">    @Override</span>
+<span class="source-line-no">128</span><span id="line-128">    public void reportSingleLineComment(String type, int startLineNo,</span>
+<span class="source-line-no">129</span><span id="line-129">            int startColNo) {</span>
+<span class="source-line-no">130</span><span id="line-130">        reportSingleLineComment(startLineNo, startColNo);</span>
+<span class="source-line-no">131</span><span id="line-131">    }</span>
+<span class="source-line-no">132</span><span id="line-132"></span>
+<span class="source-line-no">133</span><span id="line-133">    /**</span>
+<span class="source-line-no">134</span><span id="line-134">     * Report the location of a block comment.</span>
+<span class="source-line-no">135</span><span id="line-135">     *</span>
+<span class="source-line-no">136</span><span id="line-136">     * @param startLineNo the starting line number</span>
+<span class="source-line-no">137</span><span id="line-137">     * @param startColNo the starting column number</span>
+<span class="source-line-no">138</span><span id="line-138">     * @param endLineNo the ending line number</span>
+<span class="source-line-no">139</span><span id="line-139">     * @param endColNo the ending column number</span>
+<span class="source-line-no">140</span><span id="line-140">     **/</span>
+<span class="source-line-no">141</span><span id="line-141">    public void reportBlockComment(int startLineNo, int startColNo,</span>
+<span class="source-line-no">142</span><span id="line-142">            int endLineNo, int endColNo) {</span>
+<span class="source-line-no">143</span><span id="line-143">        final String[] cComment = extractBlockComment(startLineNo, startColNo,</span>
+<span class="source-line-no">144</span><span id="line-144">                endLineNo, endColNo);</span>
+<span class="source-line-no">145</span><span id="line-145">        final Comment comment = new Comment(cComment, startColNo, endLineNo,</span>
+<span class="source-line-no">146</span><span id="line-146">                endColNo);</span>
+<span class="source-line-no">147</span><span id="line-147"></span>
+<span class="source-line-no">148</span><span id="line-148">        // save the comment</span>
+<span class="source-line-no">149</span><span id="line-149">        final List&lt;TextBlock&gt; entries = clangComments.computeIfAbsent(startLineNo,</span>
+<span class="source-line-no">150</span><span id="line-150">                empty -&gt; new ArrayList&lt;&gt;());</span>
+<span class="source-line-no">151</span><span id="line-151"></span>
+<span class="source-line-no">152</span><span id="line-152">        entries.add(comment);</span>
+<span class="source-line-no">153</span><span id="line-153"></span>
+<span class="source-line-no">154</span><span id="line-154">        // Remember if possible Javadoc comment</span>
+<span class="source-line-no">155</span><span id="line-155">        final String firstLine = line(startLineNo - 1);</span>
+<span class="source-line-no">156</span><span id="line-156">        if (firstLine.contains("/**") &amp;&amp; !firstLine.contains("/**/")) {</span>
+<span class="source-line-no">157</span><span id="line-157">            javadocComments.put(endLineNo - 1, comment);</span>
+<span class="source-line-no">158</span><span id="line-158">        }</span>
+<span class="source-line-no">159</span><span id="line-159">    }</span>
+<span class="source-line-no">160</span><span id="line-160"></span>
+<span class="source-line-no">161</span><span id="line-161">    @Override</span>
+<span class="source-line-no">162</span><span id="line-162">    public void reportBlockComment(String type, int startLineNo,</span>
+<span class="source-line-no">163</span><span id="line-163">            int startColNo, int endLineNo, int endColNo) {</span>
+<span class="source-line-no">164</span><span id="line-164">        reportBlockComment(startLineNo, startColNo, endLineNo, endColNo);</span>
+<span class="source-line-no">165</span><span id="line-165">    }</span>
+<span class="source-line-no">166</span><span id="line-166"></span>
+<span class="source-line-no">167</span><span id="line-167">    /**</span>
+<span class="source-line-no">168</span><span id="line-168">     * Returns the specified block comment as a String array.</span>
+<span class="source-line-no">169</span><span id="line-169">     *</span>
+<span class="source-line-no">170</span><span id="line-170">     * @param startLineNo the starting line number</span>
+<span class="source-line-no">171</span><span id="line-171">     * @param startColNo the starting column number</span>
+<span class="source-line-no">172</span><span id="line-172">     * @param endLineNo the ending line number</span>
+<span class="source-line-no">173</span><span id="line-173">     * @param endColNo the ending column number</span>
+<span class="source-line-no">174</span><span id="line-174">     * @return block comment as an array</span>
+<span class="source-line-no">175</span><span id="line-175">     **/</span>
+<span class="source-line-no">176</span><span id="line-176">    private String[] extractBlockComment(int startLineNo, int startColNo,</span>
+<span class="source-line-no">177</span><span id="line-177">            int endLineNo, int endColNo) {</span>
+<span class="source-line-no">178</span><span id="line-178">        final String[] returnValue;</span>
+<span class="source-line-no">179</span><span id="line-179">        if (startLineNo == endLineNo) {</span>
+<span class="source-line-no">180</span><span id="line-180">            returnValue = new String[1];</span>
+<span class="source-line-no">181</span><span id="line-181">            returnValue[0] = line(startLineNo - 1).substring(startColNo,</span>
+<span class="source-line-no">182</span><span id="line-182">                    endColNo + 1);</span>
+<span class="source-line-no">183</span><span id="line-183">        }</span>
+<span class="source-line-no">184</span><span id="line-184">        else {</span>
+<span class="source-line-no">185</span><span id="line-185">            returnValue = new String[endLineNo - startLineNo + 1];</span>
+<span class="source-line-no">186</span><span id="line-186">            returnValue[0] = line(startLineNo - 1).substring(startColNo);</span>
+<span class="source-line-no">187</span><span id="line-187">            for (int i = startLineNo; i &lt; endLineNo; i++) {</span>
+<span class="source-line-no">188</span><span id="line-188">                returnValue[i - startLineNo + 1] = line(i);</span>
+<span class="source-line-no">189</span><span id="line-189">            }</span>
+<span class="source-line-no">190</span><span id="line-190">            returnValue[returnValue.length - 1] = line(endLineNo - 1).substring(0,</span>
+<span class="source-line-no">191</span><span id="line-191">                    endColNo + 1);</span>
+<span class="source-line-no">192</span><span id="line-192">        }</span>
+<span class="source-line-no">193</span><span id="line-193">        return returnValue;</span>
+<span class="source-line-no">194</span><span id="line-194">    }</span>
+<span class="source-line-no">195</span><span id="line-195"></span>
+<span class="source-line-no">196</span><span id="line-196">    /**</span>
+<span class="source-line-no">197</span><span id="line-197">     * Get a single-line.</span>
+<span class="source-line-no">198</span><span id="line-198">     * For internal use only, as getText().get(lineNo) is just as</span>
+<span class="source-line-no">199</span><span id="line-199">     * suitable for external use and avoids method duplication.</span>
+<span class="source-line-no">200</span><span id="line-200">     *</span>
+<span class="source-line-no">201</span><span id="line-201">     * @param lineNo the number of the line to get</span>
+<span class="source-line-no">202</span><span id="line-202">     * @return the corresponding line, without terminator</span>
+<span class="source-line-no">203</span><span id="line-203">     * @throws IndexOutOfBoundsException if lineNo is invalid</span>
+<span class="source-line-no">204</span><span id="line-204">     */</span>
+<span class="source-line-no">205</span><span id="line-205">    private String line(int lineNo) {</span>
+<span class="source-line-no">206</span><span id="line-206">        return text.get(lineNo);</span>
+<span class="source-line-no">207</span><span id="line-207">    }</span>
+<span class="source-line-no">208</span><span id="line-208"></span>
+<span class="source-line-no">209</span><span id="line-209">    /**</span>
+<span class="source-line-no">210</span><span id="line-210">     * Returns the Javadoc comment before the specified line.</span>
+<span class="source-line-no">211</span><span id="line-211">     * A return value of {@code null} means there is no such comment.</span>
+<span class="source-line-no">212</span><span id="line-212">     *</span>
+<span class="source-line-no">213</span><span id="line-213">     * @param lineNoBefore the line number to check before</span>
+<span class="source-line-no">214</span><span id="line-214">     * @return the Javadoc comment, or {@code null} if none</span>
+<span class="source-line-no">215</span><span id="line-215">     * @deprecated this method supports legacy checks that inspect Javadoc comments from</span>
+<span class="source-line-no">216</span><span id="line-216">     *             {@code FileContents}; use</span>
+<span class="source-line-no">217</span><span id="line-217">     *             {@link JavadocUtil#getAttachedJavadocComment(DetailAST)} with AST-based</span>
+<span class="source-line-no">218</span><span id="line-218">     *             Javadoc processing instead.</span>
+<span class="source-line-no">219</span><span id="line-219">     * @noinspection DeprecatedIsStillUsed</span>
+<span class="source-line-no">220</span><span id="line-220">     * @noinspectionreason DeprecatedIsStillUsed - Method used in unit testing to verify</span>
+<span class="source-line-no">221</span><span id="line-221">     *             legacy API behavior.</span>
+<span class="source-line-no">222</span><span id="line-222">     **/</span>
+<span class="source-line-no">223</span><span id="line-223">    @Deprecated(since = "13.9.0")</span>
+<span class="source-line-no">224</span><span id="line-224">    public TextBlock getJavadocBefore(int lineNoBefore) {</span>
+<span class="source-line-no">225</span><span id="line-225">        // Lines start at 1 to the callers perspective, so need to take off 2</span>
+<span class="source-line-no">226</span><span id="line-226">        int lineNo = lineNoBefore - 2;</span>
 <span class="source-line-no">227</span><span id="line-227"></span>
-<span class="source-line-no">228</span><span id="line-228">    /**</span>
-<span class="source-line-no">229</span><span id="line-229">     * Checks if the specified line number is inside a block comment.</span>
-<span class="source-line-no">230</span><span id="line-230">     * This method scans through all block comments (excluding Javadoc comments)</span>
-<span class="source-line-no">231</span><span id="line-231">     * and determines whether the given line number falls within any of them</span>
-<span class="source-line-no">232</span><span id="line-232">     *</span>
-<span class="source-line-no">233</span><span id="line-233">     * @param lineNo the line number to check</span>
-<span class="source-line-no">234</span><span id="line-234">     * @return {@code true} if the line is inside a block comment (excluding Javadoc comments)</span>
-<span class="source-line-no">235</span><span id="line-235">     *          , {@code false} otherwise</span>
-<span class="source-line-no">236</span><span id="line-236">     */</span>
-<span class="source-line-no">237</span><span id="line-237">    private boolean lineInsideBlockComment(int lineNo) {</span>
-<span class="source-line-no">238</span><span id="line-238">        final Collection&lt;List&lt;TextBlock&gt;&gt; values = clangComments.values();</span>
-<span class="source-line-no">239</span><span id="line-239">        return values.stream()</span>
-<span class="source-line-no">240</span><span id="line-240">            .flatMap(List::stream)</span>
-<span class="source-line-no">241</span><span id="line-241">            .filter(comment -&gt; !javadocComments.containsValue(comment))</span>
-<span class="source-line-no">242</span><span id="line-242">            .anyMatch(comment -&gt; isLineBlockComment(lineNo, comment));</span>
-<span class="source-line-no">243</span><span id="line-243">    }</span>
-<span class="source-line-no">244</span><span id="line-244"></span>
-<span class="source-line-no">245</span><span id="line-245">    /**</span>
-<span class="source-line-no">246</span><span id="line-246">     * Checks if the given line is inside a block comment</span>
-<span class="source-line-no">247</span><span id="line-247">     * and both the start and end lines contain only the comment.</span>
-<span class="source-line-no">248</span><span id="line-248">     *</span>
-<span class="source-line-no">249</span><span id="line-249">     * @param lineNo the line number to check</span>
-<span class="source-line-no">250</span><span id="line-250">     * @param comment the block comment to inspect</span>
-<span class="source-line-no">251</span><span id="line-251">     * @return {@code true} line is in block comment, {@code false} otherwise</span>
-<span class="source-line-no">252</span><span id="line-252">     */</span>
-<span class="source-line-no">253</span><span id="line-253">    private boolean isLineBlockComment(int lineNo, TextBlock comment) {</span>
-<span class="source-line-no">254</span><span id="line-254">        final boolean lineInSideBlockComment = lineNo &gt;= comment.getStartLineNo()</span>
-<span class="source-line-no">255</span><span id="line-255">                &amp;&amp; lineNo &lt;= comment.getEndLineNo();</span>
-<span class="source-line-no">256</span><span id="line-256">        boolean lineHasOnlyBlockComment = true;</span>
-<span class="source-line-no">257</span><span id="line-257">        final String startLine = line(comment.getStartLineNo() - 1).trim();</span>
-<span class="source-line-no">258</span><span id="line-258">        if (!startLine.startsWith("/*")) {</span>
-<span class="source-line-no">259</span><span id="line-259">            lineHasOnlyBlockComment = false;</span>
-<span class="source-line-no">260</span><span id="line-260">        }</span>
-<span class="source-line-no">261</span><span id="line-261"></span>
-<span class="source-line-no">262</span><span id="line-262">        final String endLine = line(comment.getEndLineNo() - 1).trim();</span>
-<span class="source-line-no">263</span><span id="line-263">        if (!endLine.endsWith("*/")) {</span>
-<span class="source-line-no">264</span><span id="line-264">            lineHasOnlyBlockComment = false;</span>
-<span class="source-line-no">265</span><span id="line-265">        }</span>
-<span class="source-line-no">266</span><span id="line-266">        return lineInSideBlockComment &amp;&amp; lineHasOnlyBlockComment;</span>
-<span class="source-line-no">267</span><span id="line-267">    }</span>
-<span class="source-line-no">268</span><span id="line-268"></span>
-<span class="source-line-no">269</span><span id="line-269">    /**</span>
-<span class="source-line-no">270</span><span id="line-270">     * Checks if the specified line is blank.</span>
-<span class="source-line-no">271</span><span id="line-271">     *</span>
-<span class="source-line-no">272</span><span id="line-272">     * @param lineNo the line number to check</span>
-<span class="source-line-no">273</span><span id="line-273">     * @return if the specified line consists only of tabs and spaces.</span>
-<span class="source-line-no">274</span><span id="line-274">     **/</span>
-<span class="source-line-no">275</span><span id="line-275">    public boolean lineIsBlank(int lineNo) {</span>
-<span class="source-line-no">276</span><span id="line-276">        return CommonUtil.isBlank(line(lineNo));</span>
-<span class="source-line-no">277</span><span id="line-277">    }</span>
-<span class="source-line-no">278</span><span id="line-278"></span>
-<span class="source-line-no">279</span><span id="line-279">    /**</span>
-<span class="source-line-no">280</span><span id="line-280">     * Checks if the specified line is a single-line comment without code.</span>
-<span class="source-line-no">281</span><span id="line-281">     *</span>
-<span class="source-line-no">282</span><span id="line-282">     * @param lineNo  the line number to check</span>
-<span class="source-line-no">283</span><span id="line-283">     * @return if the specified line consists of only a single-line comment</span>
-<span class="source-line-no">284</span><span id="line-284">     *         without code.</span>
-<span class="source-line-no">285</span><span id="line-285">     **/</span>
-<span class="source-line-no">286</span><span id="line-286">    public boolean lineIsComment(int lineNo) {</span>
-<span class="source-line-no">287</span><span id="line-287">        return MATCH_SINGLELINE_COMMENT.matcher(line(lineNo)).matches();</span>
-<span class="source-line-no">288</span><span id="line-288">    }</span>
-<span class="source-line-no">289</span><span id="line-289"></span>
-<span class="source-line-no">290</span><span id="line-290">    /**</span>
-<span class="source-line-no">291</span><span id="line-291">     * Checks if the specified position intersects with a comment.</span>
-<span class="source-line-no">292</span><span id="line-292">     *</span>
-<span class="source-line-no">293</span><span id="line-293">     * @param startLineNo the starting line number</span>
-<span class="source-line-no">294</span><span id="line-294">     * @param startColNo the starting column number</span>
-<span class="source-line-no">295</span><span id="line-295">     * @param endLineNo the ending line number</span>
-<span class="source-line-no">296</span><span id="line-296">     * @param endColNo the ending column number</span>
-<span class="source-line-no">297</span><span id="line-297">     * @return true if the positions intersects with a comment.</span>
-<span class="source-line-no">298</span><span id="line-298">     **/</span>
-<span class="source-line-no">299</span><span id="line-299">    public boolean hasIntersectionWithComment(int startLineNo,</span>
-<span class="source-line-no">300</span><span id="line-300">            int startColNo, int endLineNo, int endColNo) {</span>
-<span class="source-line-no">301</span><span id="line-301">        return hasIntersectionWithBlockComment(startLineNo, startColNo, endLineNo, endColNo)</span>
-<span class="source-line-no">302</span><span id="line-302">                || hasIntersectionWithSingleLineComment(startLineNo, startColNo, endLineNo,</span>
-<span class="source-line-no">303</span><span id="line-303">                        endColNo);</span>
-<span class="source-line-no">304</span><span id="line-304">    }</span>
-<span class="source-line-no">305</span><span id="line-305"></span>
-<span class="source-line-no">306</span><span id="line-306">    /**</span>
-<span class="source-line-no">307</span><span id="line-307">     * Checks if the specified position intersects with a block comment.</span>
-<span class="source-line-no">308</span><span id="line-308">     *</span>
-<span class="source-line-no">309</span><span id="line-309">     * @param startLineNo the starting line number</span>
-<span class="source-line-no">310</span><span id="line-310">     * @param startColNo the starting column number</span>
-<span class="source-line-no">311</span><span id="line-311">     * @param endLineNo the ending line number</span>
-<span class="source-line-no">312</span><span id="line-312">     * @param endColNo the ending column number</span>
-<span class="source-line-no">313</span><span id="line-313">     * @return true if the positions intersects with a block comment.</span>
-<span class="source-line-no">314</span><span id="line-314">     */</span>
-<span class="source-line-no">315</span><span id="line-315">    private boolean hasIntersectionWithBlockComment(int startLineNo, int startColNo,</span>
-<span class="source-line-no">316</span><span id="line-316">            int endLineNo, int endColNo) {</span>
-<span class="source-line-no">317</span><span id="line-317">        // Check C comments (all comments should be checked)</span>
-<span class="source-line-no">318</span><span id="line-318">        final Collection&lt;List&lt;TextBlock&gt;&gt; values = clangComments.values();</span>
-<span class="source-line-no">319</span><span id="line-319">        return values.stream()</span>
-<span class="source-line-no">320</span><span id="line-320">            .flatMap(List::stream)</span>
-<span class="source-line-no">321</span><span id="line-321">            .anyMatch(comment -&gt; comment.intersects(startLineNo, startColNo, endLineNo, endColNo));</span>
-<span class="source-line-no">322</span><span id="line-322">    }</span>
-<span class="source-line-no">323</span><span id="line-323"></span>
-<span class="source-line-no">324</span><span id="line-324">    /**</span>
-<span class="source-line-no">325</span><span id="line-325">     * Checks if the specified position intersects with a single-line comment.</span>
-<span class="source-line-no">326</span><span id="line-326">     *</span>
-<span class="source-line-no">327</span><span id="line-327">     * @param startLineNo the starting line number</span>
-<span class="source-line-no">328</span><span id="line-328">     * @param startColNo the starting column number</span>
-<span class="source-line-no">329</span><span id="line-329">     * @param endLineNo the ending line number</span>
-<span class="source-line-no">330</span><span id="line-330">     * @param endColNo the ending column number</span>
-<span class="source-line-no">331</span><span id="line-331">     * @return true if the positions intersects with a single-line comment.</span>
-<span class="source-line-no">332</span><span id="line-332">     */</span>
-<span class="source-line-no">333</span><span id="line-333">    private boolean hasIntersectionWithSingleLineComment(int startLineNo, int startColNo,</span>
-<span class="source-line-no">334</span><span id="line-334">            int endLineNo, int endColNo) {</span>
-<span class="source-line-no">335</span><span id="line-335">        boolean hasIntersection = false;</span>
-<span class="source-line-no">336</span><span id="line-336">        // Check CPP comments (line searching is possible)</span>
-<span class="source-line-no">337</span><span id="line-337">        for (int lineNumber = startLineNo; lineNumber &lt;= endLineNo;</span>
-<span class="source-line-no">338</span><span id="line-338">             lineNumber++) {</span>
-<span class="source-line-no">339</span><span id="line-339">            final TextBlock comment = cppComments.get(lineNumber);</span>
-<span class="source-line-no">340</span><span id="line-340">            if (comment != null &amp;&amp; comment.intersects(startLineNo, startColNo,</span>
-<span class="source-line-no">341</span><span id="line-341">                    endLineNo, endColNo)) {</span>
-<span class="source-line-no">342</span><span id="line-342">                hasIntersection = true;</span>
-<span class="source-line-no">343</span><span id="line-343">                break;</span>
-<span class="source-line-no">344</span><span id="line-344">            }</span>
-<span class="source-line-no">345</span><span id="line-345">        }</span>
-<span class="source-line-no">346</span><span id="line-346">        return hasIntersection;</span>
-<span class="source-line-no">347</span><span id="line-347">    }</span>
-<span class="source-line-no">348</span><span id="line-348"></span>
-<span class="source-line-no">349</span><span id="line-349">    /**</span>
-<span class="source-line-no">350</span><span id="line-350">     * Returns a map of all the single-line comments. The key is a line number,</span>
-<span class="source-line-no">351</span><span id="line-351">     * the value is the comment {@link TextBlock} at the line.</span>
-<span class="source-line-no">352</span><span id="line-352">     *</span>
-<span class="source-line-no">353</span><span id="line-353">     * @return the Map of comments</span>
-<span class="source-line-no">354</span><span id="line-354">     */</span>
-<span class="source-line-no">355</span><span id="line-355">    public Map&lt;Integer, TextBlock&gt; getSingleLineComments() {</span>
-<span class="source-line-no">356</span><span id="line-356">        return Collections.unmodifiableMap(cppComments);</span>
-<span class="source-line-no">357</span><span id="line-357">    }</span>
-<span class="source-line-no">358</span><span id="line-358"></span>
-<span class="source-line-no">359</span><span id="line-359">    /**</span>
-<span class="source-line-no">360</span><span id="line-360">     * Returns a map of all block comments. The key is the line number, the</span>
-<span class="source-line-no">361</span><span id="line-361">     * value is a {@link List} of block comment {@link TextBlock}s</span>
-<span class="source-line-no">362</span><span id="line-362">     * that start at that line.</span>
-<span class="source-line-no">363</span><span id="line-363">     *</span>
-<span class="source-line-no">364</span><span id="line-364">     * @return the map of comments</span>
-<span class="source-line-no">365</span><span id="line-365">     */</span>
-<span class="source-line-no">366</span><span id="line-366">    public Map&lt;Integer, List&lt;TextBlock&gt;&gt; getBlockComments() {</span>
-<span class="source-line-no">367</span><span id="line-367">        return Collections.unmodifiableMap(clangComments);</span>
-<span class="source-line-no">368</span><span id="line-368">    }</span>
-<span class="source-line-no">369</span><span id="line-369"></span>
-<span class="source-line-no">370</span><span id="line-370">    /**</span>
-<span class="source-line-no">371</span><span id="line-371">     * Checks if the current file is a package-info.java file.</span>
+<span class="source-line-no">228</span><span id="line-228">        // skip blank lines and comments</span>
+<span class="source-line-no">229</span><span id="line-229">        while (lineNo &gt; 0 &amp;&amp; (lineIsBlank(lineNo) || lineIsComment(lineNo)</span>
+<span class="source-line-no">230</span><span id="line-230">                            || lineInsideBlockComment(lineNo + 1))) {</span>
+<span class="source-line-no">231</span><span id="line-231">            lineNo--;</span>
+<span class="source-line-no">232</span><span id="line-232">        }</span>
+<span class="source-line-no">233</span><span id="line-233"></span>
+<span class="source-line-no">234</span><span id="line-234">        return javadocComments.get(lineNo);</span>
+<span class="source-line-no">235</span><span id="line-235">    }</span>
+<span class="source-line-no">236</span><span id="line-236"></span>
+<span class="source-line-no">237</span><span id="line-237">    /**</span>
+<span class="source-line-no">238</span><span id="line-238">     * Checks if the specified line number is inside a block comment.</span>
+<span class="source-line-no">239</span><span id="line-239">     * This method scans through all block comments (excluding Javadoc comments)</span>
+<span class="source-line-no">240</span><span id="line-240">     * and determines whether the given line number falls within any of them</span>
+<span class="source-line-no">241</span><span id="line-241">     *</span>
+<span class="source-line-no">242</span><span id="line-242">     * @param lineNo the line number to check</span>
+<span class="source-line-no">243</span><span id="line-243">     * @return {@code true} if the line is inside a block comment (excluding Javadoc comments)</span>
+<span class="source-line-no">244</span><span id="line-244">     *          , {@code false} otherwise</span>
+<span class="source-line-no">245</span><span id="line-245">     */</span>
+<span class="source-line-no">246</span><span id="line-246">    private boolean lineInsideBlockComment(int lineNo) {</span>
+<span class="source-line-no">247</span><span id="line-247">        final Collection&lt;List&lt;TextBlock&gt;&gt; values = clangComments.values();</span>
+<span class="source-line-no">248</span><span id="line-248">        return values.stream()</span>
+<span class="source-line-no">249</span><span id="line-249">            .flatMap(List::stream)</span>
+<span class="source-line-no">250</span><span id="line-250">            .filter(comment -&gt; !javadocComments.containsValue(comment))</span>
+<span class="source-line-no">251</span><span id="line-251">            .anyMatch(comment -&gt; isLineBlockComment(lineNo, comment));</span>
+<span class="source-line-no">252</span><span id="line-252">    }</span>
+<span class="source-line-no">253</span><span id="line-253"></span>
+<span class="source-line-no">254</span><span id="line-254">    /**</span>
+<span class="source-line-no">255</span><span id="line-255">     * Checks if the given line is inside a block comment</span>
+<span class="source-line-no">256</span><span id="line-256">     * and both the start and end lines contain only the comment.</span>
+<span class="source-line-no">257</span><span id="line-257">     *</span>
+<span class="source-line-no">258</span><span id="line-258">     * @param lineNo the line number to check</span>
+<span class="source-line-no">259</span><span id="line-259">     * @param comment the block comment to inspect</span>
+<span class="source-line-no">260</span><span id="line-260">     * @return {@code true} line is in block comment, {@code false} otherwise</span>
+<span class="source-line-no">261</span><span id="line-261">     */</span>
+<span class="source-line-no">262</span><span id="line-262">    private boolean isLineBlockComment(int lineNo, TextBlock comment) {</span>
+<span class="source-line-no">263</span><span id="line-263">        final boolean lineInSideBlockComment = lineNo &gt;= comment.getStartLineNo()</span>
+<span class="source-line-no">264</span><span id="line-264">                &amp;&amp; lineNo &lt;= comment.getEndLineNo();</span>
+<span class="source-line-no">265</span><span id="line-265">        boolean lineHasOnlyBlockComment = true;</span>
+<span class="source-line-no">266</span><span id="line-266">        final String startLine = line(comment.getStartLineNo() - 1).trim();</span>
+<span class="source-line-no">267</span><span id="line-267">        if (!startLine.startsWith("/*")) {</span>
+<span class="source-line-no">268</span><span id="line-268">            lineHasOnlyBlockComment = false;</span>
+<span class="source-line-no">269</span><span id="line-269">        }</span>
+<span class="source-line-no">270</span><span id="line-270"></span>
+<span class="source-line-no">271</span><span id="line-271">        final String endLine = line(comment.getEndLineNo() - 1).trim();</span>
+<span class="source-line-no">272</span><span id="line-272">        if (!endLine.endsWith("*/")) {</span>
+<span class="source-line-no">273</span><span id="line-273">            lineHasOnlyBlockComment = false;</span>
+<span class="source-line-no">274</span><span id="line-274">        }</span>
+<span class="source-line-no">275</span><span id="line-275">        return lineInSideBlockComment &amp;&amp; lineHasOnlyBlockComment;</span>
+<span class="source-line-no">276</span><span id="line-276">    }</span>
+<span class="source-line-no">277</span><span id="line-277"></span>
+<span class="source-line-no">278</span><span id="line-278">    /**</span>
+<span class="source-line-no">279</span><span id="line-279">     * Checks if the specified line is blank.</span>
+<span class="source-line-no">280</span><span id="line-280">     *</span>
+<span class="source-line-no">281</span><span id="line-281">     * @param lineNo the line number to check</span>
+<span class="source-line-no">282</span><span id="line-282">     * @return if the specified line consists only of tabs and spaces.</span>
+<span class="source-line-no">283</span><span id="line-283">     **/</span>
+<span class="source-line-no">284</span><span id="line-284">    public boolean lineIsBlank(int lineNo) {</span>
+<span class="source-line-no">285</span><span id="line-285">        return CommonUtil.isBlank(line(lineNo));</span>
+<span class="source-line-no">286</span><span id="line-286">    }</span>
+<span class="source-line-no">287</span><span id="line-287"></span>
+<span class="source-line-no">288</span><span id="line-288">    /**</span>
+<span class="source-line-no">289</span><span id="line-289">     * Checks if the specified line is a single-line comment without code.</span>
+<span class="source-line-no">290</span><span id="line-290">     *</span>
+<span class="source-line-no">291</span><span id="line-291">     * @param lineNo  the line number to check</span>
+<span class="source-line-no">292</span><span id="line-292">     * @return if the specified line consists of only a single-line comment</span>
+<span class="source-line-no">293</span><span id="line-293">     *         without code.</span>
+<span class="source-line-no">294</span><span id="line-294">     **/</span>
+<span class="source-line-no">295</span><span id="line-295">    public boolean lineIsComment(int lineNo) {</span>
+<span class="source-line-no">296</span><span id="line-296">        return MATCH_SINGLELINE_COMMENT.matcher(line(lineNo)).matches();</span>
+<span class="source-line-no">297</span><span id="line-297">    }</span>
+<span class="source-line-no">298</span><span id="line-298"></span>
+<span class="source-line-no">299</span><span id="line-299">    /**</span>
+<span class="source-line-no">300</span><span id="line-300">     * Checks if the specified position intersects with a comment.</span>
+<span class="source-line-no">301</span><span id="line-301">     *</span>
+<span class="source-line-no">302</span><span id="line-302">     * @param startLineNo the starting line number</span>
+<span class="source-line-no">303</span><span id="line-303">     * @param startColNo the starting column number</span>
+<span class="source-line-no">304</span><span id="line-304">     * @param endLineNo the ending line number</span>
+<span class="source-line-no">305</span><span id="line-305">     * @param endColNo the ending column number</span>
+<span class="source-line-no">306</span><span id="line-306">     * @return true if the positions intersects with a comment.</span>
+<span class="source-line-no">307</span><span id="line-307">     **/</span>
+<span class="source-line-no">308</span><span id="line-308">    public boolean hasIntersectionWithComment(int startLineNo,</span>
+<span class="source-line-no">309</span><span id="line-309">            int startColNo, int endLineNo, int endColNo) {</span>
+<span class="source-line-no">310</span><span id="line-310">        return hasIntersectionWithBlockComment(startLineNo, startColNo, endLineNo, endColNo)</span>
+<span class="source-line-no">311</span><span id="line-311">                || hasIntersectionWithSingleLineComment(startLineNo, startColNo, endLineNo,</span>
+<span class="source-line-no">312</span><span id="line-312">                        endColNo);</span>
+<span class="source-line-no">313</span><span id="line-313">    }</span>
+<span class="source-line-no">314</span><span id="line-314"></span>
+<span class="source-line-no">315</span><span id="line-315">    /**</span>
+<span class="source-line-no">316</span><span id="line-316">     * Checks if the specified position intersects with a block comment.</span>
+<span class="source-line-no">317</span><span id="line-317">     *</span>
+<span class="source-line-no">318</span><span id="line-318">     * @param startLineNo the starting line number</span>
+<span class="source-line-no">319</span><span id="line-319">     * @param startColNo the starting column number</span>
+<span class="source-line-no">320</span><span id="line-320">     * @param endLineNo the ending line number</span>
+<span class="source-line-no">321</span><span id="line-321">     * @param endColNo the ending column number</span>
+<span class="source-line-no">322</span><span id="line-322">     * @return true if the positions intersects with a block comment.</span>
+<span class="source-line-no">323</span><span id="line-323">     */</span>
+<span class="source-line-no">324</span><span id="line-324">    private boolean hasIntersectionWithBlockComment(int startLineNo, int startColNo,</span>
+<span class="source-line-no">325</span><span id="line-325">            int endLineNo, int endColNo) {</span>
+<span class="source-line-no">326</span><span id="line-326">        // Check C comments (all comments should be checked)</span>
+<span class="source-line-no">327</span><span id="line-327">        final Collection&lt;List&lt;TextBlock&gt;&gt; values = clangComments.values();</span>
+<span class="source-line-no">328</span><span id="line-328">        return values.stream()</span>
+<span class="source-line-no">329</span><span id="line-329">            .flatMap(List::stream)</span>
+<span class="source-line-no">330</span><span id="line-330">            .anyMatch(comment -&gt; comment.intersects(startLineNo, startColNo, endLineNo, endColNo));</span>
+<span class="source-line-no">331</span><span id="line-331">    }</span>
+<span class="source-line-no">332</span><span id="line-332"></span>
+<span class="source-line-no">333</span><span id="line-333">    /**</span>
+<span class="source-line-no">334</span><span id="line-334">     * Checks if the specified position intersects with a single-line comment.</span>
+<span class="source-line-no">335</span><span id="line-335">     *</span>
+<span class="source-line-no">336</span><span id="line-336">     * @param startLineNo the starting line number</span>
+<span class="source-line-no">337</span><span id="line-337">     * @param startColNo the starting column number</span>
+<span class="source-line-no">338</span><span id="line-338">     * @param endLineNo the ending line number</span>
+<span class="source-line-no">339</span><span id="line-339">     * @param endColNo the ending column number</span>
+<span class="source-line-no">340</span><span id="line-340">     * @return true if the positions intersects with a single-line comment.</span>
+<span class="source-line-no">341</span><span id="line-341">     */</span>
+<span class="source-line-no">342</span><span id="line-342">    private boolean hasIntersectionWithSingleLineComment(int startLineNo, int startColNo,</span>
+<span class="source-line-no">343</span><span id="line-343">            int endLineNo, int endColNo) {</span>
+<span class="source-line-no">344</span><span id="line-344">        boolean hasIntersection = false;</span>
+<span class="source-line-no">345</span><span id="line-345">        // Check CPP comments (line searching is possible)</span>
+<span class="source-line-no">346</span><span id="line-346">        for (int lineNumber = startLineNo; lineNumber &lt;= endLineNo;</span>
+<span class="source-line-no">347</span><span id="line-347">             lineNumber++) {</span>
+<span class="source-line-no">348</span><span id="line-348">            final TextBlock comment = cppComments.get(lineNumber);</span>
+<span class="source-line-no">349</span><span id="line-349">            if (comment != null &amp;&amp; comment.intersects(startLineNo, startColNo,</span>
+<span class="source-line-no">350</span><span id="line-350">                    endLineNo, endColNo)) {</span>
+<span class="source-line-no">351</span><span id="line-351">                hasIntersection = true;</span>
+<span class="source-line-no">352</span><span id="line-352">                break;</span>
+<span class="source-line-no">353</span><span id="line-353">            }</span>
+<span class="source-line-no">354</span><span id="line-354">        }</span>
+<span class="source-line-no">355</span><span id="line-355">        return hasIntersection;</span>
+<span class="source-line-no">356</span><span id="line-356">    }</span>
+<span class="source-line-no">357</span><span id="line-357"></span>
+<span class="source-line-no">358</span><span id="line-358">    /**</span>
+<span class="source-line-no">359</span><span id="line-359">     * Returns a map of all the single-line comments. The key is a line number,</span>
+<span class="source-line-no">360</span><span id="line-360">     * the value is the comment {@link TextBlock} at the line.</span>
+<span class="source-line-no">361</span><span id="line-361">     *</span>
+<span class="source-line-no">362</span><span id="line-362">     * @return the Map of comments</span>
+<span class="source-line-no">363</span><span id="line-363">     */</span>
+<span class="source-line-no">364</span><span id="line-364">    public Map&lt;Integer, TextBlock&gt; getSingleLineComments() {</span>
+<span class="source-line-no">365</span><span id="line-365">        return Collections.unmodifiableMap(cppComments);</span>
+<span class="source-line-no">366</span><span id="line-366">    }</span>
+<span class="source-line-no">367</span><span id="line-367"></span>
+<span class="source-line-no">368</span><span id="line-368">    /**</span>
+<span class="source-line-no">369</span><span id="line-369">     * Returns a map of all block comments. The key is the line number, the</span>
+<span class="source-line-no">370</span><span id="line-370">     * value is a {@link List} of block comment {@link TextBlock}s</span>
+<span class="source-line-no">371</span><span id="line-371">     * that start at that line.</span>
 <span class="source-line-no">372</span><span id="line-372">     *</span>
-<span class="source-line-no">373</span><span id="line-373">     * @return true if the package file.</span>
-<span class="source-line-no">374</span><span id="line-374">     * @deprecated use {@link CheckUtil#isPackageInfo(String)} for the same functionality,</span>
-<span class="source-line-no">375</span><span id="line-375">     *              or use {@link AbstractCheck#getFilePath()} to process your own standards.</span>
-<span class="source-line-no">376</span><span id="line-376">     */</span>
-<span class="source-line-no">377</span><span id="line-377">    @Deprecated(since = "10.2")</span>
-<span class="source-line-no">378</span><span id="line-378">    public boolean inPackageInfo() {</span>
-<span class="source-line-no">379</span><span id="line-379">        return "package-info.java".equals(text.getFile().getName());</span>
-<span class="source-line-no">380</span><span id="line-380">    }</span>
-<span class="source-line-no">381</span><span id="line-381">}</span>
+<span class="source-line-no">373</span><span id="line-373">     * @return the map of comments</span>
+<span class="source-line-no">374</span><span id="line-374">     */</span>
+<span class="source-line-no">375</span><span id="line-375">    public Map&lt;Integer, List&lt;TextBlock&gt;&gt; getBlockComments() {</span>
+<span class="source-line-no">376</span><span id="line-376">        return Collections.unmodifiableMap(clangComments);</span>
+<span class="source-line-no">377</span><span id="line-377">    }</span>
+<span class="source-line-no">378</span><span id="line-378"></span>
+<span class="source-line-no">379</span><span id="line-379">    /**</span>
+<span class="source-line-no">380</span><span id="line-380">     * Checks if the current file is a package-info.java file.</span>
+<span class="source-line-no">381</span><span id="line-381">     *</span>
+<span class="source-line-no">382</span><span id="line-382">     * @return true if the package file.</span>
+<span class="source-line-no">383</span><span id="line-383">     * @deprecated use {@link CheckUtil#isPackageInfo(String)} for the same functionality,</span>
+<span class="source-line-no">384</span><span id="line-384">     *              or use {@link AbstractCheck#getFilePath()} to process your own standards.</span>
+<span class="source-line-no">385</span><span id="line-385">     */</span>
+<span class="source-line-no">386</span><span id="line-386">    @Deprecated(since = "10.2")</span>
+<span class="source-line-no">387</span><span id="line-387">    public boolean inPackageInfo() {</span>
+<span class="source-line-no">388</span><span id="line-388">        return "package-info.java".equals(text.getFile().getName());</span>
+<span class="source-line-no">389</span><span id="line-389">    }</span>
+<span class="source-line-no">390</span><span id="line-390"></span>
+<span class="source-line-no">391</span><span id="line-391">}</span>
 
 
 

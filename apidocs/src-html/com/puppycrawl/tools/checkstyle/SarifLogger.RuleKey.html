@@ -49,389 +49,389 @@
 <span class="source-line-no">036</span><span id="line-36">import java.util.MissingResourceException;</span>
 <span class="source-line-no">037</span><span id="line-37">import java.util.Objects;</span>
 <span class="source-line-no">038</span><span id="line-38">import java.util.ResourceBundle;</span>
-<span class="source-line-no">039</span><span id="line-39">import java.util.regex.Pattern;</span>
-<span class="source-line-no">040</span><span id="line-40"></span>
-<span class="source-line-no">041</span><span id="line-41">import com.puppycrawl.tools.checkstyle.api.AuditEvent;</span>
-<span class="source-line-no">042</span><span id="line-42">import com.puppycrawl.tools.checkstyle.api.AuditListener;</span>
-<span class="source-line-no">043</span><span id="line-43">import com.puppycrawl.tools.checkstyle.api.AutomaticBean;</span>
-<span class="source-line-no">044</span><span id="line-44">import com.puppycrawl.tools.checkstyle.api.SeverityLevel;</span>
-<span class="source-line-no">045</span><span id="line-45">import com.puppycrawl.tools.checkstyle.meta.ModuleDetails;</span>
-<span class="source-line-no">046</span><span id="line-46">import com.puppycrawl.tools.checkstyle.meta.XmlMetaReader;</span>
-<span class="source-line-no">047</span><span id="line-47">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</span>
-<span class="source-line-no">048</span><span id="line-48"></span>
-<span class="source-line-no">049</span><span id="line-49">/**</span>
-<span class="source-line-no">050</span><span id="line-50"> * Simple SARIF logger.</span>
-<span class="source-line-no">051</span><span id="line-51"> * SARIF stands for the static analysis results interchange format.</span>
-<span class="source-line-no">052</span><span id="line-52"> * See &lt;a href="https://sarifweb.azurewebsites.net/"&gt;reference&lt;/a&gt;</span>
-<span class="source-line-no">053</span><span id="line-53"> */</span>
-<span class="source-line-no">054</span><span id="line-54">public final class SarifLogger extends AbstractAutomaticBean implements AuditListener {</span>
-<span class="source-line-no">055</span><span id="line-55"></span>
-<span class="source-line-no">056</span><span id="line-56">    /** The length of unicode placeholder. */</span>
-<span class="source-line-no">057</span><span id="line-57">    private static final int UNICODE_LENGTH = 4;</span>
-<span class="source-line-no">058</span><span id="line-58"></span>
-<span class="source-line-no">059</span><span id="line-59">    /** Unicode escaping upper limit. */</span>
-<span class="source-line-no">060</span><span id="line-60">    private static final int UNICODE_ESCAPE_UPPER_LIMIT = 0x1F;</span>
-<span class="source-line-no">061</span><span id="line-61"></span>
-<span class="source-line-no">062</span><span id="line-62">    /** Input stream buffer size. */</span>
-<span class="source-line-no">063</span><span id="line-63">    private static final int BUFFER_SIZE = 1024;</span>
-<span class="source-line-no">064</span><span id="line-64"></span>
-<span class="source-line-no">065</span><span id="line-65">    /** The placeholder for message. */</span>
-<span class="source-line-no">066</span><span id="line-66">    private static final String MESSAGE_PLACEHOLDER = "${message}";</span>
-<span class="source-line-no">067</span><span id="line-67"></span>
-<span class="source-line-no">068</span><span id="line-68">    /** The placeholder for message text. */</span>
-<span class="source-line-no">069</span><span id="line-69">    private static final String MESSAGE_TEXT_PLACEHOLDER = "${messageText}";</span>
-<span class="source-line-no">070</span><span id="line-70"></span>
-<span class="source-line-no">071</span><span id="line-71">    /** The placeholder for message id. */</span>
-<span class="source-line-no">072</span><span id="line-72">    private static final String MESSAGE_ID_PLACEHOLDER = "${messageId}";</span>
-<span class="source-line-no">073</span><span id="line-73"></span>
-<span class="source-line-no">074</span><span id="line-74">    /** The placeholder for severity level. */</span>
-<span class="source-line-no">075</span><span id="line-75">    private static final String SEVERITY_LEVEL_PLACEHOLDER = "${severityLevel}";</span>
-<span class="source-line-no">076</span><span id="line-76"></span>
-<span class="source-line-no">077</span><span id="line-77">    /** The placeholder for uri. */</span>
-<span class="source-line-no">078</span><span id="line-78">    private static final String URI_PLACEHOLDER = "${uri}";</span>
-<span class="source-line-no">079</span><span id="line-79"></span>
-<span class="source-line-no">080</span><span id="line-80">    /** The placeholder for line. */</span>
-<span class="source-line-no">081</span><span id="line-81">    private static final String LINE_PLACEHOLDER = "${line}";</span>
-<span class="source-line-no">082</span><span id="line-82"></span>
-<span class="source-line-no">083</span><span id="line-83">    /** The placeholder for column. */</span>
-<span class="source-line-no">084</span><span id="line-84">    private static final String COLUMN_PLACEHOLDER = "${column}";</span>
-<span class="source-line-no">085</span><span id="line-85"></span>
-<span class="source-line-no">086</span><span id="line-86">    /** The placeholder for rule id. */</span>
-<span class="source-line-no">087</span><span id="line-87">    private static final String RULE_ID_PLACEHOLDER = "${ruleId}";</span>
-<span class="source-line-no">088</span><span id="line-88"></span>
-<span class="source-line-no">089</span><span id="line-89">    /** The placeholder for version. */</span>
-<span class="source-line-no">090</span><span id="line-90">    private static final String VERSION_PLACEHOLDER = "${version}";</span>
-<span class="source-line-no">091</span><span id="line-91"></span>
-<span class="source-line-no">092</span><span id="line-92">    /** The placeholder for results. */</span>
-<span class="source-line-no">093</span><span id="line-93">    private static final String RESULTS_PLACEHOLDER = "${results}";</span>
-<span class="source-line-no">094</span><span id="line-94"></span>
-<span class="source-line-no">095</span><span id="line-95">    /** The placeholder for rules. */</span>
-<span class="source-line-no">096</span><span id="line-96">    private static final String RULES_PLACEHOLDER = "${rules}";</span>
-<span class="source-line-no">097</span><span id="line-97"></span>
-<span class="source-line-no">098</span><span id="line-98">    /** Two backslashes to not duplicate strings. */</span>
-<span class="source-line-no">099</span><span id="line-99">    private static final String TWO_BACKSLASHES = "\\\\";</span>
-<span class="source-line-no">100</span><span id="line-100"></span>
-<span class="source-line-no">101</span><span id="line-101">    /** A pattern for two backslashes. */</span>
-<span class="source-line-no">102</span><span id="line-102">    private static final Pattern A_SPACE_PATTERN = Pattern.compile(" ");</span>
-<span class="source-line-no">103</span><span id="line-103"></span>
-<span class="source-line-no">104</span><span id="line-104">    /** A pattern for a double quote. */</span>
-<span class="source-line-no">105</span><span id="line-105">    private static final Pattern A_QUOTE_PATTERN = Pattern.compile("\"");</span>
-<span class="source-line-no">106</span><span id="line-106"></span>
-<span class="source-line-no">107</span><span id="line-107">    /** A pattern for two backslashes. */</span>
-<span class="source-line-no">108</span><span id="line-108">    private static final Pattern TWO_BACKSLASHES_PATTERN = Pattern.compile(TWO_BACKSLASHES);</span>
-<span class="source-line-no">109</span><span id="line-109"></span>
-<span class="source-line-no">110</span><span id="line-110">    /** A pattern to match a file with a Windows drive letter. */</span>
-<span class="source-line-no">111</span><span id="line-111">    private static final Pattern WINDOWS_DRIVE_LETTER_PATTERN =</span>
-<span class="source-line-no">112</span><span id="line-112">            Pattern.compile("\\A[A-Z]:", Pattern.CASE_INSENSITIVE);</span>
-<span class="source-line-no">113</span><span id="line-113"></span>
-<span class="source-line-no">114</span><span id="line-114">    /** Comma and line separator. */</span>
-<span class="source-line-no">115</span><span id="line-115">    private static final String COMMA_LINE_SEPARATOR = ",\n";</span>
-<span class="source-line-no">116</span><span id="line-116"></span>
-<span class="source-line-no">117</span><span id="line-117">    /** Helper writer that allows easy encoding and printing. */</span>
-<span class="source-line-no">118</span><span id="line-118">    private final PrintWriter writer;</span>
-<span class="source-line-no">119</span><span id="line-119"></span>
-<span class="source-line-no">120</span><span id="line-120">    /** Close output stream in auditFinished. */</span>
-<span class="source-line-no">121</span><span id="line-121">    private final boolean closeStream;</span>
-<span class="source-line-no">122</span><span id="line-122"></span>
-<span class="source-line-no">123</span><span id="line-123">    /** The results. */</span>
-<span class="source-line-no">124</span><span id="line-124">    private final List&lt;String&gt; results = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">125</span><span id="line-125"></span>
-<span class="source-line-no">126</span><span id="line-126">    /** Map of all available module metadata by fully qualified name. */</span>
-<span class="source-line-no">127</span><span id="line-127">    private final Map&lt;String, ModuleDetails&gt; allModuleMetadata = new HashMap&lt;&gt;();</span>
-<span class="source-line-no">128</span><span id="line-128"></span>
-<span class="source-line-no">129</span><span id="line-129">    /** Map to store rule metadata by composite key (sourceName, moduleId). */</span>
-<span class="source-line-no">130</span><span id="line-130">    private final Map&lt;RuleKey, ModuleDetails&gt; ruleMetadata = new LinkedHashMap&lt;&gt;();</span>
-<span class="source-line-no">131</span><span id="line-131"></span>
-<span class="source-line-no">132</span><span id="line-132">    /** Content for the entire report. */</span>
-<span class="source-line-no">133</span><span id="line-133">    private final String report;</span>
-<span class="source-line-no">134</span><span id="line-134"></span>
-<span class="source-line-no">135</span><span id="line-135">    /** Content for result representing an error with source line and column. */</span>
-<span class="source-line-no">136</span><span id="line-136">    private final String resultLineColumn;</span>
-<span class="source-line-no">137</span><span id="line-137"></span>
-<span class="source-line-no">138</span><span id="line-138">    /** Content for result representing an error with source line only. */</span>
-<span class="source-line-no">139</span><span id="line-139">    private final String resultLineOnly;</span>
-<span class="source-line-no">140</span><span id="line-140"></span>
-<span class="source-line-no">141</span><span id="line-141">    /** Content for result representing an error with filename only and without source location. */</span>
-<span class="source-line-no">142</span><span id="line-142">    private final String resultFileOnly;</span>
-<span class="source-line-no">143</span><span id="line-143"></span>
-<span class="source-line-no">144</span><span id="line-144">    /** Content for result representing an error without filename or location. */</span>
-<span class="source-line-no">145</span><span id="line-145">    private final String resultErrorOnly;</span>
-<span class="source-line-no">146</span><span id="line-146"></span>
-<span class="source-line-no">147</span><span id="line-147">    /** Content for rule. */</span>
-<span class="source-line-no">148</span><span id="line-148">    private final String rule;</span>
-<span class="source-line-no">149</span><span id="line-149"></span>
-<span class="source-line-no">150</span><span id="line-150">    /** Content for messageStrings. */</span>
-<span class="source-line-no">151</span><span id="line-151">    private final String messageStrings;</span>
-<span class="source-line-no">152</span><span id="line-152"></span>
-<span class="source-line-no">153</span><span id="line-153">    /** Content for message with text only. */</span>
-<span class="source-line-no">154</span><span id="line-154">    private final String messageTextOnly;</span>
-<span class="source-line-no">155</span><span id="line-155"></span>
-<span class="source-line-no">156</span><span id="line-156">    /** Content for message with id. */</span>
-<span class="source-line-no">157</span><span id="line-157">    private final String messageWithId;</span>
-<span class="source-line-no">158</span><span id="line-158"></span>
-<span class="source-line-no">159</span><span id="line-159">    /**</span>
-<span class="source-line-no">160</span><span id="line-160">     * Creates a new {@code SarifLogger} instance.</span>
-<span class="source-line-no">161</span><span id="line-161">     *</span>
-<span class="source-line-no">162</span><span id="line-162">     * @param outputStream where to log audit events</span>
-<span class="source-line-no">163</span><span id="line-163">     * @param outputStreamOptions if {@code CLOSE} that should be closed in auditFinished()</span>
-<span class="source-line-no">164</span><span id="line-164">     * @throws IllegalArgumentException if outputStreamOptions is null</span>
-<span class="source-line-no">165</span><span id="line-165">     * @throws IOException if there is reading errors.</span>
-<span class="source-line-no">166</span><span id="line-166">     * @noinspection deprecation</span>
-<span class="source-line-no">167</span><span id="line-167">     * @noinspectionreason We are forced to keep AutomaticBean compatability</span>
-<span class="source-line-no">168</span><span id="line-168">     *     because of maven-checkstyle-plugin. Until #12873.</span>
-<span class="source-line-no">169</span><span id="line-169">     */</span>
-<span class="source-line-no">170</span><span id="line-170">    public SarifLogger(</span>
-<span class="source-line-no">171</span><span id="line-171">        OutputStream outputStream,</span>
-<span class="source-line-no">172</span><span id="line-172">        AutomaticBean.OutputStreamOptions outputStreamOptions) throws IOException {</span>
-<span class="source-line-no">173</span><span id="line-173">        this(outputStream, OutputStreamOptions.valueOf(outputStreamOptions.name()));</span>
-<span class="source-line-no">174</span><span id="line-174">    }</span>
-<span class="source-line-no">175</span><span id="line-175"></span>
-<span class="source-line-no">176</span><span id="line-176">    /**</span>
-<span class="source-line-no">177</span><span id="line-177">     * Creates a new {@code SarifLogger} instance.</span>
-<span class="source-line-no">178</span><span id="line-178">     *</span>
-<span class="source-line-no">179</span><span id="line-179">     * @param outputStream where to log audit events</span>
-<span class="source-line-no">180</span><span id="line-180">     * @param outputStreamOptions if {@code CLOSE} that should be closed in auditFinished()</span>
-<span class="source-line-no">181</span><span id="line-181">     * @throws IllegalArgumentException if outputStreamOptions is null</span>
-<span class="source-line-no">182</span><span id="line-182">     * @throws IOException if there is reading errors.</span>
-<span class="source-line-no">183</span><span id="line-183">     */</span>
-<span class="source-line-no">184</span><span id="line-184">    public SarifLogger(</span>
-<span class="source-line-no">185</span><span id="line-185">        OutputStream outputStream,</span>
-<span class="source-line-no">186</span><span id="line-186">        OutputStreamOptions outputStreamOptions) throws IOException {</span>
-<span class="source-line-no">187</span><span id="line-187">        if (outputStreamOptions == null) {</span>
-<span class="source-line-no">188</span><span id="line-188">            throw new IllegalArgumentException("Parameter outputStreamOptions can not be null");</span>
-<span class="source-line-no">189</span><span id="line-189">        }</span>
-<span class="source-line-no">190</span><span id="line-190">        writer = new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));</span>
-<span class="source-line-no">191</span><span id="line-191">        closeStream = outputStreamOptions == OutputStreamOptions.CLOSE;</span>
-<span class="source-line-no">192</span><span id="line-192">        loadModuleMetadata();</span>
-<span class="source-line-no">193</span><span id="line-193">        report = readResource("/com/puppycrawl/tools/checkstyle/sarif/SarifReport.template");</span>
-<span class="source-line-no">194</span><span id="line-194">        resultLineColumn =</span>
-<span class="source-line-no">195</span><span id="line-195">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultLineColumn.template");</span>
-<span class="source-line-no">196</span><span id="line-196">        resultLineOnly =</span>
-<span class="source-line-no">197</span><span id="line-197">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultLineOnly.template");</span>
-<span class="source-line-no">198</span><span id="line-198">        resultFileOnly =</span>
-<span class="source-line-no">199</span><span id="line-199">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultFileOnly.template");</span>
-<span class="source-line-no">200</span><span id="line-200">        resultErrorOnly =</span>
-<span class="source-line-no">201</span><span id="line-201">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultErrorOnly.template");</span>
-<span class="source-line-no">202</span><span id="line-202">        rule = readResource("/com/puppycrawl/tools/checkstyle/sarif/Rule.template");</span>
-<span class="source-line-no">203</span><span id="line-203">        messageStrings =</span>
-<span class="source-line-no">204</span><span id="line-204">            readResource("/com/puppycrawl/tools/checkstyle/sarif/MessageStrings.template");</span>
-<span class="source-line-no">205</span><span id="line-205">        messageTextOnly =</span>
-<span class="source-line-no">206</span><span id="line-206">            readResource("/com/puppycrawl/tools/checkstyle/sarif/MessageTextOnly.template");</span>
-<span class="source-line-no">207</span><span id="line-207">        messageWithId =</span>
-<span class="source-line-no">208</span><span id="line-208">            readResource("/com/puppycrawl/tools/checkstyle/sarif/MessageWithId.template");</span>
-<span class="source-line-no">209</span><span id="line-209">    }</span>
-<span class="source-line-no">210</span><span id="line-210"></span>
-<span class="source-line-no">211</span><span id="line-211">    /**</span>
-<span class="source-line-no">212</span><span id="line-212">     * Loads all available module metadata from XML files.</span>
-<span class="source-line-no">213</span><span id="line-213">     */</span>
-<span class="source-line-no">214</span><span id="line-214">    private void loadModuleMetadata() {</span>
-<span class="source-line-no">215</span><span id="line-215">        final List&lt;ModuleDetails&gt; allModules =</span>
-<span class="source-line-no">216</span><span id="line-216">                XmlMetaReader.readAllModulesIncludingThirdPartyIfAny();</span>
-<span class="source-line-no">217</span><span id="line-217">        for (ModuleDetails module : allModules) {</span>
-<span class="source-line-no">218</span><span id="line-218">            allModuleMetadata.put(module.getFullQualifiedName(), module);</span>
-<span class="source-line-no">219</span><span id="line-219">        }</span>
-<span class="source-line-no">220</span><span id="line-220">    }</span>
-<span class="source-line-no">221</span><span id="line-221"></span>
-<span class="source-line-no">222</span><span id="line-222">    @Override</span>
-<span class="source-line-no">223</span><span id="line-223">    protected void finishLocalSetup() {</span>
-<span class="source-line-no">224</span><span id="line-224">        // No code by default</span>
-<span class="source-line-no">225</span><span id="line-225">    }</span>
-<span class="source-line-no">226</span><span id="line-226"></span>
-<span class="source-line-no">227</span><span id="line-227">    @Override</span>
-<span class="source-line-no">228</span><span id="line-228">    public void auditStarted(AuditEvent event) {</span>
-<span class="source-line-no">229</span><span id="line-229">        // No code by default</span>
-<span class="source-line-no">230</span><span id="line-230">    }</span>
-<span class="source-line-no">231</span><span id="line-231"></span>
-<span class="source-line-no">232</span><span id="line-232">    @Override</span>
-<span class="source-line-no">233</span><span id="line-233">    public void auditFinished(AuditEvent event) {</span>
-<span class="source-line-no">234</span><span id="line-234">        String rendered = replaceVersionString(report);</span>
-<span class="source-line-no">235</span><span id="line-235">        rendered = rendered</span>
-<span class="source-line-no">236</span><span id="line-236">                .replace(RESULTS_PLACEHOLDER, String.join(COMMA_LINE_SEPARATOR, results))</span>
-<span class="source-line-no">237</span><span id="line-237">                .replace(RULES_PLACEHOLDER, String.join(COMMA_LINE_SEPARATOR, generateRules()));</span>
-<span class="source-line-no">238</span><span id="line-238">        writer.print(rendered);</span>
-<span class="source-line-no">239</span><span id="line-239">        if (closeStream) {</span>
-<span class="source-line-no">240</span><span id="line-240">            writer.close();</span>
-<span class="source-line-no">241</span><span id="line-241">        }</span>
-<span class="source-line-no">242</span><span id="line-242">        else {</span>
-<span class="source-line-no">243</span><span id="line-243">            writer.flush();</span>
-<span class="source-line-no">244</span><span id="line-244">        }</span>
-<span class="source-line-no">245</span><span id="line-245">    }</span>
-<span class="source-line-no">246</span><span id="line-246"></span>
-<span class="source-line-no">247</span><span id="line-247">    /**</span>
-<span class="source-line-no">248</span><span id="line-248">     * Generates rules from cached rule metadata.</span>
-<span class="source-line-no">249</span><span id="line-249">     *</span>
-<span class="source-line-no">250</span><span id="line-250">     * @return list of rules</span>
-<span class="source-line-no">251</span><span id="line-251">     */</span>
-<span class="source-line-no">252</span><span id="line-252">    private List&lt;String&gt; generateRules() {</span>
-<span class="source-line-no">253</span><span id="line-253">        final List&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">254</span><span id="line-254">        for (Map.Entry&lt;RuleKey, ModuleDetails&gt; entry : ruleMetadata.entrySet()) {</span>
-<span class="source-line-no">255</span><span id="line-255">            final RuleKey ruleKey = entry.getKey();</span>
-<span class="source-line-no">256</span><span id="line-256">            final ModuleDetails module = entry.getValue();</span>
-<span class="source-line-no">257</span><span id="line-257">            final String shortDescription;</span>
-<span class="source-line-no">258</span><span id="line-258">            final String fullDescription;</span>
-<span class="source-line-no">259</span><span id="line-259">            final String messageStringsFragment;</span>
-<span class="source-line-no">260</span><span id="line-260">            if (module == null) {</span>
-<span class="source-line-no">261</span><span id="line-261">                shortDescription = CommonUtil.baseClassName(ruleKey.sourceName());</span>
-<span class="source-line-no">262</span><span id="line-262">                fullDescription = "No description available";</span>
-<span class="source-line-no">263</span><span id="line-263">                messageStringsFragment = "";</span>
-<span class="source-line-no">264</span><span id="line-264">            }</span>
-<span class="source-line-no">265</span><span id="line-265">            else {</span>
-<span class="source-line-no">266</span><span id="line-266">                shortDescription = module.getName();</span>
-<span class="source-line-no">267</span><span id="line-267">                fullDescription = module.getDescription();</span>
-<span class="source-line-no">268</span><span id="line-268">                messageStringsFragment = String.join(COMMA_LINE_SEPARATOR,</span>
-<span class="source-line-no">269</span><span id="line-269">                        generateMessageStrings(module));</span>
-<span class="source-line-no">270</span><span id="line-270">            }</span>
-<span class="source-line-no">271</span><span id="line-271">            result.add(rule</span>
-<span class="source-line-no">272</span><span id="line-272">                    .replace(RULE_ID_PLACEHOLDER, ruleKey.toRuleId())</span>
-<span class="source-line-no">273</span><span id="line-273">                    .replace("${shortDescription}", shortDescription)</span>
-<span class="source-line-no">274</span><span id="line-274">                    .replace("${fullDescription}", escape(fullDescription))</span>
-<span class="source-line-no">275</span><span id="line-275">                    .replace("${messageStrings}", messageStringsFragment));</span>
-<span class="source-line-no">276</span><span id="line-276">        }</span>
-<span class="source-line-no">277</span><span id="line-277">        return result;</span>
-<span class="source-line-no">278</span><span id="line-278">    }</span>
-<span class="source-line-no">279</span><span id="line-279"></span>
-<span class="source-line-no">280</span><span id="line-280">    /**</span>
-<span class="source-line-no">281</span><span id="line-281">     * Generates message strings for a given module.</span>
-<span class="source-line-no">282</span><span id="line-282">     *</span>
-<span class="source-line-no">283</span><span id="line-283">     * @param module the module</span>
-<span class="source-line-no">284</span><span id="line-284">     * @return the generated message strings</span>
-<span class="source-line-no">285</span><span id="line-285">     */</span>
-<span class="source-line-no">286</span><span id="line-286">    private List&lt;String&gt; generateMessageStrings(ModuleDetails module) {</span>
-<span class="source-line-no">287</span><span id="line-287">        final Map&lt;String, String&gt; messages = getMessages(module);</span>
-<span class="source-line-no">288</span><span id="line-288">        return module.getViolationMessageKeys().stream()</span>
-<span class="source-line-no">289</span><span id="line-289">                .filter(messages::containsKey)</span>
-<span class="source-line-no">290</span><span id="line-290">                .map(key -&gt; {</span>
-<span class="source-line-no">291</span><span id="line-291">                    final String message = messages.get(key);</span>
-<span class="source-line-no">292</span><span id="line-292">                    return messageStrings</span>
-<span class="source-line-no">293</span><span id="line-293">                            .replace("${key}", key)</span>
-<span class="source-line-no">294</span><span id="line-294">                            .replace("${text}", escape(message));</span>
-<span class="source-line-no">295</span><span id="line-295">                })</span>
-<span class="source-line-no">296</span><span id="line-296">                .toList();</span>
-<span class="source-line-no">297</span><span id="line-297">    }</span>
-<span class="source-line-no">298</span><span id="line-298"></span>
-<span class="source-line-no">299</span><span id="line-299">    /**</span>
-<span class="source-line-no">300</span><span id="line-300">     * Gets a map of message keys to their message strings for a module.</span>
-<span class="source-line-no">301</span><span id="line-301">     *</span>
-<span class="source-line-no">302</span><span id="line-302">     * @param moduleDetails the module details</span>
-<span class="source-line-no">303</span><span id="line-303">     * @return map of message keys to message strings</span>
-<span class="source-line-no">304</span><span id="line-304">     */</span>
-<span class="source-line-no">305</span><span id="line-305">    private static Map&lt;String, String&gt; getMessages(ModuleDetails moduleDetails) {</span>
-<span class="source-line-no">306</span><span id="line-306">        final String fullQualifiedName = moduleDetails.getFullQualifiedName();</span>
-<span class="source-line-no">307</span><span id="line-307">        final Map&lt;String, String&gt; result = new LinkedHashMap&lt;&gt;();</span>
-<span class="source-line-no">308</span><span id="line-308">        try {</span>
-<span class="source-line-no">309</span><span id="line-309">            final int lastDot = fullQualifiedName.lastIndexOf('.');</span>
-<span class="source-line-no">310</span><span id="line-310">            final String packageName = fullQualifiedName.substring(0, lastDot);</span>
-<span class="source-line-no">311</span><span id="line-311">            final String bundleName = packageName + ".messages";</span>
-<span class="source-line-no">312</span><span id="line-312">            final Class&lt;?&gt; moduleClass = Class.forName(fullQualifiedName);</span>
-<span class="source-line-no">313</span><span id="line-313">            final ResourceBundle bundle = ResourceBundle.getBundle(</span>
-<span class="source-line-no">314</span><span id="line-314">                    bundleName,</span>
-<span class="source-line-no">315</span><span id="line-315">                    Locale.ROOT,</span>
-<span class="source-line-no">316</span><span id="line-316">                    moduleClass.getClassLoader(),</span>
-<span class="source-line-no">317</span><span id="line-317">                    new LocalizedMessage.Utf8Control()</span>
-<span class="source-line-no">318</span><span id="line-318">            );</span>
-<span class="source-line-no">319</span><span id="line-319">            for (String key : moduleDetails.getViolationMessageKeys()) {</span>
-<span class="source-line-no">320</span><span id="line-320">                result.put(key, bundle.getString(key));</span>
-<span class="source-line-no">321</span><span id="line-321">            }</span>
-<span class="source-line-no">322</span><span id="line-322">        }</span>
-<span class="source-line-no">323</span><span id="line-323">        catch (ClassNotFoundException | MissingResourceException ignored) {</span>
-<span class="source-line-no">324</span><span id="line-324">            // Return empty map when module class or resource bundle is not on classpath.</span>
-<span class="source-line-no">325</span><span id="line-325">            // Occurs with third-party modules that have XML metadata but missing implementation.</span>
+<span class="source-line-no">039</span><span id="line-39">import java.util.regex.Matcher;</span>
+<span class="source-line-no">040</span><span id="line-40">import java.util.regex.Pattern;</span>
+<span class="source-line-no">041</span><span id="line-41"></span>
+<span class="source-line-no">042</span><span id="line-42">import com.puppycrawl.tools.checkstyle.api.AuditEvent;</span>
+<span class="source-line-no">043</span><span id="line-43">import com.puppycrawl.tools.checkstyle.api.AuditListener;</span>
+<span class="source-line-no">044</span><span id="line-44">import com.puppycrawl.tools.checkstyle.api.AutomaticBean;</span>
+<span class="source-line-no">045</span><span id="line-45">import com.puppycrawl.tools.checkstyle.api.SeverityLevel;</span>
+<span class="source-line-no">046</span><span id="line-46">import com.puppycrawl.tools.checkstyle.meta.ModuleDetails;</span>
+<span class="source-line-no">047</span><span id="line-47">import com.puppycrawl.tools.checkstyle.meta.XmlMetaReader;</span>
+<span class="source-line-no">048</span><span id="line-48">import com.puppycrawl.tools.checkstyle.utils.CommonUtil;</span>
+<span class="source-line-no">049</span><span id="line-49"></span>
+<span class="source-line-no">050</span><span id="line-50">/**</span>
+<span class="source-line-no">051</span><span id="line-51"> * Simple SARIF logger.</span>
+<span class="source-line-no">052</span><span id="line-52"> * SARIF stands for the static analysis results interchange format.</span>
+<span class="source-line-no">053</span><span id="line-53"> * See &lt;a href="https://sarifweb.azurewebsites.net/"&gt;reference&lt;/a&gt;</span>
+<span class="source-line-no">054</span><span id="line-54"> */</span>
+<span class="source-line-no">055</span><span id="line-55">public final class SarifLogger extends AbstractAutomaticBean implements AuditListener {</span>
+<span class="source-line-no">056</span><span id="line-56"></span>
+<span class="source-line-no">057</span><span id="line-57">    /** The length of unicode placeholder. */</span>
+<span class="source-line-no">058</span><span id="line-58">    private static final int UNICODE_LENGTH = 4;</span>
+<span class="source-line-no">059</span><span id="line-59"></span>
+<span class="source-line-no">060</span><span id="line-60">    /** Unicode escaping upper limit. */</span>
+<span class="source-line-no">061</span><span id="line-61">    private static final int UNICODE_ESCAPE_UPPER_LIMIT = 0x1F;</span>
+<span class="source-line-no">062</span><span id="line-62"></span>
+<span class="source-line-no">063</span><span id="line-63">    /** Input stream buffer size. */</span>
+<span class="source-line-no">064</span><span id="line-64">    private static final int BUFFER_SIZE = 1024;</span>
+<span class="source-line-no">065</span><span id="line-65"></span>
+<span class="source-line-no">066</span><span id="line-66">    /** The placeholder for message. */</span>
+<span class="source-line-no">067</span><span id="line-67">    private static final String MESSAGE_PLACEHOLDER = "${message}";</span>
+<span class="source-line-no">068</span><span id="line-68"></span>
+<span class="source-line-no">069</span><span id="line-69">    /** The placeholder for message text. */</span>
+<span class="source-line-no">070</span><span id="line-70">    private static final String MESSAGE_TEXT_PLACEHOLDER = "${messageText}";</span>
+<span class="source-line-no">071</span><span id="line-71"></span>
+<span class="source-line-no">072</span><span id="line-72">    /** The placeholder for message id. */</span>
+<span class="source-line-no">073</span><span id="line-73">    private static final String MESSAGE_ID_PLACEHOLDER = "${messageId}";</span>
+<span class="source-line-no">074</span><span id="line-74"></span>
+<span class="source-line-no">075</span><span id="line-75">    /** The placeholder for severity level. */</span>
+<span class="source-line-no">076</span><span id="line-76">    private static final String SEVERITY_LEVEL_PLACEHOLDER = "${severityLevel}";</span>
+<span class="source-line-no">077</span><span id="line-77"></span>
+<span class="source-line-no">078</span><span id="line-78">    /** The placeholder for uri. */</span>
+<span class="source-line-no">079</span><span id="line-79">    private static final String URI_PLACEHOLDER = "${uri}";</span>
+<span class="source-line-no">080</span><span id="line-80"></span>
+<span class="source-line-no">081</span><span id="line-81">    /** The placeholder for line. */</span>
+<span class="source-line-no">082</span><span id="line-82">    private static final String LINE_PLACEHOLDER = "${line}";</span>
+<span class="source-line-no">083</span><span id="line-83"></span>
+<span class="source-line-no">084</span><span id="line-84">    /** The placeholder for column. */</span>
+<span class="source-line-no">085</span><span id="line-85">    private static final String COLUMN_PLACEHOLDER = "${column}";</span>
+<span class="source-line-no">086</span><span id="line-86"></span>
+<span class="source-line-no">087</span><span id="line-87">    /** The placeholder for rule id. */</span>
+<span class="source-line-no">088</span><span id="line-88">    private static final String RULE_ID_PLACEHOLDER = "${ruleId}";</span>
+<span class="source-line-no">089</span><span id="line-89"></span>
+<span class="source-line-no">090</span><span id="line-90">    /** The placeholder for version. */</span>
+<span class="source-line-no">091</span><span id="line-91">    private static final String VERSION_PLACEHOLDER = "${version}";</span>
+<span class="source-line-no">092</span><span id="line-92"></span>
+<span class="source-line-no">093</span><span id="line-93">    /** The placeholder for results. */</span>
+<span class="source-line-no">094</span><span id="line-94">    private static final String RESULTS_PLACEHOLDER = "${results}";</span>
+<span class="source-line-no">095</span><span id="line-95"></span>
+<span class="source-line-no">096</span><span id="line-96">    /** The placeholder for rules. */</span>
+<span class="source-line-no">097</span><span id="line-97">    private static final String RULES_PLACEHOLDER = "${rules}";</span>
+<span class="source-line-no">098</span><span id="line-98"></span>
+<span class="source-line-no">099</span><span id="line-99">    /** Two backslashes to not duplicate strings. */</span>
+<span class="source-line-no">100</span><span id="line-100">    private static final String TWO_BACKSLASHES = "\\\\";</span>
+<span class="source-line-no">101</span><span id="line-101"></span>
+<span class="source-line-no">102</span><span id="line-102">    /** A pattern for two backslashes. */</span>
+<span class="source-line-no">103</span><span id="line-103">    private static final Pattern A_SPACE_PATTERN = Pattern.compile(" ");</span>
+<span class="source-line-no">104</span><span id="line-104"></span>
+<span class="source-line-no">105</span><span id="line-105">    /** A pattern for a double quote. */</span>
+<span class="source-line-no">106</span><span id="line-106">    private static final Pattern A_QUOTE_PATTERN = Pattern.compile("\"");</span>
+<span class="source-line-no">107</span><span id="line-107"></span>
+<span class="source-line-no">108</span><span id="line-108">    /** A pattern for two backslashes. */</span>
+<span class="source-line-no">109</span><span id="line-109">    private static final Pattern TWO_BACKSLASHES_PATTERN = Pattern.compile(TWO_BACKSLASHES);</span>
+<span class="source-line-no">110</span><span id="line-110"></span>
+<span class="source-line-no">111</span><span id="line-111">    /** A pattern to match a file with a Windows drive letter. */</span>
+<span class="source-line-no">112</span><span id="line-112">    private static final Pattern WINDOWS_DRIVE_LETTER_PATTERN =</span>
+<span class="source-line-no">113</span><span id="line-113">            Pattern.compile("\\A[A-Z]:", Pattern.CASE_INSENSITIVE);</span>
+<span class="source-line-no">114</span><span id="line-114"></span>
+<span class="source-line-no">115</span><span id="line-115">    /** A pattern matching a template placeholder such as {@code ${uri}}. */</span>
+<span class="source-line-no">116</span><span id="line-116">    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{\\w+}");</span>
+<span class="source-line-no">117</span><span id="line-117"></span>
+<span class="source-line-no">118</span><span id="line-118">    /** Comma and line separator. */</span>
+<span class="source-line-no">119</span><span id="line-119">    private static final String COMMA_LINE_SEPARATOR = ",\n";</span>
+<span class="source-line-no">120</span><span id="line-120"></span>
+<span class="source-line-no">121</span><span id="line-121">    /** Helper writer that allows easy encoding and printing. */</span>
+<span class="source-line-no">122</span><span id="line-122">    private final PrintWriter writer;</span>
+<span class="source-line-no">123</span><span id="line-123"></span>
+<span class="source-line-no">124</span><span id="line-124">    /** Close output stream in auditFinished. */</span>
+<span class="source-line-no">125</span><span id="line-125">    private final boolean closeStream;</span>
+<span class="source-line-no">126</span><span id="line-126"></span>
+<span class="source-line-no">127</span><span id="line-127">    /** The results. */</span>
+<span class="source-line-no">128</span><span id="line-128">    private final List&lt;String&gt; results = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">129</span><span id="line-129"></span>
+<span class="source-line-no">130</span><span id="line-130">    /** Map of all available module metadata by fully qualified name. */</span>
+<span class="source-line-no">131</span><span id="line-131">    private final Map&lt;String, ModuleDetails&gt; allModuleMetadata = new HashMap&lt;&gt;();</span>
+<span class="source-line-no">132</span><span id="line-132"></span>
+<span class="source-line-no">133</span><span id="line-133">    /** Map to store rule metadata by composite key (sourceName, moduleId). */</span>
+<span class="source-line-no">134</span><span id="line-134">    private final Map&lt;RuleKey, ModuleDetails&gt; ruleMetadata = new LinkedHashMap&lt;&gt;();</span>
+<span class="source-line-no">135</span><span id="line-135"></span>
+<span class="source-line-no">136</span><span id="line-136">    /** Content for the entire report. */</span>
+<span class="source-line-no">137</span><span id="line-137">    private final String report;</span>
+<span class="source-line-no">138</span><span id="line-138"></span>
+<span class="source-line-no">139</span><span id="line-139">    /** Content for result representing an error with source line and column. */</span>
+<span class="source-line-no">140</span><span id="line-140">    private final String resultLineColumn;</span>
+<span class="source-line-no">141</span><span id="line-141"></span>
+<span class="source-line-no">142</span><span id="line-142">    /** Content for result representing an error with source line only. */</span>
+<span class="source-line-no">143</span><span id="line-143">    private final String resultLineOnly;</span>
+<span class="source-line-no">144</span><span id="line-144"></span>
+<span class="source-line-no">145</span><span id="line-145">    /** Content for result representing an error with filename only and without source location. */</span>
+<span class="source-line-no">146</span><span id="line-146">    private final String resultFileOnly;</span>
+<span class="source-line-no">147</span><span id="line-147"></span>
+<span class="source-line-no">148</span><span id="line-148">    /** Content for result representing an error without filename or location. */</span>
+<span class="source-line-no">149</span><span id="line-149">    private final String resultErrorOnly;</span>
+<span class="source-line-no">150</span><span id="line-150"></span>
+<span class="source-line-no">151</span><span id="line-151">    /** Content for rule. */</span>
+<span class="source-line-no">152</span><span id="line-152">    private final String rule;</span>
+<span class="source-line-no">153</span><span id="line-153"></span>
+<span class="source-line-no">154</span><span id="line-154">    /** Content for messageStrings. */</span>
+<span class="source-line-no">155</span><span id="line-155">    private final String messageStrings;</span>
+<span class="source-line-no">156</span><span id="line-156"></span>
+<span class="source-line-no">157</span><span id="line-157">    /** Content for message with text only. */</span>
+<span class="source-line-no">158</span><span id="line-158">    private final String messageTextOnly;</span>
+<span class="source-line-no">159</span><span id="line-159"></span>
+<span class="source-line-no">160</span><span id="line-160">    /** Content for message with id. */</span>
+<span class="source-line-no">161</span><span id="line-161">    private final String messageWithId;</span>
+<span class="source-line-no">162</span><span id="line-162"></span>
+<span class="source-line-no">163</span><span id="line-163">    /**</span>
+<span class="source-line-no">164</span><span id="line-164">     * Creates a new {@code SarifLogger} instance.</span>
+<span class="source-line-no">165</span><span id="line-165">     *</span>
+<span class="source-line-no">166</span><span id="line-166">     * @param outputStream where to log audit events</span>
+<span class="source-line-no">167</span><span id="line-167">     * @param outputStreamOptions if {@code CLOSE} that should be closed in auditFinished()</span>
+<span class="source-line-no">168</span><span id="line-168">     * @throws IllegalArgumentException if outputStreamOptions is null</span>
+<span class="source-line-no">169</span><span id="line-169">     * @throws IOException if there is reading errors.</span>
+<span class="source-line-no">170</span><span id="line-170">     * @noinspection deprecation</span>
+<span class="source-line-no">171</span><span id="line-171">     * @noinspectionreason We are forced to keep AutomaticBean compatability</span>
+<span class="source-line-no">172</span><span id="line-172">     *     because of maven-checkstyle-plugin. Until #12873.</span>
+<span class="source-line-no">173</span><span id="line-173">     */</span>
+<span class="source-line-no">174</span><span id="line-174">    public SarifLogger(</span>
+<span class="source-line-no">175</span><span id="line-175">        OutputStream outputStream,</span>
+<span class="source-line-no">176</span><span id="line-176">        AutomaticBean.OutputStreamOptions outputStreamOptions) throws IOException {</span>
+<span class="source-line-no">177</span><span id="line-177">        this(outputStream, OutputStreamOptions.valueOf(outputStreamOptions.name()));</span>
+<span class="source-line-no">178</span><span id="line-178">    }</span>
+<span class="source-line-no">179</span><span id="line-179"></span>
+<span class="source-line-no">180</span><span id="line-180">    /**</span>
+<span class="source-line-no">181</span><span id="line-181">     * Creates a new {@code SarifLogger} instance.</span>
+<span class="source-line-no">182</span><span id="line-182">     *</span>
+<span class="source-line-no">183</span><span id="line-183">     * @param outputStream where to log audit events</span>
+<span class="source-line-no">184</span><span id="line-184">     * @param outputStreamOptions if {@code CLOSE} that should be closed in auditFinished()</span>
+<span class="source-line-no">185</span><span id="line-185">     * @throws IllegalArgumentException if outputStreamOptions is null</span>
+<span class="source-line-no">186</span><span id="line-186">     * @throws IOException if there is reading errors.</span>
+<span class="source-line-no">187</span><span id="line-187">     */</span>
+<span class="source-line-no">188</span><span id="line-188">    public SarifLogger(</span>
+<span class="source-line-no">189</span><span id="line-189">        OutputStream outputStream,</span>
+<span class="source-line-no">190</span><span id="line-190">        OutputStreamOptions outputStreamOptions) throws IOException {</span>
+<span class="source-line-no">191</span><span id="line-191">        if (outputStreamOptions == null) {</span>
+<span class="source-line-no">192</span><span id="line-192">            throw new IllegalArgumentException("Parameter outputStreamOptions can not be null");</span>
+<span class="source-line-no">193</span><span id="line-193">        }</span>
+<span class="source-line-no">194</span><span id="line-194">        writer = new PrintWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));</span>
+<span class="source-line-no">195</span><span id="line-195">        closeStream = outputStreamOptions == OutputStreamOptions.CLOSE;</span>
+<span class="source-line-no">196</span><span id="line-196">        loadModuleMetadata();</span>
+<span class="source-line-no">197</span><span id="line-197">        report = readResource("/com/puppycrawl/tools/checkstyle/sarif/SarifReport.template");</span>
+<span class="source-line-no">198</span><span id="line-198">        resultLineColumn =</span>
+<span class="source-line-no">199</span><span id="line-199">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultLineColumn.template");</span>
+<span class="source-line-no">200</span><span id="line-200">        resultLineOnly =</span>
+<span class="source-line-no">201</span><span id="line-201">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultLineOnly.template");</span>
+<span class="source-line-no">202</span><span id="line-202">        resultFileOnly =</span>
+<span class="source-line-no">203</span><span id="line-203">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultFileOnly.template");</span>
+<span class="source-line-no">204</span><span id="line-204">        resultErrorOnly =</span>
+<span class="source-line-no">205</span><span id="line-205">            readResource("/com/puppycrawl/tools/checkstyle/sarif/ResultErrorOnly.template");</span>
+<span class="source-line-no">206</span><span id="line-206">        rule = readResource("/com/puppycrawl/tools/checkstyle/sarif/Rule.template");</span>
+<span class="source-line-no">207</span><span id="line-207">        messageStrings =</span>
+<span class="source-line-no">208</span><span id="line-208">            readResource("/com/puppycrawl/tools/checkstyle/sarif/MessageStrings.template");</span>
+<span class="source-line-no">209</span><span id="line-209">        messageTextOnly =</span>
+<span class="source-line-no">210</span><span id="line-210">            readResource("/com/puppycrawl/tools/checkstyle/sarif/MessageTextOnly.template");</span>
+<span class="source-line-no">211</span><span id="line-211">        messageWithId =</span>
+<span class="source-line-no">212</span><span id="line-212">            readResource("/com/puppycrawl/tools/checkstyle/sarif/MessageWithId.template");</span>
+<span class="source-line-no">213</span><span id="line-213">    }</span>
+<span class="source-line-no">214</span><span id="line-214"></span>
+<span class="source-line-no">215</span><span id="line-215">    /**</span>
+<span class="source-line-no">216</span><span id="line-216">     * Loads all available module metadata from XML files.</span>
+<span class="source-line-no">217</span><span id="line-217">     */</span>
+<span class="source-line-no">218</span><span id="line-218">    private void loadModuleMetadata() {</span>
+<span class="source-line-no">219</span><span id="line-219">        final List&lt;ModuleDetails&gt; allModules =</span>
+<span class="source-line-no">220</span><span id="line-220">                XmlMetaReader.readAllModulesIncludingThirdPartyIfAny();</span>
+<span class="source-line-no">221</span><span id="line-221">        for (ModuleDetails module : allModules) {</span>
+<span class="source-line-no">222</span><span id="line-222">            allModuleMetadata.put(module.getFullQualifiedName(), module);</span>
+<span class="source-line-no">223</span><span id="line-223">        }</span>
+<span class="source-line-no">224</span><span id="line-224">    }</span>
+<span class="source-line-no">225</span><span id="line-225"></span>
+<span class="source-line-no">226</span><span id="line-226">    @Override</span>
+<span class="source-line-no">227</span><span id="line-227">    protected void finishLocalSetup() {</span>
+<span class="source-line-no">228</span><span id="line-228">        // No code by default</span>
+<span class="source-line-no">229</span><span id="line-229">    }</span>
+<span class="source-line-no">230</span><span id="line-230"></span>
+<span class="source-line-no">231</span><span id="line-231">    @Override</span>
+<span class="source-line-no">232</span><span id="line-232">    public void auditStarted(AuditEvent event) {</span>
+<span class="source-line-no">233</span><span id="line-233">        // No code by default</span>
+<span class="source-line-no">234</span><span id="line-234">    }</span>
+<span class="source-line-no">235</span><span id="line-235"></span>
+<span class="source-line-no">236</span><span id="line-236">    @Override</span>
+<span class="source-line-no">237</span><span id="line-237">    public void auditFinished(AuditEvent event) {</span>
+<span class="source-line-no">238</span><span id="line-238">        String rendered = replaceVersionString(report);</span>
+<span class="source-line-no">239</span><span id="line-239">        rendered = rendered</span>
+<span class="source-line-no">240</span><span id="line-240">                .replace(RESULTS_PLACEHOLDER, String.join(COMMA_LINE_SEPARATOR, results))</span>
+<span class="source-line-no">241</span><span id="line-241">                .replace(RULES_PLACEHOLDER, String.join(COMMA_LINE_SEPARATOR, generateRules()));</span>
+<span class="source-line-no">242</span><span id="line-242">        writer.print(rendered);</span>
+<span class="source-line-no">243</span><span id="line-243">        if (closeStream) {</span>
+<span class="source-line-no">244</span><span id="line-244">            writer.close();</span>
+<span class="source-line-no">245</span><span id="line-245">        }</span>
+<span class="source-line-no">246</span><span id="line-246">        else {</span>
+<span class="source-line-no">247</span><span id="line-247">            writer.flush();</span>
+<span class="source-line-no">248</span><span id="line-248">        }</span>
+<span class="source-line-no">249</span><span id="line-249">    }</span>
+<span class="source-line-no">250</span><span id="line-250"></span>
+<span class="source-line-no">251</span><span id="line-251">    /**</span>
+<span class="source-line-no">252</span><span id="line-252">     * Generates rules from cached rule metadata.</span>
+<span class="source-line-no">253</span><span id="line-253">     *</span>
+<span class="source-line-no">254</span><span id="line-254">     * @return list of rules</span>
+<span class="source-line-no">255</span><span id="line-255">     */</span>
+<span class="source-line-no">256</span><span id="line-256">    private List&lt;String&gt; generateRules() {</span>
+<span class="source-line-no">257</span><span id="line-257">        final List&lt;String&gt; result = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">258</span><span id="line-258">        for (Map.Entry&lt;RuleKey, ModuleDetails&gt; entry : ruleMetadata.entrySet()) {</span>
+<span class="source-line-no">259</span><span id="line-259">            final RuleKey ruleKey = entry.getKey();</span>
+<span class="source-line-no">260</span><span id="line-260">            final ModuleDetails module = entry.getValue();</span>
+<span class="source-line-no">261</span><span id="line-261">            final String shortDescription;</span>
+<span class="source-line-no">262</span><span id="line-262">            final String fullDescription;</span>
+<span class="source-line-no">263</span><span id="line-263">            final String messageStringsFragment;</span>
+<span class="source-line-no">264</span><span id="line-264">            if (module == null) {</span>
+<span class="source-line-no">265</span><span id="line-265">                shortDescription = CommonUtil.baseClassName(ruleKey.sourceName());</span>
+<span class="source-line-no">266</span><span id="line-266">                fullDescription = "No description available";</span>
+<span class="source-line-no">267</span><span id="line-267">                messageStringsFragment = "";</span>
+<span class="source-line-no">268</span><span id="line-268">            }</span>
+<span class="source-line-no">269</span><span id="line-269">            else {</span>
+<span class="source-line-no">270</span><span id="line-270">                shortDescription = module.getName();</span>
+<span class="source-line-no">271</span><span id="line-271">                fullDescription = module.getDescription();</span>
+<span class="source-line-no">272</span><span id="line-272">                messageStringsFragment = String.join(COMMA_LINE_SEPARATOR,</span>
+<span class="source-line-no">273</span><span id="line-273">                        generateMessageStrings(module));</span>
+<span class="source-line-no">274</span><span id="line-274">            }</span>
+<span class="source-line-no">275</span><span id="line-275">            result.add(rule</span>
+<span class="source-line-no">276</span><span id="line-276">                    .replace(RULE_ID_PLACEHOLDER, ruleKey.toRuleId())</span>
+<span class="source-line-no">277</span><span id="line-277">                    .replace("${shortDescription}", shortDescription)</span>
+<span class="source-line-no">278</span><span id="line-278">                    .replace("${fullDescription}", escape(fullDescription))</span>
+<span class="source-line-no">279</span><span id="line-279">                    .replace("${messageStrings}", messageStringsFragment));</span>
+<span class="source-line-no">280</span><span id="line-280">        }</span>
+<span class="source-line-no">281</span><span id="line-281">        return result;</span>
+<span class="source-line-no">282</span><span id="line-282">    }</span>
+<span class="source-line-no">283</span><span id="line-283"></span>
+<span class="source-line-no">284</span><span id="line-284">    /**</span>
+<span class="source-line-no">285</span><span id="line-285">     * Generates message strings for a given module.</span>
+<span class="source-line-no">286</span><span id="line-286">     *</span>
+<span class="source-line-no">287</span><span id="line-287">     * @param module the module</span>
+<span class="source-line-no">288</span><span id="line-288">     * @return the generated message strings</span>
+<span class="source-line-no">289</span><span id="line-289">     */</span>
+<span class="source-line-no">290</span><span id="line-290">    private List&lt;String&gt; generateMessageStrings(ModuleDetails module) {</span>
+<span class="source-line-no">291</span><span id="line-291">        final Map&lt;String, String&gt; messages = getMessages(module);</span>
+<span class="source-line-no">292</span><span id="line-292">        return module.getViolationMessageKeys().stream()</span>
+<span class="source-line-no">293</span><span id="line-293">                .filter(messages::containsKey)</span>
+<span class="source-line-no">294</span><span id="line-294">                .map(key -&gt; {</span>
+<span class="source-line-no">295</span><span id="line-295">                    final String message = messages.get(key);</span>
+<span class="source-line-no">296</span><span id="line-296">                    return messageStrings</span>
+<span class="source-line-no">297</span><span id="line-297">                            .replace("${key}", key)</span>
+<span class="source-line-no">298</span><span id="line-298">                            .replace("${text}", escape(message));</span>
+<span class="source-line-no">299</span><span id="line-299">                })</span>
+<span class="source-line-no">300</span><span id="line-300">                .toList();</span>
+<span class="source-line-no">301</span><span id="line-301">    }</span>
+<span class="source-line-no">302</span><span id="line-302"></span>
+<span class="source-line-no">303</span><span id="line-303">    /**</span>
+<span class="source-line-no">304</span><span id="line-304">     * Gets a map of message keys to their message strings for a module.</span>
+<span class="source-line-no">305</span><span id="line-305">     *</span>
+<span class="source-line-no">306</span><span id="line-306">     * @param moduleDetails the module details</span>
+<span class="source-line-no">307</span><span id="line-307">     * @return map of message keys to message strings</span>
+<span class="source-line-no">308</span><span id="line-308">     */</span>
+<span class="source-line-no">309</span><span id="line-309">    private static Map&lt;String, String&gt; getMessages(ModuleDetails moduleDetails) {</span>
+<span class="source-line-no">310</span><span id="line-310">        final String fullQualifiedName = moduleDetails.getFullQualifiedName();</span>
+<span class="source-line-no">311</span><span id="line-311">        final Map&lt;String, String&gt; result = new LinkedHashMap&lt;&gt;();</span>
+<span class="source-line-no">312</span><span id="line-312">        try {</span>
+<span class="source-line-no">313</span><span id="line-313">            final int lastDot = fullQualifiedName.lastIndexOf('.');</span>
+<span class="source-line-no">314</span><span id="line-314">            final String packageName = fullQualifiedName.substring(0, lastDot);</span>
+<span class="source-line-no">315</span><span id="line-315">            final String bundleName = packageName + ".messages";</span>
+<span class="source-line-no">316</span><span id="line-316">            final Class&lt;?&gt; moduleClass = Class.forName(fullQualifiedName);</span>
+<span class="source-line-no">317</span><span id="line-317">            final ResourceBundle bundle = ResourceBundle.getBundle(</span>
+<span class="source-line-no">318</span><span id="line-318">                    bundleName,</span>
+<span class="source-line-no">319</span><span id="line-319">                    Locale.ROOT,</span>
+<span class="source-line-no">320</span><span id="line-320">                    moduleClass.getClassLoader(),</span>
+<span class="source-line-no">321</span><span id="line-321">                    new LocalizedMessage.Utf8Control()</span>
+<span class="source-line-no">322</span><span id="line-322">            );</span>
+<span class="source-line-no">323</span><span id="line-323">            for (String key : moduleDetails.getViolationMessageKeys()) {</span>
+<span class="source-line-no">324</span><span id="line-324">                result.put(key, bundle.getString(key));</span>
+<span class="source-line-no">325</span><span id="line-325">            }</span>
 <span class="source-line-no">326</span><span id="line-326">        }</span>
-<span class="source-line-no">327</span><span id="line-327">        return result;</span>
-<span class="source-line-no">328</span><span id="line-328">    }</span>
-<span class="source-line-no">329</span><span id="line-329"></span>
-<span class="source-line-no">330</span><span id="line-330">    /**</span>
-<span class="source-line-no">331</span><span id="line-331">     * Returns the version string.</span>
-<span class="source-line-no">332</span><span id="line-332">     *</span>
-<span class="source-line-no">333</span><span id="line-333">     * @param report report content where replace should happen</span>
-<span class="source-line-no">334</span><span id="line-334">     * @return a version string based on the package implementation version</span>
-<span class="source-line-no">335</span><span id="line-335">     */</span>
-<span class="source-line-no">336</span><span id="line-336">    private static String replaceVersionString(String report) {</span>
-<span class="source-line-no">337</span><span id="line-337">        final String version = SarifLogger.class.getPackage().getImplementationVersion();</span>
-<span class="source-line-no">338</span><span id="line-338">        return report.replace(VERSION_PLACEHOLDER, Objects.toString(version, "null"));</span>
-<span class="source-line-no">339</span><span id="line-339">    }</span>
-<span class="source-line-no">340</span><span id="line-340"></span>
-<span class="source-line-no">341</span><span id="line-341">    @Override</span>
-<span class="source-line-no">342</span><span id="line-342">    public void addError(AuditEvent event) {</span>
-<span class="source-line-no">343</span><span id="line-343">        final RuleKey ruleKey = cacheRuleMetadata(event);</span>
-<span class="source-line-no">344</span><span id="line-344">        final String message = generateMessage(ruleKey, event);</span>
-<span class="source-line-no">345</span><span id="line-345">        if (event.getColumn() &gt; 0) {</span>
-<span class="source-line-no">346</span><span id="line-346">            results.add(resultLineColumn</span>
-<span class="source-line-no">347</span><span id="line-347">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
-<span class="source-line-no">348</span><span id="line-348">                .replace(URI_PLACEHOLDER, renderFileNameUri(event.getFileName()))</span>
-<span class="source-line-no">349</span><span id="line-349">                .replace(COLUMN_PLACEHOLDER, Integer.toString(event.getColumn()))</span>
-<span class="source-line-no">350</span><span id="line-350">                .replace(LINE_PLACEHOLDER, Integer.toString(event.getLine()))</span>
-<span class="source-line-no">351</span><span id="line-351">                .replace(MESSAGE_PLACEHOLDER, message)</span>
-<span class="source-line-no">352</span><span id="line-352">                .replace(RULE_ID_PLACEHOLDER, ruleKey.toRuleId())</span>
-<span class="source-line-no">353</span><span id="line-353">            );</span>
-<span class="source-line-no">354</span><span id="line-354">        }</span>
-<span class="source-line-no">355</span><span id="line-355">        else {</span>
-<span class="source-line-no">356</span><span id="line-356">            results.add(resultLineOnly</span>
-<span class="source-line-no">357</span><span id="line-357">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
-<span class="source-line-no">358</span><span id="line-358">                .replace(URI_PLACEHOLDER, renderFileNameUri(event.getFileName()))</span>
-<span class="source-line-no">359</span><span id="line-359">                .replace(LINE_PLACEHOLDER, Integer.toString(event.getLine()))</span>
-<span class="source-line-no">360</span><span id="line-360">                .replace(MESSAGE_PLACEHOLDER, message)</span>
-<span class="source-line-no">361</span><span id="line-361">                .replace(RULE_ID_PLACEHOLDER, ruleKey.toRuleId())</span>
-<span class="source-line-no">362</span><span id="line-362">            );</span>
-<span class="source-line-no">363</span><span id="line-363">        }</span>
-<span class="source-line-no">364</span><span id="line-364">    }</span>
-<span class="source-line-no">365</span><span id="line-365"></span>
-<span class="source-line-no">366</span><span id="line-366">    /**</span>
-<span class="source-line-no">367</span><span id="line-367">     * Caches rule metadata for a given audit event.</span>
-<span class="source-line-no">368</span><span id="line-368">     *</span>
-<span class="source-line-no">369</span><span id="line-369">     * @param event the audit event</span>
-<span class="source-line-no">370</span><span id="line-370">     * @return the composite key for the rule</span>
-<span class="source-line-no">371</span><span id="line-371">     */</span>
-<span class="source-line-no">372</span><span id="line-372">    private RuleKey cacheRuleMetadata(AuditEvent event) {</span>
-<span class="source-line-no">373</span><span id="line-373">        final String sourceName = event.getSourceName();</span>
-<span class="source-line-no">374</span><span id="line-374">        final RuleKey key = new RuleKey(sourceName, event.getModuleId());</span>
-<span class="source-line-no">375</span><span id="line-375">        final ModuleDetails module = allModuleMetadata.get(sourceName);</span>
-<span class="source-line-no">376</span><span id="line-376">        ruleMetadata.putIfAbsent(key, module);</span>
-<span class="source-line-no">377</span><span id="line-377">        return key;</span>
-<span class="source-line-no">378</span><span id="line-378">    }</span>
-<span class="source-line-no">379</span><span id="line-379"></span>
-<span class="source-line-no">380</span><span id="line-380">    /**</span>
-<span class="source-line-no">381</span><span id="line-381">     * Generate message for the given rule key and audit event.</span>
-<span class="source-line-no">382</span><span id="line-382">     *</span>
-<span class="source-line-no">383</span><span id="line-383">     * @param ruleKey the rule key</span>
-<span class="source-line-no">384</span><span id="line-384">     * @param event the audit event</span>
-<span class="source-line-no">385</span><span id="line-385">     * @return the generated message</span>
-<span class="source-line-no">386</span><span id="line-386">     */</span>
-<span class="source-line-no">387</span><span id="line-387">    private String generateMessage(RuleKey ruleKey, AuditEvent event) {</span>
-<span class="source-line-no">388</span><span id="line-388">        final String violationKey = event.getViolation().getKey();</span>
-<span class="source-line-no">389</span><span id="line-389">        final ModuleDetails module = ruleMetadata.get(ruleKey);</span>
-<span class="source-line-no">390</span><span id="line-390">        final String result;</span>
-<span class="source-line-no">391</span><span id="line-391">        if (module != null &amp;&amp; module.getViolationMessageKeys().contains(violationKey)) {</span>
-<span class="source-line-no">392</span><span id="line-392">            result = messageWithId</span>
-<span class="source-line-no">393</span><span id="line-393">                    .replace(MESSAGE_ID_PLACEHOLDER, violationKey)</span>
-<span class="source-line-no">394</span><span id="line-394">                    .replace(MESSAGE_TEXT_PLACEHOLDER, escape(event.getMessage()));</span>
-<span class="source-line-no">395</span><span id="line-395">        }</span>
-<span class="source-line-no">396</span><span id="line-396">        else {</span>
-<span class="source-line-no">397</span><span id="line-397">            result = messageTextOnly</span>
-<span class="source-line-no">398</span><span id="line-398">                    .replace(MESSAGE_TEXT_PLACEHOLDER, escape(event.getMessage()));</span>
-<span class="source-line-no">399</span><span id="line-399">        }</span>
-<span class="source-line-no">400</span><span id="line-400">        return result;</span>
-<span class="source-line-no">401</span><span id="line-401">    }</span>
-<span class="source-line-no">402</span><span id="line-402"></span>
-<span class="source-line-no">403</span><span id="line-403">    @Override</span>
-<span class="source-line-no">404</span><span id="line-404">    public void addException(AuditEvent event, Throwable throwable) {</span>
-<span class="source-line-no">405</span><span id="line-405">        final StringWriter stringWriter = new StringWriter();</span>
-<span class="source-line-no">406</span><span id="line-406">        final PrintWriter printer = new PrintWriter(stringWriter);</span>
-<span class="source-line-no">407</span><span id="line-407">        throwable.printStackTrace(printer);</span>
-<span class="source-line-no">408</span><span id="line-408">        final String message = messageTextOnly</span>
-<span class="source-line-no">409</span><span id="line-409">                .replace(MESSAGE_TEXT_PLACEHOLDER, escape(stringWriter.toString()));</span>
-<span class="source-line-no">410</span><span id="line-410">        if (event.getFileName() == null) {</span>
-<span class="source-line-no">411</span><span id="line-411">            results.add(resultErrorOnly</span>
-<span class="source-line-no">412</span><span id="line-412">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
-<span class="source-line-no">413</span><span id="line-413">                .replace(MESSAGE_PLACEHOLDER, message)</span>
-<span class="source-line-no">414</span><span id="line-414">            );</span>
-<span class="source-line-no">415</span><span id="line-415">        }</span>
-<span class="source-line-no">416</span><span id="line-416">        else {</span>
-<span class="source-line-no">417</span><span id="line-417">            results.add(resultFileOnly</span>
-<span class="source-line-no">418</span><span id="line-418">                .replace(SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()))</span>
-<span class="source-line-no">419</span><span id="line-419">                .replace(URI_PLACEHOLDER, renderFileNameUri(event.getFileName()))</span>
-<span class="source-line-no">420</span><span id="line-420">                .replace(MESSAGE_PLACEHOLDER, message)</span>
-<span class="source-line-no">421</span><span id="line-421">            );</span>
+<span class="source-line-no">327</span><span id="line-327">        catch (ClassNotFoundException | MissingResourceException ignored) {</span>
+<span class="source-line-no">328</span><span id="line-328">            // Return empty map when module class or resource bundle is not on classpath.</span>
+<span class="source-line-no">329</span><span id="line-329">            // Occurs with third-party modules that have XML metadata but missing implementation.</span>
+<span class="source-line-no">330</span><span id="line-330">        }</span>
+<span class="source-line-no">331</span><span id="line-331">        return result;</span>
+<span class="source-line-no">332</span><span id="line-332">    }</span>
+<span class="source-line-no">333</span><span id="line-333"></span>
+<span class="source-line-no">334</span><span id="line-334">    /**</span>
+<span class="source-line-no">335</span><span id="line-335">     * Returns the version string.</span>
+<span class="source-line-no">336</span><span id="line-336">     *</span>
+<span class="source-line-no">337</span><span id="line-337">     * @param report report content where replace should happen</span>
+<span class="source-line-no">338</span><span id="line-338">     * @return a version string based on the package implementation version</span>
+<span class="source-line-no">339</span><span id="line-339">     */</span>
+<span class="source-line-no">340</span><span id="line-340">    private static String replaceVersionString(String report) {</span>
+<span class="source-line-no">341</span><span id="line-341">        final String version = SarifLogger.class.getPackage().getImplementationVersion();</span>
+<span class="source-line-no">342</span><span id="line-342">        return report.replace(VERSION_PLACEHOLDER, Objects.toString(version, "null"));</span>
+<span class="source-line-no">343</span><span id="line-343">    }</span>
+<span class="source-line-no">344</span><span id="line-344"></span>
+<span class="source-line-no">345</span><span id="line-345">    @Override</span>
+<span class="source-line-no">346</span><span id="line-346">    public void addError(AuditEvent event) {</span>
+<span class="source-line-no">347</span><span id="line-347">        final RuleKey ruleKey = cacheRuleMetadata(event);</span>
+<span class="source-line-no">348</span><span id="line-348">        final String message = generateMessage(ruleKey, event);</span>
+<span class="source-line-no">349</span><span id="line-349">        if (event.getColumn() &gt; 0) {</span>
+<span class="source-line-no">350</span><span id="line-350">            results.add(fillTemplate(resultLineColumn, Map.of(</span>
+<span class="source-line-no">351</span><span id="line-351">                SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()),</span>
+<span class="source-line-no">352</span><span id="line-352">                URI_PLACEHOLDER, renderFileNameUri(event.getFileName()),</span>
+<span class="source-line-no">353</span><span id="line-353">                COLUMN_PLACEHOLDER, Integer.toString(event.getColumn()),</span>
+<span class="source-line-no">354</span><span id="line-354">                LINE_PLACEHOLDER, Integer.toString(event.getLine()),</span>
+<span class="source-line-no">355</span><span id="line-355">                MESSAGE_PLACEHOLDER, message,</span>
+<span class="source-line-no">356</span><span id="line-356">                RULE_ID_PLACEHOLDER, ruleKey.toRuleId())));</span>
+<span class="source-line-no">357</span><span id="line-357">        }</span>
+<span class="source-line-no">358</span><span id="line-358">        else {</span>
+<span class="source-line-no">359</span><span id="line-359">            results.add(fillTemplate(resultLineOnly, Map.of(</span>
+<span class="source-line-no">360</span><span id="line-360">                SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()),</span>
+<span class="source-line-no">361</span><span id="line-361">                URI_PLACEHOLDER, renderFileNameUri(event.getFileName()),</span>
+<span class="source-line-no">362</span><span id="line-362">                LINE_PLACEHOLDER, Integer.toString(event.getLine()),</span>
+<span class="source-line-no">363</span><span id="line-363">                MESSAGE_PLACEHOLDER, message,</span>
+<span class="source-line-no">364</span><span id="line-364">                RULE_ID_PLACEHOLDER, ruleKey.toRuleId())));</span>
+<span class="source-line-no">365</span><span id="line-365">        }</span>
+<span class="source-line-no">366</span><span id="line-366">    }</span>
+<span class="source-line-no">367</span><span id="line-367"></span>
+<span class="source-line-no">368</span><span id="line-368">    /**</span>
+<span class="source-line-no">369</span><span id="line-369">     * Caches rule metadata for a given audit event.</span>
+<span class="source-line-no">370</span><span id="line-370">     *</span>
+<span class="source-line-no">371</span><span id="line-371">     * @param event the audit event</span>
+<span class="source-line-no">372</span><span id="line-372">     * @return the composite key for the rule</span>
+<span class="source-line-no">373</span><span id="line-373">     */</span>
+<span class="source-line-no">374</span><span id="line-374">    private RuleKey cacheRuleMetadata(AuditEvent event) {</span>
+<span class="source-line-no">375</span><span id="line-375">        final String sourceName = event.getSourceName();</span>
+<span class="source-line-no">376</span><span id="line-376">        final RuleKey key = new RuleKey(sourceName, event.getModuleId());</span>
+<span class="source-line-no">377</span><span id="line-377">        final ModuleDetails module = allModuleMetadata.get(sourceName);</span>
+<span class="source-line-no">378</span><span id="line-378">        ruleMetadata.putIfAbsent(key, module);</span>
+<span class="source-line-no">379</span><span id="line-379">        return key;</span>
+<span class="source-line-no">380</span><span id="line-380">    }</span>
+<span class="source-line-no">381</span><span id="line-381"></span>
+<span class="source-line-no">382</span><span id="line-382">    /**</span>
+<span class="source-line-no">383</span><span id="line-383">     * Generate message for the given rule key and audit event.</span>
+<span class="source-line-no">384</span><span id="line-384">     *</span>
+<span class="source-line-no">385</span><span id="line-385">     * @param ruleKey the rule key</span>
+<span class="source-line-no">386</span><span id="line-386">     * @param event the audit event</span>
+<span class="source-line-no">387</span><span id="line-387">     * @return the generated message</span>
+<span class="source-line-no">388</span><span id="line-388">     */</span>
+<span class="source-line-no">389</span><span id="line-389">    private String generateMessage(RuleKey ruleKey, AuditEvent event) {</span>
+<span class="source-line-no">390</span><span id="line-390">        final String violationKey = event.getViolation().getKey();</span>
+<span class="source-line-no">391</span><span id="line-391">        final ModuleDetails module = ruleMetadata.get(ruleKey);</span>
+<span class="source-line-no">392</span><span id="line-392">        final String result;</span>
+<span class="source-line-no">393</span><span id="line-393">        if (module != null &amp;&amp; module.getViolationMessageKeys().contains(violationKey)) {</span>
+<span class="source-line-no">394</span><span id="line-394">            result = messageWithId</span>
+<span class="source-line-no">395</span><span id="line-395">                    .replace(MESSAGE_ID_PLACEHOLDER, violationKey)</span>
+<span class="source-line-no">396</span><span id="line-396">                    .replace(MESSAGE_TEXT_PLACEHOLDER, escape(event.getMessage()));</span>
+<span class="source-line-no">397</span><span id="line-397">        }</span>
+<span class="source-line-no">398</span><span id="line-398">        else {</span>
+<span class="source-line-no">399</span><span id="line-399">            result = messageTextOnly</span>
+<span class="source-line-no">400</span><span id="line-400">                    .replace(MESSAGE_TEXT_PLACEHOLDER, escape(event.getMessage()));</span>
+<span class="source-line-no">401</span><span id="line-401">        }</span>
+<span class="source-line-no">402</span><span id="line-402">        return result;</span>
+<span class="source-line-no">403</span><span id="line-403">    }</span>
+<span class="source-line-no">404</span><span id="line-404"></span>
+<span class="source-line-no">405</span><span id="line-405">    @Override</span>
+<span class="source-line-no">406</span><span id="line-406">    public void addException(AuditEvent event, Throwable throwable) {</span>
+<span class="source-line-no">407</span><span id="line-407">        final StringWriter stringWriter = new StringWriter();</span>
+<span class="source-line-no">408</span><span id="line-408">        final PrintWriter printer = new PrintWriter(stringWriter);</span>
+<span class="source-line-no">409</span><span id="line-409">        throwable.printStackTrace(printer);</span>
+<span class="source-line-no">410</span><span id="line-410">        final String message = messageTextOnly</span>
+<span class="source-line-no">411</span><span id="line-411">                .replace(MESSAGE_TEXT_PLACEHOLDER, escape(stringWriter.toString()));</span>
+<span class="source-line-no">412</span><span id="line-412">        if (event.getFileName() == null) {</span>
+<span class="source-line-no">413</span><span id="line-413">            results.add(fillTemplate(resultErrorOnly, Map.of(</span>
+<span class="source-line-no">414</span><span id="line-414">                SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()),</span>
+<span class="source-line-no">415</span><span id="line-415">                MESSAGE_PLACEHOLDER, message)));</span>
+<span class="source-line-no">416</span><span id="line-416">        }</span>
+<span class="source-line-no">417</span><span id="line-417">        else {</span>
+<span class="source-line-no">418</span><span id="line-418">            results.add(fillTemplate(resultFileOnly, Map.of(</span>
+<span class="source-line-no">419</span><span id="line-419">                SEVERITY_LEVEL_PLACEHOLDER, renderSeverityLevel(event.getSeverityLevel()),</span>
+<span class="source-line-no">420</span><span id="line-420">                URI_PLACEHOLDER, renderFileNameUri(event.getFileName()),</span>
+<span class="source-line-no">421</span><span id="line-421">                MESSAGE_PLACEHOLDER, message)));</span>
 <span class="source-line-no">422</span><span id="line-422">        }</span>
 <span class="source-line-no">423</span><span id="line-423">    }</span>
 <span class="source-line-no">424</span><span id="line-424"></span>
@@ -446,132 +446,155 @@
 <span class="source-line-no">433</span><span id="line-433">    }</span>
 <span class="source-line-no">434</span><span id="line-434"></span>
 <span class="source-line-no">435</span><span id="line-435">    /**</span>
-<span class="source-line-no">436</span><span id="line-436">     * Render the file name URI for the given file name.</span>
-<span class="source-line-no">437</span><span id="line-437">     *</span>
-<span class="source-line-no">438</span><span id="line-438">     * @param fileName the file name to render the URI for</span>
-<span class="source-line-no">439</span><span id="line-439">     * @return the rendered URI for the given file name</span>
-<span class="source-line-no">440</span><span id="line-440">     */</span>
-<span class="source-line-no">441</span><span id="line-441">    private static String renderFileNameUri(final String fileName) {</span>
-<span class="source-line-no">442</span><span id="line-442">        final String withoutSpaces =</span>
-<span class="source-line-no">443</span><span id="line-443">                A_SPACE_PATTERN</span>
-<span class="source-line-no">444</span><span id="line-444">                        .matcher(TWO_BACKSLASHES_PATTERN.matcher(fileName).replaceAll("/"))</span>
-<span class="source-line-no">445</span><span id="line-445">                        .replaceAll("%20");</span>
-<span class="source-line-no">446</span><span id="line-446">        String normalized = A_QUOTE_PATTERN.matcher(withoutSpaces).replaceAll("%22");</span>
-<span class="source-line-no">447</span><span id="line-447">        if (WINDOWS_DRIVE_LETTER_PATTERN.matcher(normalized).find()) {</span>
-<span class="source-line-no">448</span><span id="line-448">            normalized = '/' + normalized;</span>
-<span class="source-line-no">449</span><span id="line-449">        }</span>
-<span class="source-line-no">450</span><span id="line-450">        return "file:" + normalized;</span>
-<span class="source-line-no">451</span><span id="line-451">    }</span>
-<span class="source-line-no">452</span><span id="line-452"></span>
-<span class="source-line-no">453</span><span id="line-453">    /**</span>
-<span class="source-line-no">454</span><span id="line-454">     * Render the severity level into SARIF severity level.</span>
-<span class="source-line-no">455</span><span id="line-455">     *</span>
-<span class="source-line-no">456</span><span id="line-456">     * @param severityLevel the Severity level.</span>
-<span class="source-line-no">457</span><span id="line-457">     * @return the rendered severity level in string.</span>
-<span class="source-line-no">458</span><span id="line-458">     */</span>
-<span class="source-line-no">459</span><span id="line-459">    private static String renderSeverityLevel(SeverityLevel severityLevel) {</span>
-<span class="source-line-no">460</span><span id="line-460">        return switch (severityLevel) {</span>
-<span class="source-line-no">461</span><span id="line-461">            case IGNORE -&gt; "none";</span>
-<span class="source-line-no">462</span><span id="line-462">            case INFO -&gt; "note";</span>
-<span class="source-line-no">463</span><span id="line-463">            case WARNING -&gt; "warning";</span>
-<span class="source-line-no">464</span><span id="line-464">            case ERROR -&gt; "error";</span>
-<span class="source-line-no">465</span><span id="line-465">        };</span>
-<span class="source-line-no">466</span><span id="line-466">    }</span>
-<span class="source-line-no">467</span><span id="line-467"></span>
-<span class="source-line-no">468</span><span id="line-468">    /**</span>
-<span class="source-line-no">469</span><span id="line-469">     * Escape \b, \f, \n, \r, \t, \", \\ and U+0000 through U+001F.</span>
-<span class="source-line-no">470</span><span id="line-470">     * See &lt;a href="https://www.ietf.org/rfc/rfc4627.txt"&gt;reference&lt;/a&gt; - 2.5. Strings</span>
-<span class="source-line-no">471</span><span id="line-471">     *</span>
-<span class="source-line-no">472</span><span id="line-472">     * @param value the value to escape.</span>
-<span class="source-line-no">473</span><span id="line-473">     * @return the escaped value if necessary.</span>
-<span class="source-line-no">474</span><span id="line-474">     */</span>
-<span class="source-line-no">475</span><span id="line-475">    public static String escape(String value) {</span>
-<span class="source-line-no">476</span><span id="line-476">        final int length = value.length();</span>
-<span class="source-line-no">477</span><span id="line-477">        final StringBuilder sb = new StringBuilder(length);</span>
-<span class="source-line-no">478</span><span id="line-478">        for (int i = 0; i &lt; length; i++) {</span>
-<span class="source-line-no">479</span><span id="line-479">            final char chr = value.charAt(i);</span>
-<span class="source-line-no">480</span><span id="line-480">            final String replacement = switch (chr) {</span>
-<span class="source-line-no">481</span><span id="line-481">                case '"' -&gt; "\\\"";</span>
-<span class="source-line-no">482</span><span id="line-482">                case '\\' -&gt; TWO_BACKSLASHES;</span>
-<span class="source-line-no">483</span><span id="line-483">                case '\b' -&gt; "\\b";</span>
-<span class="source-line-no">484</span><span id="line-484">                case '\f' -&gt; "\\f";</span>
-<span class="source-line-no">485</span><span id="line-485">                case '\n' -&gt; "\\n";</span>
-<span class="source-line-no">486</span><span id="line-486">                case '\r' -&gt; "\\r";</span>
-<span class="source-line-no">487</span><span id="line-487">                case '\t' -&gt; "\\t";</span>
-<span class="source-line-no">488</span><span id="line-488">                case '/' -&gt; "\\/";</span>
-<span class="source-line-no">489</span><span id="line-489">                default -&gt; {</span>
-<span class="source-line-no">490</span><span id="line-490">                    if (chr &lt;= UNICODE_ESCAPE_UPPER_LIMIT) {</span>
-<span class="source-line-no">491</span><span id="line-491">                        yield escapeUnicode1F(chr);</span>
-<span class="source-line-no">492</span><span id="line-492">                    }</span>
-<span class="source-line-no">493</span><span id="line-493">                    yield Character.toString(chr);</span>
-<span class="source-line-no">494</span><span id="line-494">                }</span>
-<span class="source-line-no">495</span><span id="line-495">            };</span>
-<span class="source-line-no">496</span><span id="line-496">            sb.append(replacement);</span>
-<span class="source-line-no">497</span><span id="line-497">        }</span>
-<span class="source-line-no">498</span><span id="line-498"></span>
-<span class="source-line-no">499</span><span id="line-499">        return sb.toString();</span>
-<span class="source-line-no">500</span><span id="line-500">    }</span>
-<span class="source-line-no">501</span><span id="line-501"></span>
-<span class="source-line-no">502</span><span id="line-502">    /**</span>
-<span class="source-line-no">503</span><span id="line-503">     * Escape the character between 0x00 to 0x1F in JSON.</span>
-<span class="source-line-no">504</span><span id="line-504">     *</span>
-<span class="source-line-no">505</span><span id="line-505">     * @param chr the character to be escaped.</span>
-<span class="source-line-no">506</span><span id="line-506">     * @return the escaped string.</span>
-<span class="source-line-no">507</span><span id="line-507">     */</span>
-<span class="source-line-no">508</span><span id="line-508">    private static String escapeUnicode1F(char chr) {</span>
-<span class="source-line-no">509</span><span id="line-509">        final String hexString = Integer.toHexString(chr);</span>
-<span class="source-line-no">510</span><span id="line-510">        return "\\u"</span>
-<span class="source-line-no">511</span><span id="line-511">                + "0".repeat(UNICODE_LENGTH - hexString.length())</span>
-<span class="source-line-no">512</span><span id="line-512">                + hexString.toUpperCase(Locale.US);</span>
-<span class="source-line-no">513</span><span id="line-513">    }</span>
-<span class="source-line-no">514</span><span id="line-514"></span>
-<span class="source-line-no">515</span><span id="line-515">    /**</span>
-<span class="source-line-no">516</span><span id="line-516">     * Read string from given resource.</span>
-<span class="source-line-no">517</span><span id="line-517">     *</span>
-<span class="source-line-no">518</span><span id="line-518">     * @param name name of the desired resource</span>
-<span class="source-line-no">519</span><span id="line-519">     * @return the string content from the give resource</span>
-<span class="source-line-no">520</span><span id="line-520">     * @throws IOException if there is reading errors</span>
-<span class="source-line-no">521</span><span id="line-521">     */</span>
-<span class="source-line-no">522</span><span id="line-522">    public static String readResource(String name) throws IOException {</span>
-<span class="source-line-no">523</span><span id="line-523">        try (InputStream inputStream = SarifLogger.class.getResourceAsStream(name);</span>
-<span class="source-line-no">524</span><span id="line-524">             ByteArrayOutputStream result = new ByteArrayOutputStream()) {</span>
-<span class="source-line-no">525</span><span id="line-525">            if (inputStream == null) {</span>
-<span class="source-line-no">526</span><span id="line-526">                throw new IOException("Cannot find the resource " + name);</span>
-<span class="source-line-no">527</span><span id="line-527">            }</span>
-<span class="source-line-no">528</span><span id="line-528">            final byte[] buffer = new byte[BUFFER_SIZE];</span>
-<span class="source-line-no">529</span><span id="line-529">            int length = 0;</span>
-<span class="source-line-no">530</span><span id="line-530">            while (length != -1) {</span>
-<span class="source-line-no">531</span><span id="line-531">                result.write(buffer, 0, length);</span>
-<span class="source-line-no">532</span><span id="line-532">                length = inputStream.read(buffer);</span>
-<span class="source-line-no">533</span><span id="line-533">            }</span>
-<span class="source-line-no">534</span><span id="line-534">            return result.toString(StandardCharsets.UTF_8);</span>
-<span class="source-line-no">535</span><span id="line-535">        }</span>
-<span class="source-line-no">536</span><span id="line-536">    }</span>
-<span class="source-line-no">537</span><span id="line-537"></span>
-<span class="source-line-no">538</span><span id="line-538">    /**</span>
-<span class="source-line-no">539</span><span id="line-539">     * Composite key for uniquely identifying a rule by source name and module ID.</span>
-<span class="source-line-no">540</span><span id="line-540">     *</span>
-<span class="source-line-no">541</span><span id="line-541">     * @param sourceName  The fully qualified source class name.</span>
-<span class="source-line-no">542</span><span id="line-542">     * @param moduleId  The module ID from configuration (can be null).</span>
+<span class="source-line-no">436</span><span id="line-436">     * Fill a template with its values in a single pass, so a value substituted for one</span>
+<span class="source-line-no">437</span><span id="line-437">     * placeholder is never scanned again and taken for another. A file name or message that</span>
+<span class="source-line-no">438</span><span id="line-438">     * happens to carry placeholder text is therefore kept verbatim instead of pulling</span>
+<span class="source-line-no">439</span><span id="line-439">     * another value into it.</span>
+<span class="source-line-no">440</span><span id="line-440">     *</span>
+<span class="source-line-no">441</span><span id="line-441">     * @param template the template to fill</span>
+<span class="source-line-no">442</span><span id="line-442">     * @param values the value to substitute for each placeholder</span>
+<span class="source-line-no">443</span><span id="line-443">     * @return the filled template</span>
+<span class="source-line-no">444</span><span id="line-444">     */</span>
+<span class="source-line-no">445</span><span id="line-445">    private static String fillTemplate(String template, Map&lt;String, String&gt; values) {</span>
+<span class="source-line-no">446</span><span id="line-446">        final Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);</span>
+<span class="source-line-no">447</span><span id="line-447">        final StringBuilder result = new StringBuilder(256);</span>
+<span class="source-line-no">448</span><span id="line-448">        while (matcher.find()) {</span>
+<span class="source-line-no">449</span><span id="line-449">            final String placeholder = matcher.group();</span>
+<span class="source-line-no">450</span><span id="line-450">            final String value = values.getOrDefault(placeholder, placeholder);</span>
+<span class="source-line-no">451</span><span id="line-451">            matcher.appendReplacement(result, Matcher.quoteReplacement(value));</span>
+<span class="source-line-no">452</span><span id="line-452">        }</span>
+<span class="source-line-no">453</span><span id="line-453">        matcher.appendTail(result);</span>
+<span class="source-line-no">454</span><span id="line-454">        return result.toString();</span>
+<span class="source-line-no">455</span><span id="line-455">    }</span>
+<span class="source-line-no">456</span><span id="line-456"></span>
+<span class="source-line-no">457</span><span id="line-457">    /**</span>
+<span class="source-line-no">458</span><span id="line-458">     * Render the file name URI for the given file name.</span>
+<span class="source-line-no">459</span><span id="line-459">     *</span>
+<span class="source-line-no">460</span><span id="line-460">     * @param fileName the file name to render the URI for</span>
+<span class="source-line-no">461</span><span id="line-461">     * @return the rendered URI for the given file name</span>
+<span class="source-line-no">462</span><span id="line-462">     */</span>
+<span class="source-line-no">463</span><span id="line-463">    private static String renderFileNameUri(final String fileName) {</span>
+<span class="source-line-no">464</span><span id="line-464">        final String withoutSpaces =</span>
+<span class="source-line-no">465</span><span id="line-465">                A_SPACE_PATTERN</span>
+<span class="source-line-no">466</span><span id="line-466">                        .matcher(TWO_BACKSLASHES_PATTERN.matcher(fileName).replaceAll("/"))</span>
+<span class="source-line-no">467</span><span id="line-467">                        .replaceAll("%20");</span>
+<span class="source-line-no">468</span><span id="line-468">        String normalized = A_QUOTE_PATTERN.matcher(withoutSpaces).replaceAll("%22");</span>
+<span class="source-line-no">469</span><span id="line-469">        if (WINDOWS_DRIVE_LETTER_PATTERN.matcher(normalized).find()) {</span>
+<span class="source-line-no">470</span><span id="line-470">            normalized = '/' + normalized;</span>
+<span class="source-line-no">471</span><span id="line-471">        }</span>
+<span class="source-line-no">472</span><span id="line-472">        return "file:" + normalized;</span>
+<span class="source-line-no">473</span><span id="line-473">    }</span>
+<span class="source-line-no">474</span><span id="line-474"></span>
+<span class="source-line-no">475</span><span id="line-475">    /**</span>
+<span class="source-line-no">476</span><span id="line-476">     * Render the severity level into SARIF severity level.</span>
+<span class="source-line-no">477</span><span id="line-477">     *</span>
+<span class="source-line-no">478</span><span id="line-478">     * @param severityLevel the Severity level.</span>
+<span class="source-line-no">479</span><span id="line-479">     * @return the rendered severity level in string.</span>
+<span class="source-line-no">480</span><span id="line-480">     */</span>
+<span class="source-line-no">481</span><span id="line-481">    private static String renderSeverityLevel(SeverityLevel severityLevel) {</span>
+<span class="source-line-no">482</span><span id="line-482">        return switch (severityLevel) {</span>
+<span class="source-line-no">483</span><span id="line-483">            case IGNORE -&gt; "none";</span>
+<span class="source-line-no">484</span><span id="line-484">            case INFO -&gt; "note";</span>
+<span class="source-line-no">485</span><span id="line-485">            case WARNING -&gt; "warning";</span>
+<span class="source-line-no">486</span><span id="line-486">            case ERROR -&gt; "error";</span>
+<span class="source-line-no">487</span><span id="line-487">        };</span>
+<span class="source-line-no">488</span><span id="line-488">    }</span>
+<span class="source-line-no">489</span><span id="line-489"></span>
+<span class="source-line-no">490</span><span id="line-490">    /**</span>
+<span class="source-line-no">491</span><span id="line-491">     * Escape \b, \f, \n, \r, \t, \", \\ and U+0000 through U+001F.</span>
+<span class="source-line-no">492</span><span id="line-492">     * See &lt;a href="https://www.ietf.org/rfc/rfc4627.txt"&gt;reference&lt;/a&gt; - 2.5. Strings</span>
+<span class="source-line-no">493</span><span id="line-493">     *</span>
+<span class="source-line-no">494</span><span id="line-494">     * @param value the value to escape.</span>
+<span class="source-line-no">495</span><span id="line-495">     * @return the escaped value if necessary.</span>
+<span class="source-line-no">496</span><span id="line-496">     */</span>
+<span class="source-line-no">497</span><span id="line-497">    public static String escape(String value) {</span>
+<span class="source-line-no">498</span><span id="line-498">        final int length = value.length();</span>
+<span class="source-line-no">499</span><span id="line-499">        final StringBuilder sb = new StringBuilder(length);</span>
+<span class="source-line-no">500</span><span id="line-500">        for (int i = 0; i &lt; length; i++) {</span>
+<span class="source-line-no">501</span><span id="line-501">            final char chr = value.charAt(i);</span>
+<span class="source-line-no">502</span><span id="line-502">            final String replacement = switch (chr) {</span>
+<span class="source-line-no">503</span><span id="line-503">                case '"' -&gt; "\\\"";</span>
+<span class="source-line-no">504</span><span id="line-504">                case '\\' -&gt; TWO_BACKSLASHES;</span>
+<span class="source-line-no">505</span><span id="line-505">                case '\b' -&gt; "\\b";</span>
+<span class="source-line-no">506</span><span id="line-506">                case '\f' -&gt; "\\f";</span>
+<span class="source-line-no">507</span><span id="line-507">                case '\n' -&gt; "\\n";</span>
+<span class="source-line-no">508</span><span id="line-508">                case '\r' -&gt; "\\r";</span>
+<span class="source-line-no">509</span><span id="line-509">                case '\t' -&gt; "\\t";</span>
+<span class="source-line-no">510</span><span id="line-510">                case '/' -&gt; "\\/";</span>
+<span class="source-line-no">511</span><span id="line-511">                default -&gt; {</span>
+<span class="source-line-no">512</span><span id="line-512">                    if (chr &lt;= UNICODE_ESCAPE_UPPER_LIMIT) {</span>
+<span class="source-line-no">513</span><span id="line-513">                        yield escapeUnicode1F(chr);</span>
+<span class="source-line-no">514</span><span id="line-514">                    }</span>
+<span class="source-line-no">515</span><span id="line-515">                    yield Character.toString(chr);</span>
+<span class="source-line-no">516</span><span id="line-516">                }</span>
+<span class="source-line-no">517</span><span id="line-517">            };</span>
+<span class="source-line-no">518</span><span id="line-518">            sb.append(replacement);</span>
+<span class="source-line-no">519</span><span id="line-519">        }</span>
+<span class="source-line-no">520</span><span id="line-520"></span>
+<span class="source-line-no">521</span><span id="line-521">        return sb.toString();</span>
+<span class="source-line-no">522</span><span id="line-522">    }</span>
+<span class="source-line-no">523</span><span id="line-523"></span>
+<span class="source-line-no">524</span><span id="line-524">    /**</span>
+<span class="source-line-no">525</span><span id="line-525">     * Escape the character between 0x00 to 0x1F in JSON.</span>
+<span class="source-line-no">526</span><span id="line-526">     *</span>
+<span class="source-line-no">527</span><span id="line-527">     * @param chr the character to be escaped.</span>
+<span class="source-line-no">528</span><span id="line-528">     * @return the escaped string.</span>
+<span class="source-line-no">529</span><span id="line-529">     */</span>
+<span class="source-line-no">530</span><span id="line-530">    private static String escapeUnicode1F(char chr) {</span>
+<span class="source-line-no">531</span><span id="line-531">        final String hexString = Integer.toHexString(chr);</span>
+<span class="source-line-no">532</span><span id="line-532">        return "\\u"</span>
+<span class="source-line-no">533</span><span id="line-533">                + "0".repeat(UNICODE_LENGTH - hexString.length())</span>
+<span class="source-line-no">534</span><span id="line-534">                + hexString.toUpperCase(Locale.US);</span>
+<span class="source-line-no">535</span><span id="line-535">    }</span>
+<span class="source-line-no">536</span><span id="line-536"></span>
+<span class="source-line-no">537</span><span id="line-537">    /**</span>
+<span class="source-line-no">538</span><span id="line-538">     * Read string from given resource.</span>
+<span class="source-line-no">539</span><span id="line-539">     *</span>
+<span class="source-line-no">540</span><span id="line-540">     * @param name name of the desired resource</span>
+<span class="source-line-no">541</span><span id="line-541">     * @return the string content from the give resource</span>
+<span class="source-line-no">542</span><span id="line-542">     * @throws IOException if there is reading errors</span>
 <span class="source-line-no">543</span><span id="line-543">     */</span>
-<span class="source-line-no">544</span><span id="line-544">    private record RuleKey(String sourceName, String moduleId) {</span>
-<span class="source-line-no">545</span><span id="line-545">        /**</span>
-<span class="source-line-no">546</span><span id="line-546">         * Converts this key to a SARIF rule ID string.</span>
-<span class="source-line-no">547</span><span id="line-547">         *</span>
-<span class="source-line-no">548</span><span id="line-548">         * @return rule ID in format: sourceName[#moduleId]</span>
-<span class="source-line-no">549</span><span id="line-549">         */</span>
-<span class="source-line-no">550</span><span id="line-550">        private String toRuleId() {</span>
-<span class="source-line-no">551</span><span id="line-551">            final String result;</span>
-<span class="source-line-no">552</span><span id="line-552">            if (moduleId == null) {</span>
-<span class="source-line-no">553</span><span id="line-553">                result = sourceName;</span>
-<span class="source-line-no">554</span><span id="line-554">            }</span>
-<span class="source-line-no">555</span><span id="line-555">            else {</span>
-<span class="source-line-no">556</span><span id="line-556">                result = sourceName + '#' + moduleId;</span>
-<span class="source-line-no">557</span><span id="line-557">            }</span>
-<span class="source-line-no">558</span><span id="line-558">            return result;</span>
-<span class="source-line-no">559</span><span id="line-559">        }</span>
-<span class="source-line-no">560</span><span id="line-560">    }</span>
-<span class="source-line-no">561</span><span id="line-561">}</span>
+<span class="source-line-no">544</span><span id="line-544">    public static String readResource(String name) throws IOException {</span>
+<span class="source-line-no">545</span><span id="line-545">        try (InputStream inputStream = SarifLogger.class.getResourceAsStream(name);</span>
+<span class="source-line-no">546</span><span id="line-546">             ByteArrayOutputStream result = new ByteArrayOutputStream()) {</span>
+<span class="source-line-no">547</span><span id="line-547">            if (inputStream == null) {</span>
+<span class="source-line-no">548</span><span id="line-548">                throw new IOException("Cannot find the resource " + name);</span>
+<span class="source-line-no">549</span><span id="line-549">            }</span>
+<span class="source-line-no">550</span><span id="line-550">            final byte[] buffer = new byte[BUFFER_SIZE];</span>
+<span class="source-line-no">551</span><span id="line-551">            int length = 0;</span>
+<span class="source-line-no">552</span><span id="line-552">            while (length != -1) {</span>
+<span class="source-line-no">553</span><span id="line-553">                result.write(buffer, 0, length);</span>
+<span class="source-line-no">554</span><span id="line-554">                length = inputStream.read(buffer);</span>
+<span class="source-line-no">555</span><span id="line-555">            }</span>
+<span class="source-line-no">556</span><span id="line-556">            return result.toString(StandardCharsets.UTF_8);</span>
+<span class="source-line-no">557</span><span id="line-557">        }</span>
+<span class="source-line-no">558</span><span id="line-558">    }</span>
+<span class="source-line-no">559</span><span id="line-559"></span>
+<span class="source-line-no">560</span><span id="line-560">    /**</span>
+<span class="source-line-no">561</span><span id="line-561">     * Composite key for uniquely identifying a rule by source name and module ID.</span>
+<span class="source-line-no">562</span><span id="line-562">     *</span>
+<span class="source-line-no">563</span><span id="line-563">     * @param sourceName  The fully qualified source class name.</span>
+<span class="source-line-no">564</span><span id="line-564">     * @param moduleId  The module ID from configuration (can be null).</span>
+<span class="source-line-no">565</span><span id="line-565">     */</span>
+<span class="source-line-no">566</span><span id="line-566">    private record RuleKey(String sourceName, String moduleId) {</span>
+<span class="source-line-no">567</span><span id="line-567">        /**</span>
+<span class="source-line-no">568</span><span id="line-568">         * Converts this key to a SARIF rule ID string.</span>
+<span class="source-line-no">569</span><span id="line-569">         *</span>
+<span class="source-line-no">570</span><span id="line-570">         * @return rule ID in format: sourceName[#moduleId]</span>
+<span class="source-line-no">571</span><span id="line-571">         */</span>
+<span class="source-line-no">572</span><span id="line-572">        private String toRuleId() {</span>
+<span class="source-line-no">573</span><span id="line-573">            final String result;</span>
+<span class="source-line-no">574</span><span id="line-574">            if (moduleId == null) {</span>
+<span class="source-line-no">575</span><span id="line-575">                result = sourceName;</span>
+<span class="source-line-no">576</span><span id="line-576">            }</span>
+<span class="source-line-no">577</span><span id="line-577">            else {</span>
+<span class="source-line-no">578</span><span id="line-578">                result = sourceName + '#' + moduleId;</span>
+<span class="source-line-no">579</span><span id="line-579">            }</span>
+<span class="source-line-no">580</span><span id="line-580">            return result;</span>
+<span class="source-line-no">581</span><span id="line-581">        }</span>
+<span class="source-line-no">582</span><span id="line-582">    }</span>
+<span class="source-line-no">583</span><span id="line-583"></span>
+<span class="source-line-no">584</span><span id="line-584">}</span>
 
 
 

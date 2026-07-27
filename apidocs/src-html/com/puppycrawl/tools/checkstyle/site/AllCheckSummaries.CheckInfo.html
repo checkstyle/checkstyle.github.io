@@ -180,660 +180,668 @@
 <span class="source-line-no">167</span><span id="line-167">    private static final Pattern CODE_SPACE_PATTERN = Pattern.compile(WHITESPACE_REGEX</span>
 <span class="source-line-no">168</span><span id="line-168">            + "(" + CLOSING_ANCHOR_TAG.substring(0, 2) + "code&gt;)");</span>
 <span class="source-line-no">169</span><span id="line-169"></span>
-<span class="source-line-no">170</span><span id="line-170">    @Override</span>
-<span class="source-line-no">171</span><span id="line-171">    public void execute(Sink sink, MacroRequest request) throws MacroExecutionException {</span>
-<span class="source-line-no">172</span><span id="line-172">        final String packageFilter = (String) request.getParameter("package");</span>
-<span class="source-line-no">173</span><span id="line-173"></span>
-<span class="source-line-no">174</span><span id="line-174">        final Map&lt;String, String&gt; xmlHrefMap = buildXmlHtmlMap();</span>
-<span class="source-line-no">175</span><span id="line-175">        final Map&lt;String, CheckInfo&gt; infos = new TreeMap&lt;&gt;();</span>
+<span class="source-line-no">170</span><span id="line-170">    /**</span>
+<span class="source-line-no">171</span><span id="line-171">     * Creates a new {@code AllCheckSummaries} instance.</span>
+<span class="source-line-no">172</span><span id="line-172">     */</span>
+<span class="source-line-no">173</span><span id="line-173">    public AllCheckSummaries() {</span>
+<span class="source-line-no">174</span><span id="line-174">        // no code by default</span>
+<span class="source-line-no">175</span><span id="line-175">    }</span>
 <span class="source-line-no">176</span><span id="line-176"></span>
-<span class="source-line-no">177</span><span id="line-177">        processCheckFiles(infos, xmlHrefMap, packageFilter);</span>
-<span class="source-line-no">178</span><span id="line-178"></span>
-<span class="source-line-no">179</span><span id="line-179">        final StringBuilder normalRows = new StringBuilder(4096);</span>
-<span class="source-line-no">180</span><span id="line-180">        final StringBuilder holderRows = new StringBuilder(512);</span>
-<span class="source-line-no">181</span><span id="line-181"></span>
-<span class="source-line-no">182</span><span id="line-182">        buildTableRows(infos, normalRows, holderRows);</span>
+<span class="source-line-no">177</span><span id="line-177">    @Override</span>
+<span class="source-line-no">178</span><span id="line-178">    public void execute(Sink sink, MacroRequest request) throws MacroExecutionException {</span>
+<span class="source-line-no">179</span><span id="line-179">        final String packageFilter = (String) request.getParameter("package");</span>
+<span class="source-line-no">180</span><span id="line-180"></span>
+<span class="source-line-no">181</span><span id="line-181">        final Map&lt;String, String&gt; xmlHrefMap = buildXmlHtmlMap();</span>
+<span class="source-line-no">182</span><span id="line-182">        final Map&lt;String, CheckInfo&gt; infos = new TreeMap&lt;&gt;();</span>
 <span class="source-line-no">183</span><span id="line-183"></span>
-<span class="source-line-no">184</span><span id="line-184">        sink.rawText(normalRows.toString());</span>
-<span class="source-line-no">185</span><span id="line-185">        if (packageFilter == null &amp;&amp; !holderRows.isEmpty()) {</span>
-<span class="source-line-no">186</span><span id="line-186">            appendHolderSection(sink, holderRows);</span>
-<span class="source-line-no">187</span><span id="line-187">        }</span>
-<span class="source-line-no">188</span><span id="line-188">        else if (packageFilter != null &amp;&amp; !holderRows.isEmpty()) {</span>
-<span class="source-line-no">189</span><span id="line-189">            appendFilteredHolderSection(sink, holderRows, packageFilter);</span>
-<span class="source-line-no">190</span><span id="line-190">        }</span>
-<span class="source-line-no">191</span><span id="line-191">    }</span>
-<span class="source-line-no">192</span><span id="line-192"></span>
-<span class="source-line-no">193</span><span id="line-193">    /**</span>
-<span class="source-line-no">194</span><span id="line-194">     * Scans Java sources and populates info map with modules having Javadoc.</span>
-<span class="source-line-no">195</span><span id="line-195">     *</span>
-<span class="source-line-no">196</span><span id="line-196">     * @param infos map of collected module info</span>
-<span class="source-line-no">197</span><span id="line-197">     * @param xmlHrefMap map of XML-to-HTML hrefs</span>
-<span class="source-line-no">198</span><span id="line-198">     * @param packageFilter optional package to filter by, null for all</span>
-<span class="source-line-no">199</span><span id="line-199">     * @throws MacroExecutionException if file walk fails</span>
-<span class="source-line-no">200</span><span id="line-200">     */</span>
-<span class="source-line-no">201</span><span id="line-201">    private static void processCheckFiles(Map&lt;String, CheckInfo&gt; infos,</span>
-<span class="source-line-no">202</span><span id="line-202">                                          Map&lt;String, String&gt; xmlHrefMap,</span>
-<span class="source-line-no">203</span><span id="line-203">                                          String packageFilter)</span>
-<span class="source-line-no">204</span><span id="line-204">            throws MacroExecutionException {</span>
-<span class="source-line-no">205</span><span id="line-205">        try {</span>
-<span class="source-line-no">206</span><span id="line-206">            final List&lt;Path&gt; checkFiles = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">207</span><span id="line-207">            Files.walkFileTree(JAVA_CHECKS_ROOT, new SimpleFileVisitor&lt;&gt;() {</span>
-<span class="source-line-no">208</span><span id="line-208">                @Override</span>
-<span class="source-line-no">209</span><span id="line-209">                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {</span>
-<span class="source-line-no">210</span><span id="line-210">                    if (isCheckOrHolderFile(file)) {</span>
-<span class="source-line-no">211</span><span id="line-211">                        checkFiles.add(file);</span>
-<span class="source-line-no">212</span><span id="line-212">                    }</span>
-<span class="source-line-no">213</span><span id="line-213">                    return FileVisitResult.CONTINUE;</span>
-<span class="source-line-no">214</span><span id="line-214">                }</span>
-<span class="source-line-no">215</span><span id="line-215">            });</span>
-<span class="source-line-no">216</span><span id="line-216"></span>
-<span class="source-line-no">217</span><span id="line-217">            checkFiles.forEach(path -&gt; processCheckFile(path, infos, xmlHrefMap, packageFilter));</span>
-<span class="source-line-no">218</span><span id="line-218">        }</span>
-<span class="source-line-no">219</span><span id="line-219">        catch (IOException | IllegalStateException exception) {</span>
-<span class="source-line-no">220</span><span id="line-220">            throw new MacroExecutionException("Failed to discover checks", exception);</span>
-<span class="source-line-no">221</span><span id="line-221">        }</span>
-<span class="source-line-no">222</span><span id="line-222">    }</span>
+<span class="source-line-no">184</span><span id="line-184">        processCheckFiles(infos, xmlHrefMap, packageFilter);</span>
+<span class="source-line-no">185</span><span id="line-185"></span>
+<span class="source-line-no">186</span><span id="line-186">        final StringBuilder normalRows = new StringBuilder(4096);</span>
+<span class="source-line-no">187</span><span id="line-187">        final StringBuilder holderRows = new StringBuilder(512);</span>
+<span class="source-line-no">188</span><span id="line-188"></span>
+<span class="source-line-no">189</span><span id="line-189">        buildTableRows(infos, normalRows, holderRows);</span>
+<span class="source-line-no">190</span><span id="line-190"></span>
+<span class="source-line-no">191</span><span id="line-191">        sink.rawText(normalRows.toString());</span>
+<span class="source-line-no">192</span><span id="line-192">        if (packageFilter == null &amp;&amp; !holderRows.isEmpty()) {</span>
+<span class="source-line-no">193</span><span id="line-193">            appendHolderSection(sink, holderRows);</span>
+<span class="source-line-no">194</span><span id="line-194">        }</span>
+<span class="source-line-no">195</span><span id="line-195">        else if (packageFilter != null &amp;&amp; !holderRows.isEmpty()) {</span>
+<span class="source-line-no">196</span><span id="line-196">            appendFilteredHolderSection(sink, holderRows, packageFilter);</span>
+<span class="source-line-no">197</span><span id="line-197">        }</span>
+<span class="source-line-no">198</span><span id="line-198">    }</span>
+<span class="source-line-no">199</span><span id="line-199"></span>
+<span class="source-line-no">200</span><span id="line-200">    /**</span>
+<span class="source-line-no">201</span><span id="line-201">     * Scans Java sources and populates info map with modules having Javadoc.</span>
+<span class="source-line-no">202</span><span id="line-202">     *</span>
+<span class="source-line-no">203</span><span id="line-203">     * @param infos map of collected module info</span>
+<span class="source-line-no">204</span><span id="line-204">     * @param xmlHrefMap map of XML-to-HTML hrefs</span>
+<span class="source-line-no">205</span><span id="line-205">     * @param packageFilter optional package to filter by, null for all</span>
+<span class="source-line-no">206</span><span id="line-206">     * @throws MacroExecutionException if file walk fails</span>
+<span class="source-line-no">207</span><span id="line-207">     */</span>
+<span class="source-line-no">208</span><span id="line-208">    private static void processCheckFiles(Map&lt;String, CheckInfo&gt; infos,</span>
+<span class="source-line-no">209</span><span id="line-209">                                          Map&lt;String, String&gt; xmlHrefMap,</span>
+<span class="source-line-no">210</span><span id="line-210">                                          String packageFilter)</span>
+<span class="source-line-no">211</span><span id="line-211">            throws MacroExecutionException {</span>
+<span class="source-line-no">212</span><span id="line-212">        try {</span>
+<span class="source-line-no">213</span><span id="line-213">            final List&lt;Path&gt; checkFiles = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">214</span><span id="line-214">            Files.walkFileTree(JAVA_CHECKS_ROOT, new SimpleFileVisitor&lt;&gt;() {</span>
+<span class="source-line-no">215</span><span id="line-215">                @Override</span>
+<span class="source-line-no">216</span><span id="line-216">                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {</span>
+<span class="source-line-no">217</span><span id="line-217">                    if (isCheckOrHolderFile(file)) {</span>
+<span class="source-line-no">218</span><span id="line-218">                        checkFiles.add(file);</span>
+<span class="source-line-no">219</span><span id="line-219">                    }</span>
+<span class="source-line-no">220</span><span id="line-220">                    return FileVisitResult.CONTINUE;</span>
+<span class="source-line-no">221</span><span id="line-221">                }</span>
+<span class="source-line-no">222</span><span id="line-222">            });</span>
 <span class="source-line-no">223</span><span id="line-223"></span>
-<span class="source-line-no">224</span><span id="line-224">    /**</span>
-<span class="source-line-no">225</span><span id="line-225">     * Checks if a path is a Check or Holder Java file.</span>
-<span class="source-line-no">226</span><span id="line-226">     *</span>
-<span class="source-line-no">227</span><span id="line-227">     * @param path the path to check</span>
-<span class="source-line-no">228</span><span id="line-228">     * @return true if the path is a Check or Holder file, false otherwise</span>
-<span class="source-line-no">229</span><span id="line-229">     */</span>
-<span class="source-line-no">230</span><span id="line-230">    private static boolean isCheckOrHolderFile(Path path) {</span>
-<span class="source-line-no">231</span><span id="line-231">        final Path fileNamePath = path.getFileName();</span>
-<span class="source-line-no">232</span><span id="line-232">        boolean isCheckOrHolder = false;</span>
-<span class="source-line-no">233</span><span id="line-233">        if (fileNamePath != null &amp;&amp; Files.isRegularFile(path)) {</span>
-<span class="source-line-no">234</span><span id="line-234">            final String fileName = fileNamePath.toString();</span>
-<span class="source-line-no">235</span><span id="line-235">            isCheckOrHolder = (fileName.endsWith("Check.java") || fileName.endsWith("Holder.java"))</span>
-<span class="source-line-no">236</span><span id="line-236">                    &amp;&amp; (!fileName.startsWith("Abstract")</span>
-<span class="source-line-no">237</span><span id="line-237">                    || "AbstractClassNameCheck.java".equals(fileName));</span>
-<span class="source-line-no">238</span><span id="line-238">        }</span>
-<span class="source-line-no">239</span><span id="line-239">        return isCheckOrHolder;</span>
-<span class="source-line-no">240</span><span id="line-240">    }</span>
-<span class="source-line-no">241</span><span id="line-241"></span>
-<span class="source-line-no">242</span><span id="line-242">    /**</span>
-<span class="source-line-no">243</span><span id="line-243">     * Checks if a module is a holder type.</span>
-<span class="source-line-no">244</span><span id="line-244">     *</span>
-<span class="source-line-no">245</span><span id="line-245">     * @param moduleName the module name</span>
-<span class="source-line-no">246</span><span id="line-246">     * @return true if the module is a holder, false otherwise</span>
-<span class="source-line-no">247</span><span id="line-247">     */</span>
-<span class="source-line-no">248</span><span id="line-248">    private static boolean isHolder(String moduleName) {</span>
-<span class="source-line-no">249</span><span id="line-249">        return moduleName.endsWith("Holder");</span>
-<span class="source-line-no">250</span><span id="line-250">    }</span>
-<span class="source-line-no">251</span><span id="line-251"></span>
-<span class="source-line-no">252</span><span id="line-252">    /**</span>
-<span class="source-line-no">253</span><span id="line-253">     * Processes a single check class file and extracts metadata.</span>
-<span class="source-line-no">254</span><span id="line-254">     *</span>
-<span class="source-line-no">255</span><span id="line-255">     * @param path the check class file</span>
-<span class="source-line-no">256</span><span id="line-256">     * @param infos map of results</span>
-<span class="source-line-no">257</span><span id="line-257">     * @param xmlHrefMap map of XML hrefs</span>
-<span class="source-line-no">258</span><span id="line-258">     * @param packageFilter optional package to filter by, null for all</span>
-<span class="source-line-no">259</span><span id="line-259">     * @throws IllegalArgumentException if macro execution fails</span>
-<span class="source-line-no">260</span><span id="line-260">     */</span>
-<span class="source-line-no">261</span><span id="line-261">    private static void processCheckFile(Path path, Map&lt;String, CheckInfo&gt; infos,</span>
-<span class="source-line-no">262</span><span id="line-262">                                         Map&lt;String, String&gt; xmlHrefMap,</span>
-<span class="source-line-no">263</span><span id="line-263">                                         String packageFilter) {</span>
-<span class="source-line-no">264</span><span id="line-264">        try {</span>
-<span class="source-line-no">265</span><span id="line-265">            final String moduleName = CommonUtil.getFileNameWithoutExtension(path.toString());</span>
-<span class="source-line-no">266</span><span id="line-266">            SiteUtil.processModule(moduleName, path);</span>
-<span class="source-line-no">267</span><span id="line-267">            if (!JavadocScraperResultUtil.getModuleSinceVersion().isEmpty()) {</span>
-<span class="source-line-no">268</span><span id="line-268">                final String description = JavadocScraperResultUtil.getModuleDescription();</span>
-<span class="source-line-no">269</span><span id="line-269">                if (!description.isEmpty()) {</span>
-<span class="source-line-no">270</span><span id="line-270"></span>
-<span class="source-line-no">271</span><span id="line-271">                    final String[] moduleInfo = determineModuleInfo(path, moduleName);</span>
-<span class="source-line-no">272</span><span id="line-272">                    final String packageName = moduleInfo[1];</span>
-<span class="source-line-no">273</span><span id="line-273">                    if (packageFilter == null || packageFilter.equals(packageName)) {</span>
-<span class="source-line-no">274</span><span id="line-274">                        final String sanitizedDescription = sanitizeAnchorUrls(description);</span>
-<span class="source-line-no">275</span><span id="line-275"></span>
-<span class="source-line-no">276</span><span id="line-276">                        final String simpleName = moduleInfo[0];</span>
-<span class="source-line-no">277</span><span id="line-277">                        final String summary = sanitizeAndFirstSentence(sanitizedDescription);</span>
-<span class="source-line-no">278</span><span id="line-278">                        final String href = resolveHref(xmlHrefMap, packageName, simpleName,</span>
-<span class="source-line-no">279</span><span id="line-279">                                packageFilter);</span>
-<span class="source-line-no">280</span><span id="line-280">                        infos.put(simpleName, new CheckInfo(simpleName, href, summary));</span>
-<span class="source-line-no">281</span><span id="line-281">                    }</span>
-<span class="source-line-no">282</span><span id="line-282">                }</span>
-<span class="source-line-no">283</span><span id="line-283">            }</span>
-<span class="source-line-no">284</span><span id="line-284"></span>
-<span class="source-line-no">285</span><span id="line-285">        }</span>
-<span class="source-line-no">286</span><span id="line-286">        catch (MacroExecutionException exceptionThrown) {</span>
-<span class="source-line-no">287</span><span id="line-287">            throw new IllegalArgumentException(exceptionThrown);</span>
-<span class="source-line-no">288</span><span id="line-288">        }</span>
-<span class="source-line-no">289</span><span id="line-289">    }</span>
-<span class="source-line-no">290</span><span id="line-290"></span>
-<span class="source-line-no">291</span><span id="line-291">    /**</span>
-<span class="source-line-no">292</span><span id="line-292">     * Determines the simple name and package name for a check module.</span>
-<span class="source-line-no">293</span><span id="line-293">     *</span>
-<span class="source-line-no">294</span><span id="line-294">     * @param path the check class file</span>
-<span class="source-line-no">295</span><span id="line-295">     * @param moduleName the full module name</span>
-<span class="source-line-no">296</span><span id="line-296">     * @return array with [simpleName, packageName]</span>
-<span class="source-line-no">297</span><span id="line-297">     */</span>
-<span class="source-line-no">298</span><span id="line-298">    private static String[] determineModuleInfo(Path path, String moduleName) {</span>
-<span class="source-line-no">299</span><span id="line-299">        String packageName = extractCategoryFromJavaPath(path);</span>
-<span class="source-line-no">300</span><span id="line-300"></span>
-<span class="source-line-no">301</span><span id="line-301">        if ("indentation".equals(packageName)) {</span>
-<span class="source-line-no">302</span><span id="line-302">            packageName = MISC_PACKAGE;</span>
-<span class="source-line-no">303</span><span id="line-303">        }</span>
-<span class="source-line-no">304</span><span id="line-304">        if (isHolder(moduleName)) {</span>
-<span class="source-line-no">305</span><span id="line-305">            packageName = ANNOTATION_PACKAGE;</span>
-<span class="source-line-no">306</span><span id="line-306">        }</span>
-<span class="source-line-no">307</span><span id="line-307">        final String simpleName;</span>
-<span class="source-line-no">308</span><span id="line-308">        if (isHolder(moduleName)) {</span>
-<span class="source-line-no">309</span><span id="line-309">            simpleName = moduleName;</span>
+<span class="source-line-no">224</span><span id="line-224">            checkFiles.forEach(path -&gt; processCheckFile(path, infos, xmlHrefMap, packageFilter));</span>
+<span class="source-line-no">225</span><span id="line-225">        }</span>
+<span class="source-line-no">226</span><span id="line-226">        catch (IOException | IllegalStateException exception) {</span>
+<span class="source-line-no">227</span><span id="line-227">            throw new MacroExecutionException("Failed to discover checks", exception);</span>
+<span class="source-line-no">228</span><span id="line-228">        }</span>
+<span class="source-line-no">229</span><span id="line-229">    }</span>
+<span class="source-line-no">230</span><span id="line-230"></span>
+<span class="source-line-no">231</span><span id="line-231">    /**</span>
+<span class="source-line-no">232</span><span id="line-232">     * Checks if a path is a Check or Holder Java file.</span>
+<span class="source-line-no">233</span><span id="line-233">     *</span>
+<span class="source-line-no">234</span><span id="line-234">     * @param path the path to check</span>
+<span class="source-line-no">235</span><span id="line-235">     * @return true if the path is a Check or Holder file, false otherwise</span>
+<span class="source-line-no">236</span><span id="line-236">     */</span>
+<span class="source-line-no">237</span><span id="line-237">    private static boolean isCheckOrHolderFile(Path path) {</span>
+<span class="source-line-no">238</span><span id="line-238">        final Path fileNamePath = path.getFileName();</span>
+<span class="source-line-no">239</span><span id="line-239">        boolean isCheckOrHolder = false;</span>
+<span class="source-line-no">240</span><span id="line-240">        if (fileNamePath != null &amp;&amp; Files.isRegularFile(path)) {</span>
+<span class="source-line-no">241</span><span id="line-241">            final String fileName = fileNamePath.toString();</span>
+<span class="source-line-no">242</span><span id="line-242">            isCheckOrHolder = (fileName.endsWith("Check.java") || fileName.endsWith("Holder.java"))</span>
+<span class="source-line-no">243</span><span id="line-243">                    &amp;&amp; (!fileName.startsWith("Abstract")</span>
+<span class="source-line-no">244</span><span id="line-244">                    || "AbstractClassNameCheck.java".equals(fileName));</span>
+<span class="source-line-no">245</span><span id="line-245">        }</span>
+<span class="source-line-no">246</span><span id="line-246">        return isCheckOrHolder;</span>
+<span class="source-line-no">247</span><span id="line-247">    }</span>
+<span class="source-line-no">248</span><span id="line-248"></span>
+<span class="source-line-no">249</span><span id="line-249">    /**</span>
+<span class="source-line-no">250</span><span id="line-250">     * Checks if a module is a holder type.</span>
+<span class="source-line-no">251</span><span id="line-251">     *</span>
+<span class="source-line-no">252</span><span id="line-252">     * @param moduleName the module name</span>
+<span class="source-line-no">253</span><span id="line-253">     * @return true if the module is a holder, false otherwise</span>
+<span class="source-line-no">254</span><span id="line-254">     */</span>
+<span class="source-line-no">255</span><span id="line-255">    private static boolean isHolder(String moduleName) {</span>
+<span class="source-line-no">256</span><span id="line-256">        return moduleName.endsWith("Holder");</span>
+<span class="source-line-no">257</span><span id="line-257">    }</span>
+<span class="source-line-no">258</span><span id="line-258"></span>
+<span class="source-line-no">259</span><span id="line-259">    /**</span>
+<span class="source-line-no">260</span><span id="line-260">     * Processes a single check class file and extracts metadata.</span>
+<span class="source-line-no">261</span><span id="line-261">     *</span>
+<span class="source-line-no">262</span><span id="line-262">     * @param path the check class file</span>
+<span class="source-line-no">263</span><span id="line-263">     * @param infos map of results</span>
+<span class="source-line-no">264</span><span id="line-264">     * @param xmlHrefMap map of XML hrefs</span>
+<span class="source-line-no">265</span><span id="line-265">     * @param packageFilter optional package to filter by, null for all</span>
+<span class="source-line-no">266</span><span id="line-266">     * @throws IllegalArgumentException if macro execution fails</span>
+<span class="source-line-no">267</span><span id="line-267">     */</span>
+<span class="source-line-no">268</span><span id="line-268">    private static void processCheckFile(Path path, Map&lt;String, CheckInfo&gt; infos,</span>
+<span class="source-line-no">269</span><span id="line-269">                                         Map&lt;String, String&gt; xmlHrefMap,</span>
+<span class="source-line-no">270</span><span id="line-270">                                         String packageFilter) {</span>
+<span class="source-line-no">271</span><span id="line-271">        try {</span>
+<span class="source-line-no">272</span><span id="line-272">            final String moduleName = CommonUtil.getFileNameWithoutExtension(path.toString());</span>
+<span class="source-line-no">273</span><span id="line-273">            SiteUtil.processModule(moduleName, path);</span>
+<span class="source-line-no">274</span><span id="line-274">            if (!JavadocScraperResultUtil.getModuleSinceVersion().isEmpty()) {</span>
+<span class="source-line-no">275</span><span id="line-275">                final String description = JavadocScraperResultUtil.getModuleDescription();</span>
+<span class="source-line-no">276</span><span id="line-276">                if (!description.isEmpty()) {</span>
+<span class="source-line-no">277</span><span id="line-277"></span>
+<span class="source-line-no">278</span><span id="line-278">                    final String[] moduleInfo = determineModuleInfo(path, moduleName);</span>
+<span class="source-line-no">279</span><span id="line-279">                    final String packageName = moduleInfo[1];</span>
+<span class="source-line-no">280</span><span id="line-280">                    if (packageFilter == null || packageFilter.equals(packageName)) {</span>
+<span class="source-line-no">281</span><span id="line-281">                        final String sanitizedDescription = sanitizeAnchorUrls(description);</span>
+<span class="source-line-no">282</span><span id="line-282"></span>
+<span class="source-line-no">283</span><span id="line-283">                        final String simpleName = moduleInfo[0];</span>
+<span class="source-line-no">284</span><span id="line-284">                        final String summary = sanitizeAndFirstSentence(sanitizedDescription);</span>
+<span class="source-line-no">285</span><span id="line-285">                        final String href = resolveHref(xmlHrefMap, packageName, simpleName,</span>
+<span class="source-line-no">286</span><span id="line-286">                                packageFilter);</span>
+<span class="source-line-no">287</span><span id="line-287">                        infos.put(simpleName, new CheckInfo(simpleName, href, summary));</span>
+<span class="source-line-no">288</span><span id="line-288">                    }</span>
+<span class="source-line-no">289</span><span id="line-289">                }</span>
+<span class="source-line-no">290</span><span id="line-290">            }</span>
+<span class="source-line-no">291</span><span id="line-291"></span>
+<span class="source-line-no">292</span><span id="line-292">        }</span>
+<span class="source-line-no">293</span><span id="line-293">        catch (MacroExecutionException exceptionThrown) {</span>
+<span class="source-line-no">294</span><span id="line-294">            throw new IllegalArgumentException(exceptionThrown);</span>
+<span class="source-line-no">295</span><span id="line-295">        }</span>
+<span class="source-line-no">296</span><span id="line-296">    }</span>
+<span class="source-line-no">297</span><span id="line-297"></span>
+<span class="source-line-no">298</span><span id="line-298">    /**</span>
+<span class="source-line-no">299</span><span id="line-299">     * Determines the simple name and package name for a check module.</span>
+<span class="source-line-no">300</span><span id="line-300">     *</span>
+<span class="source-line-no">301</span><span id="line-301">     * @param path the check class file</span>
+<span class="source-line-no">302</span><span id="line-302">     * @param moduleName the full module name</span>
+<span class="source-line-no">303</span><span id="line-303">     * @return array with [simpleName, packageName]</span>
+<span class="source-line-no">304</span><span id="line-304">     */</span>
+<span class="source-line-no">305</span><span id="line-305">    private static String[] determineModuleInfo(Path path, String moduleName) {</span>
+<span class="source-line-no">306</span><span id="line-306">        String packageName = extractCategoryFromJavaPath(path);</span>
+<span class="source-line-no">307</span><span id="line-307"></span>
+<span class="source-line-no">308</span><span id="line-308">        if ("indentation".equals(packageName)) {</span>
+<span class="source-line-no">309</span><span id="line-309">            packageName = MISC_PACKAGE;</span>
 <span class="source-line-no">310</span><span id="line-310">        }</span>
-<span class="source-line-no">311</span><span id="line-311">        else {</span>
-<span class="source-line-no">312</span><span id="line-312">            simpleName = moduleName.substring(0, moduleName.length() - "Check".length());</span>
+<span class="source-line-no">311</span><span id="line-311">        if (isHolder(moduleName)) {</span>
+<span class="source-line-no">312</span><span id="line-312">            packageName = ANNOTATION_PACKAGE;</span>
 <span class="source-line-no">313</span><span id="line-313">        }</span>
-<span class="source-line-no">314</span><span id="line-314"></span>
-<span class="source-line-no">315</span><span id="line-315">        return new String[] {simpleName, packageName};</span>
-<span class="source-line-no">316</span><span id="line-316">    }</span>
-<span class="source-line-no">317</span><span id="line-317"></span>
-<span class="source-line-no">318</span><span id="line-318">    /**</span>
-<span class="source-line-no">319</span><span id="line-319">     * Builds HTML rows for both normal and holder check modules.</span>
-<span class="source-line-no">320</span><span id="line-320">     *</span>
-<span class="source-line-no">321</span><span id="line-321">     * @param infos map of collected module info</span>
-<span class="source-line-no">322</span><span id="line-322">     * @param normalRows builder for normal check rows</span>
-<span class="source-line-no">323</span><span id="line-323">     * @param holderRows builder for holder check rows</span>
-<span class="source-line-no">324</span><span id="line-324">     */</span>
-<span class="source-line-no">325</span><span id="line-325">    private static void buildTableRows(Map&lt;String, CheckInfo&gt; infos,</span>
-<span class="source-line-no">326</span><span id="line-326">                                       StringBuilder normalRows,</span>
-<span class="source-line-no">327</span><span id="line-327">                                       StringBuilder holderRows) {</span>
-<span class="source-line-no">328</span><span id="line-328">        for (CheckInfo info : infos.values()) {</span>
-<span class="source-line-no">329</span><span id="line-329">            final String row = buildTableRow(info);</span>
-<span class="source-line-no">330</span><span id="line-330">            if (isHolder(info.simpleName())) {</span>
-<span class="source-line-no">331</span><span id="line-331">                holderRows.append(row);</span>
-<span class="source-line-no">332</span><span id="line-332">            }</span>
-<span class="source-line-no">333</span><span id="line-333">            else {</span>
-<span class="source-line-no">334</span><span id="line-334">                normalRows.append(row);</span>
-<span class="source-line-no">335</span><span id="line-335">            }</span>
-<span class="source-line-no">336</span><span id="line-336">        }</span>
-<span class="source-line-no">337</span><span id="line-337">        removeLeadingNewline(normalRows);</span>
-<span class="source-line-no">338</span><span id="line-338">        removeLeadingNewline(holderRows);</span>
-<span class="source-line-no">339</span><span id="line-339">    }</span>
-<span class="source-line-no">340</span><span id="line-340"></span>
-<span class="source-line-no">341</span><span id="line-341">    /**</span>
-<span class="source-line-no">342</span><span id="line-342">     * Builds a single table row for a check module.</span>
-<span class="source-line-no">343</span><span id="line-343">     *</span>
-<span class="source-line-no">344</span><span id="line-344">     * @param info check module information</span>
-<span class="source-line-no">345</span><span id="line-345">     * @return the HTML table row as a string</span>
-<span class="source-line-no">346</span><span id="line-346">     */</span>
-<span class="source-line-no">347</span><span id="line-347">    private static String buildTableRow(CheckInfo info) {</span>
-<span class="source-line-no">348</span><span id="line-348">        final String ind10 = ModuleJavadocParsingUtil.INDENT_LEVEL_10;</span>
-<span class="source-line-no">349</span><span id="line-349">        final String ind12 = ModuleJavadocParsingUtil.INDENT_LEVEL_12;</span>
-<span class="source-line-no">350</span><span id="line-350">        final String ind14 = ModuleJavadocParsingUtil.INDENT_LEVEL_14;</span>
-<span class="source-line-no">351</span><span id="line-351">        final String ind16 = ModuleJavadocParsingUtil.INDENT_LEVEL_16;</span>
-<span class="source-line-no">352</span><span id="line-352"></span>
-<span class="source-line-no">353</span><span id="line-353">        final String cleanSummary = sanitizeAnchorUrls(info.summary());</span>
-<span class="source-line-no">354</span><span id="line-354"></span>
-<span class="source-line-no">355</span><span id="line-355">        return ind10 + "&lt;tr&gt;"</span>
-<span class="source-line-no">356</span><span id="line-356">                + ind12 + TD_TAG</span>
-<span class="source-line-no">357</span><span id="line-357">                + ind14</span>
-<span class="source-line-no">358</span><span id="line-358">                + "&lt;a href=\""</span>
-<span class="source-line-no">359</span><span id="line-359">                + info.link()</span>
-<span class="source-line-no">360</span><span id="line-360">                + "\"&gt;"</span>
-<span class="source-line-no">361</span><span id="line-361">                + ind16 + info.simpleName()</span>
-<span class="source-line-no">362</span><span id="line-362">                + ind14 + CLOSING_ANCHOR_TAG</span>
-<span class="source-line-no">363</span><span id="line-363">                + ind12 + TD_CLOSE_TAG</span>
-<span class="source-line-no">364</span><span id="line-364">                + ind12 + TD_TAG</span>
-<span class="source-line-no">365</span><span id="line-365">                + ind14 + wrapSummary(cleanSummary)</span>
-<span class="source-line-no">366</span><span id="line-366">                + ind12 + TD_CLOSE_TAG</span>
-<span class="source-line-no">367</span><span id="line-367">                + ind10 + "&lt;/tr&gt;";</span>
-<span class="source-line-no">368</span><span id="line-368">    }</span>
-<span class="source-line-no">369</span><span id="line-369"></span>
-<span class="source-line-no">370</span><span id="line-370">    /**</span>
-<span class="source-line-no">371</span><span id="line-371">     * Removes leading newline characters from a StringBuilder.</span>
-<span class="source-line-no">372</span><span id="line-372">     *</span>
-<span class="source-line-no">373</span><span id="line-373">     * @param builder the StringBuilder to process</span>
-<span class="source-line-no">374</span><span id="line-374">     */</span>
-<span class="source-line-no">375</span><span id="line-375">    private static void removeLeadingNewline(StringBuilder builder) {</span>
-<span class="source-line-no">376</span><span id="line-376">        while (!builder.isEmpty() &amp;&amp; Character.isWhitespace(builder.charAt(0))) {</span>
-<span class="source-line-no">377</span><span id="line-377">            builder.delete(0, 1);</span>
-<span class="source-line-no">378</span><span id="line-378">        }</span>
-<span class="source-line-no">379</span><span id="line-379">    }</span>
-<span class="source-line-no">380</span><span id="line-380"></span>
-<span class="source-line-no">381</span><span id="line-381">    /**</span>
-<span class="source-line-no">382</span><span id="line-382">     * Appends the Holder Checks HTML section.</span>
-<span class="source-line-no">383</span><span id="line-383">     *</span>
-<span class="source-line-no">384</span><span id="line-384">     * @param sink the output sink</span>
-<span class="source-line-no">385</span><span id="line-385">     * @param holderRows the holder rows content</span>
-<span class="source-line-no">386</span><span id="line-386">     */</span>
-<span class="source-line-no">387</span><span id="line-387">    private static void appendHolderSection(Sink sink, StringBuilder holderRows) {</span>
-<span class="source-line-no">388</span><span id="line-388">        final String holderSection = ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">389</span><span id="line-389">                + TABLE_CLOSE_TAG</span>
-<span class="source-line-no">390</span><span id="line-390">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
-<span class="source-line-no">391</span><span id="line-391">                + DIV_CLOSE_TAG</span>
-<span class="source-line-no">392</span><span id="line-392">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
-<span class="source-line-no">393</span><span id="line-393">                + SECTION_CLOSE_TAG</span>
-<span class="source-line-no">394</span><span id="line-394">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
-<span class="source-line-no">395</span><span id="line-395">                + "&lt;section name=\"Holder Checks\"&gt;"</span>
-<span class="source-line-no">396</span><span id="line-396">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
-<span class="source-line-no">397</span><span id="line-397">                + "&lt;p&gt;"</span>
-<span class="source-line-no">398</span><span id="line-398">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">399</span><span id="line-399">                + "These checks aren't normal checks and are usually"</span>
-<span class="source-line-no">400</span><span id="line-400">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">401</span><span id="line-401">                + "associated with a specialized filter to gather"</span>
-<span class="source-line-no">402</span><span id="line-402">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">403</span><span id="line-403">                + "information the filter can't get on its own."</span>
-<span class="source-line-no">404</span><span id="line-404">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
-<span class="source-line-no">405</span><span id="line-405">                + "&lt;/p&gt;"</span>
-<span class="source-line-no">406</span><span id="line-406">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
-<span class="source-line-no">407</span><span id="line-407">                + DIV_WRAPPER_TAG</span>
-<span class="source-line-no">408</span><span id="line-408">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">409</span><span id="line-409">                + TABLE_OPEN_TAG</span>
-<span class="source-line-no">410</span><span id="line-410">                + ModuleJavadocParsingUtil.INDENT_LEVEL_10</span>
-<span class="source-line-no">411</span><span id="line-411">                + holderRows;</span>
-<span class="source-line-no">412</span><span id="line-412">        sink.rawText(holderSection);</span>
-<span class="source-line-no">413</span><span id="line-413">    }</span>
-<span class="source-line-no">414</span><span id="line-414"></span>
-<span class="source-line-no">415</span><span id="line-415">    /**</span>
-<span class="source-line-no">416</span><span id="line-416">     * Appends the filtered Holder Checks section for package views.</span>
-<span class="source-line-no">417</span><span id="line-417">     *</span>
-<span class="source-line-no">418</span><span id="line-418">     * @param sink the output sink</span>
-<span class="source-line-no">419</span><span id="line-419">     * @param holderRows the holder rows content</span>
-<span class="source-line-no">420</span><span id="line-420">     * @param packageName the package name</span>
-<span class="source-line-no">421</span><span id="line-421">     */</span>
-<span class="source-line-no">422</span><span id="line-422">    private static void appendFilteredHolderSection(Sink sink, StringBuilder holderRows,</span>
-<span class="source-line-no">423</span><span id="line-423">                                                    String packageName) {</span>
-<span class="source-line-no">424</span><span id="line-424">        final String packageTitle = getPackageDisplayName(packageName);</span>
-<span class="source-line-no">425</span><span id="line-425">        final String holderSection = ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">426</span><span id="line-426">                + TABLE_CLOSE_TAG</span>
-<span class="source-line-no">427</span><span id="line-427">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
-<span class="source-line-no">428</span><span id="line-428">                + DIV_CLOSE_TAG</span>
-<span class="source-line-no">429</span><span id="line-429">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
-<span class="source-line-no">430</span><span id="line-430">                + SECTION_CLOSE_TAG</span>
-<span class="source-line-no">431</span><span id="line-431">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
-<span class="source-line-no">432</span><span id="line-432">                + "&lt;section name=\"" + packageTitle + " Holder Checks\"&gt;"</span>
-<span class="source-line-no">433</span><span id="line-433">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
-<span class="source-line-no">434</span><span id="line-434">                + DIV_WRAPPER_TAG</span>
-<span class="source-line-no">435</span><span id="line-435">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
-<span class="source-line-no">436</span><span id="line-436">                + TABLE_OPEN_TAG</span>
-<span class="source-line-no">437</span><span id="line-437">                + ModuleJavadocParsingUtil.INDENT_LEVEL_10</span>
-<span class="source-line-no">438</span><span id="line-438">                + holderRows;</span>
-<span class="source-line-no">439</span><span id="line-439">        sink.rawText(holderSection);</span>
-<span class="source-line-no">440</span><span id="line-440">    }</span>
-<span class="source-line-no">441</span><span id="line-441"></span>
-<span class="source-line-no">442</span><span id="line-442">    /**</span>
-<span class="source-line-no">443</span><span id="line-443">     * Get display name for package (capitalize first letter).</span>
-<span class="source-line-no">444</span><span id="line-444">     *</span>
-<span class="source-line-no">445</span><span id="line-445">     * @param packageName the package name</span>
-<span class="source-line-no">446</span><span id="line-446">     * @return the capitalized package name</span>
-<span class="source-line-no">447</span><span id="line-447">     */</span>
-<span class="source-line-no">448</span><span id="line-448">    private static String getPackageDisplayName(String packageName) {</span>
-<span class="source-line-no">449</span><span id="line-449">        final String result;</span>
-<span class="source-line-no">450</span><span id="line-450">        if (packageName == null || packageName.isEmpty()) {</span>
-<span class="source-line-no">451</span><span id="line-451">            result = packageName;</span>
-<span class="source-line-no">452</span><span id="line-452">        }</span>
-<span class="source-line-no">453</span><span id="line-453">        else {</span>
-<span class="source-line-no">454</span><span id="line-454">            result = packageName.substring(0, 1).toUpperCase(Locale.ENGLISH)</span>
-<span class="source-line-no">455</span><span id="line-455">                    + packageName.substring(1);</span>
-<span class="source-line-no">456</span><span id="line-456">        }</span>
-<span class="source-line-no">457</span><span id="line-457">        return result;</span>
-<span class="source-line-no">458</span><span id="line-458">    }</span>
-<span class="source-line-no">459</span><span id="line-459"></span>
-<span class="source-line-no">460</span><span id="line-460">    /**</span>
-<span class="source-line-no">461</span><span id="line-461">     * Builds map of XML file names to HTML documentation paths.</span>
-<span class="source-line-no">462</span><span id="line-462">     *</span>
-<span class="source-line-no">463</span><span id="line-463">     * @return map of lowercase check names to hrefs</span>
-<span class="source-line-no">464</span><span id="line-464">     */</span>
-<span class="source-line-no">465</span><span id="line-465">    private static Map&lt;String, String&gt; buildXmlHtmlMap() {</span>
-<span class="source-line-no">466</span><span id="line-466">        final Map&lt;String, String&gt; map = new TreeMap&lt;&gt;();</span>
-<span class="source-line-no">467</span><span id="line-467">        if (Files.exists(SITE_CHECKS_ROOT)) {</span>
-<span class="source-line-no">468</span><span id="line-468">            try {</span>
-<span class="source-line-no">469</span><span id="line-469">                final List&lt;Path&gt; xmlFiles = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">470</span><span id="line-470">                Files.walkFileTree(SITE_CHECKS_ROOT, new SimpleFileVisitor&lt;&gt;() {</span>
-<span class="source-line-no">471</span><span id="line-471">                    @Override</span>
-<span class="source-line-no">472</span><span id="line-472">                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {</span>
-<span class="source-line-no">473</span><span id="line-473">                        if (isValidXmlFile(file)) {</span>
-<span class="source-line-no">474</span><span id="line-474">                            xmlFiles.add(file);</span>
-<span class="source-line-no">475</span><span id="line-475">                        }</span>
-<span class="source-line-no">476</span><span id="line-476">                        return FileVisitResult.CONTINUE;</span>
-<span class="source-line-no">477</span><span id="line-477">                    }</span>
-<span class="source-line-no">478</span><span id="line-478">                });</span>
-<span class="source-line-no">479</span><span id="line-479"></span>
-<span class="source-line-no">480</span><span id="line-480">                xmlFiles.forEach(path -&gt; addXmlHtmlMapping(path, map));</span>
-<span class="source-line-no">481</span><span id="line-481">            }</span>
-<span class="source-line-no">482</span><span id="line-482">            catch (IOException ignored) {</span>
-<span class="source-line-no">483</span><span id="line-483">                // ignore</span>
-<span class="source-line-no">484</span><span id="line-484">            }</span>
-<span class="source-line-no">485</span><span id="line-485">        }</span>
-<span class="source-line-no">486</span><span id="line-486">        return map;</span>
-<span class="source-line-no">487</span><span id="line-487">    }</span>
-<span class="source-line-no">488</span><span id="line-488"></span>
-<span class="source-line-no">489</span><span id="line-489">    /**</span>
-<span class="source-line-no">490</span><span id="line-490">     * Checks if a path is a valid XML file for processing.</span>
-<span class="source-line-no">491</span><span id="line-491">     *</span>
-<span class="source-line-no">492</span><span id="line-492">     * @param path the path to check</span>
-<span class="source-line-no">493</span><span id="line-493">     * @return true if the path is a valid XML file, false otherwise</span>
-<span class="source-line-no">494</span><span id="line-494">     */</span>
-<span class="source-line-no">495</span><span id="line-495">    private static boolean isValidXmlFile(Path path) {</span>
-<span class="source-line-no">496</span><span id="line-496">        final Path fileName = path.getFileName();</span>
-<span class="source-line-no">497</span><span id="line-497">        return fileName != null</span>
-<span class="source-line-no">498</span><span id="line-498">                &amp;&amp; !("index" + XML_EXTENSION).equalsIgnoreCase(fileName.toString())</span>
-<span class="source-line-no">499</span><span id="line-499">                &amp;&amp; path.toString().endsWith(XML_EXTENSION)</span>
-<span class="source-line-no">500</span><span id="line-500">                &amp;&amp; Files.isRegularFile(path);</span>
-<span class="source-line-no">501</span><span id="line-501">    }</span>
-<span class="source-line-no">502</span><span id="line-502"></span>
-<span class="source-line-no">503</span><span id="line-503">    /**</span>
-<span class="source-line-no">504</span><span id="line-504">     * Adds XML-to-HTML mapping entry to map.</span>
-<span class="source-line-no">505</span><span id="line-505">     *</span>
-<span class="source-line-no">506</span><span id="line-506">     * @param path the XML file path</span>
-<span class="source-line-no">507</span><span id="line-507">     * @param map the mapping to update</span>
-<span class="source-line-no">508</span><span id="line-508">     */</span>
-<span class="source-line-no">509</span><span id="line-509">    private static void addXmlHtmlMapping(Path path, Map&lt;String, String&gt; map) {</span>
-<span class="source-line-no">510</span><span id="line-510">        final Path fileName = path.getFileName();</span>
-<span class="source-line-no">511</span><span id="line-511">        if (fileName != null) {</span>
-<span class="source-line-no">512</span><span id="line-512">            final String fileNameString = fileName.toString();</span>
-<span class="source-line-no">513</span><span id="line-513">            final int extensionLength = 4;</span>
-<span class="source-line-no">514</span><span id="line-514">            final String base = fileNameString.substring(0,</span>
-<span class="source-line-no">515</span><span id="line-515">                            fileNameString.length() - extensionLength)</span>
-<span class="source-line-no">516</span><span id="line-516">                    .toLowerCase(Locale.ROOT);</span>
-<span class="source-line-no">517</span><span id="line-517">            final Path relativePath = SITE_CHECKS_ROOT.relativize(path);</span>
-<span class="source-line-no">518</span><span id="line-518">            final String relativePathString = relativePath.toString();</span>
-<span class="source-line-no">519</span><span id="line-519">            final String rel = relativePathString</span>
-<span class="source-line-no">520</span><span id="line-520">                    .replace('\\', '/')</span>
-<span class="source-line-no">521</span><span id="line-521">                    .replace(XML_EXTENSION, HTML_EXTENSION);</span>
-<span class="source-line-no">522</span><span id="line-522">            map.put(base, CHECKS + "/" + rel);</span>
-<span class="source-line-no">523</span><span id="line-523">        }</span>
-<span class="source-line-no">524</span><span id="line-524">    }</span>
-<span class="source-line-no">525</span><span id="line-525"></span>
-<span class="source-line-no">526</span><span id="line-526">    /**</span>
-<span class="source-line-no">527</span><span id="line-527">     * Resolves the href for a given check module.</span>
-<span class="source-line-no">528</span><span id="line-528">     * When packageFilter is null, returns full path: checks/category/filename.html#CheckName</span>
-<span class="source-line-no">529</span><span id="line-529">     * When packageFilter is set, returns relative path: filename.html#CheckName</span>
-<span class="source-line-no">530</span><span id="line-530">     *</span>
-<span class="source-line-no">531</span><span id="line-531">     * @param xmlMap map of XML file names to HTML paths</span>
-<span class="source-line-no">532</span><span id="line-532">     * @param category the category of the check</span>
-<span class="source-line-no">533</span><span id="line-533">     * @param simpleName simple name of the check</span>
-<span class="source-line-no">534</span><span id="line-534">     * @param packageFilter optional package filter, null for all checks</span>
-<span class="source-line-no">535</span><span id="line-535">     * @return the resolved href for the check</span>
-<span class="source-line-no">536</span><span id="line-536">     */</span>
-<span class="source-line-no">537</span><span id="line-537">    private static String resolveHref(Map&lt;String, String&gt; xmlMap, String category,</span>
-<span class="source-line-no">538</span><span id="line-538">                                      String simpleName, @Nullable String packageFilter) {</span>
-<span class="source-line-no">539</span><span id="line-539">        final String lower = simpleName.toLowerCase(Locale.ROOT);</span>
-<span class="source-line-no">540</span><span id="line-540">        final String href = xmlMap.get(lower);</span>
-<span class="source-line-no">541</span><span id="line-541">        final String result;</span>
-<span class="source-line-no">542</span><span id="line-542"></span>
-<span class="source-line-no">543</span><span id="line-543">        if (href != null) {</span>
-<span class="source-line-no">544</span><span id="line-544">            if (packageFilter == null) {</span>
-<span class="source-line-no">545</span><span id="line-545">                result = href + ANCHOR_SEPARATOR + simpleName;</span>
-<span class="source-line-no">546</span><span id="line-546">            }</span>
-<span class="source-line-no">547</span><span id="line-547">            else {</span>
-<span class="source-line-no">548</span><span id="line-548">                final int lastSlash = href.lastIndexOf('/');</span>
-<span class="source-line-no">549</span><span id="line-549">                final String filename;</span>
-<span class="source-line-no">550</span><span id="line-550">                if (lastSlash &gt;= 0) {</span>
-<span class="source-line-no">551</span><span id="line-551">                    filename = href.substring(lastSlash + 1);</span>
-<span class="source-line-no">552</span><span id="line-552">                }</span>
-<span class="source-line-no">553</span><span id="line-553">                else {</span>
-<span class="source-line-no">554</span><span id="line-554">                    filename = href;</span>
-<span class="source-line-no">555</span><span id="line-555">                }</span>
-<span class="source-line-no">556</span><span id="line-556">                result = filename + ANCHOR_SEPARATOR + simpleName;</span>
-<span class="source-line-no">557</span><span id="line-557">            }</span>
-<span class="source-line-no">558</span><span id="line-558">        }</span>
-<span class="source-line-no">559</span><span id="line-559">        else {</span>
-<span class="source-line-no">560</span><span id="line-560">            if (packageFilter == null) {</span>
-<span class="source-line-no">561</span><span id="line-561">                result = String.format(Locale.ROOT, "%s/%s/%s.html%s%s",</span>
-<span class="source-line-no">562</span><span id="line-562">                        CHECKS, category, lower, ANCHOR_SEPARATOR, simpleName);</span>
-<span class="source-line-no">563</span><span id="line-563">            }</span>
-<span class="source-line-no">564</span><span id="line-564">            else {</span>
-<span class="source-line-no">565</span><span id="line-565">                result = String.format(Locale.ROOT, "%s.html%s%s",</span>
-<span class="source-line-no">566</span><span id="line-566">                        lower, ANCHOR_SEPARATOR, simpleName);</span>
-<span class="source-line-no">567</span><span id="line-567">            }</span>
-<span class="source-line-no">568</span><span id="line-568">        }</span>
-<span class="source-line-no">569</span><span id="line-569">        return result;</span>
-<span class="source-line-no">570</span><span id="line-570">    }</span>
-<span class="source-line-no">571</span><span id="line-571"></span>
-<span class="source-line-no">572</span><span id="line-572">    /**</span>
-<span class="source-line-no">573</span><span id="line-573">     * Extracts category path from a Java file path.</span>
-<span class="source-line-no">574</span><span id="line-574">     *</span>
-<span class="source-line-no">575</span><span id="line-575">     * @param javaPath the Java source file path</span>
-<span class="source-line-no">576</span><span id="line-576">     * @return the category path extracted from the Java path</span>
-<span class="source-line-no">577</span><span id="line-577">     */</span>
-<span class="source-line-no">578</span><span id="line-578">    private static String extractCategoryFromJavaPath(Path javaPath) {</span>
-<span class="source-line-no">579</span><span id="line-579">        final Path rel = JAVA_CHECKS_ROOT.relativize(javaPath);</span>
-<span class="source-line-no">580</span><span id="line-580">        final Path parent = rel.getParent();</span>
-<span class="source-line-no">581</span><span id="line-581">        final String result;</span>
-<span class="source-line-no">582</span><span id="line-582">        if (parent == null) {</span>
-<span class="source-line-no">583</span><span id="line-583">            result = MISC_PACKAGE;</span>
-<span class="source-line-no">584</span><span id="line-584">        }</span>
-<span class="source-line-no">585</span><span id="line-585">        else {</span>
-<span class="source-line-no">586</span><span id="line-586">            result = parent.toString().replace('\\', '/');</span>
-<span class="source-line-no">587</span><span id="line-587">        }</span>
-<span class="source-line-no">588</span><span id="line-588">        return result;</span>
-<span class="source-line-no">589</span><span id="line-589">    }</span>
-<span class="source-line-no">590</span><span id="line-590"></span>
-<span class="source-line-no">591</span><span id="line-591">    /**</span>
-<span class="source-line-no">592</span><span id="line-592">     * Sanitizes URLs within anchor tags by removing whitespace from href attributes.</span>
-<span class="source-line-no">593</span><span id="line-593">     *</span>
-<span class="source-line-no">594</span><span id="line-594">     * @param html the HTML string containing anchor tags</span>
-<span class="source-line-no">595</span><span id="line-595">     * @return the HTML with sanitized URLs</span>
-<span class="source-line-no">596</span><span id="line-596">     */</span>
-<span class="source-line-no">597</span><span id="line-597">    private static String sanitizeAnchorUrls(String html) {</span>
-<span class="source-line-no">598</span><span id="line-598">        final String result;</span>
-<span class="source-line-no">599</span><span id="line-599">        if (html == null || html.isEmpty()) {</span>
-<span class="source-line-no">600</span><span id="line-600">            result = html;</span>
-<span class="source-line-no">601</span><span id="line-601">        }</span>
-<span class="source-line-no">602</span><span id="line-602">        else {</span>
-<span class="source-line-no">603</span><span id="line-603">            final Matcher matcher = HREF_PATTERN.matcher(html);</span>
-<span class="source-line-no">604</span><span id="line-604">            final StringBuilder buffer = new StringBuilder(html.length());</span>
-<span class="source-line-no">605</span><span id="line-605"></span>
-<span class="source-line-no">606</span><span id="line-606">            while (matcher.find()) {</span>
-<span class="source-line-no">607</span><span id="line-607">                final String originalUrl = matcher.group(1);</span>
-<span class="source-line-no">608</span><span id="line-608">                final String cleanedUrl = SPACE_PATTERN.matcher(originalUrl).replaceAll("");</span>
-<span class="source-line-no">609</span><span id="line-609">                final String replacement = "href=\""</span>
-<span class="source-line-no">610</span><span id="line-610">                        + Matcher.quoteReplacement(cleanedUrl) + "\"";</span>
-<span class="source-line-no">611</span><span id="line-611">                matcher.appendReplacement(buffer, replacement);</span>
-<span class="source-line-no">612</span><span id="line-612">            }</span>
-<span class="source-line-no">613</span><span id="line-613">            matcher.appendTail(buffer);</span>
-<span class="source-line-no">614</span><span id="line-614"></span>
-<span class="source-line-no">615</span><span id="line-615">            result = buffer.toString();</span>
-<span class="source-line-no">616</span><span id="line-616">        }</span>
-<span class="source-line-no">617</span><span id="line-617">        return result;</span>
-<span class="source-line-no">618</span><span id="line-618">    }</span>
-<span class="source-line-no">619</span><span id="line-619"></span>
-<span class="source-line-no">620</span><span id="line-620">    /**</span>
-<span class="source-line-no">621</span><span id="line-621">     * Sanitizes HTML and extracts first sentence.</span>
-<span class="source-line-no">622</span><span id="line-622">     * Preserves anchor tags while removing other HTML formatting.</span>
-<span class="source-line-no">623</span><span id="line-623">     * Also cleans whitespace from URLs in href attributes.</span>
-<span class="source-line-no">624</span><span id="line-624">     *</span>
-<span class="source-line-no">625</span><span id="line-625">     * @param html the HTML string to process</span>
-<span class="source-line-no">626</span><span id="line-626">     * @return the sanitized first sentence</span>
-<span class="source-line-no">627</span><span id="line-627">     */</span>
-<span class="source-line-no">628</span><span id="line-628">    private static String sanitizeAndFirstSentence(String html) {</span>
-<span class="source-line-no">629</span><span id="line-629">        final String result;</span>
-<span class="source-line-no">630</span><span id="line-630">        if (html == null || html.isEmpty()) {</span>
-<span class="source-line-no">631</span><span id="line-631">            result = "";</span>
-<span class="source-line-no">632</span><span id="line-632">        }</span>
-<span class="source-line-no">633</span><span id="line-633">        else {</span>
-<span class="source-line-no">634</span><span id="line-634">            String cleaned = sanitizeAnchorUrls(html);</span>
-<span class="source-line-no">635</span><span id="line-635">            cleaned = TAG_PATTERN.matcher(cleaned).replaceAll("");</span>
-<span class="source-line-no">636</span><span id="line-636">            cleaned = SPACE_PATTERN.matcher(cleaned).replaceAll(" ").trim();</span>
-<span class="source-line-no">637</span><span id="line-637">            cleaned = AMP_PATTERN.matcher(cleaned).replaceAll("&amp;amp;");</span>
-<span class="source-line-no">638</span><span id="line-638">            cleaned = CODE_SPACE_PATTERN.matcher(cleaned).replaceAll(FIRST_CAPTURE_GROUP);</span>
-<span class="source-line-no">639</span><span id="line-639">            result = extractFirstSentence(cleaned);</span>
-<span class="source-line-no">640</span><span id="line-640">        }</span>
-<span class="source-line-no">641</span><span id="line-641">        return result;</span>
-<span class="source-line-no">642</span><span id="line-642">    }</span>
-<span class="source-line-no">643</span><span id="line-643"></span>
-<span class="source-line-no">644</span><span id="line-644">    /**</span>
-<span class="source-line-no">645</span><span id="line-645">     * Extracts first sentence from plain text.</span>
-<span class="source-line-no">646</span><span id="line-646">     *</span>
-<span class="source-line-no">647</span><span id="line-647">     * @param text the text to process</span>
-<span class="source-line-no">648</span><span id="line-648">     * @return the first sentence extracted from the text</span>
-<span class="source-line-no">649</span><span id="line-649">     */</span>
-<span class="source-line-no">650</span><span id="line-650">    private static String extractFirstSentence(String text) {</span>
-<span class="source-line-no">651</span><span id="line-651">        String result = "";</span>
-<span class="source-line-no">652</span><span id="line-652">        if (text != null &amp;&amp; !text.isEmpty()) {</span>
-<span class="source-line-no">653</span><span id="line-653">            int end = -1;</span>
-<span class="source-line-no">654</span><span id="line-654">            for (int index = 0; index &lt; text.length(); index++) {</span>
-<span class="source-line-no">655</span><span id="line-655">                if (text.charAt(index) == '.'</span>
-<span class="source-line-no">656</span><span id="line-656">                        &amp;&amp; (index == text.length() - 1</span>
-<span class="source-line-no">657</span><span id="line-657">                        || Character.isWhitespace(text.charAt(index + 1))</span>
-<span class="source-line-no">658</span><span id="line-658">                        || text.charAt(index + 1) == '&lt;')) {</span>
-<span class="source-line-no">659</span><span id="line-659">                    end = index;</span>
-<span class="source-line-no">660</span><span id="line-660">                    break;</span>
-<span class="source-line-no">661</span><span id="line-661">                }</span>
-<span class="source-line-no">662</span><span id="line-662">            }</span>
-<span class="source-line-no">663</span><span id="line-663">            if (end == -1) {</span>
-<span class="source-line-no">664</span><span id="line-664">                result = text.trim();</span>
-<span class="source-line-no">665</span><span id="line-665">            }</span>
-<span class="source-line-no">666</span><span id="line-666">            else {</span>
-<span class="source-line-no">667</span><span id="line-667">                result = text.substring(0, end + 1).trim();</span>
-<span class="source-line-no">668</span><span id="line-668">            }</span>
-<span class="source-line-no">669</span><span id="line-669">        }</span>
-<span class="source-line-no">670</span><span id="line-670">        return result;</span>
-<span class="source-line-no">671</span><span id="line-671">    }</span>
-<span class="source-line-no">672</span><span id="line-672"></span>
-<span class="source-line-no">673</span><span id="line-673">    /**</span>
-<span class="source-line-no">674</span><span id="line-674">     * Wraps long summaries to avoid exceeding line width.</span>
-<span class="source-line-no">675</span><span id="line-675">     * Preserves URLs in anchor tags by breaking after the opening tag's closing bracket.</span>
-<span class="source-line-no">676</span><span id="line-676">     *</span>
-<span class="source-line-no">677</span><span id="line-677">     * @param text the text to wrap</span>
-<span class="source-line-no">678</span><span id="line-678">     * @return the wrapped text</span>
-<span class="source-line-no">679</span><span id="line-679">     */</span>
-<span class="source-line-no">680</span><span id="line-680">    private static String wrapSummary(String text) {</span>
-<span class="source-line-no">681</span><span id="line-681">        String wrapped = "";</span>
-<span class="source-line-no">682</span><span id="line-682"></span>
-<span class="source-line-no">683</span><span id="line-683">        if (text != null &amp;&amp; !text.isEmpty()) {</span>
-<span class="source-line-no">684</span><span id="line-684">            final String sanitized = sanitizeAnchorUrls(text);</span>
-<span class="source-line-no">685</span><span id="line-685"></span>
-<span class="source-line-no">686</span><span id="line-686">            final String indent = ModuleJavadocParsingUtil.INDENT_LEVEL_14;</span>
-<span class="source-line-no">687</span><span id="line-687">            final String clean = sanitized.trim();</span>
-<span class="source-line-no">688</span><span id="line-688"></span>
-<span class="source-line-no">689</span><span id="line-689">            final StringBuilder result = new StringBuilder(CAPACITY);</span>
-<span class="source-line-no">690</span><span id="line-690">            int cleanIndex = 0;</span>
-<span class="source-line-no">691</span><span id="line-691">            final int cleanLen = clean.length();</span>
+<span class="source-line-no">314</span><span id="line-314">        final String simpleName;</span>
+<span class="source-line-no">315</span><span id="line-315">        if (isHolder(moduleName)) {</span>
+<span class="source-line-no">316</span><span id="line-316">            simpleName = moduleName;</span>
+<span class="source-line-no">317</span><span id="line-317">        }</span>
+<span class="source-line-no">318</span><span id="line-318">        else {</span>
+<span class="source-line-no">319</span><span id="line-319">            simpleName = moduleName.substring(0, moduleName.length() - "Check".length());</span>
+<span class="source-line-no">320</span><span id="line-320">        }</span>
+<span class="source-line-no">321</span><span id="line-321"></span>
+<span class="source-line-no">322</span><span id="line-322">        return new String[] {simpleName, packageName};</span>
+<span class="source-line-no">323</span><span id="line-323">    }</span>
+<span class="source-line-no">324</span><span id="line-324"></span>
+<span class="source-line-no">325</span><span id="line-325">    /**</span>
+<span class="source-line-no">326</span><span id="line-326">     * Builds HTML rows for both normal and holder check modules.</span>
+<span class="source-line-no">327</span><span id="line-327">     *</span>
+<span class="source-line-no">328</span><span id="line-328">     * @param infos map of collected module info</span>
+<span class="source-line-no">329</span><span id="line-329">     * @param normalRows builder for normal check rows</span>
+<span class="source-line-no">330</span><span id="line-330">     * @param holderRows builder for holder check rows</span>
+<span class="source-line-no">331</span><span id="line-331">     */</span>
+<span class="source-line-no">332</span><span id="line-332">    private static void buildTableRows(Map&lt;String, CheckInfo&gt; infos,</span>
+<span class="source-line-no">333</span><span id="line-333">                                       StringBuilder normalRows,</span>
+<span class="source-line-no">334</span><span id="line-334">                                       StringBuilder holderRows) {</span>
+<span class="source-line-no">335</span><span id="line-335">        for (CheckInfo info : infos.values()) {</span>
+<span class="source-line-no">336</span><span id="line-336">            final String row = buildTableRow(info);</span>
+<span class="source-line-no">337</span><span id="line-337">            if (isHolder(info.simpleName())) {</span>
+<span class="source-line-no">338</span><span id="line-338">                holderRows.append(row);</span>
+<span class="source-line-no">339</span><span id="line-339">            }</span>
+<span class="source-line-no">340</span><span id="line-340">            else {</span>
+<span class="source-line-no">341</span><span id="line-341">                normalRows.append(row);</span>
+<span class="source-line-no">342</span><span id="line-342">            }</span>
+<span class="source-line-no">343</span><span id="line-343">        }</span>
+<span class="source-line-no">344</span><span id="line-344">        removeLeadingNewline(normalRows);</span>
+<span class="source-line-no">345</span><span id="line-345">        removeLeadingNewline(holderRows);</span>
+<span class="source-line-no">346</span><span id="line-346">    }</span>
+<span class="source-line-no">347</span><span id="line-347"></span>
+<span class="source-line-no">348</span><span id="line-348">    /**</span>
+<span class="source-line-no">349</span><span id="line-349">     * Builds a single table row for a check module.</span>
+<span class="source-line-no">350</span><span id="line-350">     *</span>
+<span class="source-line-no">351</span><span id="line-351">     * @param info check module information</span>
+<span class="source-line-no">352</span><span id="line-352">     * @return the HTML table row as a string</span>
+<span class="source-line-no">353</span><span id="line-353">     */</span>
+<span class="source-line-no">354</span><span id="line-354">    private static String buildTableRow(CheckInfo info) {</span>
+<span class="source-line-no">355</span><span id="line-355">        final String ind10 = ModuleJavadocParsingUtil.INDENT_LEVEL_10;</span>
+<span class="source-line-no">356</span><span id="line-356">        final String ind12 = ModuleJavadocParsingUtil.INDENT_LEVEL_12;</span>
+<span class="source-line-no">357</span><span id="line-357">        final String ind14 = ModuleJavadocParsingUtil.INDENT_LEVEL_14;</span>
+<span class="source-line-no">358</span><span id="line-358">        final String ind16 = ModuleJavadocParsingUtil.INDENT_LEVEL_16;</span>
+<span class="source-line-no">359</span><span id="line-359"></span>
+<span class="source-line-no">360</span><span id="line-360">        final String cleanSummary = sanitizeAnchorUrls(info.summary());</span>
+<span class="source-line-no">361</span><span id="line-361"></span>
+<span class="source-line-no">362</span><span id="line-362">        return ind10 + "&lt;tr&gt;"</span>
+<span class="source-line-no">363</span><span id="line-363">                + ind12 + TD_TAG</span>
+<span class="source-line-no">364</span><span id="line-364">                + ind14</span>
+<span class="source-line-no">365</span><span id="line-365">                + "&lt;a href=\""</span>
+<span class="source-line-no">366</span><span id="line-366">                + info.link()</span>
+<span class="source-line-no">367</span><span id="line-367">                + "\"&gt;"</span>
+<span class="source-line-no">368</span><span id="line-368">                + ind16 + info.simpleName()</span>
+<span class="source-line-no">369</span><span id="line-369">                + ind14 + CLOSING_ANCHOR_TAG</span>
+<span class="source-line-no">370</span><span id="line-370">                + ind12 + TD_CLOSE_TAG</span>
+<span class="source-line-no">371</span><span id="line-371">                + ind12 + TD_TAG</span>
+<span class="source-line-no">372</span><span id="line-372">                + ind14 + wrapSummary(cleanSummary)</span>
+<span class="source-line-no">373</span><span id="line-373">                + ind12 + TD_CLOSE_TAG</span>
+<span class="source-line-no">374</span><span id="line-374">                + ind10 + "&lt;/tr&gt;";</span>
+<span class="source-line-no">375</span><span id="line-375">    }</span>
+<span class="source-line-no">376</span><span id="line-376"></span>
+<span class="source-line-no">377</span><span id="line-377">    /**</span>
+<span class="source-line-no">378</span><span id="line-378">     * Removes leading newline characters from a StringBuilder.</span>
+<span class="source-line-no">379</span><span id="line-379">     *</span>
+<span class="source-line-no">380</span><span id="line-380">     * @param builder the StringBuilder to process</span>
+<span class="source-line-no">381</span><span id="line-381">     */</span>
+<span class="source-line-no">382</span><span id="line-382">    private static void removeLeadingNewline(StringBuilder builder) {</span>
+<span class="source-line-no">383</span><span id="line-383">        while (!builder.isEmpty() &amp;&amp; Character.isWhitespace(builder.charAt(0))) {</span>
+<span class="source-line-no">384</span><span id="line-384">            builder.delete(0, 1);</span>
+<span class="source-line-no">385</span><span id="line-385">        }</span>
+<span class="source-line-no">386</span><span id="line-386">    }</span>
+<span class="source-line-no">387</span><span id="line-387"></span>
+<span class="source-line-no">388</span><span id="line-388">    /**</span>
+<span class="source-line-no">389</span><span id="line-389">     * Appends the Holder Checks HTML section.</span>
+<span class="source-line-no">390</span><span id="line-390">     *</span>
+<span class="source-line-no">391</span><span id="line-391">     * @param sink the output sink</span>
+<span class="source-line-no">392</span><span id="line-392">     * @param holderRows the holder rows content</span>
+<span class="source-line-no">393</span><span id="line-393">     */</span>
+<span class="source-line-no">394</span><span id="line-394">    private static void appendHolderSection(Sink sink, StringBuilder holderRows) {</span>
+<span class="source-line-no">395</span><span id="line-395">        final String holderSection = ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">396</span><span id="line-396">                + TABLE_CLOSE_TAG</span>
+<span class="source-line-no">397</span><span id="line-397">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
+<span class="source-line-no">398</span><span id="line-398">                + DIV_CLOSE_TAG</span>
+<span class="source-line-no">399</span><span id="line-399">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
+<span class="source-line-no">400</span><span id="line-400">                + SECTION_CLOSE_TAG</span>
+<span class="source-line-no">401</span><span id="line-401">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
+<span class="source-line-no">402</span><span id="line-402">                + "&lt;section name=\"Holder Checks\"&gt;"</span>
+<span class="source-line-no">403</span><span id="line-403">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
+<span class="source-line-no">404</span><span id="line-404">                + "&lt;p&gt;"</span>
+<span class="source-line-no">405</span><span id="line-405">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">406</span><span id="line-406">                + "These checks aren't normal checks and are usually"</span>
+<span class="source-line-no">407</span><span id="line-407">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">408</span><span id="line-408">                + "associated with a specialized filter to gather"</span>
+<span class="source-line-no">409</span><span id="line-409">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">410</span><span id="line-410">                + "information the filter can't get on its own."</span>
+<span class="source-line-no">411</span><span id="line-411">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
+<span class="source-line-no">412</span><span id="line-412">                + "&lt;/p&gt;"</span>
+<span class="source-line-no">413</span><span id="line-413">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
+<span class="source-line-no">414</span><span id="line-414">                + DIV_WRAPPER_TAG</span>
+<span class="source-line-no">415</span><span id="line-415">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">416</span><span id="line-416">                + TABLE_OPEN_TAG</span>
+<span class="source-line-no">417</span><span id="line-417">                + ModuleJavadocParsingUtil.INDENT_LEVEL_10</span>
+<span class="source-line-no">418</span><span id="line-418">                + holderRows;</span>
+<span class="source-line-no">419</span><span id="line-419">        sink.rawText(holderSection);</span>
+<span class="source-line-no">420</span><span id="line-420">    }</span>
+<span class="source-line-no">421</span><span id="line-421"></span>
+<span class="source-line-no">422</span><span id="line-422">    /**</span>
+<span class="source-line-no">423</span><span id="line-423">     * Appends the filtered Holder Checks section for package views.</span>
+<span class="source-line-no">424</span><span id="line-424">     *</span>
+<span class="source-line-no">425</span><span id="line-425">     * @param sink the output sink</span>
+<span class="source-line-no">426</span><span id="line-426">     * @param holderRows the holder rows content</span>
+<span class="source-line-no">427</span><span id="line-427">     * @param packageName the package name</span>
+<span class="source-line-no">428</span><span id="line-428">     */</span>
+<span class="source-line-no">429</span><span id="line-429">    private static void appendFilteredHolderSection(Sink sink, StringBuilder holderRows,</span>
+<span class="source-line-no">430</span><span id="line-430">                                                    String packageName) {</span>
+<span class="source-line-no">431</span><span id="line-431">        final String packageTitle = getPackageDisplayName(packageName);</span>
+<span class="source-line-no">432</span><span id="line-432">        final String holderSection = ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">433</span><span id="line-433">                + TABLE_CLOSE_TAG</span>
+<span class="source-line-no">434</span><span id="line-434">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
+<span class="source-line-no">435</span><span id="line-435">                + DIV_CLOSE_TAG</span>
+<span class="source-line-no">436</span><span id="line-436">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
+<span class="source-line-no">437</span><span id="line-437">                + SECTION_CLOSE_TAG</span>
+<span class="source-line-no">438</span><span id="line-438">                + ModuleJavadocParsingUtil.INDENT_LEVEL_4</span>
+<span class="source-line-no">439</span><span id="line-439">                + "&lt;section name=\"" + packageTitle + " Holder Checks\"&gt;"</span>
+<span class="source-line-no">440</span><span id="line-440">                + ModuleJavadocParsingUtil.INDENT_LEVEL_6</span>
+<span class="source-line-no">441</span><span id="line-441">                + DIV_WRAPPER_TAG</span>
+<span class="source-line-no">442</span><span id="line-442">                + ModuleJavadocParsingUtil.INDENT_LEVEL_8</span>
+<span class="source-line-no">443</span><span id="line-443">                + TABLE_OPEN_TAG</span>
+<span class="source-line-no">444</span><span id="line-444">                + ModuleJavadocParsingUtil.INDENT_LEVEL_10</span>
+<span class="source-line-no">445</span><span id="line-445">                + holderRows;</span>
+<span class="source-line-no">446</span><span id="line-446">        sink.rawText(holderSection);</span>
+<span class="source-line-no">447</span><span id="line-447">    }</span>
+<span class="source-line-no">448</span><span id="line-448"></span>
+<span class="source-line-no">449</span><span id="line-449">    /**</span>
+<span class="source-line-no">450</span><span id="line-450">     * Get display name for package (capitalize first letter).</span>
+<span class="source-line-no">451</span><span id="line-451">     *</span>
+<span class="source-line-no">452</span><span id="line-452">     * @param packageName the package name</span>
+<span class="source-line-no">453</span><span id="line-453">     * @return the capitalized package name</span>
+<span class="source-line-no">454</span><span id="line-454">     */</span>
+<span class="source-line-no">455</span><span id="line-455">    private static String getPackageDisplayName(String packageName) {</span>
+<span class="source-line-no">456</span><span id="line-456">        final String result;</span>
+<span class="source-line-no">457</span><span id="line-457">        if (packageName == null || packageName.isEmpty()) {</span>
+<span class="source-line-no">458</span><span id="line-458">            result = packageName;</span>
+<span class="source-line-no">459</span><span id="line-459">        }</span>
+<span class="source-line-no">460</span><span id="line-460">        else {</span>
+<span class="source-line-no">461</span><span id="line-461">            result = packageName.substring(0, 1).toUpperCase(Locale.ENGLISH)</span>
+<span class="source-line-no">462</span><span id="line-462">                    + packageName.substring(1);</span>
+<span class="source-line-no">463</span><span id="line-463">        }</span>
+<span class="source-line-no">464</span><span id="line-464">        return result;</span>
+<span class="source-line-no">465</span><span id="line-465">    }</span>
+<span class="source-line-no">466</span><span id="line-466"></span>
+<span class="source-line-no">467</span><span id="line-467">    /**</span>
+<span class="source-line-no">468</span><span id="line-468">     * Builds map of XML file names to HTML documentation paths.</span>
+<span class="source-line-no">469</span><span id="line-469">     *</span>
+<span class="source-line-no">470</span><span id="line-470">     * @return map of lowercase check names to hrefs</span>
+<span class="source-line-no">471</span><span id="line-471">     */</span>
+<span class="source-line-no">472</span><span id="line-472">    private static Map&lt;String, String&gt; buildXmlHtmlMap() {</span>
+<span class="source-line-no">473</span><span id="line-473">        final Map&lt;String, String&gt; map = new TreeMap&lt;&gt;();</span>
+<span class="source-line-no">474</span><span id="line-474">        if (Files.exists(SITE_CHECKS_ROOT)) {</span>
+<span class="source-line-no">475</span><span id="line-475">            try {</span>
+<span class="source-line-no">476</span><span id="line-476">                final List&lt;Path&gt; xmlFiles = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">477</span><span id="line-477">                Files.walkFileTree(SITE_CHECKS_ROOT, new SimpleFileVisitor&lt;&gt;() {</span>
+<span class="source-line-no">478</span><span id="line-478">                    @Override</span>
+<span class="source-line-no">479</span><span id="line-479">                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {</span>
+<span class="source-line-no">480</span><span id="line-480">                        if (isValidXmlFile(file)) {</span>
+<span class="source-line-no">481</span><span id="line-481">                            xmlFiles.add(file);</span>
+<span class="source-line-no">482</span><span id="line-482">                        }</span>
+<span class="source-line-no">483</span><span id="line-483">                        return FileVisitResult.CONTINUE;</span>
+<span class="source-line-no">484</span><span id="line-484">                    }</span>
+<span class="source-line-no">485</span><span id="line-485">                });</span>
+<span class="source-line-no">486</span><span id="line-486"></span>
+<span class="source-line-no">487</span><span id="line-487">                xmlFiles.forEach(path -&gt; addXmlHtmlMapping(path, map));</span>
+<span class="source-line-no">488</span><span id="line-488">            }</span>
+<span class="source-line-no">489</span><span id="line-489">            catch (IOException ignored) {</span>
+<span class="source-line-no">490</span><span id="line-490">                // ignore</span>
+<span class="source-line-no">491</span><span id="line-491">            }</span>
+<span class="source-line-no">492</span><span id="line-492">        }</span>
+<span class="source-line-no">493</span><span id="line-493">        return map;</span>
+<span class="source-line-no">494</span><span id="line-494">    }</span>
+<span class="source-line-no">495</span><span id="line-495"></span>
+<span class="source-line-no">496</span><span id="line-496">    /**</span>
+<span class="source-line-no">497</span><span id="line-497">     * Checks if a path is a valid XML file for processing.</span>
+<span class="source-line-no">498</span><span id="line-498">     *</span>
+<span class="source-line-no">499</span><span id="line-499">     * @param path the path to check</span>
+<span class="source-line-no">500</span><span id="line-500">     * @return true if the path is a valid XML file, false otherwise</span>
+<span class="source-line-no">501</span><span id="line-501">     */</span>
+<span class="source-line-no">502</span><span id="line-502">    private static boolean isValidXmlFile(Path path) {</span>
+<span class="source-line-no">503</span><span id="line-503">        final Path fileName = path.getFileName();</span>
+<span class="source-line-no">504</span><span id="line-504">        return fileName != null</span>
+<span class="source-line-no">505</span><span id="line-505">                &amp;&amp; !("index" + XML_EXTENSION).equalsIgnoreCase(fileName.toString())</span>
+<span class="source-line-no">506</span><span id="line-506">                &amp;&amp; path.toString().endsWith(XML_EXTENSION)</span>
+<span class="source-line-no">507</span><span id="line-507">                &amp;&amp; Files.isRegularFile(path);</span>
+<span class="source-line-no">508</span><span id="line-508">    }</span>
+<span class="source-line-no">509</span><span id="line-509"></span>
+<span class="source-line-no">510</span><span id="line-510">    /**</span>
+<span class="source-line-no">511</span><span id="line-511">     * Adds XML-to-HTML mapping entry to map.</span>
+<span class="source-line-no">512</span><span id="line-512">     *</span>
+<span class="source-line-no">513</span><span id="line-513">     * @param path the XML file path</span>
+<span class="source-line-no">514</span><span id="line-514">     * @param map the mapping to update</span>
+<span class="source-line-no">515</span><span id="line-515">     */</span>
+<span class="source-line-no">516</span><span id="line-516">    private static void addXmlHtmlMapping(Path path, Map&lt;String, String&gt; map) {</span>
+<span class="source-line-no">517</span><span id="line-517">        final Path fileName = path.getFileName();</span>
+<span class="source-line-no">518</span><span id="line-518">        if (fileName != null) {</span>
+<span class="source-line-no">519</span><span id="line-519">            final String fileNameString = fileName.toString();</span>
+<span class="source-line-no">520</span><span id="line-520">            final int extensionLength = 4;</span>
+<span class="source-line-no">521</span><span id="line-521">            final String base = fileNameString.substring(0,</span>
+<span class="source-line-no">522</span><span id="line-522">                            fileNameString.length() - extensionLength)</span>
+<span class="source-line-no">523</span><span id="line-523">                    .toLowerCase(Locale.ROOT);</span>
+<span class="source-line-no">524</span><span id="line-524">            final Path relativePath = SITE_CHECKS_ROOT.relativize(path);</span>
+<span class="source-line-no">525</span><span id="line-525">            final String relativePathString = relativePath.toString();</span>
+<span class="source-line-no">526</span><span id="line-526">            final String rel = relativePathString</span>
+<span class="source-line-no">527</span><span id="line-527">                    .replace('\\', '/')</span>
+<span class="source-line-no">528</span><span id="line-528">                    .replace(XML_EXTENSION, HTML_EXTENSION);</span>
+<span class="source-line-no">529</span><span id="line-529">            map.put(base, CHECKS + "/" + rel);</span>
+<span class="source-line-no">530</span><span id="line-530">        }</span>
+<span class="source-line-no">531</span><span id="line-531">    }</span>
+<span class="source-line-no">532</span><span id="line-532"></span>
+<span class="source-line-no">533</span><span id="line-533">    /**</span>
+<span class="source-line-no">534</span><span id="line-534">     * Resolves the href for a given check module.</span>
+<span class="source-line-no">535</span><span id="line-535">     * When packageFilter is null, returns full path: checks/category/filename.html#CheckName</span>
+<span class="source-line-no">536</span><span id="line-536">     * When packageFilter is set, returns relative path: filename.html#CheckName</span>
+<span class="source-line-no">537</span><span id="line-537">     *</span>
+<span class="source-line-no">538</span><span id="line-538">     * @param xmlMap map of XML file names to HTML paths</span>
+<span class="source-line-no">539</span><span id="line-539">     * @param category the category of the check</span>
+<span class="source-line-no">540</span><span id="line-540">     * @param simpleName simple name of the check</span>
+<span class="source-line-no">541</span><span id="line-541">     * @param packageFilter optional package filter, null for all checks</span>
+<span class="source-line-no">542</span><span id="line-542">     * @return the resolved href for the check</span>
+<span class="source-line-no">543</span><span id="line-543">     */</span>
+<span class="source-line-no">544</span><span id="line-544">    private static String resolveHref(Map&lt;String, String&gt; xmlMap, String category,</span>
+<span class="source-line-no">545</span><span id="line-545">                                      String simpleName, @Nullable String packageFilter) {</span>
+<span class="source-line-no">546</span><span id="line-546">        final String lower = simpleName.toLowerCase(Locale.ROOT);</span>
+<span class="source-line-no">547</span><span id="line-547">        final String href = xmlMap.get(lower);</span>
+<span class="source-line-no">548</span><span id="line-548">        final String result;</span>
+<span class="source-line-no">549</span><span id="line-549"></span>
+<span class="source-line-no">550</span><span id="line-550">        if (href != null) {</span>
+<span class="source-line-no">551</span><span id="line-551">            if (packageFilter == null) {</span>
+<span class="source-line-no">552</span><span id="line-552">                result = href + ANCHOR_SEPARATOR + simpleName;</span>
+<span class="source-line-no">553</span><span id="line-553">            }</span>
+<span class="source-line-no">554</span><span id="line-554">            else {</span>
+<span class="source-line-no">555</span><span id="line-555">                final int lastSlash = href.lastIndexOf('/');</span>
+<span class="source-line-no">556</span><span id="line-556">                final String filename;</span>
+<span class="source-line-no">557</span><span id="line-557">                if (lastSlash &gt;= 0) {</span>
+<span class="source-line-no">558</span><span id="line-558">                    filename = href.substring(lastSlash + 1);</span>
+<span class="source-line-no">559</span><span id="line-559">                }</span>
+<span class="source-line-no">560</span><span id="line-560">                else {</span>
+<span class="source-line-no">561</span><span id="line-561">                    filename = href;</span>
+<span class="source-line-no">562</span><span id="line-562">                }</span>
+<span class="source-line-no">563</span><span id="line-563">                result = filename + ANCHOR_SEPARATOR + simpleName;</span>
+<span class="source-line-no">564</span><span id="line-564">            }</span>
+<span class="source-line-no">565</span><span id="line-565">        }</span>
+<span class="source-line-no">566</span><span id="line-566">        else {</span>
+<span class="source-line-no">567</span><span id="line-567">            if (packageFilter == null) {</span>
+<span class="source-line-no">568</span><span id="line-568">                result = String.format(Locale.ROOT, "%s/%s/%s.html%s%s",</span>
+<span class="source-line-no">569</span><span id="line-569">                        CHECKS, category, lower, ANCHOR_SEPARATOR, simpleName);</span>
+<span class="source-line-no">570</span><span id="line-570">            }</span>
+<span class="source-line-no">571</span><span id="line-571">            else {</span>
+<span class="source-line-no">572</span><span id="line-572">                result = String.format(Locale.ROOT, "%s.html%s%s",</span>
+<span class="source-line-no">573</span><span id="line-573">                        lower, ANCHOR_SEPARATOR, simpleName);</span>
+<span class="source-line-no">574</span><span id="line-574">            }</span>
+<span class="source-line-no">575</span><span id="line-575">        }</span>
+<span class="source-line-no">576</span><span id="line-576">        return result;</span>
+<span class="source-line-no">577</span><span id="line-577">    }</span>
+<span class="source-line-no">578</span><span id="line-578"></span>
+<span class="source-line-no">579</span><span id="line-579">    /**</span>
+<span class="source-line-no">580</span><span id="line-580">     * Extracts category path from a Java file path.</span>
+<span class="source-line-no">581</span><span id="line-581">     *</span>
+<span class="source-line-no">582</span><span id="line-582">     * @param javaPath the Java source file path</span>
+<span class="source-line-no">583</span><span id="line-583">     * @return the category path extracted from the Java path</span>
+<span class="source-line-no">584</span><span id="line-584">     */</span>
+<span class="source-line-no">585</span><span id="line-585">    private static String extractCategoryFromJavaPath(Path javaPath) {</span>
+<span class="source-line-no">586</span><span id="line-586">        final Path rel = JAVA_CHECKS_ROOT.relativize(javaPath);</span>
+<span class="source-line-no">587</span><span id="line-587">        final Path parent = rel.getParent();</span>
+<span class="source-line-no">588</span><span id="line-588">        final String result;</span>
+<span class="source-line-no">589</span><span id="line-589">        if (parent == null) {</span>
+<span class="source-line-no">590</span><span id="line-590">            result = MISC_PACKAGE;</span>
+<span class="source-line-no">591</span><span id="line-591">        }</span>
+<span class="source-line-no">592</span><span id="line-592">        else {</span>
+<span class="source-line-no">593</span><span id="line-593">            result = parent.toString().replace('\\', '/');</span>
+<span class="source-line-no">594</span><span id="line-594">        }</span>
+<span class="source-line-no">595</span><span id="line-595">        return result;</span>
+<span class="source-line-no">596</span><span id="line-596">    }</span>
+<span class="source-line-no">597</span><span id="line-597"></span>
+<span class="source-line-no">598</span><span id="line-598">    /**</span>
+<span class="source-line-no">599</span><span id="line-599">     * Sanitizes URLs within anchor tags by removing whitespace from href attributes.</span>
+<span class="source-line-no">600</span><span id="line-600">     *</span>
+<span class="source-line-no">601</span><span id="line-601">     * @param html the HTML string containing anchor tags</span>
+<span class="source-line-no">602</span><span id="line-602">     * @return the HTML with sanitized URLs</span>
+<span class="source-line-no">603</span><span id="line-603">     */</span>
+<span class="source-line-no">604</span><span id="line-604">    private static String sanitizeAnchorUrls(String html) {</span>
+<span class="source-line-no">605</span><span id="line-605">        final String result;</span>
+<span class="source-line-no">606</span><span id="line-606">        if (html == null || html.isEmpty()) {</span>
+<span class="source-line-no">607</span><span id="line-607">            result = html;</span>
+<span class="source-line-no">608</span><span id="line-608">        }</span>
+<span class="source-line-no">609</span><span id="line-609">        else {</span>
+<span class="source-line-no">610</span><span id="line-610">            final Matcher matcher = HREF_PATTERN.matcher(html);</span>
+<span class="source-line-no">611</span><span id="line-611">            final StringBuilder buffer = new StringBuilder(html.length());</span>
+<span class="source-line-no">612</span><span id="line-612"></span>
+<span class="source-line-no">613</span><span id="line-613">            while (matcher.find()) {</span>
+<span class="source-line-no">614</span><span id="line-614">                final String originalUrl = matcher.group(1);</span>
+<span class="source-line-no">615</span><span id="line-615">                final String cleanedUrl = SPACE_PATTERN.matcher(originalUrl).replaceAll("");</span>
+<span class="source-line-no">616</span><span id="line-616">                final String replacement = "href=\""</span>
+<span class="source-line-no">617</span><span id="line-617">                        + Matcher.quoteReplacement(cleanedUrl) + "\"";</span>
+<span class="source-line-no">618</span><span id="line-618">                matcher.appendReplacement(buffer, replacement);</span>
+<span class="source-line-no">619</span><span id="line-619">            }</span>
+<span class="source-line-no">620</span><span id="line-620">            matcher.appendTail(buffer);</span>
+<span class="source-line-no">621</span><span id="line-621"></span>
+<span class="source-line-no">622</span><span id="line-622">            result = buffer.toString();</span>
+<span class="source-line-no">623</span><span id="line-623">        }</span>
+<span class="source-line-no">624</span><span id="line-624">        return result;</span>
+<span class="source-line-no">625</span><span id="line-625">    }</span>
+<span class="source-line-no">626</span><span id="line-626"></span>
+<span class="source-line-no">627</span><span id="line-627">    /**</span>
+<span class="source-line-no">628</span><span id="line-628">     * Sanitizes HTML and extracts first sentence.</span>
+<span class="source-line-no">629</span><span id="line-629">     * Preserves anchor tags while removing other HTML formatting.</span>
+<span class="source-line-no">630</span><span id="line-630">     * Also cleans whitespace from URLs in href attributes.</span>
+<span class="source-line-no">631</span><span id="line-631">     *</span>
+<span class="source-line-no">632</span><span id="line-632">     * @param html the HTML string to process</span>
+<span class="source-line-no">633</span><span id="line-633">     * @return the sanitized first sentence</span>
+<span class="source-line-no">634</span><span id="line-634">     */</span>
+<span class="source-line-no">635</span><span id="line-635">    private static String sanitizeAndFirstSentence(String html) {</span>
+<span class="source-line-no">636</span><span id="line-636">        final String result;</span>
+<span class="source-line-no">637</span><span id="line-637">        if (html == null || html.isEmpty()) {</span>
+<span class="source-line-no">638</span><span id="line-638">            result = "";</span>
+<span class="source-line-no">639</span><span id="line-639">        }</span>
+<span class="source-line-no">640</span><span id="line-640">        else {</span>
+<span class="source-line-no">641</span><span id="line-641">            String cleaned = sanitizeAnchorUrls(html);</span>
+<span class="source-line-no">642</span><span id="line-642">            cleaned = TAG_PATTERN.matcher(cleaned).replaceAll("");</span>
+<span class="source-line-no">643</span><span id="line-643">            cleaned = SPACE_PATTERN.matcher(cleaned).replaceAll(" ").trim();</span>
+<span class="source-line-no">644</span><span id="line-644">            cleaned = AMP_PATTERN.matcher(cleaned).replaceAll("&amp;amp;");</span>
+<span class="source-line-no">645</span><span id="line-645">            cleaned = CODE_SPACE_PATTERN.matcher(cleaned).replaceAll(FIRST_CAPTURE_GROUP);</span>
+<span class="source-line-no">646</span><span id="line-646">            result = extractFirstSentence(cleaned);</span>
+<span class="source-line-no">647</span><span id="line-647">        }</span>
+<span class="source-line-no">648</span><span id="line-648">        return result;</span>
+<span class="source-line-no">649</span><span id="line-649">    }</span>
+<span class="source-line-no">650</span><span id="line-650"></span>
+<span class="source-line-no">651</span><span id="line-651">    /**</span>
+<span class="source-line-no">652</span><span id="line-652">     * Extracts first sentence from plain text.</span>
+<span class="source-line-no">653</span><span id="line-653">     *</span>
+<span class="source-line-no">654</span><span id="line-654">     * @param text the text to process</span>
+<span class="source-line-no">655</span><span id="line-655">     * @return the first sentence extracted from the text</span>
+<span class="source-line-no">656</span><span id="line-656">     */</span>
+<span class="source-line-no">657</span><span id="line-657">    private static String extractFirstSentence(String text) {</span>
+<span class="source-line-no">658</span><span id="line-658">        String result = "";</span>
+<span class="source-line-no">659</span><span id="line-659">        if (text != null &amp;&amp; !text.isEmpty()) {</span>
+<span class="source-line-no">660</span><span id="line-660">            int end = -1;</span>
+<span class="source-line-no">661</span><span id="line-661">            for (int index = 0; index &lt; text.length(); index++) {</span>
+<span class="source-line-no">662</span><span id="line-662">                if (text.charAt(index) == '.'</span>
+<span class="source-line-no">663</span><span id="line-663">                        &amp;&amp; (index == text.length() - 1</span>
+<span class="source-line-no">664</span><span id="line-664">                        || Character.isWhitespace(text.charAt(index + 1))</span>
+<span class="source-line-no">665</span><span id="line-665">                        || text.charAt(index + 1) == '&lt;')) {</span>
+<span class="source-line-no">666</span><span id="line-666">                    end = index;</span>
+<span class="source-line-no">667</span><span id="line-667">                    break;</span>
+<span class="source-line-no">668</span><span id="line-668">                }</span>
+<span class="source-line-no">669</span><span id="line-669">            }</span>
+<span class="source-line-no">670</span><span id="line-670">            if (end == -1) {</span>
+<span class="source-line-no">671</span><span id="line-671">                result = text.trim();</span>
+<span class="source-line-no">672</span><span id="line-672">            }</span>
+<span class="source-line-no">673</span><span id="line-673">            else {</span>
+<span class="source-line-no">674</span><span id="line-674">                result = text.substring(0, end + 1).trim();</span>
+<span class="source-line-no">675</span><span id="line-675">            }</span>
+<span class="source-line-no">676</span><span id="line-676">        }</span>
+<span class="source-line-no">677</span><span id="line-677">        return result;</span>
+<span class="source-line-no">678</span><span id="line-678">    }</span>
+<span class="source-line-no">679</span><span id="line-679"></span>
+<span class="source-line-no">680</span><span id="line-680">    /**</span>
+<span class="source-line-no">681</span><span id="line-681">     * Wraps long summaries to avoid exceeding line width.</span>
+<span class="source-line-no">682</span><span id="line-682">     * Preserves URLs in anchor tags by breaking after the opening tag's closing bracket.</span>
+<span class="source-line-no">683</span><span id="line-683">     *</span>
+<span class="source-line-no">684</span><span id="line-684">     * @param text the text to wrap</span>
+<span class="source-line-no">685</span><span id="line-685">     * @return the wrapped text</span>
+<span class="source-line-no">686</span><span id="line-686">     */</span>
+<span class="source-line-no">687</span><span id="line-687">    private static String wrapSummary(String text) {</span>
+<span class="source-line-no">688</span><span id="line-688">        String wrapped = "";</span>
+<span class="source-line-no">689</span><span id="line-689"></span>
+<span class="source-line-no">690</span><span id="line-690">        if (text != null &amp;&amp; !text.isEmpty()) {</span>
+<span class="source-line-no">691</span><span id="line-691">            final String sanitized = sanitizeAnchorUrls(text);</span>
 <span class="source-line-no">692</span><span id="line-692"></span>
-<span class="source-line-no">693</span><span id="line-693">            while (cleanIndex &lt; cleanLen) {</span>
-<span class="source-line-no">694</span><span id="line-694">                final int remainingChars = cleanLen - cleanIndex;</span>
+<span class="source-line-no">693</span><span id="line-693">            final String indent = ModuleJavadocParsingUtil.INDENT_LEVEL_14;</span>
+<span class="source-line-no">694</span><span id="line-694">            final String clean = sanitized.trim();</span>
 <span class="source-line-no">695</span><span id="line-695"></span>
-<span class="source-line-no">696</span><span id="line-696">                if (remainingChars &lt;= MAX_CONTENT_WIDTH) {</span>
-<span class="source-line-no">697</span><span id="line-697">                    result.append(indent)</span>
-<span class="source-line-no">698</span><span id="line-698">                            .append(clean.substring(cleanIndex))</span>
-<span class="source-line-no">699</span><span id="line-699">                            .append('\n');</span>
-<span class="source-line-no">700</span><span id="line-700">                    break;</span>
-<span class="source-line-no">701</span><span id="line-701">                }</span>
+<span class="source-line-no">696</span><span id="line-696">            final StringBuilder result = new StringBuilder(CAPACITY);</span>
+<span class="source-line-no">697</span><span id="line-697">            int cleanIndex = 0;</span>
+<span class="source-line-no">698</span><span id="line-698">            final int cleanLen = clean.length();</span>
+<span class="source-line-no">699</span><span id="line-699"></span>
+<span class="source-line-no">700</span><span id="line-700">            while (cleanIndex &lt; cleanLen) {</span>
+<span class="source-line-no">701</span><span id="line-701">                final int remainingChars = cleanLen - cleanIndex;</span>
 <span class="source-line-no">702</span><span id="line-702"></span>
-<span class="source-line-no">703</span><span id="line-703">                final int idealBreak = cleanIndex + MAX_CONTENT_WIDTH;</span>
-<span class="source-line-no">704</span><span id="line-704">                final int actualBreak = calculateBreakPoint(clean, cleanIndex, idealBreak);</span>
-<span class="source-line-no">705</span><span id="line-705"></span>
-<span class="source-line-no">706</span><span id="line-706">                result.append(indent)</span>
-<span class="source-line-no">707</span><span id="line-707">                        .append(clean, cleanIndex, actualBreak);</span>
-<span class="source-line-no">708</span><span id="line-708"></span>
-<span class="source-line-no">709</span><span id="line-709">                cleanIndex = actualBreak;</span>
-<span class="source-line-no">710</span><span id="line-710">                while (cleanIndex &lt; cleanLen &amp;&amp; clean.charAt(cleanIndex) == ' ') {</span>
-<span class="source-line-no">711</span><span id="line-711">                    cleanIndex++;</span>
-<span class="source-line-no">712</span><span id="line-712">                }</span>
-<span class="source-line-no">713</span><span id="line-713">            }</span>
-<span class="source-line-no">714</span><span id="line-714"></span>
-<span class="source-line-no">715</span><span id="line-715">            wrapped = result.toString().trim();</span>
-<span class="source-line-no">716</span><span id="line-716">        }</span>
-<span class="source-line-no">717</span><span id="line-717"></span>
-<span class="source-line-no">718</span><span id="line-718">        return wrapped;</span>
-<span class="source-line-no">719</span><span id="line-719">    }</span>
-<span class="source-line-no">720</span><span id="line-720"></span>
-<span class="source-line-no">721</span><span id="line-721">    /**</span>
-<span class="source-line-no">722</span><span id="line-722">     * Calculates the appropriate break point for text wrapping.</span>
-<span class="source-line-no">723</span><span id="line-723">     * Handles anchor tags specially to avoid breaking URLs.</span>
-<span class="source-line-no">724</span><span id="line-724">     *</span>
-<span class="source-line-no">725</span><span id="line-725">     * @param clean the cleaned text to process</span>
-<span class="source-line-no">726</span><span id="line-726">     * @param cleanIndex current position in text</span>
-<span class="source-line-no">727</span><span id="line-727">     * @param idealBreak ideal break position</span>
-<span class="source-line-no">728</span><span id="line-728">     * @return the actual break position</span>
-<span class="source-line-no">729</span><span id="line-729">     */</span>
-<span class="source-line-no">730</span><span id="line-730">    private static int calculateBreakPoint(String clean, int cleanIndex, int idealBreak) {</span>
-<span class="source-line-no">731</span><span id="line-731">        final int anchorStart = clean.indexOf("&lt;a ", cleanIndex);</span>
-<span class="source-line-no">732</span><span id="line-732">        final int anchorOpenEnd;</span>
-<span class="source-line-no">733</span><span id="line-733">        if (anchorStart == -1) {</span>
-<span class="source-line-no">734</span><span id="line-734">            anchorOpenEnd = -1;</span>
-<span class="source-line-no">735</span><span id="line-735">        }</span>
-<span class="source-line-no">736</span><span id="line-736">        else {</span>
-<span class="source-line-no">737</span><span id="line-737">            anchorOpenEnd = clean.indexOf('&gt;', anchorStart);</span>
-<span class="source-line-no">738</span><span id="line-738">        }</span>
-<span class="source-line-no">739</span><span id="line-739"></span>
-<span class="source-line-no">740</span><span id="line-740">        final int actualBreak;</span>
-<span class="source-line-no">741</span><span id="line-741">        if (shouldBreakAfterAnchorOpen(anchorStart, anchorOpenEnd, idealBreak)) {</span>
-<span class="source-line-no">742</span><span id="line-742">            actualBreak = anchorOpenEnd + 1;</span>
-<span class="source-line-no">743</span><span id="line-743">        }</span>
-<span class="source-line-no">744</span><span id="line-744">        else if (shouldBreakAfterAnchorContent(anchorStart, anchorOpenEnd,</span>
-<span class="source-line-no">745</span><span id="line-745">                idealBreak, clean)) {</span>
-<span class="source-line-no">746</span><span id="line-746">            actualBreak = anchorOpenEnd + 1;</span>
-<span class="source-line-no">747</span><span id="line-747">        }</span>
-<span class="source-line-no">748</span><span id="line-748">        else {</span>
-<span class="source-line-no">749</span><span id="line-749">            actualBreak = findSafeBreakPoint(clean, cleanIndex, idealBreak);</span>
+<span class="source-line-no">703</span><span id="line-703">                if (remainingChars &lt;= MAX_CONTENT_WIDTH) {</span>
+<span class="source-line-no">704</span><span id="line-704">                    result.append(indent)</span>
+<span class="source-line-no">705</span><span id="line-705">                            .append(clean.substring(cleanIndex))</span>
+<span class="source-line-no">706</span><span id="line-706">                            .append('\n');</span>
+<span class="source-line-no">707</span><span id="line-707">                    break;</span>
+<span class="source-line-no">708</span><span id="line-708">                }</span>
+<span class="source-line-no">709</span><span id="line-709"></span>
+<span class="source-line-no">710</span><span id="line-710">                final int idealBreak = cleanIndex + MAX_CONTENT_WIDTH;</span>
+<span class="source-line-no">711</span><span id="line-711">                final int actualBreak = calculateBreakPoint(clean, cleanIndex, idealBreak);</span>
+<span class="source-line-no">712</span><span id="line-712"></span>
+<span class="source-line-no">713</span><span id="line-713">                result.append(indent)</span>
+<span class="source-line-no">714</span><span id="line-714">                        .append(clean, cleanIndex, actualBreak);</span>
+<span class="source-line-no">715</span><span id="line-715"></span>
+<span class="source-line-no">716</span><span id="line-716">                cleanIndex = actualBreak;</span>
+<span class="source-line-no">717</span><span id="line-717">                while (cleanIndex &lt; cleanLen &amp;&amp; clean.charAt(cleanIndex) == ' ') {</span>
+<span class="source-line-no">718</span><span id="line-718">                    cleanIndex++;</span>
+<span class="source-line-no">719</span><span id="line-719">                }</span>
+<span class="source-line-no">720</span><span id="line-720">            }</span>
+<span class="source-line-no">721</span><span id="line-721"></span>
+<span class="source-line-no">722</span><span id="line-722">            wrapped = result.toString().trim();</span>
+<span class="source-line-no">723</span><span id="line-723">        }</span>
+<span class="source-line-no">724</span><span id="line-724"></span>
+<span class="source-line-no">725</span><span id="line-725">        return wrapped;</span>
+<span class="source-line-no">726</span><span id="line-726">    }</span>
+<span class="source-line-no">727</span><span id="line-727"></span>
+<span class="source-line-no">728</span><span id="line-728">    /**</span>
+<span class="source-line-no">729</span><span id="line-729">     * Calculates the appropriate break point for text wrapping.</span>
+<span class="source-line-no">730</span><span id="line-730">     * Handles anchor tags specially to avoid breaking URLs.</span>
+<span class="source-line-no">731</span><span id="line-731">     *</span>
+<span class="source-line-no">732</span><span id="line-732">     * @param clean the cleaned text to process</span>
+<span class="source-line-no">733</span><span id="line-733">     * @param cleanIndex current position in text</span>
+<span class="source-line-no">734</span><span id="line-734">     * @param idealBreak ideal break position</span>
+<span class="source-line-no">735</span><span id="line-735">     * @return the actual break position</span>
+<span class="source-line-no">736</span><span id="line-736">     */</span>
+<span class="source-line-no">737</span><span id="line-737">    private static int calculateBreakPoint(String clean, int cleanIndex, int idealBreak) {</span>
+<span class="source-line-no">738</span><span id="line-738">        final int anchorStart = clean.indexOf("&lt;a ", cleanIndex);</span>
+<span class="source-line-no">739</span><span id="line-739">        final int anchorOpenEnd;</span>
+<span class="source-line-no">740</span><span id="line-740">        if (anchorStart == -1) {</span>
+<span class="source-line-no">741</span><span id="line-741">            anchorOpenEnd = -1;</span>
+<span class="source-line-no">742</span><span id="line-742">        }</span>
+<span class="source-line-no">743</span><span id="line-743">        else {</span>
+<span class="source-line-no">744</span><span id="line-744">            anchorOpenEnd = clean.indexOf('&gt;', anchorStart);</span>
+<span class="source-line-no">745</span><span id="line-745">        }</span>
+<span class="source-line-no">746</span><span id="line-746"></span>
+<span class="source-line-no">747</span><span id="line-747">        final int actualBreak;</span>
+<span class="source-line-no">748</span><span id="line-748">        if (shouldBreakAfterAnchorOpen(anchorStart, anchorOpenEnd, idealBreak)) {</span>
+<span class="source-line-no">749</span><span id="line-749">            actualBreak = anchorOpenEnd + 1;</span>
 <span class="source-line-no">750</span><span id="line-750">        }</span>
-<span class="source-line-no">751</span><span id="line-751"></span>
-<span class="source-line-no">752</span><span id="line-752">        return actualBreak;</span>
-<span class="source-line-no">753</span><span id="line-753">    }</span>
-<span class="source-line-no">754</span><span id="line-754"></span>
-<span class="source-line-no">755</span><span id="line-755">    /**</span>
-<span class="source-line-no">756</span><span id="line-756">     * Determines if break should occur after anchor opening tag.</span>
-<span class="source-line-no">757</span><span id="line-757">     *</span>
-<span class="source-line-no">758</span><span id="line-758">     * @param anchorStart start position of anchor tag</span>
-<span class="source-line-no">759</span><span id="line-759">     * @param anchorOpenEnd end position of anchor opening tag</span>
-<span class="source-line-no">760</span><span id="line-760">     * @param idealBreak ideal break position</span>
-<span class="source-line-no">761</span><span id="line-761">     * @return true if should break after anchor opening</span>
-<span class="source-line-no">762</span><span id="line-762">     */</span>
-<span class="source-line-no">763</span><span id="line-763">    private static boolean shouldBreakAfterAnchorOpen(int anchorStart, int anchorOpenEnd,</span>
-<span class="source-line-no">764</span><span id="line-764">                                                      int idealBreak) {</span>
-<span class="source-line-no">765</span><span id="line-765">        return anchorStart != -1 &amp;&amp; anchorStart &lt; idealBreak</span>
-<span class="source-line-no">766</span><span id="line-766">                &amp;&amp; anchorOpenEnd != -1 &amp;&amp; anchorOpenEnd &gt;= idealBreak;</span>
-<span class="source-line-no">767</span><span id="line-767">    }</span>
-<span class="source-line-no">768</span><span id="line-768"></span>
-<span class="source-line-no">769</span><span id="line-769">    /**</span>
-<span class="source-line-no">770</span><span id="line-770">     * Determines if break should occur after anchor content.</span>
-<span class="source-line-no">771</span><span id="line-771">     *</span>
-<span class="source-line-no">772</span><span id="line-772">     * @param anchorStart start position of anchor tag</span>
-<span class="source-line-no">773</span><span id="line-773">     * @param anchorOpenEnd end position of anchor opening tag</span>
-<span class="source-line-no">774</span><span id="line-774">     * @param idealBreak ideal break position</span>
-<span class="source-line-no">775</span><span id="line-775">     * @param clean the text being processed</span>
-<span class="source-line-no">776</span><span id="line-776">     * @return true if should break after anchor content</span>
-<span class="source-line-no">777</span><span id="line-777">     */</span>
-<span class="source-line-no">778</span><span id="line-778">    private static boolean shouldBreakAfterAnchorContent(int anchorStart, int anchorOpenEnd,</span>
-<span class="source-line-no">779</span><span id="line-779">                                                         int idealBreak, String clean) {</span>
-<span class="source-line-no">780</span><span id="line-780">        final boolean result;</span>
-<span class="source-line-no">781</span><span id="line-781">        if (anchorStart != -1 &amp;&amp; anchorStart &lt; idealBreak</span>
-<span class="source-line-no">782</span><span id="line-782">                &amp;&amp; anchorOpenEnd != -1 &amp;&amp; anchorOpenEnd &lt; idealBreak) {</span>
-<span class="source-line-no">783</span><span id="line-783">            final int anchorCloseStart = clean.indexOf(CLOSING_ANCHOR_TAG, anchorOpenEnd);</span>
-<span class="source-line-no">784</span><span id="line-784">            result = anchorCloseStart != -1 &amp;&amp; anchorCloseStart &gt;= idealBreak;</span>
-<span class="source-line-no">785</span><span id="line-785">        }</span>
-<span class="source-line-no">786</span><span id="line-786">        else {</span>
-<span class="source-line-no">787</span><span id="line-787">            result = false;</span>
-<span class="source-line-no">788</span><span id="line-788">        }</span>
-<span class="source-line-no">789</span><span id="line-789">        return result;</span>
-<span class="source-line-no">790</span><span id="line-790">    }</span>
-<span class="source-line-no">791</span><span id="line-791"></span>
-<span class="source-line-no">792</span><span id="line-792">    /**</span>
-<span class="source-line-no">793</span><span id="line-793">     * Finds a safe break point at a space character.</span>
-<span class="source-line-no">794</span><span id="line-794">     *</span>
-<span class="source-line-no">795</span><span id="line-795">     * @param text the text to search</span>
-<span class="source-line-no">796</span><span id="line-796">     * @param start the start index</span>
-<span class="source-line-no">797</span><span id="line-797">     * @param idealBreak the ideal break position</span>
-<span class="source-line-no">798</span><span id="line-798">     * @return the actual break position</span>
-<span class="source-line-no">799</span><span id="line-799">     */</span>
-<span class="source-line-no">800</span><span id="line-800">    private static int findSafeBreakPoint(String text, int start, int idealBreak) {</span>
-<span class="source-line-no">801</span><span id="line-801">        final int actualBreak;</span>
-<span class="source-line-no">802</span><span id="line-802">        final int lastSpace = text.lastIndexOf(' ', idealBreak);</span>
-<span class="source-line-no">803</span><span id="line-803"></span>
-<span class="source-line-no">804</span><span id="line-804">        if (lastSpace &gt; start &amp;&amp; lastSpace &gt;= start + MAX_CONTENT_WIDTH / 2) {</span>
-<span class="source-line-no">805</span><span id="line-805">            actualBreak = lastSpace;</span>
-<span class="source-line-no">806</span><span id="line-806">        }</span>
-<span class="source-line-no">807</span><span id="line-807">        else {</span>
-<span class="source-line-no">808</span><span id="line-808">            actualBreak = idealBreak;</span>
-<span class="source-line-no">809</span><span id="line-809">        }</span>
+<span class="source-line-no">751</span><span id="line-751">        else if (shouldBreakAfterAnchorContent(anchorStart, anchorOpenEnd,</span>
+<span class="source-line-no">752</span><span id="line-752">                idealBreak, clean)) {</span>
+<span class="source-line-no">753</span><span id="line-753">            actualBreak = anchorOpenEnd + 1;</span>
+<span class="source-line-no">754</span><span id="line-754">        }</span>
+<span class="source-line-no">755</span><span id="line-755">        else {</span>
+<span class="source-line-no">756</span><span id="line-756">            actualBreak = findSafeBreakPoint(clean, cleanIndex, idealBreak);</span>
+<span class="source-line-no">757</span><span id="line-757">        }</span>
+<span class="source-line-no">758</span><span id="line-758"></span>
+<span class="source-line-no">759</span><span id="line-759">        return actualBreak;</span>
+<span class="source-line-no">760</span><span id="line-760">    }</span>
+<span class="source-line-no">761</span><span id="line-761"></span>
+<span class="source-line-no">762</span><span id="line-762">    /**</span>
+<span class="source-line-no">763</span><span id="line-763">     * Determines if break should occur after anchor opening tag.</span>
+<span class="source-line-no">764</span><span id="line-764">     *</span>
+<span class="source-line-no">765</span><span id="line-765">     * @param anchorStart start position of anchor tag</span>
+<span class="source-line-no">766</span><span id="line-766">     * @param anchorOpenEnd end position of anchor opening tag</span>
+<span class="source-line-no">767</span><span id="line-767">     * @param idealBreak ideal break position</span>
+<span class="source-line-no">768</span><span id="line-768">     * @return true if should break after anchor opening</span>
+<span class="source-line-no">769</span><span id="line-769">     */</span>
+<span class="source-line-no">770</span><span id="line-770">    private static boolean shouldBreakAfterAnchorOpen(int anchorStart, int anchorOpenEnd,</span>
+<span class="source-line-no">771</span><span id="line-771">                                                      int idealBreak) {</span>
+<span class="source-line-no">772</span><span id="line-772">        return anchorStart != -1 &amp;&amp; anchorStart &lt; idealBreak</span>
+<span class="source-line-no">773</span><span id="line-773">                &amp;&amp; anchorOpenEnd != -1 &amp;&amp; anchorOpenEnd &gt;= idealBreak;</span>
+<span class="source-line-no">774</span><span id="line-774">    }</span>
+<span class="source-line-no">775</span><span id="line-775"></span>
+<span class="source-line-no">776</span><span id="line-776">    /**</span>
+<span class="source-line-no">777</span><span id="line-777">     * Determines if break should occur after anchor content.</span>
+<span class="source-line-no">778</span><span id="line-778">     *</span>
+<span class="source-line-no">779</span><span id="line-779">     * @param anchorStart start position of anchor tag</span>
+<span class="source-line-no">780</span><span id="line-780">     * @param anchorOpenEnd end position of anchor opening tag</span>
+<span class="source-line-no">781</span><span id="line-781">     * @param idealBreak ideal break position</span>
+<span class="source-line-no">782</span><span id="line-782">     * @param clean the text being processed</span>
+<span class="source-line-no">783</span><span id="line-783">     * @return true if should break after anchor content</span>
+<span class="source-line-no">784</span><span id="line-784">     */</span>
+<span class="source-line-no">785</span><span id="line-785">    private static boolean shouldBreakAfterAnchorContent(int anchorStart, int anchorOpenEnd,</span>
+<span class="source-line-no">786</span><span id="line-786">                                                         int idealBreak, String clean) {</span>
+<span class="source-line-no">787</span><span id="line-787">        final boolean result;</span>
+<span class="source-line-no">788</span><span id="line-788">        if (anchorStart != -1 &amp;&amp; anchorStart &lt; idealBreak</span>
+<span class="source-line-no">789</span><span id="line-789">                &amp;&amp; anchorOpenEnd != -1 &amp;&amp; anchorOpenEnd &lt; idealBreak) {</span>
+<span class="source-line-no">790</span><span id="line-790">            final int anchorCloseStart = clean.indexOf(CLOSING_ANCHOR_TAG, anchorOpenEnd);</span>
+<span class="source-line-no">791</span><span id="line-791">            result = anchorCloseStart != -1 &amp;&amp; anchorCloseStart &gt;= idealBreak;</span>
+<span class="source-line-no">792</span><span id="line-792">        }</span>
+<span class="source-line-no">793</span><span id="line-793">        else {</span>
+<span class="source-line-no">794</span><span id="line-794">            result = false;</span>
+<span class="source-line-no">795</span><span id="line-795">        }</span>
+<span class="source-line-no">796</span><span id="line-796">        return result;</span>
+<span class="source-line-no">797</span><span id="line-797">    }</span>
+<span class="source-line-no">798</span><span id="line-798"></span>
+<span class="source-line-no">799</span><span id="line-799">    /**</span>
+<span class="source-line-no">800</span><span id="line-800">     * Finds a safe break point at a space character.</span>
+<span class="source-line-no">801</span><span id="line-801">     *</span>
+<span class="source-line-no">802</span><span id="line-802">     * @param text the text to search</span>
+<span class="source-line-no">803</span><span id="line-803">     * @param start the start index</span>
+<span class="source-line-no">804</span><span id="line-804">     * @param idealBreak the ideal break position</span>
+<span class="source-line-no">805</span><span id="line-805">     * @return the actual break position</span>
+<span class="source-line-no">806</span><span id="line-806">     */</span>
+<span class="source-line-no">807</span><span id="line-807">    private static int findSafeBreakPoint(String text, int start, int idealBreak) {</span>
+<span class="source-line-no">808</span><span id="line-808">        final int actualBreak;</span>
+<span class="source-line-no">809</span><span id="line-809">        final int lastSpace = text.lastIndexOf(' ', idealBreak);</span>
 <span class="source-line-no">810</span><span id="line-810"></span>
-<span class="source-line-no">811</span><span id="line-811">        return actualBreak;</span>
-<span class="source-line-no">812</span><span id="line-812">    }</span>
-<span class="source-line-no">813</span><span id="line-813"></span>
-<span class="source-line-no">814</span><span id="line-814">    /**</span>
-<span class="source-line-no">815</span><span id="line-815">     * Data holder for each Check module entry.</span>
-<span class="source-line-no">816</span><span id="line-816">     *</span>
-<span class="source-line-no">817</span><span id="line-817">     * @param simpleName check simple name</span>
-<span class="source-line-no">818</span><span id="line-818">     * @param link documentation link</span>
-<span class="source-line-no">819</span><span id="line-819">     * @param summary module summary</span>
-<span class="source-line-no">820</span><span id="line-820">     */</span>
-<span class="source-line-no">821</span><span id="line-821">    private record CheckInfo(String simpleName, String link, String summary) {</span>
-<span class="source-line-no">822</span><span id="line-822">    }</span>
-<span class="source-line-no">823</span><span id="line-823">}</span>
+<span class="source-line-no">811</span><span id="line-811">        if (lastSpace &gt; start &amp;&amp; lastSpace &gt;= start + MAX_CONTENT_WIDTH / 2) {</span>
+<span class="source-line-no">812</span><span id="line-812">            actualBreak = lastSpace;</span>
+<span class="source-line-no">813</span><span id="line-813">        }</span>
+<span class="source-line-no">814</span><span id="line-814">        else {</span>
+<span class="source-line-no">815</span><span id="line-815">            actualBreak = idealBreak;</span>
+<span class="source-line-no">816</span><span id="line-816">        }</span>
+<span class="source-line-no">817</span><span id="line-817"></span>
+<span class="source-line-no">818</span><span id="line-818">        return actualBreak;</span>
+<span class="source-line-no">819</span><span id="line-819">    }</span>
+<span class="source-line-no">820</span><span id="line-820"></span>
+<span class="source-line-no">821</span><span id="line-821">    /**</span>
+<span class="source-line-no">822</span><span id="line-822">     * Data holder for each Check module entry.</span>
+<span class="source-line-no">823</span><span id="line-823">     *</span>
+<span class="source-line-no">824</span><span id="line-824">     * @param simpleName check simple name</span>
+<span class="source-line-no">825</span><span id="line-825">     * @param link documentation link</span>
+<span class="source-line-no">826</span><span id="line-826">     * @param summary module summary</span>
+<span class="source-line-no">827</span><span id="line-827">     */</span>
+<span class="source-line-no">828</span><span id="line-828">    private record CheckInfo(String simpleName, String link, String summary) {</span>
+<span class="source-line-no">829</span><span id="line-829">    }</span>
+<span class="source-line-no">830</span><span id="line-830"></span>
+<span class="source-line-no">831</span><span id="line-831">}</span>
 
 
 

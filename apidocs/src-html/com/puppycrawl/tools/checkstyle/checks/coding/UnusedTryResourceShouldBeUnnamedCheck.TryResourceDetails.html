@@ -112,215 +112,223 @@
 <span class="source-line-no">099</span><span id="line-99">     */</span>
 <span class="source-line-no">100</span><span id="line-100">    private final Deque&lt;Deque&lt;TryResourceDetails&gt;&gt; tryResources = new ArrayDeque&lt;&gt;();</span>
 <span class="source-line-no">101</span><span id="line-101"></span>
-<span class="source-line-no">102</span><span id="line-102">    @Override</span>
-<span class="source-line-no">103</span><span id="line-103">    public int[] getDefaultTokens() {</span>
-<span class="source-line-no">104</span><span id="line-104">        return getRequiredTokens();</span>
-<span class="source-line-no">105</span><span id="line-105">    }</span>
-<span class="source-line-no">106</span><span id="line-106"></span>
-<span class="source-line-no">107</span><span id="line-107">    @Override</span>
-<span class="source-line-no">108</span><span id="line-108">    public int[] getAcceptableTokens() {</span>
-<span class="source-line-no">109</span><span id="line-109">        return getRequiredTokens();</span>
-<span class="source-line-no">110</span><span id="line-110">    }</span>
-<span class="source-line-no">111</span><span id="line-111"></span>
-<span class="source-line-no">112</span><span id="line-112">    @Override</span>
-<span class="source-line-no">113</span><span id="line-113">    public int[] getRequiredTokens() {</span>
-<span class="source-line-no">114</span><span id="line-114">        return new int[] {</span>
-<span class="source-line-no">115</span><span id="line-115">            TokenTypes.LITERAL_TRY,</span>
-<span class="source-line-no">116</span><span id="line-116">            TokenTypes.IDENT,</span>
-<span class="source-line-no">117</span><span id="line-117">        };</span>
-<span class="source-line-no">118</span><span id="line-118">    }</span>
-<span class="source-line-no">119</span><span id="line-119"></span>
-<span class="source-line-no">120</span><span id="line-120">    @Override</span>
-<span class="source-line-no">121</span><span id="line-121">    public void beginTree(DetailAST rootAST) {</span>
-<span class="source-line-no">122</span><span id="line-122">        tryResources.clear();</span>
-<span class="source-line-no">123</span><span id="line-123">    }</span>
-<span class="source-line-no">124</span><span id="line-124"></span>
-<span class="source-line-no">125</span><span id="line-125">    @Override</span>
-<span class="source-line-no">126</span><span id="line-126">    public void visitToken(DetailAST ast) {</span>
-<span class="source-line-no">127</span><span id="line-127">        if (ast.getType() == TokenTypes.LITERAL_TRY) {</span>
-<span class="source-line-no">128</span><span id="line-128">            tryResources.push(collectTrackedResources(ast));</span>
-<span class="source-line-no">129</span><span id="line-129">        }</span>
-<span class="source-line-no">130</span><span id="line-130">        else if (isResourceUsageCandidate(ast)</span>
-<span class="source-line-no">131</span><span id="line-131">                &amp;&amp; !isShadowedByCatchParameter(ast)) {</span>
-<span class="source-line-no">132</span><span id="line-132">            tryResources.stream()</span>
-<span class="source-line-no">133</span><span id="line-133">                .flatMap(Deque::stream)</span>
-<span class="source-line-no">134</span><span id="line-134">                .filter(resource -&gt; resource.getName().equals(ast.getText()))</span>
-<span class="source-line-no">135</span><span id="line-135">                .findFirst()</span>
-<span class="source-line-no">136</span><span id="line-136">                .ifPresent(TryResourceDetails::registerAsUsed);</span>
-<span class="source-line-no">137</span><span id="line-137">        }</span>
-<span class="source-line-no">138</span><span id="line-138">    }</span>
-<span class="source-line-no">139</span><span id="line-139"></span>
-<span class="source-line-no">140</span><span id="line-140">    @Override</span>
-<span class="source-line-no">141</span><span id="line-141">    public void leaveToken(DetailAST ast) {</span>
-<span class="source-line-no">142</span><span id="line-142">        if (ast.getType() == TokenTypes.LITERAL_TRY) {</span>
-<span class="source-line-no">143</span><span id="line-143">            final Deque&lt;TryResourceDetails&gt; resources = tryResources.peek();</span>
-<span class="source-line-no">144</span><span id="line-144">            for (TryResourceDetails resource : resources) {</span>
-<span class="source-line-no">145</span><span id="line-145">                if (!resource.isUsed()) {</span>
-<span class="source-line-no">146</span><span id="line-146">                    log(resource.getIdentToken(),</span>
-<span class="source-line-no">147</span><span id="line-147">                            MSG_UNUSED_TRY_RESOURCE,</span>
-<span class="source-line-no">148</span><span id="line-148">                            resource.getName());</span>
-<span class="source-line-no">149</span><span id="line-149">                }</span>
-<span class="source-line-no">150</span><span id="line-150">            }</span>
-<span class="source-line-no">151</span><span id="line-151">            tryResources.pop();</span>
-<span class="source-line-no">152</span><span id="line-152">        }</span>
-<span class="source-line-no">153</span><span id="line-153">    }</span>
-<span class="source-line-no">154</span><span id="line-154"></span>
-<span class="source-line-no">155</span><span id="line-155">    /**</span>
-<span class="source-line-no">156</span><span id="line-156">     * Collects all tracked resources from the {@code RESOURCE_SPECIFICATION} of a</span>
-<span class="source-line-no">157</span><span id="line-157">     * try-with-resources statement.</span>
-<span class="source-line-no">158</span><span id="line-158">     *</span>
-<span class="source-line-no">159</span><span id="line-159">     * @param tryAst the {@link TokenTypes#LITERAL_TRY} token</span>
-<span class="source-line-no">160</span><span id="line-160">     * @return a deque of {@link TryResourceDetails} for trackable resources;</span>
-<span class="source-line-no">161</span><span id="line-161">     *         never {@code null}, but may be empty for plain try statements</span>
-<span class="source-line-no">162</span><span id="line-162">     */</span>
-<span class="source-line-no">163</span><span id="line-163">    private static Deque&lt;TryResourceDetails&gt; collectTrackedResources(DetailAST tryAst) {</span>
-<span class="source-line-no">164</span><span id="line-164">        final Deque&lt;TryResourceDetails&gt; resources = new ArrayDeque&lt;&gt;();</span>
-<span class="source-line-no">165</span><span id="line-165">        final DetailAST resourceSpec =</span>
-<span class="source-line-no">166</span><span id="line-166">                tryAst.findFirstToken(TokenTypes.RESOURCE_SPECIFICATION);</span>
-<span class="source-line-no">167</span><span id="line-167">        if (resourceSpec != null) {</span>
-<span class="source-line-no">168</span><span id="line-168">            final DetailAST resourcesNode =</span>
-<span class="source-line-no">169</span><span id="line-169">                    resourceSpec.findFirstToken(TokenTypes.RESOURCES);</span>
-<span class="source-line-no">170</span><span id="line-170"></span>
-<span class="source-line-no">171</span><span id="line-171">            TokenUtil.forEachChild(resourcesNode, TokenTypes.RESOURCE, child -&gt; {</span>
-<span class="source-line-no">172</span><span id="line-172">                final boolean isDeclared = child.findFirstToken(TokenTypes.TYPE) != null;</span>
-<span class="source-line-no">173</span><span id="line-173">                if (isDeclared) {</span>
-<span class="source-line-no">174</span><span id="line-174">                    final DetailAST ident = child.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">175</span><span id="line-175">                    if (!UNNAMED_VARIABLE_IDENTIFIER.equals(ident.getText())) {</span>
-<span class="source-line-no">176</span><span id="line-176">                        resources.addLast(new TryResourceDetails(ident));</span>
-<span class="source-line-no">177</span><span id="line-177">                    }</span>
-<span class="source-line-no">178</span><span id="line-178">                }</span>
-<span class="source-line-no">179</span><span id="line-179">            });</span>
-<span class="source-line-no">180</span><span id="line-180">        }</span>
-<span class="source-line-no">181</span><span id="line-181">        return resources;</span>
-<span class="source-line-no">182</span><span id="line-182">    }</span>
-<span class="source-line-no">183</span><span id="line-183"></span>
-<span class="source-line-no">184</span><span id="line-184">    /**</span>
-<span class="source-line-no">185</span><span id="line-185">     * Determines whether an {@link TokenTypes#IDENT} token is a candidate for being</span>
-<span class="source-line-no">186</span><span id="line-186">     * a &lt;em&gt;use&lt;/em&gt; of a tracked try resource.</span>
-<span class="source-line-no">187</span><span id="line-187">     *</span>
-<span class="source-line-no">188</span><span id="line-188">     * @param identAst the {@link TokenTypes#IDENT} token to inspect</span>
-<span class="source-line-no">189</span><span id="line-189">     * @return {@code true} if the token could represent a reference to a resource variable</span>
-<span class="source-line-no">190</span><span id="line-190">     */</span>
-<span class="source-line-no">191</span><span id="line-191">    private static boolean isResourceUsageCandidate(DetailAST identAst) {</span>
-<span class="source-line-no">192</span><span id="line-192">        return !isResourceDeclarationIdent(identAst)</span>
-<span class="source-line-no">193</span><span id="line-193">                &amp;&amp; (!TokenUtil.isOfType(identAst.getParent(), INVALID_RESOURCE_IDENT_PARENTS)</span>
-<span class="source-line-no">194</span><span id="line-194">                        || isObjectReferenceInDot(identAst));</span>
-<span class="source-line-no">195</span><span id="line-195">    }</span>
-<span class="source-line-no">196</span><span id="line-196"></span>
-<span class="source-line-no">197</span><span id="line-197">    /**</span>
-<span class="source-line-no">198</span><span id="line-198">     * Returns {@code true} when {@code identAst} is shadowed by a catch parameter</span>
-<span class="source-line-no">199</span><span id="line-199">     * of an immediately enclosing {@link TokenTypes#LITERAL_CATCH} block.</span>
-<span class="source-line-no">200</span><span id="line-200">     *</span>
-<span class="source-line-no">201</span><span id="line-201">     * @param identAst the {@link TokenTypes#IDENT} token to inspect</span>
-<span class="source-line-no">202</span><span id="line-202">     * @return {@code true} if a catch parameter with the same name is in scope</span>
-<span class="source-line-no">203</span><span id="line-203">     */</span>
-<span class="source-line-no">204</span><span id="line-204">    private static boolean isShadowedByCatchParameter(DetailAST identAst) {</span>
-<span class="source-line-no">205</span><span id="line-205">        boolean shadowed = false;</span>
-<span class="source-line-no">206</span><span id="line-206">        DetailAST ancestor = identAst;</span>
-<span class="source-line-no">207</span><span id="line-207">        while (ancestor != null) {</span>
-<span class="source-line-no">208</span><span id="line-208">            if (ancestor.getType() == TokenTypes.LITERAL_CATCH) {</span>
-<span class="source-line-no">209</span><span id="line-209">                final DetailAST paramDef =</span>
-<span class="source-line-no">210</span><span id="line-210">                        ancestor.findFirstToken(TokenTypes.PARAMETER_DEF);</span>
-<span class="source-line-no">211</span><span id="line-211">                final DetailAST paramIdent =</span>
-<span class="source-line-no">212</span><span id="line-212">                        paramDef.findFirstToken(TokenTypes.IDENT);</span>
-<span class="source-line-no">213</span><span id="line-213">                shadowed = paramIdent.getText().equals(identAst.getText());</span>
-<span class="source-line-no">214</span><span id="line-214">                break;</span>
-<span class="source-line-no">215</span><span id="line-215">            }</span>
-<span class="source-line-no">216</span><span id="line-216">            ancestor = ancestor.getParent();</span>
-<span class="source-line-no">217</span><span id="line-217">        }</span>
-<span class="source-line-no">218</span><span id="line-218">        return shadowed;</span>
-<span class="source-line-no">219</span><span id="line-219">    }</span>
-<span class="source-line-no">220</span><span id="line-220"></span>
-<span class="source-line-no">221</span><span id="line-221">    /**</span>
-<span class="source-line-no">222</span><span id="line-222">     * Returns {@code true} when {@code identAst} is the variable-name token inside a</span>
-<span class="source-line-no">223</span><span id="line-223">     * {@link TokenTypes#RESOURCE} node (i.e. the declaration site, not a use).</span>
-<span class="source-line-no">224</span><span id="line-224">     *</span>
-<span class="source-line-no">225</span><span id="line-225">     * @param identAst the {@link TokenTypes#IDENT} token</span>
-<span class="source-line-no">226</span><span id="line-226">     * @return {@code true} if this IDENT is the name in a resource declaration/reference</span>
-<span class="source-line-no">227</span><span id="line-227">     */</span>
-<span class="source-line-no">228</span><span id="line-228">    private static boolean isResourceDeclarationIdent(DetailAST identAst) {</span>
-<span class="source-line-no">229</span><span id="line-229">        final DetailAST parent = identAst.getParent();</span>
-<span class="source-line-no">230</span><span id="line-230">        return parent.getType() == TokenTypes.RESOURCE</span>
-<span class="source-line-no">231</span><span id="line-231">            &amp;&amp; parent.findFirstToken(TokenTypes.TYPE) != null;</span>
-<span class="source-line-no">232</span><span id="line-232">    }</span>
-<span class="source-line-no">233</span><span id="line-233"></span>
-<span class="source-line-no">234</span><span id="line-234">    /**</span>
-<span class="source-line-no">235</span><span id="line-235">     * Returns {@code true} when {@code identAst} is the &lt;em&gt;first&lt;/em&gt; child of a</span>
-<span class="source-line-no">236</span><span id="line-236">     * {@link TokenTypes#DOT} node, meaning it is the object reference in an expression</span>
-<span class="source-line-no">237</span><span id="line-237">     * such as {@code a.close()} — a genuine use of the variable.</span>
-<span class="source-line-no">238</span><span id="line-238">     *</span>
-<span class="source-line-no">239</span><span id="line-239">     * @param identAst the {@link TokenTypes#IDENT} token</span>
-<span class="source-line-no">240</span><span id="line-240">     * @return {@code true} if the IDENT is the left-hand operand of a dot expression</span>
-<span class="source-line-no">241</span><span id="line-241">     */</span>
-<span class="source-line-no">242</span><span id="line-242">    private static boolean isObjectReferenceInDot(DetailAST identAst) {</span>
-<span class="source-line-no">243</span><span id="line-243">        final DetailAST parent = identAst.getParent();</span>
-<span class="source-line-no">244</span><span id="line-244">        return parent.getType() == TokenTypes.DOT</span>
-<span class="source-line-no">245</span><span id="line-245">                &amp;&amp; identAst.equals(parent.getFirstChild());</span>
-<span class="source-line-no">246</span><span id="line-246">    }</span>
-<span class="source-line-no">247</span><span id="line-247"></span>
-<span class="source-line-no">248</span><span id="line-248">    /**</span>
-<span class="source-line-no">249</span><span id="line-249">     * Maintains tracking information about a single try-with-resources resource.</span>
-<span class="source-line-no">250</span><span id="line-250">     */</span>
-<span class="source-line-no">251</span><span id="line-251">    private static final class TryResourceDetails {</span>
-<span class="source-line-no">252</span><span id="line-252"></span>
-<span class="source-line-no">253</span><span id="line-253">        /** The name of the resource variable. */</span>
-<span class="source-line-no">254</span><span id="line-254">        private final String name;</span>
-<span class="source-line-no">255</span><span id="line-255"></span>
-<span class="source-line-no">256</span><span id="line-256">        /**</span>
-<span class="source-line-no">257</span><span id="line-257">         * The {@link TokenTypes#IDENT} token for the variable name.</span>
-<span class="source-line-no">258</span><span id="line-258">         * Used as the violation position.</span>
-<span class="source-line-no">259</span><span id="line-259">         */</span>
-<span class="source-line-no">260</span><span id="line-260">        private final DetailAST identToken;</span>
-<span class="source-line-no">261</span><span id="line-261"></span>
-<span class="source-line-no">262</span><span id="line-262">        /** Whether the resource has been referenced within the try scope. */</span>
-<span class="source-line-no">263</span><span id="line-263">        private boolean used;</span>
-<span class="source-line-no">264</span><span id="line-264"></span>
-<span class="source-line-no">265</span><span id="line-265">        /**</span>
-<span class="source-line-no">266</span><span id="line-266">         * Creates a new instance tracking the resource whose name-token is</span>
-<span class="source-line-no">267</span><span id="line-267">         * {@code identToken}.</span>
-<span class="source-line-no">268</span><span id="line-268">         *</span>
-<span class="source-line-no">269</span><span id="line-269">         * @param identToken the {@link TokenTypes#IDENT} token for the resource name</span>
-<span class="source-line-no">270</span><span id="line-270">         */</span>
-<span class="source-line-no">271</span><span id="line-271">        private TryResourceDetails(DetailAST identToken) {</span>
-<span class="source-line-no">272</span><span id="line-272">            name = identToken.getText();</span>
-<span class="source-line-no">273</span><span id="line-273">            this.identToken = identToken;</span>
-<span class="source-line-no">274</span><span id="line-274">        }</span>
-<span class="source-line-no">275</span><span id="line-275"></span>
-<span class="source-line-no">276</span><span id="line-276">        /**</span>
-<span class="source-line-no">277</span><span id="line-277">         * Marks this resource as having been referenced (used) in the try scope.</span>
-<span class="source-line-no">278</span><span id="line-278">         */</span>
-<span class="source-line-no">279</span><span id="line-279">        private void registerAsUsed() {</span>
-<span class="source-line-no">280</span><span id="line-280">            used = true;</span>
+<span class="source-line-no">102</span><span id="line-102">    /**</span>
+<span class="source-line-no">103</span><span id="line-103">     * Creates a new {@code UnusedTryResourceShouldBeUnnamedCheck} instance.</span>
+<span class="source-line-no">104</span><span id="line-104">     */</span>
+<span class="source-line-no">105</span><span id="line-105">    public UnusedTryResourceShouldBeUnnamedCheck() {</span>
+<span class="source-line-no">106</span><span id="line-106">        // no code by default</span>
+<span class="source-line-no">107</span><span id="line-107">    }</span>
+<span class="source-line-no">108</span><span id="line-108"></span>
+<span class="source-line-no">109</span><span id="line-109">    @Override</span>
+<span class="source-line-no">110</span><span id="line-110">    public int[] getDefaultTokens() {</span>
+<span class="source-line-no">111</span><span id="line-111">        return getRequiredTokens();</span>
+<span class="source-line-no">112</span><span id="line-112">    }</span>
+<span class="source-line-no">113</span><span id="line-113"></span>
+<span class="source-line-no">114</span><span id="line-114">    @Override</span>
+<span class="source-line-no">115</span><span id="line-115">    public int[] getAcceptableTokens() {</span>
+<span class="source-line-no">116</span><span id="line-116">        return getRequiredTokens();</span>
+<span class="source-line-no">117</span><span id="line-117">    }</span>
+<span class="source-line-no">118</span><span id="line-118"></span>
+<span class="source-line-no">119</span><span id="line-119">    @Override</span>
+<span class="source-line-no">120</span><span id="line-120">    public int[] getRequiredTokens() {</span>
+<span class="source-line-no">121</span><span id="line-121">        return new int[] {</span>
+<span class="source-line-no">122</span><span id="line-122">            TokenTypes.LITERAL_TRY,</span>
+<span class="source-line-no">123</span><span id="line-123">            TokenTypes.IDENT,</span>
+<span class="source-line-no">124</span><span id="line-124">        };</span>
+<span class="source-line-no">125</span><span id="line-125">    }</span>
+<span class="source-line-no">126</span><span id="line-126"></span>
+<span class="source-line-no">127</span><span id="line-127">    @Override</span>
+<span class="source-line-no">128</span><span id="line-128">    public void beginTree(DetailAST rootAST) {</span>
+<span class="source-line-no">129</span><span id="line-129">        tryResources.clear();</span>
+<span class="source-line-no">130</span><span id="line-130">    }</span>
+<span class="source-line-no">131</span><span id="line-131"></span>
+<span class="source-line-no">132</span><span id="line-132">    @Override</span>
+<span class="source-line-no">133</span><span id="line-133">    public void visitToken(DetailAST ast) {</span>
+<span class="source-line-no">134</span><span id="line-134">        if (ast.getType() == TokenTypes.LITERAL_TRY) {</span>
+<span class="source-line-no">135</span><span id="line-135">            tryResources.push(collectTrackedResources(ast));</span>
+<span class="source-line-no">136</span><span id="line-136">        }</span>
+<span class="source-line-no">137</span><span id="line-137">        else if (isResourceUsageCandidate(ast)</span>
+<span class="source-line-no">138</span><span id="line-138">                &amp;&amp; !isShadowedByCatchParameter(ast)) {</span>
+<span class="source-line-no">139</span><span id="line-139">            tryResources.stream()</span>
+<span class="source-line-no">140</span><span id="line-140">                .flatMap(Deque::stream)</span>
+<span class="source-line-no">141</span><span id="line-141">                .filter(resource -&gt; resource.getName().equals(ast.getText()))</span>
+<span class="source-line-no">142</span><span id="line-142">                .findFirst()</span>
+<span class="source-line-no">143</span><span id="line-143">                .ifPresent(TryResourceDetails::registerAsUsed);</span>
+<span class="source-line-no">144</span><span id="line-144">        }</span>
+<span class="source-line-no">145</span><span id="line-145">    }</span>
+<span class="source-line-no">146</span><span id="line-146"></span>
+<span class="source-line-no">147</span><span id="line-147">    @Override</span>
+<span class="source-line-no">148</span><span id="line-148">    public void leaveToken(DetailAST ast) {</span>
+<span class="source-line-no">149</span><span id="line-149">        if (ast.getType() == TokenTypes.LITERAL_TRY) {</span>
+<span class="source-line-no">150</span><span id="line-150">            final Deque&lt;TryResourceDetails&gt; resources = tryResources.peek();</span>
+<span class="source-line-no">151</span><span id="line-151">            for (TryResourceDetails resource : resources) {</span>
+<span class="source-line-no">152</span><span id="line-152">                if (!resource.isUsed()) {</span>
+<span class="source-line-no">153</span><span id="line-153">                    log(resource.getIdentToken(),</span>
+<span class="source-line-no">154</span><span id="line-154">                            MSG_UNUSED_TRY_RESOURCE,</span>
+<span class="source-line-no">155</span><span id="line-155">                            resource.getName());</span>
+<span class="source-line-no">156</span><span id="line-156">                }</span>
+<span class="source-line-no">157</span><span id="line-157">            }</span>
+<span class="source-line-no">158</span><span id="line-158">            tryResources.pop();</span>
+<span class="source-line-no">159</span><span id="line-159">        }</span>
+<span class="source-line-no">160</span><span id="line-160">    }</span>
+<span class="source-line-no">161</span><span id="line-161"></span>
+<span class="source-line-no">162</span><span id="line-162">    /**</span>
+<span class="source-line-no">163</span><span id="line-163">     * Collects all tracked resources from the {@code RESOURCE_SPECIFICATION} of a</span>
+<span class="source-line-no">164</span><span id="line-164">     * try-with-resources statement.</span>
+<span class="source-line-no">165</span><span id="line-165">     *</span>
+<span class="source-line-no">166</span><span id="line-166">     * @param tryAst the {@link TokenTypes#LITERAL_TRY} token</span>
+<span class="source-line-no">167</span><span id="line-167">     * @return a deque of {@link TryResourceDetails} for trackable resources;</span>
+<span class="source-line-no">168</span><span id="line-168">     *         never {@code null}, but may be empty for plain try statements</span>
+<span class="source-line-no">169</span><span id="line-169">     */</span>
+<span class="source-line-no">170</span><span id="line-170">    private static Deque&lt;TryResourceDetails&gt; collectTrackedResources(DetailAST tryAst) {</span>
+<span class="source-line-no">171</span><span id="line-171">        final Deque&lt;TryResourceDetails&gt; resources = new ArrayDeque&lt;&gt;();</span>
+<span class="source-line-no">172</span><span id="line-172">        final DetailAST resourceSpec =</span>
+<span class="source-line-no">173</span><span id="line-173">                tryAst.findFirstToken(TokenTypes.RESOURCE_SPECIFICATION);</span>
+<span class="source-line-no">174</span><span id="line-174">        if (resourceSpec != null) {</span>
+<span class="source-line-no">175</span><span id="line-175">            final DetailAST resourcesNode =</span>
+<span class="source-line-no">176</span><span id="line-176">                    resourceSpec.findFirstToken(TokenTypes.RESOURCES);</span>
+<span class="source-line-no">177</span><span id="line-177"></span>
+<span class="source-line-no">178</span><span id="line-178">            TokenUtil.forEachChild(resourcesNode, TokenTypes.RESOURCE, child -&gt; {</span>
+<span class="source-line-no">179</span><span id="line-179">                final boolean isDeclared = child.findFirstToken(TokenTypes.TYPE) != null;</span>
+<span class="source-line-no">180</span><span id="line-180">                if (isDeclared) {</span>
+<span class="source-line-no">181</span><span id="line-181">                    final DetailAST ident = child.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">182</span><span id="line-182">                    if (!UNNAMED_VARIABLE_IDENTIFIER.equals(ident.getText())) {</span>
+<span class="source-line-no">183</span><span id="line-183">                        resources.addLast(new TryResourceDetails(ident));</span>
+<span class="source-line-no">184</span><span id="line-184">                    }</span>
+<span class="source-line-no">185</span><span id="line-185">                }</span>
+<span class="source-line-no">186</span><span id="line-186">            });</span>
+<span class="source-line-no">187</span><span id="line-187">        }</span>
+<span class="source-line-no">188</span><span id="line-188">        return resources;</span>
+<span class="source-line-no">189</span><span id="line-189">    }</span>
+<span class="source-line-no">190</span><span id="line-190"></span>
+<span class="source-line-no">191</span><span id="line-191">    /**</span>
+<span class="source-line-no">192</span><span id="line-192">     * Determines whether an {@link TokenTypes#IDENT} token is a candidate for being</span>
+<span class="source-line-no">193</span><span id="line-193">     * a &lt;em&gt;use&lt;/em&gt; of a tracked try resource.</span>
+<span class="source-line-no">194</span><span id="line-194">     *</span>
+<span class="source-line-no">195</span><span id="line-195">     * @param identAst the {@link TokenTypes#IDENT} token to inspect</span>
+<span class="source-line-no">196</span><span id="line-196">     * @return {@code true} if the token could represent a reference to a resource variable</span>
+<span class="source-line-no">197</span><span id="line-197">     */</span>
+<span class="source-line-no">198</span><span id="line-198">    private static boolean isResourceUsageCandidate(DetailAST identAst) {</span>
+<span class="source-line-no">199</span><span id="line-199">        return !isResourceDeclarationIdent(identAst)</span>
+<span class="source-line-no">200</span><span id="line-200">                &amp;&amp; (!TokenUtil.isOfType(identAst.getParent(), INVALID_RESOURCE_IDENT_PARENTS)</span>
+<span class="source-line-no">201</span><span id="line-201">                        || isObjectReferenceInDot(identAst));</span>
+<span class="source-line-no">202</span><span id="line-202">    }</span>
+<span class="source-line-no">203</span><span id="line-203"></span>
+<span class="source-line-no">204</span><span id="line-204">    /**</span>
+<span class="source-line-no">205</span><span id="line-205">     * Returns {@code true} when {@code identAst} is shadowed by a catch parameter</span>
+<span class="source-line-no">206</span><span id="line-206">     * of an immediately enclosing {@link TokenTypes#LITERAL_CATCH} block.</span>
+<span class="source-line-no">207</span><span id="line-207">     *</span>
+<span class="source-line-no">208</span><span id="line-208">     * @param identAst the {@link TokenTypes#IDENT} token to inspect</span>
+<span class="source-line-no">209</span><span id="line-209">     * @return {@code true} if a catch parameter with the same name is in scope</span>
+<span class="source-line-no">210</span><span id="line-210">     */</span>
+<span class="source-line-no">211</span><span id="line-211">    private static boolean isShadowedByCatchParameter(DetailAST identAst) {</span>
+<span class="source-line-no">212</span><span id="line-212">        boolean shadowed = false;</span>
+<span class="source-line-no">213</span><span id="line-213">        DetailAST ancestor = identAst;</span>
+<span class="source-line-no">214</span><span id="line-214">        while (ancestor != null) {</span>
+<span class="source-line-no">215</span><span id="line-215">            if (ancestor.getType() == TokenTypes.LITERAL_CATCH) {</span>
+<span class="source-line-no">216</span><span id="line-216">                final DetailAST paramDef =</span>
+<span class="source-line-no">217</span><span id="line-217">                        ancestor.findFirstToken(TokenTypes.PARAMETER_DEF);</span>
+<span class="source-line-no">218</span><span id="line-218">                final DetailAST paramIdent =</span>
+<span class="source-line-no">219</span><span id="line-219">                        paramDef.findFirstToken(TokenTypes.IDENT);</span>
+<span class="source-line-no">220</span><span id="line-220">                shadowed = paramIdent.getText().equals(identAst.getText());</span>
+<span class="source-line-no">221</span><span id="line-221">                break;</span>
+<span class="source-line-no">222</span><span id="line-222">            }</span>
+<span class="source-line-no">223</span><span id="line-223">            ancestor = ancestor.getParent();</span>
+<span class="source-line-no">224</span><span id="line-224">        }</span>
+<span class="source-line-no">225</span><span id="line-225">        return shadowed;</span>
+<span class="source-line-no">226</span><span id="line-226">    }</span>
+<span class="source-line-no">227</span><span id="line-227"></span>
+<span class="source-line-no">228</span><span id="line-228">    /**</span>
+<span class="source-line-no">229</span><span id="line-229">     * Returns {@code true} when {@code identAst} is the variable-name token inside a</span>
+<span class="source-line-no">230</span><span id="line-230">     * {@link TokenTypes#RESOURCE} node (i.e. the declaration site, not a use).</span>
+<span class="source-line-no">231</span><span id="line-231">     *</span>
+<span class="source-line-no">232</span><span id="line-232">     * @param identAst the {@link TokenTypes#IDENT} token</span>
+<span class="source-line-no">233</span><span id="line-233">     * @return {@code true} if this IDENT is the name in a resource declaration/reference</span>
+<span class="source-line-no">234</span><span id="line-234">     */</span>
+<span class="source-line-no">235</span><span id="line-235">    private static boolean isResourceDeclarationIdent(DetailAST identAst) {</span>
+<span class="source-line-no">236</span><span id="line-236">        final DetailAST parent = identAst.getParent();</span>
+<span class="source-line-no">237</span><span id="line-237">        return parent.getType() == TokenTypes.RESOURCE</span>
+<span class="source-line-no">238</span><span id="line-238">            &amp;&amp; parent.findFirstToken(TokenTypes.TYPE) != null;</span>
+<span class="source-line-no">239</span><span id="line-239">    }</span>
+<span class="source-line-no">240</span><span id="line-240"></span>
+<span class="source-line-no">241</span><span id="line-241">    /**</span>
+<span class="source-line-no">242</span><span id="line-242">     * Returns {@code true} when {@code identAst} is the &lt;em&gt;first&lt;/em&gt; child of a</span>
+<span class="source-line-no">243</span><span id="line-243">     * {@link TokenTypes#DOT} node, meaning it is the object reference in an expression</span>
+<span class="source-line-no">244</span><span id="line-244">     * such as {@code a.close()} — a genuine use of the variable.</span>
+<span class="source-line-no">245</span><span id="line-245">     *</span>
+<span class="source-line-no">246</span><span id="line-246">     * @param identAst the {@link TokenTypes#IDENT} token</span>
+<span class="source-line-no">247</span><span id="line-247">     * @return {@code true} if the IDENT is the left-hand operand of a dot expression</span>
+<span class="source-line-no">248</span><span id="line-248">     */</span>
+<span class="source-line-no">249</span><span id="line-249">    private static boolean isObjectReferenceInDot(DetailAST identAst) {</span>
+<span class="source-line-no">250</span><span id="line-250">        final DetailAST parent = identAst.getParent();</span>
+<span class="source-line-no">251</span><span id="line-251">        return parent.getType() == TokenTypes.DOT</span>
+<span class="source-line-no">252</span><span id="line-252">                &amp;&amp; identAst.equals(parent.getFirstChild());</span>
+<span class="source-line-no">253</span><span id="line-253">    }</span>
+<span class="source-line-no">254</span><span id="line-254"></span>
+<span class="source-line-no">255</span><span id="line-255">    /**</span>
+<span class="source-line-no">256</span><span id="line-256">     * Maintains tracking information about a single try-with-resources resource.</span>
+<span class="source-line-no">257</span><span id="line-257">     */</span>
+<span class="source-line-no">258</span><span id="line-258">    private static final class TryResourceDetails {</span>
+<span class="source-line-no">259</span><span id="line-259"></span>
+<span class="source-line-no">260</span><span id="line-260">        /** The name of the resource variable. */</span>
+<span class="source-line-no">261</span><span id="line-261">        private final String name;</span>
+<span class="source-line-no">262</span><span id="line-262"></span>
+<span class="source-line-no">263</span><span id="line-263">        /**</span>
+<span class="source-line-no">264</span><span id="line-264">         * The {@link TokenTypes#IDENT} token for the variable name.</span>
+<span class="source-line-no">265</span><span id="line-265">         * Used as the violation position.</span>
+<span class="source-line-no">266</span><span id="line-266">         */</span>
+<span class="source-line-no">267</span><span id="line-267">        private final DetailAST identToken;</span>
+<span class="source-line-no">268</span><span id="line-268"></span>
+<span class="source-line-no">269</span><span id="line-269">        /** Whether the resource has been referenced within the try scope. */</span>
+<span class="source-line-no">270</span><span id="line-270">        private boolean used;</span>
+<span class="source-line-no">271</span><span id="line-271"></span>
+<span class="source-line-no">272</span><span id="line-272">        /**</span>
+<span class="source-line-no">273</span><span id="line-273">         * Creates a new instance tracking the resource whose name-token is</span>
+<span class="source-line-no">274</span><span id="line-274">         * {@code identToken}.</span>
+<span class="source-line-no">275</span><span id="line-275">         *</span>
+<span class="source-line-no">276</span><span id="line-276">         * @param identToken the {@link TokenTypes#IDENT} token for the resource name</span>
+<span class="source-line-no">277</span><span id="line-277">         */</span>
+<span class="source-line-no">278</span><span id="line-278">        private TryResourceDetails(DetailAST identToken) {</span>
+<span class="source-line-no">279</span><span id="line-279">            name = identToken.getText();</span>
+<span class="source-line-no">280</span><span id="line-280">            this.identToken = identToken;</span>
 <span class="source-line-no">281</span><span id="line-281">        }</span>
 <span class="source-line-no">282</span><span id="line-282"></span>
 <span class="source-line-no">283</span><span id="line-283">        /**</span>
-<span class="source-line-no">284</span><span id="line-284">         * Returns the name of the resource variable.</span>
-<span class="source-line-no">285</span><span id="line-285">         *</span>
-<span class="source-line-no">286</span><span id="line-286">         * @return variable name</span>
-<span class="source-line-no">287</span><span id="line-287">         */</span>
-<span class="source-line-no">288</span><span id="line-288">        private String getName() {</span>
-<span class="source-line-no">289</span><span id="line-289">            return name;</span>
-<span class="source-line-no">290</span><span id="line-290">        }</span>
-<span class="source-line-no">291</span><span id="line-291"></span>
-<span class="source-line-no">292</span><span id="line-292">        /**</span>
-<span class="source-line-no">293</span><span id="line-293">         * Returns the {@link TokenTypes#IDENT} token used to report violations.</span>
-<span class="source-line-no">294</span><span id="line-294">         *</span>
-<span class="source-line-no">295</span><span id="line-295">         * @return IDENT token</span>
-<span class="source-line-no">296</span><span id="line-296">         */</span>
-<span class="source-line-no">297</span><span id="line-297">        private DetailAST getIdentToken() {</span>
-<span class="source-line-no">298</span><span id="line-298">            return identToken;</span>
-<span class="source-line-no">299</span><span id="line-299">        }</span>
-<span class="source-line-no">300</span><span id="line-300"></span>
-<span class="source-line-no">301</span><span id="line-301">        /**</span>
-<span class="source-line-no">302</span><span id="line-302">         * Returns whether this resource has been referenced in the try scope.</span>
-<span class="source-line-no">303</span><span id="line-303">         *</span>
-<span class="source-line-no">304</span><span id="line-304">         * @return {@code true} if used</span>
-<span class="source-line-no">305</span><span id="line-305">         */</span>
-<span class="source-line-no">306</span><span id="line-306">        private boolean isUsed() {</span>
-<span class="source-line-no">307</span><span id="line-307">            return used;</span>
-<span class="source-line-no">308</span><span id="line-308">        }</span>
-<span class="source-line-no">309</span><span id="line-309">    }</span>
-<span class="source-line-no">310</span><span id="line-310">}</span>
+<span class="source-line-no">284</span><span id="line-284">         * Marks this resource as having been referenced (used) in the try scope.</span>
+<span class="source-line-no">285</span><span id="line-285">         */</span>
+<span class="source-line-no">286</span><span id="line-286">        private void registerAsUsed() {</span>
+<span class="source-line-no">287</span><span id="line-287">            used = true;</span>
+<span class="source-line-no">288</span><span id="line-288">        }</span>
+<span class="source-line-no">289</span><span id="line-289"></span>
+<span class="source-line-no">290</span><span id="line-290">        /**</span>
+<span class="source-line-no">291</span><span id="line-291">         * Returns the name of the resource variable.</span>
+<span class="source-line-no">292</span><span id="line-292">         *</span>
+<span class="source-line-no">293</span><span id="line-293">         * @return variable name</span>
+<span class="source-line-no">294</span><span id="line-294">         */</span>
+<span class="source-line-no">295</span><span id="line-295">        private String getName() {</span>
+<span class="source-line-no">296</span><span id="line-296">            return name;</span>
+<span class="source-line-no">297</span><span id="line-297">        }</span>
+<span class="source-line-no">298</span><span id="line-298"></span>
+<span class="source-line-no">299</span><span id="line-299">        /**</span>
+<span class="source-line-no">300</span><span id="line-300">         * Returns the {@link TokenTypes#IDENT} token used to report violations.</span>
+<span class="source-line-no">301</span><span id="line-301">         *</span>
+<span class="source-line-no">302</span><span id="line-302">         * @return IDENT token</span>
+<span class="source-line-no">303</span><span id="line-303">         */</span>
+<span class="source-line-no">304</span><span id="line-304">        private DetailAST getIdentToken() {</span>
+<span class="source-line-no">305</span><span id="line-305">            return identToken;</span>
+<span class="source-line-no">306</span><span id="line-306">        }</span>
+<span class="source-line-no">307</span><span id="line-307"></span>
+<span class="source-line-no">308</span><span id="line-308">        /**</span>
+<span class="source-line-no">309</span><span id="line-309">         * Returns whether this resource has been referenced in the try scope.</span>
+<span class="source-line-no">310</span><span id="line-310">         *</span>
+<span class="source-line-no">311</span><span id="line-311">         * @return {@code true} if used</span>
+<span class="source-line-no">312</span><span id="line-312">         */</span>
+<span class="source-line-no">313</span><span id="line-313">        private boolean isUsed() {</span>
+<span class="source-line-no">314</span><span id="line-314">            return used;</span>
+<span class="source-line-no">315</span><span id="line-315">        }</span>
+<span class="source-line-no">316</span><span id="line-316">    }</span>
+<span class="source-line-no">317</span><span id="line-317"></span>
+<span class="source-line-no">318</span><span id="line-318">}</span>
 
 
 
