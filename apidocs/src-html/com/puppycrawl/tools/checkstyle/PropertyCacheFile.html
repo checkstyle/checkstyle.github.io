@@ -250,157 +250,158 @@
 <span class="source-line-no">237</span><span id="line-237">     * @throws IOException if an error occurs</span>
 <span class="source-line-no">238</span><span id="line-238">     */</span>
 <span class="source-line-no">239</span><span id="line-239">    private static void serialize(Serializable object,</span>
-<span class="source-line-no">240</span><span id="line-240">                                  OutputStream outputStream) throws IOException {</span>
-<span class="source-line-no">241</span><span id="line-241">        try (ObjectOutputStream oos = new ObjectOutputStream(outputStream)) {</span>
-<span class="source-line-no">242</span><span id="line-242">            oos.writeObject(object);</span>
-<span class="source-line-no">243</span><span id="line-243">        }</span>
-<span class="source-line-no">244</span><span id="line-244">    }</span>
-<span class="source-line-no">245</span><span id="line-245"></span>
-<span class="source-line-no">246</span><span id="line-246">    /**</span>
-<span class="source-line-no">247</span><span id="line-247">     * Puts external resources in cache.</span>
-<span class="source-line-no">248</span><span id="line-248">     * If at least one external resource changed, clears the cache.</span>
-<span class="source-line-no">249</span><span id="line-249">     *</span>
-<span class="source-line-no">250</span><span id="line-250">     * @param locations locations of external resources.</span>
-<span class="source-line-no">251</span><span id="line-251">     */</span>
-<span class="source-line-no">252</span><span id="line-252">    public void putExternalResources(Set&lt;String&gt; locations) {</span>
-<span class="source-line-no">253</span><span id="line-253">        final Set&lt;ExternalResource&gt; resources = loadExternalResources(locations);</span>
-<span class="source-line-no">254</span><span id="line-254">        if (areExternalResourcesChanged(resources)) {</span>
-<span class="source-line-no">255</span><span id="line-255">            reset();</span>
-<span class="source-line-no">256</span><span id="line-256">            fillCacheWithExternalResources(resources);</span>
-<span class="source-line-no">257</span><span id="line-257">        }</span>
-<span class="source-line-no">258</span><span id="line-258">    }</span>
-<span class="source-line-no">259</span><span id="line-259"></span>
-<span class="source-line-no">260</span><span id="line-260">    /**</span>
-<span class="source-line-no">261</span><span id="line-261">     * Loads a set of {@link ExternalResource} based on their locations.</span>
-<span class="source-line-no">262</span><span id="line-262">     *</span>
-<span class="source-line-no">263</span><span id="line-263">     * @param resourceLocations locations of external configuration resources.</span>
-<span class="source-line-no">264</span><span id="line-264">     * @return a set of {@code ExternalResource}.</span>
-<span class="source-line-no">265</span><span id="line-265">     */</span>
-<span class="source-line-no">266</span><span id="line-266">    private static Set&lt;ExternalResource&gt; loadExternalResources(Set&lt;String&gt; resourceLocations) {</span>
-<span class="source-line-no">267</span><span id="line-267">        final Set&lt;ExternalResource&gt; resources = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">268</span><span id="line-268">        for (String location : resourceLocations) {</span>
-<span class="source-line-no">269</span><span id="line-269">            try {</span>
-<span class="source-line-no">270</span><span id="line-270">                final byte[] content = loadExternalResource(location);</span>
-<span class="source-line-no">271</span><span id="line-271">                final String contentHashSum = getHashCodeBasedOnObjectContent(content);</span>
-<span class="source-line-no">272</span><span id="line-272">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</span>
-<span class="source-line-no">273</span><span id="line-273">                        contentHashSum));</span>
-<span class="source-line-no">274</span><span id="line-274">            }</span>
-<span class="source-line-no">275</span><span id="line-275">            catch (CheckstyleException | IOException exc) {</span>
-<span class="source-line-no">276</span><span id="line-276">                // if exception happened (configuration resource was not found, connection is not</span>
-<span class="source-line-no">277</span><span id="line-277">                // available, resource is broken, etc.), we need to calculate hash sum based on</span>
-<span class="source-line-no">278</span><span id="line-278">                // exception object content in order to check whether problem is resolved later</span>
-<span class="source-line-no">279</span><span id="line-279">                // and/or the configuration is changed.</span>
-<span class="source-line-no">280</span><span id="line-280">                final String contentHashSum = getHashCodeBasedOnObjectContent(exc);</span>
-<span class="source-line-no">281</span><span id="line-281">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</span>
-<span class="source-line-no">282</span><span id="line-282">                        contentHashSum));</span>
-<span class="source-line-no">283</span><span id="line-283">            }</span>
-<span class="source-line-no">284</span><span id="line-284">        }</span>
-<span class="source-line-no">285</span><span id="line-285">        return resources;</span>
-<span class="source-line-no">286</span><span id="line-286">    }</span>
-<span class="source-line-no">287</span><span id="line-287"></span>
-<span class="source-line-no">288</span><span id="line-288">    /**</span>
-<span class="source-line-no">289</span><span id="line-289">     * Loads the content of external resource.</span>
-<span class="source-line-no">290</span><span id="line-290">     *</span>
-<span class="source-line-no">291</span><span id="line-291">     * @param location external resource location.</span>
-<span class="source-line-no">292</span><span id="line-292">     * @return array of bytes which represents the content of external resource in binary form.</span>
-<span class="source-line-no">293</span><span id="line-293">     * @throws CheckstyleException if error while loading occurs.</span>
-<span class="source-line-no">294</span><span id="line-294">     * @throws IOException if error while loading occurs.</span>
-<span class="source-line-no">295</span><span id="line-295">     */</span>
-<span class="source-line-no">296</span><span id="line-296">    private static byte[] loadExternalResource(String location)</span>
-<span class="source-line-no">297</span><span id="line-297">            throws IOException, CheckstyleException {</span>
-<span class="source-line-no">298</span><span id="line-298">        final URI uri = CommonUtil.getUriByFilename(location);</span>
-<span class="source-line-no">299</span><span id="line-299"></span>
-<span class="source-line-no">300</span><span id="line-300">        try (InputStream is = uri.toURL().openStream()) {</span>
-<span class="source-line-no">301</span><span id="line-301">            return toByteArray(is);</span>
-<span class="source-line-no">302</span><span id="line-302">        }</span>
-<span class="source-line-no">303</span><span id="line-303">    }</span>
-<span class="source-line-no">304</span><span id="line-304"></span>
-<span class="source-line-no">305</span><span id="line-305">    /**</span>
-<span class="source-line-no">306</span><span id="line-306">     * Reads all the contents of an input stream and returns it as a byte array.</span>
-<span class="source-line-no">307</span><span id="line-307">     *</span>
-<span class="source-line-no">308</span><span id="line-308">     * @param stream The input stream to read from.</span>
-<span class="source-line-no">309</span><span id="line-309">     * @return The resulting byte array of the stream.</span>
-<span class="source-line-no">310</span><span id="line-310">     * @throws IOException if there is an error reading the input stream.</span>
-<span class="source-line-no">311</span><span id="line-311">     */</span>
-<span class="source-line-no">312</span><span id="line-312">    private static byte[] toByteArray(InputStream stream) throws IOException {</span>
-<span class="source-line-no">313</span><span id="line-313">        final ByteArrayOutputStream content = new ByteArrayOutputStream();</span>
-<span class="source-line-no">314</span><span id="line-314"></span>
-<span class="source-line-no">315</span><span id="line-315">        while (true) {</span>
-<span class="source-line-no">316</span><span id="line-316">            final int size = stream.read(BUFFER);</span>
-<span class="source-line-no">317</span><span id="line-317">            if (size == -1) {</span>
-<span class="source-line-no">318</span><span id="line-318">                break;</span>
-<span class="source-line-no">319</span><span id="line-319">            }</span>
-<span class="source-line-no">320</span><span id="line-320"></span>
-<span class="source-line-no">321</span><span id="line-321">            content.write(BUFFER, 0, size);</span>
-<span class="source-line-no">322</span><span id="line-322">        }</span>
-<span class="source-line-no">323</span><span id="line-323"></span>
-<span class="source-line-no">324</span><span id="line-324">        return content.toByteArray();</span>
-<span class="source-line-no">325</span><span id="line-325">    }</span>
-<span class="source-line-no">326</span><span id="line-326"></span>
-<span class="source-line-no">327</span><span id="line-327">    /**</span>
-<span class="source-line-no">328</span><span id="line-328">     * Checks whether the contents of external configuration resources were changed.</span>
-<span class="source-line-no">329</span><span id="line-329">     *</span>
-<span class="source-line-no">330</span><span id="line-330">     * @param resources a set of {@link ExternalResource}.</span>
-<span class="source-line-no">331</span><span id="line-331">     * @return true if the contents of external configuration resources were changed.</span>
-<span class="source-line-no">332</span><span id="line-332">     */</span>
-<span class="source-line-no">333</span><span id="line-333">    private boolean areExternalResourcesChanged(Set&lt;ExternalResource&gt; resources) {</span>
-<span class="source-line-no">334</span><span id="line-334">        return resources.stream().anyMatch(this::isResourceChanged);</span>
-<span class="source-line-no">335</span><span id="line-335">    }</span>
-<span class="source-line-no">336</span><span id="line-336"></span>
-<span class="source-line-no">337</span><span id="line-337">    /**</span>
-<span class="source-line-no">338</span><span id="line-338">     * Checks whether the resource is changed.</span>
-<span class="source-line-no">339</span><span id="line-339">     *</span>
-<span class="source-line-no">340</span><span id="line-340">     * @param resource resource to check.</span>
-<span class="source-line-no">341</span><span id="line-341">     * @return true if resource is changed.</span>
-<span class="source-line-no">342</span><span id="line-342">     */</span>
-<span class="source-line-no">343</span><span id="line-343">    private boolean isResourceChanged(ExternalResource resource) {</span>
-<span class="source-line-no">344</span><span id="line-344">        boolean changed = false;</span>
-<span class="source-line-no">345</span><span id="line-345">        if (isResourceLocationInCache(resource.location)) {</span>
-<span class="source-line-no">346</span><span id="line-346">            final String contentHashSum = resource.contentHashSum;</span>
-<span class="source-line-no">347</span><span id="line-347">            final String cachedHashSum = details.getProperty(resource.location);</span>
-<span class="source-line-no">348</span><span id="line-348">            if (!cachedHashSum.equals(contentHashSum)) {</span>
-<span class="source-line-no">349</span><span id="line-349">                changed = true;</span>
-<span class="source-line-no">350</span><span id="line-350">            }</span>
-<span class="source-line-no">351</span><span id="line-351">        }</span>
-<span class="source-line-no">352</span><span id="line-352">        else {</span>
-<span class="source-line-no">353</span><span id="line-353">            changed = true;</span>
-<span class="source-line-no">354</span><span id="line-354">        }</span>
-<span class="source-line-no">355</span><span id="line-355">        return changed;</span>
-<span class="source-line-no">356</span><span id="line-356">    }</span>
-<span class="source-line-no">357</span><span id="line-357"></span>
-<span class="source-line-no">358</span><span id="line-358">    /**</span>
-<span class="source-line-no">359</span><span id="line-359">     * Fills cache with a set of {@link ExternalResource}.</span>
-<span class="source-line-no">360</span><span id="line-360">     * If external resource from the set is already in cache, it will be skipped.</span>
-<span class="source-line-no">361</span><span id="line-361">     *</span>
-<span class="source-line-no">362</span><span id="line-362">     * @param externalResources a set of {@code ExternalResource}.</span>
-<span class="source-line-no">363</span><span id="line-363">     */</span>
-<span class="source-line-no">364</span><span id="line-364">    private void fillCacheWithExternalResources(Set&lt;ExternalResource&gt; externalResources) {</span>
-<span class="source-line-no">365</span><span id="line-365">        externalResources</span>
-<span class="source-line-no">366</span><span id="line-366">            .forEach(resource -&gt; details.setProperty(resource.location, resource.contentHashSum));</span>
-<span class="source-line-no">367</span><span id="line-367">    }</span>
-<span class="source-line-no">368</span><span id="line-368"></span>
-<span class="source-line-no">369</span><span id="line-369">    /**</span>
-<span class="source-line-no">370</span><span id="line-370">     * Checks whether resource location is in cache.</span>
-<span class="source-line-no">371</span><span id="line-371">     *</span>
-<span class="source-line-no">372</span><span id="line-372">     * @param location resource location.</span>
-<span class="source-line-no">373</span><span id="line-373">     * @return true if resource location is in cache.</span>
-<span class="source-line-no">374</span><span id="line-374">     */</span>
-<span class="source-line-no">375</span><span id="line-375">    private boolean isResourceLocationInCache(String location) {</span>
-<span class="source-line-no">376</span><span id="line-376">        final String cachedHashSum = details.getProperty(location);</span>
-<span class="source-line-no">377</span><span id="line-377">        return cachedHashSum != null;</span>
-<span class="source-line-no">378</span><span id="line-378">    }</span>
-<span class="source-line-no">379</span><span id="line-379"></span>
-<span class="source-line-no">380</span><span id="line-380">    /**</span>
-<span class="source-line-no">381</span><span id="line-381">     * Class which represents external resource.</span>
-<span class="source-line-no">382</span><span id="line-382">     *</span>
-<span class="source-line-no">383</span><span id="line-383">     * @param location       resource location.</span>
-<span class="source-line-no">384</span><span id="line-384">     * @param contentHashSum content hash sum.</span>
-<span class="source-line-no">385</span><span id="line-385">     */</span>
-<span class="source-line-no">386</span><span id="line-386">    private record ExternalResource(String location,</span>
-<span class="source-line-no">387</span><span id="line-387">                                    String contentHashSum) {</span>
-<span class="source-line-no">388</span><span id="line-388">    }</span>
-<span class="source-line-no">389</span><span id="line-389"></span>
-<span class="source-line-no">390</span><span id="line-390">}</span>
+<span class="source-line-no">240</span><span id="line-240">                                  OutputStream outputStream)</span>
+<span class="source-line-no">241</span><span id="line-241">            throws IOException {</span>
+<span class="source-line-no">242</span><span id="line-242">        try (ObjectOutputStream oos = new ObjectOutputStream(outputStream)) {</span>
+<span class="source-line-no">243</span><span id="line-243">            oos.writeObject(object);</span>
+<span class="source-line-no">244</span><span id="line-244">        }</span>
+<span class="source-line-no">245</span><span id="line-245">    }</span>
+<span class="source-line-no">246</span><span id="line-246"></span>
+<span class="source-line-no">247</span><span id="line-247">    /**</span>
+<span class="source-line-no">248</span><span id="line-248">     * Puts external resources in cache.</span>
+<span class="source-line-no">249</span><span id="line-249">     * If at least one external resource changed, clears the cache.</span>
+<span class="source-line-no">250</span><span id="line-250">     *</span>
+<span class="source-line-no">251</span><span id="line-251">     * @param locations locations of external resources.</span>
+<span class="source-line-no">252</span><span id="line-252">     */</span>
+<span class="source-line-no">253</span><span id="line-253">    public void putExternalResources(Set&lt;String&gt; locations) {</span>
+<span class="source-line-no">254</span><span id="line-254">        final Set&lt;ExternalResource&gt; resources = loadExternalResources(locations);</span>
+<span class="source-line-no">255</span><span id="line-255">        if (areExternalResourcesChanged(resources)) {</span>
+<span class="source-line-no">256</span><span id="line-256">            reset();</span>
+<span class="source-line-no">257</span><span id="line-257">            fillCacheWithExternalResources(resources);</span>
+<span class="source-line-no">258</span><span id="line-258">        }</span>
+<span class="source-line-no">259</span><span id="line-259">    }</span>
+<span class="source-line-no">260</span><span id="line-260"></span>
+<span class="source-line-no">261</span><span id="line-261">    /**</span>
+<span class="source-line-no">262</span><span id="line-262">     * Loads a set of {@link ExternalResource} based on their locations.</span>
+<span class="source-line-no">263</span><span id="line-263">     *</span>
+<span class="source-line-no">264</span><span id="line-264">     * @param resourceLocations locations of external configuration resources.</span>
+<span class="source-line-no">265</span><span id="line-265">     * @return a set of {@code ExternalResource}.</span>
+<span class="source-line-no">266</span><span id="line-266">     */</span>
+<span class="source-line-no">267</span><span id="line-267">    private static Set&lt;ExternalResource&gt; loadExternalResources(Set&lt;String&gt; resourceLocations) {</span>
+<span class="source-line-no">268</span><span id="line-268">        final Set&lt;ExternalResource&gt; resources = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">269</span><span id="line-269">        for (String location : resourceLocations) {</span>
+<span class="source-line-no">270</span><span id="line-270">            try {</span>
+<span class="source-line-no">271</span><span id="line-271">                final byte[] content = loadExternalResource(location);</span>
+<span class="source-line-no">272</span><span id="line-272">                final String contentHashSum = getHashCodeBasedOnObjectContent(content);</span>
+<span class="source-line-no">273</span><span id="line-273">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</span>
+<span class="source-line-no">274</span><span id="line-274">                        contentHashSum));</span>
+<span class="source-line-no">275</span><span id="line-275">            }</span>
+<span class="source-line-no">276</span><span id="line-276">            catch (CheckstyleException | IOException exc) {</span>
+<span class="source-line-no">277</span><span id="line-277">                // if exception happened (configuration resource was not found, connection is not</span>
+<span class="source-line-no">278</span><span id="line-278">                // available, resource is broken, etc.), we need to calculate hash sum based on</span>
+<span class="source-line-no">279</span><span id="line-279">                // exception object content in order to check whether problem is resolved later</span>
+<span class="source-line-no">280</span><span id="line-280">                // and/or the configuration is changed.</span>
+<span class="source-line-no">281</span><span id="line-281">                final String contentHashSum = getHashCodeBasedOnObjectContent(exc);</span>
+<span class="source-line-no">282</span><span id="line-282">                resources.add(new ExternalResource(EXTERNAL_RESOURCE_KEY_PREFIX + location,</span>
+<span class="source-line-no">283</span><span id="line-283">                        contentHashSum));</span>
+<span class="source-line-no">284</span><span id="line-284">            }</span>
+<span class="source-line-no">285</span><span id="line-285">        }</span>
+<span class="source-line-no">286</span><span id="line-286">        return resources;</span>
+<span class="source-line-no">287</span><span id="line-287">    }</span>
+<span class="source-line-no">288</span><span id="line-288"></span>
+<span class="source-line-no">289</span><span id="line-289">    /**</span>
+<span class="source-line-no">290</span><span id="line-290">     * Loads the content of external resource.</span>
+<span class="source-line-no">291</span><span id="line-291">     *</span>
+<span class="source-line-no">292</span><span id="line-292">     * @param location external resource location.</span>
+<span class="source-line-no">293</span><span id="line-293">     * @return array of bytes which represents the content of external resource in binary form.</span>
+<span class="source-line-no">294</span><span id="line-294">     * @throws CheckstyleException if error while loading occurs.</span>
+<span class="source-line-no">295</span><span id="line-295">     * @throws IOException if error while loading occurs.</span>
+<span class="source-line-no">296</span><span id="line-296">     */</span>
+<span class="source-line-no">297</span><span id="line-297">    private static byte[] loadExternalResource(String location)</span>
+<span class="source-line-no">298</span><span id="line-298">            throws IOException, CheckstyleException {</span>
+<span class="source-line-no">299</span><span id="line-299">        final URI uri = CommonUtil.getUriByFilename(location);</span>
+<span class="source-line-no">300</span><span id="line-300"></span>
+<span class="source-line-no">301</span><span id="line-301">        try (InputStream is = uri.toURL().openStream()) {</span>
+<span class="source-line-no">302</span><span id="line-302">            return toByteArray(is);</span>
+<span class="source-line-no">303</span><span id="line-303">        }</span>
+<span class="source-line-no">304</span><span id="line-304">    }</span>
+<span class="source-line-no">305</span><span id="line-305"></span>
+<span class="source-line-no">306</span><span id="line-306">    /**</span>
+<span class="source-line-no">307</span><span id="line-307">     * Reads all the contents of an input stream and returns it as a byte array.</span>
+<span class="source-line-no">308</span><span id="line-308">     *</span>
+<span class="source-line-no">309</span><span id="line-309">     * @param stream The input stream to read from.</span>
+<span class="source-line-no">310</span><span id="line-310">     * @return The resulting byte array of the stream.</span>
+<span class="source-line-no">311</span><span id="line-311">     * @throws IOException if there is an error reading the input stream.</span>
+<span class="source-line-no">312</span><span id="line-312">     */</span>
+<span class="source-line-no">313</span><span id="line-313">    private static byte[] toByteArray(InputStream stream) throws IOException {</span>
+<span class="source-line-no">314</span><span id="line-314">        final ByteArrayOutputStream content = new ByteArrayOutputStream();</span>
+<span class="source-line-no">315</span><span id="line-315"></span>
+<span class="source-line-no">316</span><span id="line-316">        while (true) {</span>
+<span class="source-line-no">317</span><span id="line-317">            final int size = stream.read(BUFFER);</span>
+<span class="source-line-no">318</span><span id="line-318">            if (size == -1) {</span>
+<span class="source-line-no">319</span><span id="line-319">                break;</span>
+<span class="source-line-no">320</span><span id="line-320">            }</span>
+<span class="source-line-no">321</span><span id="line-321"></span>
+<span class="source-line-no">322</span><span id="line-322">            content.write(BUFFER, 0, size);</span>
+<span class="source-line-no">323</span><span id="line-323">        }</span>
+<span class="source-line-no">324</span><span id="line-324"></span>
+<span class="source-line-no">325</span><span id="line-325">        return content.toByteArray();</span>
+<span class="source-line-no">326</span><span id="line-326">    }</span>
+<span class="source-line-no">327</span><span id="line-327"></span>
+<span class="source-line-no">328</span><span id="line-328">    /**</span>
+<span class="source-line-no">329</span><span id="line-329">     * Checks whether the contents of external configuration resources were changed.</span>
+<span class="source-line-no">330</span><span id="line-330">     *</span>
+<span class="source-line-no">331</span><span id="line-331">     * @param resources a set of {@link ExternalResource}.</span>
+<span class="source-line-no">332</span><span id="line-332">     * @return true if the contents of external configuration resources were changed.</span>
+<span class="source-line-no">333</span><span id="line-333">     */</span>
+<span class="source-line-no">334</span><span id="line-334">    private boolean areExternalResourcesChanged(Set&lt;ExternalResource&gt; resources) {</span>
+<span class="source-line-no">335</span><span id="line-335">        return resources.stream().anyMatch(this::isResourceChanged);</span>
+<span class="source-line-no">336</span><span id="line-336">    }</span>
+<span class="source-line-no">337</span><span id="line-337"></span>
+<span class="source-line-no">338</span><span id="line-338">    /**</span>
+<span class="source-line-no">339</span><span id="line-339">     * Checks whether the resource is changed.</span>
+<span class="source-line-no">340</span><span id="line-340">     *</span>
+<span class="source-line-no">341</span><span id="line-341">     * @param resource resource to check.</span>
+<span class="source-line-no">342</span><span id="line-342">     * @return true if resource is changed.</span>
+<span class="source-line-no">343</span><span id="line-343">     */</span>
+<span class="source-line-no">344</span><span id="line-344">    private boolean isResourceChanged(ExternalResource resource) {</span>
+<span class="source-line-no">345</span><span id="line-345">        boolean changed = false;</span>
+<span class="source-line-no">346</span><span id="line-346">        if (isResourceLocationInCache(resource.location)) {</span>
+<span class="source-line-no">347</span><span id="line-347">            final String contentHashSum = resource.contentHashSum;</span>
+<span class="source-line-no">348</span><span id="line-348">            final String cachedHashSum = details.getProperty(resource.location);</span>
+<span class="source-line-no">349</span><span id="line-349">            if (!cachedHashSum.equals(contentHashSum)) {</span>
+<span class="source-line-no">350</span><span id="line-350">                changed = true;</span>
+<span class="source-line-no">351</span><span id="line-351">            }</span>
+<span class="source-line-no">352</span><span id="line-352">        }</span>
+<span class="source-line-no">353</span><span id="line-353">        else {</span>
+<span class="source-line-no">354</span><span id="line-354">            changed = true;</span>
+<span class="source-line-no">355</span><span id="line-355">        }</span>
+<span class="source-line-no">356</span><span id="line-356">        return changed;</span>
+<span class="source-line-no">357</span><span id="line-357">    }</span>
+<span class="source-line-no">358</span><span id="line-358"></span>
+<span class="source-line-no">359</span><span id="line-359">    /**</span>
+<span class="source-line-no">360</span><span id="line-360">     * Fills cache with a set of {@link ExternalResource}.</span>
+<span class="source-line-no">361</span><span id="line-361">     * If external resource from the set is already in cache, it will be skipped.</span>
+<span class="source-line-no">362</span><span id="line-362">     *</span>
+<span class="source-line-no">363</span><span id="line-363">     * @param externalResources a set of {@code ExternalResource}.</span>
+<span class="source-line-no">364</span><span id="line-364">     */</span>
+<span class="source-line-no">365</span><span id="line-365">    private void fillCacheWithExternalResources(Set&lt;ExternalResource&gt; externalResources) {</span>
+<span class="source-line-no">366</span><span id="line-366">        externalResources</span>
+<span class="source-line-no">367</span><span id="line-367">            .forEach(resource -&gt; details.setProperty(resource.location, resource.contentHashSum));</span>
+<span class="source-line-no">368</span><span id="line-368">    }</span>
+<span class="source-line-no">369</span><span id="line-369"></span>
+<span class="source-line-no">370</span><span id="line-370">    /**</span>
+<span class="source-line-no">371</span><span id="line-371">     * Checks whether resource location is in cache.</span>
+<span class="source-line-no">372</span><span id="line-372">     *</span>
+<span class="source-line-no">373</span><span id="line-373">     * @param location resource location.</span>
+<span class="source-line-no">374</span><span id="line-374">     * @return true if resource location is in cache.</span>
+<span class="source-line-no">375</span><span id="line-375">     */</span>
+<span class="source-line-no">376</span><span id="line-376">    private boolean isResourceLocationInCache(String location) {</span>
+<span class="source-line-no">377</span><span id="line-377">        final String cachedHashSum = details.getProperty(location);</span>
+<span class="source-line-no">378</span><span id="line-378">        return cachedHashSum != null;</span>
+<span class="source-line-no">379</span><span id="line-379">    }</span>
+<span class="source-line-no">380</span><span id="line-380"></span>
+<span class="source-line-no">381</span><span id="line-381">    /**</span>
+<span class="source-line-no">382</span><span id="line-382">     * Class which represents external resource.</span>
+<span class="source-line-no">383</span><span id="line-383">     *</span>
+<span class="source-line-no">384</span><span id="line-384">     * @param location       resource location.</span>
+<span class="source-line-no">385</span><span id="line-385">     * @param contentHashSum content hash sum.</span>
+<span class="source-line-no">386</span><span id="line-386">     */</span>
+<span class="source-line-no">387</span><span id="line-387">    private record ExternalResource(String location,</span>
+<span class="source-line-no">388</span><span id="line-388">                                    String contentHashSum) {</span>
+<span class="source-line-no">389</span><span id="line-389">    }</span>
+<span class="source-line-no">390</span><span id="line-390"></span>
+<span class="source-line-no">391</span><span id="line-391">}</span>
 
 
 
