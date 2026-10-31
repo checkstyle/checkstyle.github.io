@@ -65,445 +65,441 @@
 <span class="source-line-no">052</span><span id="line-52"> *</span>
 <span class="source-line-no">053</span><span id="line-53"> * &lt;p&gt;</span>
 <span class="source-line-no">054</span><span id="line-54"> * Using fully qualified names where they are not needed reduces readability and</span>
-<span class="source-line-no">055</span><span id="line-55"> * is inconsistent with common Java style conventions, which favor importing the</span>
-<span class="source-line-no">056</span><span id="line-56"> * type instead.</span>
-<span class="source-line-no">057</span><span id="line-57"> * &lt;/p&gt;</span>
-<span class="source-line-no">058</span><span id="line-58"> *</span>
-<span class="source-line-no">059</span><span id="line-59"> * &lt;p&gt;</span>
-<span class="source-line-no">060</span><span id="line-60"> * The following limitations apply:</span>
-<span class="source-line-no">061</span><span id="line-61"> * &lt;/p&gt;</span>
-<span class="source-line-no">062</span><span id="line-62"> * &lt;ul&gt;</span>
-<span class="source-line-no">063</span><span id="line-63"> * &lt;li&gt;</span>
-<span class="source-line-no">064</span><span id="line-64"> * To distinguish a package qualified type (such as {@code java.util.Map}) from a</span>
-<span class="source-line-no">065</span><span id="line-65"> * reference to a nested type (such as {@code Map.Entry}), the check relies on the</span>
-<span class="source-line-no">066</span><span id="line-66"> * common convention that package names start with a lowercase letter. A qualified</span>
-<span class="source-line-no">067</span><span id="line-67"> * reference is treated as fully qualified only when the identifier preceding the</span>
-<span class="source-line-no">068</span><span id="line-68"> * simple name starts with a lowercase letter.</span>
-<span class="source-line-no">069</span><span id="line-69"> * &lt;/li&gt;</span>
-<span class="source-line-no">070</span><span id="line-70"> * &lt;li&gt;</span>
-<span class="source-line-no">071</span><span id="line-71"> * References to nested types via an enclosing type (for example</span>
-<span class="source-line-no">072</span><span id="line-72"> * {@code java.util.Map.Entry}) and fully qualified annotations</span>
-<span class="source-line-no">073</span><span id="line-73"> * (for example {@code @java.lang.Override}) are not reported.</span>
-<span class="source-line-no">074</span><span id="line-74"> * &lt;/li&gt;</span>
-<span class="source-line-no">075</span><span id="line-75"> * &lt;li&gt;</span>
-<span class="source-line-no">076</span><span id="line-76"> * On-demand (wildcard) imports, such as {@code import java.util.*;}, are checked</span>
-<span class="source-line-no">077</span><span id="line-77"> * against classes reachable on this check's own class loader. This reliably</span>
-<span class="source-line-no">078</span><span id="line-78"> * detects collisions from JDK packages (for example a fully qualified reference</span>
-<span class="source-line-no">079</span><span id="line-79"> * to a third-party {@code Observer} type being left alone because</span>
-<span class="source-line-no">080</span><span id="line-80"> * {@code import java.util.*;} also brings a different {@code java.util.Observer}</span>
-<span class="source-line-no">081</span><span id="line-81"> * into scope), but on-demand imports of third-party or project-local packages</span>
-<span class="source-line-no">082</span><span id="line-82"> * cannot be resolved this way and may still be flagged incorrectly.</span>
-<span class="source-line-no">083</span><span id="line-83"> * &lt;/li&gt;</span>
-<span class="source-line-no">084</span><span id="line-84"> * &lt;/ul&gt;</span>
-<span class="source-line-no">085</span><span id="line-85"> *</span>
-<span class="source-line-no">086</span><span id="line-86"> * @since 14.1.0</span>
-<span class="source-line-no">087</span><span id="line-87"> */</span>
-<span class="source-line-no">088</span><span id="line-88">@FileStatefulCheck</span>
-<span class="source-line-no">089</span><span id="line-89">public class UnnecessaryFullyQualifiedTypeCheck extends AbstractCheck {</span>
-<span class="source-line-no">090</span><span id="line-90"></span>
-<span class="source-line-no">091</span><span id="line-91">    /**</span>
-<span class="source-line-no">092</span><span id="line-92">     * A key is pointing to the warning message text in "messages.properties"</span>
-<span class="source-line-no">093</span><span id="line-93">     * file.</span>
-<span class="source-line-no">094</span><span id="line-94">     */</span>
-<span class="source-line-no">095</span><span id="line-95">    public static final String MSG_KEY = "unnecessary.fully.qualified.type";</span>
-<span class="source-line-no">096</span><span id="line-96"></span>
-<span class="source-line-no">097</span><span id="line-97">    /** Array declarator markers that may trail a type name. */</span>
-<span class="source-line-no">098</span><span id="line-98">    private static final String ARRAY_MARKERS = "[]";</span>
-<span class="source-line-no">099</span><span id="line-99"></span>
-<span class="source-line-no">100</span><span id="line-100">    /** Marker used to represent a locally declared type in the identity set. */</span>
-<span class="source-line-no">101</span><span id="line-101">    private static final String DECLARED_MARKER = "&lt;declared&gt; ";</span>
-<span class="source-line-no">102</span><span id="line-102"></span>
-<span class="source-line-no">103</span><span id="line-103">    /** Marker used to represent an unqualified type reference in the identity set. */</span>
-<span class="source-line-no">104</span><span id="line-104">    private static final String UNQUALIFIED_MARKER = "&lt;unqualified&gt; ";</span>
-<span class="source-line-no">105</span><span id="line-105"></span>
-<span class="source-line-no">106</span><span id="line-106">    /** The {@code java.lang} package, types of which never need to be qualified. */</span>
-<span class="source-line-no">107</span><span id="line-107">    private static final String JAVA_LANG_PACKAGE = "java.lang";</span>
-<span class="source-line-no">108</span><span id="line-108"></span>
-<span class="source-line-no">109</span><span id="line-109">    /** Suffix identifying an on-demand (wildcard) import, such as {@code java.util.*}. */</span>
-<span class="source-line-no">110</span><span id="line-110">    private static final String ON_DEMAND_IMPORT_SUFFIX = ".*";</span>
-<span class="source-line-no">111</span><span id="line-111"></span>
-<span class="source-line-no">112</span><span id="line-112">    /** Separator used between components of a fully qualified name. */</span>
-<span class="source-line-no">113</span><span id="line-113">    private static final String DOT = ".";</span>
-<span class="source-line-no">114</span><span id="line-114"></span>
-<span class="source-line-no">115</span><span id="line-115">    /**</span>
-<span class="source-line-no">116</span><span id="line-116">     * Tokens whose direct child is a type reference. A {@link TokenTypes#DOT} or</span>
-<span class="source-line-no">117</span><span id="line-117">     * {@link TokenTypes#IDENT} is considered to be in type context when its parent</span>
-<span class="source-line-no">118</span><span id="line-118">     * is one of these tokens.</span>
-<span class="source-line-no">119</span><span id="line-119">     */</span>
-<span class="source-line-no">120</span><span id="line-120">    private static final int[] TYPE_CONTEXT_PARENTS = {</span>
-<span class="source-line-no">121</span><span id="line-121">        TokenTypes.TYPE,</span>
-<span class="source-line-no">122</span><span id="line-122">        TokenTypes.LITERAL_NEW,</span>
-<span class="source-line-no">123</span><span id="line-123">        TokenTypes.EXTENDS_CLAUSE,</span>
-<span class="source-line-no">124</span><span id="line-124">        TokenTypes.IMPLEMENTS_CLAUSE,</span>
-<span class="source-line-no">125</span><span id="line-125">        TokenTypes.LITERAL_THROWS,</span>
-<span class="source-line-no">126</span><span id="line-126">        TokenTypes.TYPE_ARGUMENT,</span>
-<span class="source-line-no">127</span><span id="line-127">    };</span>
-<span class="source-line-no">128</span><span id="line-128"></span>
-<span class="source-line-no">129</span><span id="line-129">    /**</span>
-<span class="source-line-no">130</span><span id="line-130">     * Tokens that declare a type. An {@link TokenTypes#IDENT} whose parent is one of</span>
-<span class="source-line-no">131</span><span id="line-131">     * these is the name of a type declared in the file.</span>
-<span class="source-line-no">132</span><span id="line-132">     */</span>
-<span class="source-line-no">133</span><span id="line-133">    private static final int[] TYPE_DECLARATION_PARENTS = {</span>
-<span class="source-line-no">134</span><span id="line-134">        TokenTypes.CLASS_DEF,</span>
-<span class="source-line-no">135</span><span id="line-135">        TokenTypes.INTERFACE_DEF,</span>
-<span class="source-line-no">136</span><span id="line-136">        TokenTypes.ENUM_DEF,</span>
-<span class="source-line-no">137</span><span id="line-137">        TokenTypes.ANNOTATION_DEF,</span>
-<span class="source-line-no">138</span><span id="line-138">        TokenTypes.RECORD_DEF,</span>
-<span class="source-line-no">139</span><span id="line-139">    };</span>
-<span class="source-line-no">140</span><span id="line-140"></span>
-<span class="source-line-no">141</span><span id="line-141">    /** Maps the simple name of each single-type import to its fully qualified name. */</span>
-<span class="source-line-no">142</span><span id="line-142">    private final Map&lt;String, String&gt; importedTypes = new HashMap&lt;&gt;();</span>
-<span class="source-line-no">143</span><span id="line-143"></span>
-<span class="source-line-no">144</span><span id="line-144">    /** Simple names of the types declared in the file. */</span>
-<span class="source-line-no">145</span><span id="line-145">    private final Set&lt;String&gt; declaredTypes = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">146</span><span id="line-146"></span>
-<span class="source-line-no">147</span><span id="line-147">    /** Simple names of the types referenced without qualification in the file. */</span>
-<span class="source-line-no">148</span><span id="line-148">    private final Set&lt;String&gt; simpleReferences = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">149</span><span id="line-149"></span>
-<span class="source-line-no">150</span><span id="line-150">    /** Fully qualified type references collected while traversing the file. */</span>
-<span class="source-line-no">151</span><span id="line-151">    private final List&lt;QualifiedTypeReference&gt; qualifiedReferences = new ArrayList&lt;&gt;();</span>
-<span class="source-line-no">152</span><span id="line-152"></span>
-<span class="source-line-no">153</span><span id="line-153">    /**</span>
-<span class="source-line-no">154</span><span id="line-154">     * Packages imported on-demand (wildcard), e.g. {@code java.util} for</span>
-<span class="source-line-no">155</span><span id="line-155">     * {@code import java.util.*;}.</span>
-<span class="source-line-no">156</span><span id="line-156">     */</span>
-<span class="source-line-no">157</span><span id="line-157">    private final Set&lt;String&gt; onDemandImportPackages = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">158</span><span id="line-158"></span>
-<span class="source-line-no">159</span><span id="line-159">    /** The package the file belongs to, or {@code null} for the default package. */</span>
-<span class="source-line-no">160</span><span id="line-160">    @Nullable</span>
-<span class="source-line-no">161</span><span id="line-161">    private String packageName;</span>
-<span class="source-line-no">162</span><span id="line-162"></span>
-<span class="source-line-no">163</span><span id="line-163">    /**</span>
-<span class="source-line-no">164</span><span id="line-164">     * Creates new {@code UnnecessaryFullyQualifiedTypeCheck} instance.</span>
-<span class="source-line-no">165</span><span id="line-165">     */</span>
-<span class="source-line-no">166</span><span id="line-166">    public UnnecessaryFullyQualifiedTypeCheck() {</span>
-<span class="source-line-no">167</span><span id="line-167">        // no code by default</span>
-<span class="source-line-no">168</span><span id="line-168">    }</span>
-<span class="source-line-no">169</span><span id="line-169"></span>
-<span class="source-line-no">170</span><span id="line-170">    @Override</span>
-<span class="source-line-no">171</span><span id="line-171">    public int[] getDefaultTokens() {</span>
-<span class="source-line-no">172</span><span id="line-172">        return getRequiredTokens();</span>
-<span class="source-line-no">173</span><span id="line-173">    }</span>
-<span class="source-line-no">174</span><span id="line-174"></span>
-<span class="source-line-no">175</span><span id="line-175">    @Override</span>
-<span class="source-line-no">176</span><span id="line-176">    public int[] getAcceptableTokens() {</span>
-<span class="source-line-no">177</span><span id="line-177">        return getRequiredTokens();</span>
-<span class="source-line-no">178</span><span id="line-178">    }</span>
-<span class="source-line-no">179</span><span id="line-179"></span>
-<span class="source-line-no">180</span><span id="line-180">    @Override</span>
-<span class="source-line-no">181</span><span id="line-181">    public int[] getRequiredTokens() {</span>
-<span class="source-line-no">182</span><span id="line-182">        return new int[] {</span>
-<span class="source-line-no">183</span><span id="line-183">            TokenTypes.PACKAGE_DEF,</span>
-<span class="source-line-no">184</span><span id="line-184">            TokenTypes.IMPORT,</span>
-<span class="source-line-no">185</span><span id="line-185">            TokenTypes.DOT,</span>
-<span class="source-line-no">186</span><span id="line-186">            TokenTypes.IDENT,</span>
-<span class="source-line-no">187</span><span id="line-187">        };</span>
-<span class="source-line-no">188</span><span id="line-188">    }</span>
-<span class="source-line-no">189</span><span id="line-189"></span>
-<span class="source-line-no">190</span><span id="line-190">    @Override</span>
-<span class="source-line-no">191</span><span id="line-191">    public void beginTree(DetailAST rootAST) {</span>
-<span class="source-line-no">192</span><span id="line-192">        packageName = null;</span>
-<span class="source-line-no">193</span><span id="line-193">        onDemandImportPackages.clear();</span>
-<span class="source-line-no">194</span><span id="line-194">        importedTypes.clear();</span>
-<span class="source-line-no">195</span><span id="line-195">        declaredTypes.clear();</span>
-<span class="source-line-no">196</span><span id="line-196">        simpleReferences.clear();</span>
-<span class="source-line-no">197</span><span id="line-197">        qualifiedReferences.clear();</span>
-<span class="source-line-no">198</span><span id="line-198">    }</span>
-<span class="source-line-no">199</span><span id="line-199"></span>
-<span class="source-line-no">200</span><span id="line-200">    @Override</span>
-<span class="source-line-no">201</span><span id="line-201">    public void visitToken(DetailAST ast) {</span>
-<span class="source-line-no">202</span><span id="line-202">        switch (ast.getType()) {</span>
-<span class="source-line-no">203</span><span id="line-203">            case TokenTypes.PACKAGE_DEF -&gt; processPackage(ast);</span>
-<span class="source-line-no">204</span><span id="line-204">            case TokenTypes.IMPORT -&gt; processImport(ast);</span>
-<span class="source-line-no">205</span><span id="line-205">            case TokenTypes.DOT -&gt; processDot(ast);</span>
-<span class="source-line-no">206</span><span id="line-206">            default -&gt; processIdent(ast);</span>
-<span class="source-line-no">207</span><span id="line-207">        }</span>
-<span class="source-line-no">208</span><span id="line-208">    }</span>
-<span class="source-line-no">209</span><span id="line-209"></span>
-<span class="source-line-no">210</span><span id="line-210">    @Override</span>
-<span class="source-line-no">211</span><span id="line-211">    public void finishTree(DetailAST rootAST) {</span>
-<span class="source-line-no">212</span><span id="line-212">        for (QualifiedTypeReference reference : qualifiedReferences) {</span>
-<span class="source-line-no">213</span><span id="line-213">            if (isUnnecessary(reference.simpleName())) {</span>
-<span class="source-line-no">214</span><span id="line-214">                log(reference.detailAst(), MSG_KEY, reference.fullName());</span>
-<span class="source-line-no">215</span><span id="line-215">            }</span>
-<span class="source-line-no">216</span><span id="line-216">        }</span>
-<span class="source-line-no">217</span><span id="line-217">    }</span>
-<span class="source-line-no">218</span><span id="line-218"></span>
-<span class="source-line-no">219</span><span id="line-219">    /**</span>
-<span class="source-line-no">220</span><span id="line-220">     * Records the package the file belongs to.</span>
-<span class="source-line-no">221</span><span id="line-221">     *</span>
-<span class="source-line-no">222</span><span id="line-222">     * @param ast the {@link TokenTypes#PACKAGE_DEF} node</span>
-<span class="source-line-no">223</span><span id="line-223">     */</span>
-<span class="source-line-no">224</span><span id="line-224">    private void processPackage(DetailAST ast) {</span>
-<span class="source-line-no">225</span><span id="line-225">        packageName = FullIdent.createFullIdent(</span>
-<span class="source-line-no">226</span><span id="line-226">                ast.getLastChild().getPreviousSibling()).getText();</span>
-<span class="source-line-no">227</span><span id="line-227">    }</span>
-<span class="source-line-no">228</span><span id="line-228"></span>
-<span class="source-line-no">229</span><span id="line-229">    /**</span>
-<span class="source-line-no">230</span><span id="line-230">     * Records an import by its simple name so that later references can be resolved.</span>
-<span class="source-line-no">231</span><span id="line-231">     * On-demand (wildcard) imports do not have a single simple name, so the</span>
-<span class="source-line-no">232</span><span id="line-232">     * imported package is recorded separately instead.</span>
-<span class="source-line-no">233</span><span id="line-233">     *</span>
-<span class="source-line-no">234</span><span id="line-234">     * @param ast the {@link TokenTypes#IMPORT} node</span>
-<span class="source-line-no">235</span><span id="line-235">     */</span>
-<span class="source-line-no">236</span><span id="line-236">    private void processImport(DetailAST ast) {</span>
-<span class="source-line-no">237</span><span id="line-237">        final String importText = FullIdent.createFullIdentBelow(ast).getText();</span>
-<span class="source-line-no">238</span><span id="line-238">        if (importText.endsWith(ON_DEMAND_IMPORT_SUFFIX)) {</span>
-<span class="source-line-no">239</span><span id="line-239">            onDemandImportPackages.add(</span>
-<span class="source-line-no">240</span><span id="line-240">                importText.substring(0, importText.length() - ON_DEMAND_IMPORT_SUFFIX.length()));</span>
-<span class="source-line-no">241</span><span id="line-241">        }</span>
-<span class="source-line-no">242</span><span id="line-242">        else {</span>
-<span class="source-line-no">243</span><span id="line-243">            importedTypes.put(extractSimpleName(importText), importText);</span>
-<span class="source-line-no">244</span><span id="line-244">        }</span>
-<span class="source-line-no">245</span><span id="line-245">    }</span>
-<span class="source-line-no">246</span><span id="line-246"></span>
-<span class="source-line-no">247</span><span id="line-247">    /**</span>
-<span class="source-line-no">248</span><span id="line-248">     * Collects a fully qualified type reference if the given {@link TokenTypes#DOT}</span>
-<span class="source-line-no">249</span><span id="line-249">     * node represents one.</span>
-<span class="source-line-no">250</span><span id="line-250">     *</span>
-<span class="source-line-no">251</span><span id="line-251">     * @param ast the {@code TokenTypes#DOT} node</span>
-<span class="source-line-no">252</span><span id="line-252">     */</span>
-<span class="source-line-no">253</span><span id="line-253">    private void processDot(DetailAST ast) {</span>
-<span class="source-line-no">254</span><span id="line-254">        if (isInTypeContext(ast)) {</span>
-<span class="source-line-no">255</span><span id="line-255">            final String fullName = buildFullName(ast).replace(ARRAY_MARKERS, "");</span>
-<span class="source-line-no">256</span><span id="line-256">            if (isFullyQualified(fullName)) {</span>
-<span class="source-line-no">257</span><span id="line-257">                qualifiedReferences.add(</span>
-<span class="source-line-no">258</span><span id="line-258">                        new QualifiedTypeReference(ast, fullName, extractSimpleName(fullName)));</span>
-<span class="source-line-no">259</span><span id="line-259">            }</span>
-<span class="source-line-no">260</span><span id="line-260">        }</span>
-<span class="source-line-no">261</span><span id="line-261">    }</span>
-<span class="source-line-no">262</span><span id="line-262"></span>
-<span class="source-line-no">263</span><span id="line-263">    /**</span>
-<span class="source-line-no">264</span><span id="line-264">     * Reconstructs the fully qualified name for a {@code TokenTypes#DOT} node,</span>
-<span class="source-line-no">265</span><span id="line-265">     * handling the extra child produced by an embedded type-use annotation.</span>
-<span class="source-line-no">266</span><span id="line-266">     *</span>
-<span class="source-line-no">267</span><span id="line-267">     * @param ast the {@code TokenTypes#DOT} node</span>
-<span class="source-line-no">268</span><span id="line-268">     * @return the fully qualified name the node represents</span>
-<span class="source-line-no">269</span><span id="line-269">     */</span>
-<span class="source-line-no">270</span><span id="line-270">    private static String buildFullName(DetailAST ast) {</span>
-<span class="source-line-no">271</span><span id="line-271">        final DetailAST qualifier = ast.getFirstChild();</span>
-<span class="source-line-no">272</span><span id="line-272">        final DetailAST secondChild = qualifier.getNextSibling();</span>
-<span class="source-line-no">273</span><span id="line-273">        final String result;</span>
-<span class="source-line-no">274</span><span id="line-274">        if (secondChild.getType() == TokenTypes.ANNOTATIONS) {</span>
-<span class="source-line-no">275</span><span id="line-275">            final DetailAST simpleNameIdent = secondChild.getNextSibling();</span>
-<span class="source-line-no">276</span><span id="line-276">            result = FullIdent.createFullIdent(qualifier).getText()</span>
-<span class="source-line-no">277</span><span id="line-277">                    + DOT + simpleNameIdent.getText();</span>
-<span class="source-line-no">278</span><span id="line-278">        }</span>
-<span class="source-line-no">279</span><span id="line-279">        else {</span>
-<span class="source-line-no">280</span><span id="line-280">            result = FullIdent.createFullIdent(ast).getText();</span>
-<span class="source-line-no">281</span><span id="line-281">        }</span>
-<span class="source-line-no">282</span><span id="line-282">        return result;</span>
-<span class="source-line-no">283</span><span id="line-283">    }</span>
-<span class="source-line-no">284</span><span id="line-284"></span>
-<span class="source-line-no">285</span><span id="line-285">    /**</span>
-<span class="source-line-no">286</span><span id="line-286">     * Records a reference made through a simple name. The name is either an</span>
-<span class="source-line-no">287</span><span id="line-287">     * unqualified type reference or the name of a type declared in the file.</span>
-<span class="source-line-no">288</span><span id="line-288">     *</span>
-<span class="source-line-no">289</span><span id="line-289">     * @param ast the {@link TokenTypes#IDENT} node</span>
-<span class="source-line-no">290</span><span id="line-290">     */</span>
-<span class="source-line-no">291</span><span id="line-291">    private void processIdent(DetailAST ast) {</span>
-<span class="source-line-no">292</span><span id="line-292">        final DetailAST parent = ast.getParent();</span>
-<span class="source-line-no">293</span><span id="line-293">        if (TokenUtil.isOfType(parent, TYPE_CONTEXT_PARENTS)) {</span>
-<span class="source-line-no">294</span><span id="line-294">            simpleReferences.add(ast.getText());</span>
-<span class="source-line-no">295</span><span id="line-295">        }</span>
-<span class="source-line-no">296</span><span id="line-296">        else if (TokenUtil.isOfType(parent, TYPE_DECLARATION_PARENTS)) {</span>
-<span class="source-line-no">297</span><span id="line-297">            declaredTypes.add(ast.getText());</span>
-<span class="source-line-no">298</span><span id="line-298">        }</span>
-<span class="source-line-no">299</span><span id="line-299">    }</span>
-<span class="source-line-no">300</span><span id="line-300"></span>
-<span class="source-line-no">301</span><span id="line-301">    /**</span>
-<span class="source-line-no">302</span><span id="line-302">     * Determines whether a type reference with the given simple name is unnecessary.</span>
-<span class="source-line-no">303</span><span id="line-303">     * It is unnecessary when this fully qualified reference is the only type with</span>
-<span class="source-line-no">304</span><span id="line-304">     * that simple name used in the file, so it could be imported and referenced by</span>
-<span class="source-line-no">305</span><span id="line-305">     * its simple name without introducing ambiguity.</span>
-<span class="source-line-no">306</span><span id="line-306">     *</span>
-<span class="source-line-no">307</span><span id="line-307">     * @param simpleName the simple name of the type</span>
-<span class="source-line-no">308</span><span id="line-308">     * @return {@code true} if the fully qualified reference is unnecessary</span>
-<span class="source-line-no">309</span><span id="line-309">     */</span>
-<span class="source-line-no">310</span><span id="line-310">    private boolean isUnnecessary(String simpleName) {</span>
-<span class="source-line-no">311</span><span id="line-311">        return collectIdentities(simpleName).size() == 1;</span>
-<span class="source-line-no">312</span><span id="line-312">    }</span>
-<span class="source-line-no">313</span><span id="line-313"></span>
-<span class="source-line-no">314</span><span id="line-314">    /**</span>
-<span class="source-line-no">315</span><span id="line-315">     * Collects every distinct identity claiming the given simple name in the file:</span>
-<span class="source-line-no">316</span><span id="line-316">     * a direct import, each fully qualified reference sharing that simple name, a</span>
-<span class="source-line-no">317</span><span id="line-317">     * locally declared type, an unqualified reference resolving elsewhere, and a</span>
-<span class="source-line-no">318</span><span id="line-318">     * type reachable via an on-demand import. A simple name is unambiguous, and</span>
-<span class="source-line-no">319</span><span id="line-319">     * therefore its fully qualified reference unnecessary, exactly when this set</span>
-<span class="source-line-no">320</span><span id="line-320">     * has a single member.</span>
-<span class="source-line-no">321</span><span id="line-321">     *</span>
-<span class="source-line-no">322</span><span id="line-322">     * @param simpleName the simple name to collect identities for</span>
-<span class="source-line-no">323</span><span id="line-323">     * @return the set of distinct identities claiming this simple name</span>
-<span class="source-line-no">324</span><span id="line-324">     */</span>
-<span class="source-line-no">325</span><span id="line-325">    private Set&lt;String&gt; collectIdentities(String simpleName) {</span>
-<span class="source-line-no">326</span><span id="line-326">        final Set&lt;String&gt; identities = new HashSet&lt;&gt;();</span>
-<span class="source-line-no">327</span><span id="line-327">        final String imported = importedTypes.get(simpleName);</span>
-<span class="source-line-no">328</span><span id="line-328">        if (imported != null) {</span>
-<span class="source-line-no">329</span><span id="line-329">            identities.add(imported);</span>
-<span class="source-line-no">330</span><span id="line-330">        }</span>
-<span class="source-line-no">331</span><span id="line-331">        if (declaredTypes.contains(simpleName)) {</span>
-<span class="source-line-no">332</span><span id="line-332">            identities.add(DECLARED_MARKER + simpleName);</span>
-<span class="source-line-no">333</span><span id="line-333">        }</span>
-<span class="source-line-no">334</span><span id="line-334">        addQualifiedReferenceIdentities(simpleName, identities);</span>
-<span class="source-line-no">335</span><span id="line-335">        if (imported == null) {</span>
-<span class="source-line-no">336</span><span id="line-336">            final boolean unqualifiedResolvedToReference =</span>
-<span class="source-line-no">337</span><span id="line-337">                    resolvesToQualifiedReference(simpleName);</span>
-<span class="source-line-no">338</span><span id="line-338">            addImplicitIdentities(simpleName, unqualifiedResolvedToReference, identities);</span>
-<span class="source-line-no">339</span><span id="line-339">        }</span>
-<span class="source-line-no">340</span><span id="line-340">        return identities;</span>
-<span class="source-line-no">341</span><span id="line-341">    }</span>
-<span class="source-line-no">342</span><span id="line-342"></span>
-<span class="source-line-no">343</span><span id="line-343">    /**</span>
-<span class="source-line-no">344</span><span id="line-344">     * Adds an identity for each fully qualified reference sharing the given simple</span>
-<span class="source-line-no">345</span><span id="line-345">     * name.</span>
-<span class="source-line-no">346</span><span id="line-346">     *</span>
-<span class="source-line-no">347</span><span id="line-347">     * @param simpleName the simple name to match references against</span>
-<span class="source-line-no">348</span><span id="line-348">     * @param identities the identity set to add to</span>
-<span class="source-line-no">349</span><span id="line-349">     */</span>
-<span class="source-line-no">350</span><span id="line-350">    private void addQualifiedReferenceIdentities(String simpleName, Set&lt;String&gt; identities) {</span>
-<span class="source-line-no">351</span><span id="line-351">        for (QualifiedTypeReference reference : qualifiedReferences) {</span>
-<span class="source-line-no">352</span><span id="line-352">            if (reference.simpleName().equals(simpleName)) {</span>
-<span class="source-line-no">353</span><span id="line-353">                identities.add(reference.fullName());</span>
-<span class="source-line-no">354</span><span id="line-354">            }</span>
-<span class="source-line-no">355</span><span id="line-355">        }</span>
-<span class="source-line-no">356</span><span id="line-356">    }</span>
-<span class="source-line-no">357</span><span id="line-357"></span>
-<span class="source-line-no">358</span><span id="line-358">    /**</span>
-<span class="source-line-no">359</span><span id="line-359">     * Checks whether any fully qualified reference with the given simple name</span>
-<span class="source-line-no">360</span><span id="line-360">     * resolves to the same type as an unqualified reference would.</span>
-<span class="source-line-no">361</span><span id="line-361">     *</span>
-<span class="source-line-no">362</span><span id="line-362">     * @param simpleName the simple name to check</span>
-<span class="source-line-no">363</span><span id="line-363">     * @return {@code true} if an unqualified reference resolves to a matching</span>
-<span class="source-line-no">364</span><span id="line-364">     *     qualified type</span>
-<span class="source-line-no">365</span><span id="line-365">     */</span>
-<span class="source-line-no">366</span><span id="line-366">    private boolean resolvesToQualifiedReference(String simpleName) {</span>
-<span class="source-line-no">367</span><span id="line-367">        boolean resolved = false;</span>
-<span class="source-line-no">368</span><span id="line-368">        for (QualifiedTypeReference reference : qualifiedReferences) {</span>
-<span class="source-line-no">369</span><span id="line-369">            if (reference.simpleName().equals(simpleName)</span>
-<span class="source-line-no">370</span><span id="line-370">                    &amp;&amp; resolvesUnqualified(reference.fullName())) {</span>
-<span class="source-line-no">371</span><span id="line-371">                resolved = true;</span>
-<span class="source-line-no">372</span><span id="line-372">                break;</span>
-<span class="source-line-no">373</span><span id="line-373">            }</span>
-<span class="source-line-no">374</span><span id="line-374">        }</span>
-<span class="source-line-no">375</span><span id="line-375">        return resolved;</span>
-<span class="source-line-no">376</span><span id="line-376">    }</span>
-<span class="source-line-no">377</span><span id="line-377"></span>
-<span class="source-line-no">378</span><span id="line-378">    /**</span>
-<span class="source-line-no">379</span><span id="line-379">     * Adds identities that are not established by an explicit import: an</span>
-<span class="source-line-no">380</span><span id="line-380">     * unqualified reference resolving to a same-package or {@code java.lang} type,</span>
-<span class="source-line-no">381</span><span id="line-381">     * and a type reachable via an on-demand import. Only relevant when no direct</span>
-<span class="source-line-no">382</span><span id="line-382">     * import of this simple name exists, since a direct import always takes</span>
-<span class="source-line-no">383</span><span id="line-383">     * priority over an on-demand import.</span>
-<span class="source-line-no">384</span><span id="line-384">     *</span>
-<span class="source-line-no">385</span><span id="line-385">     * @param simpleName the simple name to check</span>
-<span class="source-line-no">386</span><span id="line-386">     * @param unqualifiedResolvedToReference whether a same-simple-name qualified</span>
-<span class="source-line-no">387</span><span id="line-387">     *     reference already resolves to what an unqualified use would mean</span>
-<span class="source-line-no">388</span><span id="line-388">     * @param identities the identity set to add to</span>
-<span class="source-line-no">389</span><span id="line-389">     */</span>
-<span class="source-line-no">390</span><span id="line-390">    private void addImplicitIdentities(String simpleName,</span>
-<span class="source-line-no">391</span><span id="line-391">                                       boolean unqualifiedResolvedToReference,</span>
-<span class="source-line-no">392</span><span id="line-392">                                       Set&lt;String&gt; identities) {</span>
-<span class="source-line-no">393</span><span id="line-393">        if (!unqualifiedResolvedToReference &amp;&amp; simpleReferences.contains(simpleName)) {</span>
-<span class="source-line-no">394</span><span id="line-394">            identities.add(UNQUALIFIED_MARKER + simpleName);</span>
+<span class="source-line-no">055</span><span id="line-55"> * is inconsistent with common Java style conventions, which favor importing the type instead.</span>
+<span class="source-line-no">056</span><span id="line-56"> * &lt;/p&gt;</span>
+<span class="source-line-no">057</span><span id="line-57"> *</span>
+<span class="source-line-no">058</span><span id="line-58"> * &lt;p&gt;</span>
+<span class="source-line-no">059</span><span id="line-59"> * The following limitations apply:</span>
+<span class="source-line-no">060</span><span id="line-60"> * &lt;/p&gt;</span>
+<span class="source-line-no">061</span><span id="line-61"> * &lt;ul&gt;</span>
+<span class="source-line-no">062</span><span id="line-62"> * &lt;li&gt;</span>
+<span class="source-line-no">063</span><span id="line-63"> * To distinguish a package qualified type (such as {@code java.util.Map}) from a</span>
+<span class="source-line-no">064</span><span id="line-64"> * reference to a nested type (such as {@code Map.Entry}), the check relies on the</span>
+<span class="source-line-no">065</span><span id="line-65"> * common convention that package names start with a lowercase letter. A qualified</span>
+<span class="source-line-no">066</span><span id="line-66"> * reference is treated as fully qualified only when the identifier preceding the</span>
+<span class="source-line-no">067</span><span id="line-67"> * simple name starts with a lowercase letter.</span>
+<span class="source-line-no">068</span><span id="line-68"> * &lt;/li&gt;</span>
+<span class="source-line-no">069</span><span id="line-69"> * &lt;li&gt;</span>
+<span class="source-line-no">070</span><span id="line-70"> * References to nested types via an enclosing type (for example</span>
+<span class="source-line-no">071</span><span id="line-71"> * {@code java.util.Map.Entry}) and fully qualified annotations</span>
+<span class="source-line-no">072</span><span id="line-72"> * (for example {@code @java.lang.Override}) are not reported.</span>
+<span class="source-line-no">073</span><span id="line-73"> * &lt;/li&gt;</span>
+<span class="source-line-no">074</span><span id="line-74"> * &lt;li&gt;</span>
+<span class="source-line-no">075</span><span id="line-75"> * On-demand (wildcard) imports, such as {@code import java.util.*;}, are checked</span>
+<span class="source-line-no">076</span><span id="line-76"> * against classes reachable on this check's own class loader. This reliably</span>
+<span class="source-line-no">077</span><span id="line-77"> * detects collisions from JDK packages (for example a fully qualified reference</span>
+<span class="source-line-no">078</span><span id="line-78"> * to a third-party {@code Observer} type being left alone because</span>
+<span class="source-line-no">079</span><span id="line-79"> * {@code import java.util.*;} also brings a different {@code java.util.Observer}</span>
+<span class="source-line-no">080</span><span id="line-80"> * into scope), but on-demand imports of third-party or project-local packages</span>
+<span class="source-line-no">081</span><span id="line-81"> * cannot be resolved this way and may still be flagged incorrectly.</span>
+<span class="source-line-no">082</span><span id="line-82"> * &lt;/li&gt;</span>
+<span class="source-line-no">083</span><span id="line-83"> * &lt;/ul&gt;</span>
+<span class="source-line-no">084</span><span id="line-84"> *</span>
+<span class="source-line-no">085</span><span id="line-85"> * @since 14.1.0</span>
+<span class="source-line-no">086</span><span id="line-86"> */</span>
+<span class="source-line-no">087</span><span id="line-87">@FileStatefulCheck</span>
+<span class="source-line-no">088</span><span id="line-88">public class UnnecessaryFullyQualifiedTypeCheck extends AbstractCheck {</span>
+<span class="source-line-no">089</span><span id="line-89"></span>
+<span class="source-line-no">090</span><span id="line-90">    /**</span>
+<span class="source-line-no">091</span><span id="line-91">     * A key is pointing to the warning message text in "messages.properties" file.</span>
+<span class="source-line-no">092</span><span id="line-92">     */</span>
+<span class="source-line-no">093</span><span id="line-93">    public static final String MSG_KEY = "unnecessary.fully.qualified.type";</span>
+<span class="source-line-no">094</span><span id="line-94"></span>
+<span class="source-line-no">095</span><span id="line-95">    /** Array declarator markers that may trail a type name. */</span>
+<span class="source-line-no">096</span><span id="line-96">    private static final String ARRAY_MARKERS = "[]";</span>
+<span class="source-line-no">097</span><span id="line-97"></span>
+<span class="source-line-no">098</span><span id="line-98">    /** Marker used to represent a locally declared type in the identity set. */</span>
+<span class="source-line-no">099</span><span id="line-99">    private static final String DECLARED_MARKER = "&lt;declared&gt; ";</span>
+<span class="source-line-no">100</span><span id="line-100"></span>
+<span class="source-line-no">101</span><span id="line-101">    /** Marker used to represent an unqualified type reference in the identity set. */</span>
+<span class="source-line-no">102</span><span id="line-102">    private static final String UNQUALIFIED_MARKER = "&lt;unqualified&gt; ";</span>
+<span class="source-line-no">103</span><span id="line-103"></span>
+<span class="source-line-no">104</span><span id="line-104">    /** The {@code java.lang} package, types of which never need to be qualified. */</span>
+<span class="source-line-no">105</span><span id="line-105">    private static final String JAVA_LANG_PACKAGE = "java.lang";</span>
+<span class="source-line-no">106</span><span id="line-106"></span>
+<span class="source-line-no">107</span><span id="line-107">    /** Suffix identifying an on-demand (wildcard) import, such as {@code java.util.*}. */</span>
+<span class="source-line-no">108</span><span id="line-108">    private static final String ON_DEMAND_IMPORT_SUFFIX = ".*";</span>
+<span class="source-line-no">109</span><span id="line-109"></span>
+<span class="source-line-no">110</span><span id="line-110">    /** Separator used between components of a fully qualified name. */</span>
+<span class="source-line-no">111</span><span id="line-111">    private static final String DOT = ".";</span>
+<span class="source-line-no">112</span><span id="line-112"></span>
+<span class="source-line-no">113</span><span id="line-113">    /**</span>
+<span class="source-line-no">114</span><span id="line-114">     * Tokens whose direct child is a type reference. A {@link TokenTypes#DOT} or</span>
+<span class="source-line-no">115</span><span id="line-115">     * {@link TokenTypes#IDENT} is considered to be in type context when its parent</span>
+<span class="source-line-no">116</span><span id="line-116">     * is one of these tokens.</span>
+<span class="source-line-no">117</span><span id="line-117">     */</span>
+<span class="source-line-no">118</span><span id="line-118">    private static final int[] TYPE_CONTEXT_PARENTS = {</span>
+<span class="source-line-no">119</span><span id="line-119">        TokenTypes.TYPE,</span>
+<span class="source-line-no">120</span><span id="line-120">        TokenTypes.LITERAL_NEW,</span>
+<span class="source-line-no">121</span><span id="line-121">        TokenTypes.EXTENDS_CLAUSE,</span>
+<span class="source-line-no">122</span><span id="line-122">        TokenTypes.IMPLEMENTS_CLAUSE,</span>
+<span class="source-line-no">123</span><span id="line-123">        TokenTypes.LITERAL_THROWS,</span>
+<span class="source-line-no">124</span><span id="line-124">        TokenTypes.TYPE_ARGUMENT,</span>
+<span class="source-line-no">125</span><span id="line-125">    };</span>
+<span class="source-line-no">126</span><span id="line-126"></span>
+<span class="source-line-no">127</span><span id="line-127">    /**</span>
+<span class="source-line-no">128</span><span id="line-128">     * Tokens that declare a type. An {@link TokenTypes#IDENT} whose parent is one of</span>
+<span class="source-line-no">129</span><span id="line-129">     * these is the name of a type declared in the file.</span>
+<span class="source-line-no">130</span><span id="line-130">     */</span>
+<span class="source-line-no">131</span><span id="line-131">    private static final int[] TYPE_DECLARATION_PARENTS = {</span>
+<span class="source-line-no">132</span><span id="line-132">        TokenTypes.CLASS_DEF,</span>
+<span class="source-line-no">133</span><span id="line-133">        TokenTypes.INTERFACE_DEF,</span>
+<span class="source-line-no">134</span><span id="line-134">        TokenTypes.ENUM_DEF,</span>
+<span class="source-line-no">135</span><span id="line-135">        TokenTypes.ANNOTATION_DEF,</span>
+<span class="source-line-no">136</span><span id="line-136">        TokenTypes.RECORD_DEF,</span>
+<span class="source-line-no">137</span><span id="line-137">    };</span>
+<span class="source-line-no">138</span><span id="line-138"></span>
+<span class="source-line-no">139</span><span id="line-139">    /** Maps the simple name of each single-type import to its fully qualified name. */</span>
+<span class="source-line-no">140</span><span id="line-140">    private final Map&lt;String, String&gt; importedTypes = new HashMap&lt;&gt;();</span>
+<span class="source-line-no">141</span><span id="line-141"></span>
+<span class="source-line-no">142</span><span id="line-142">    /** Simple names of the types declared in the file. */</span>
+<span class="source-line-no">143</span><span id="line-143">    private final Set&lt;String&gt; declaredTypes = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">144</span><span id="line-144"></span>
+<span class="source-line-no">145</span><span id="line-145">    /** Simple names of the types referenced without qualification in the file. */</span>
+<span class="source-line-no">146</span><span id="line-146">    private final Set&lt;String&gt; simpleReferences = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">147</span><span id="line-147"></span>
+<span class="source-line-no">148</span><span id="line-148">    /** Fully qualified type references collected while traversing the file. */</span>
+<span class="source-line-no">149</span><span id="line-149">    private final List&lt;QualifiedTypeReference&gt; qualifiedReferences = new ArrayList&lt;&gt;();</span>
+<span class="source-line-no">150</span><span id="line-150"></span>
+<span class="source-line-no">151</span><span id="line-151">    /**</span>
+<span class="source-line-no">152</span><span id="line-152">     * Packages imported on-demand (wildcard), e.g. {@code java.util} for</span>
+<span class="source-line-no">153</span><span id="line-153">     * {@code import java.util.*;}.</span>
+<span class="source-line-no">154</span><span id="line-154">     */</span>
+<span class="source-line-no">155</span><span id="line-155">    private final Set&lt;String&gt; onDemandImportPackages = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">156</span><span id="line-156"></span>
+<span class="source-line-no">157</span><span id="line-157">    /** The package the file belongs to, or {@code null} for the default package. */</span>
+<span class="source-line-no">158</span><span id="line-158">    @Nullable</span>
+<span class="source-line-no">159</span><span id="line-159">    private String packageName;</span>
+<span class="source-line-no">160</span><span id="line-160"></span>
+<span class="source-line-no">161</span><span id="line-161">    /**</span>
+<span class="source-line-no">162</span><span id="line-162">     * Creates new {@code UnnecessaryFullyQualifiedTypeCheck} instance.</span>
+<span class="source-line-no">163</span><span id="line-163">     */</span>
+<span class="source-line-no">164</span><span id="line-164">    public UnnecessaryFullyQualifiedTypeCheck() {</span>
+<span class="source-line-no">165</span><span id="line-165">        // no code by default</span>
+<span class="source-line-no">166</span><span id="line-166">    }</span>
+<span class="source-line-no">167</span><span id="line-167"></span>
+<span class="source-line-no">168</span><span id="line-168">    @Override</span>
+<span class="source-line-no">169</span><span id="line-169">    public int[] getDefaultTokens() {</span>
+<span class="source-line-no">170</span><span id="line-170">        return getRequiredTokens();</span>
+<span class="source-line-no">171</span><span id="line-171">    }</span>
+<span class="source-line-no">172</span><span id="line-172"></span>
+<span class="source-line-no">173</span><span id="line-173">    @Override</span>
+<span class="source-line-no">174</span><span id="line-174">    public int[] getAcceptableTokens() {</span>
+<span class="source-line-no">175</span><span id="line-175">        return getRequiredTokens();</span>
+<span class="source-line-no">176</span><span id="line-176">    }</span>
+<span class="source-line-no">177</span><span id="line-177"></span>
+<span class="source-line-no">178</span><span id="line-178">    @Override</span>
+<span class="source-line-no">179</span><span id="line-179">    public int[] getRequiredTokens() {</span>
+<span class="source-line-no">180</span><span id="line-180">        return new int[] {</span>
+<span class="source-line-no">181</span><span id="line-181">            TokenTypes.PACKAGE_DEF,</span>
+<span class="source-line-no">182</span><span id="line-182">            TokenTypes.IMPORT,</span>
+<span class="source-line-no">183</span><span id="line-183">            TokenTypes.DOT,</span>
+<span class="source-line-no">184</span><span id="line-184">            TokenTypes.IDENT,</span>
+<span class="source-line-no">185</span><span id="line-185">        };</span>
+<span class="source-line-no">186</span><span id="line-186">    }</span>
+<span class="source-line-no">187</span><span id="line-187"></span>
+<span class="source-line-no">188</span><span id="line-188">    @Override</span>
+<span class="source-line-no">189</span><span id="line-189">    public void beginTree(DetailAST rootAST) {</span>
+<span class="source-line-no">190</span><span id="line-190">        packageName = null;</span>
+<span class="source-line-no">191</span><span id="line-191">        onDemandImportPackages.clear();</span>
+<span class="source-line-no">192</span><span id="line-192">        importedTypes.clear();</span>
+<span class="source-line-no">193</span><span id="line-193">        declaredTypes.clear();</span>
+<span class="source-line-no">194</span><span id="line-194">        simpleReferences.clear();</span>
+<span class="source-line-no">195</span><span id="line-195">        qualifiedReferences.clear();</span>
+<span class="source-line-no">196</span><span id="line-196">    }</span>
+<span class="source-line-no">197</span><span id="line-197"></span>
+<span class="source-line-no">198</span><span id="line-198">    @Override</span>
+<span class="source-line-no">199</span><span id="line-199">    public void visitToken(DetailAST ast) {</span>
+<span class="source-line-no">200</span><span id="line-200">        switch (ast.getType()) {</span>
+<span class="source-line-no">201</span><span id="line-201">            case TokenTypes.PACKAGE_DEF -&gt; processPackage(ast);</span>
+<span class="source-line-no">202</span><span id="line-202">            case TokenTypes.IMPORT -&gt; processImport(ast);</span>
+<span class="source-line-no">203</span><span id="line-203">            case TokenTypes.DOT -&gt; processDot(ast);</span>
+<span class="source-line-no">204</span><span id="line-204">            default -&gt; processIdent(ast);</span>
+<span class="source-line-no">205</span><span id="line-205">        }</span>
+<span class="source-line-no">206</span><span id="line-206">    }</span>
+<span class="source-line-no">207</span><span id="line-207"></span>
+<span class="source-line-no">208</span><span id="line-208">    @Override</span>
+<span class="source-line-no">209</span><span id="line-209">    public void finishTree(DetailAST rootAST) {</span>
+<span class="source-line-no">210</span><span id="line-210">        for (QualifiedTypeReference reference : qualifiedReferences) {</span>
+<span class="source-line-no">211</span><span id="line-211">            if (isUnnecessary(reference.simpleName())) {</span>
+<span class="source-line-no">212</span><span id="line-212">                log(reference.detailAst(), MSG_KEY, reference.fullName());</span>
+<span class="source-line-no">213</span><span id="line-213">            }</span>
+<span class="source-line-no">214</span><span id="line-214">        }</span>
+<span class="source-line-no">215</span><span id="line-215">    }</span>
+<span class="source-line-no">216</span><span id="line-216"></span>
+<span class="source-line-no">217</span><span id="line-217">    /**</span>
+<span class="source-line-no">218</span><span id="line-218">     * Records the package the file belongs to.</span>
+<span class="source-line-no">219</span><span id="line-219">     *</span>
+<span class="source-line-no">220</span><span id="line-220">     * @param ast the {@link TokenTypes#PACKAGE_DEF} node</span>
+<span class="source-line-no">221</span><span id="line-221">     */</span>
+<span class="source-line-no">222</span><span id="line-222">    private void processPackage(DetailAST ast) {</span>
+<span class="source-line-no">223</span><span id="line-223">        packageName = FullIdent.createFullIdent(</span>
+<span class="source-line-no">224</span><span id="line-224">                ast.getLastChild().getPreviousSibling()).getText();</span>
+<span class="source-line-no">225</span><span id="line-225">    }</span>
+<span class="source-line-no">226</span><span id="line-226"></span>
+<span class="source-line-no">227</span><span id="line-227">    /**</span>
+<span class="source-line-no">228</span><span id="line-228">     * Records an import by its simple name so that later references can be resolved.</span>
+<span class="source-line-no">229</span><span id="line-229">     * On-demand (wildcard) imports do not have a single simple name, so the</span>
+<span class="source-line-no">230</span><span id="line-230">     * imported package is recorded separately instead.</span>
+<span class="source-line-no">231</span><span id="line-231">     *</span>
+<span class="source-line-no">232</span><span id="line-232">     * @param ast the {@link TokenTypes#IMPORT} node</span>
+<span class="source-line-no">233</span><span id="line-233">     */</span>
+<span class="source-line-no">234</span><span id="line-234">    private void processImport(DetailAST ast) {</span>
+<span class="source-line-no">235</span><span id="line-235">        final String importText = FullIdent.createFullIdentBelow(ast).getText();</span>
+<span class="source-line-no">236</span><span id="line-236">        if (importText.endsWith(ON_DEMAND_IMPORT_SUFFIX)) {</span>
+<span class="source-line-no">237</span><span id="line-237">            onDemandImportPackages.add(</span>
+<span class="source-line-no">238</span><span id="line-238">                importText.substring(0, importText.length() - ON_DEMAND_IMPORT_SUFFIX.length()));</span>
+<span class="source-line-no">239</span><span id="line-239">        }</span>
+<span class="source-line-no">240</span><span id="line-240">        else {</span>
+<span class="source-line-no">241</span><span id="line-241">            importedTypes.put(extractSimpleName(importText), importText);</span>
+<span class="source-line-no">242</span><span id="line-242">        }</span>
+<span class="source-line-no">243</span><span id="line-243">    }</span>
+<span class="source-line-no">244</span><span id="line-244"></span>
+<span class="source-line-no">245</span><span id="line-245">    /**</span>
+<span class="source-line-no">246</span><span id="line-246">     * Collects a fully qualified type reference if the given {@link TokenTypes#DOT}</span>
+<span class="source-line-no">247</span><span id="line-247">     * node represents one.</span>
+<span class="source-line-no">248</span><span id="line-248">     *</span>
+<span class="source-line-no">249</span><span id="line-249">     * @param ast the {@code TokenTypes#DOT} node</span>
+<span class="source-line-no">250</span><span id="line-250">     */</span>
+<span class="source-line-no">251</span><span id="line-251">    private void processDot(DetailAST ast) {</span>
+<span class="source-line-no">252</span><span id="line-252">        if (isInTypeContext(ast)) {</span>
+<span class="source-line-no">253</span><span id="line-253">            final String fullName = buildFullName(ast).replace(ARRAY_MARKERS, "");</span>
+<span class="source-line-no">254</span><span id="line-254">            if (isFullyQualified(fullName)) {</span>
+<span class="source-line-no">255</span><span id="line-255">                qualifiedReferences.add(</span>
+<span class="source-line-no">256</span><span id="line-256">                        new QualifiedTypeReference(ast, fullName, extractSimpleName(fullName)));</span>
+<span class="source-line-no">257</span><span id="line-257">            }</span>
+<span class="source-line-no">258</span><span id="line-258">        }</span>
+<span class="source-line-no">259</span><span id="line-259">    }</span>
+<span class="source-line-no">260</span><span id="line-260"></span>
+<span class="source-line-no">261</span><span id="line-261">    /**</span>
+<span class="source-line-no">262</span><span id="line-262">     * Reconstructs the fully qualified name for a {@code TokenTypes#DOT} node,</span>
+<span class="source-line-no">263</span><span id="line-263">     * handling the extra child produced by an embedded type-use annotation.</span>
+<span class="source-line-no">264</span><span id="line-264">     *</span>
+<span class="source-line-no">265</span><span id="line-265">     * @param ast the {@code TokenTypes#DOT} node</span>
+<span class="source-line-no">266</span><span id="line-266">     * @return the fully qualified name the node represents</span>
+<span class="source-line-no">267</span><span id="line-267">     */</span>
+<span class="source-line-no">268</span><span id="line-268">    private static String buildFullName(DetailAST ast) {</span>
+<span class="source-line-no">269</span><span id="line-269">        final DetailAST qualifier = ast.getFirstChild();</span>
+<span class="source-line-no">270</span><span id="line-270">        final DetailAST secondChild = qualifier.getNextSibling();</span>
+<span class="source-line-no">271</span><span id="line-271">        final String result;</span>
+<span class="source-line-no">272</span><span id="line-272">        if (secondChild.getType() == TokenTypes.ANNOTATIONS) {</span>
+<span class="source-line-no">273</span><span id="line-273">            final DetailAST simpleNameIdent = secondChild.getNextSibling();</span>
+<span class="source-line-no">274</span><span id="line-274">            result = FullIdent.createFullIdent(qualifier).getText()</span>
+<span class="source-line-no">275</span><span id="line-275">                    + DOT + simpleNameIdent.getText();</span>
+<span class="source-line-no">276</span><span id="line-276">        }</span>
+<span class="source-line-no">277</span><span id="line-277">        else {</span>
+<span class="source-line-no">278</span><span id="line-278">            result = FullIdent.createFullIdent(ast).getText();</span>
+<span class="source-line-no">279</span><span id="line-279">        }</span>
+<span class="source-line-no">280</span><span id="line-280">        return result;</span>
+<span class="source-line-no">281</span><span id="line-281">    }</span>
+<span class="source-line-no">282</span><span id="line-282"></span>
+<span class="source-line-no">283</span><span id="line-283">    /**</span>
+<span class="source-line-no">284</span><span id="line-284">     * Records a reference made through a simple name. The name is either an</span>
+<span class="source-line-no">285</span><span id="line-285">     * unqualified type reference or the name of a type declared in the file.</span>
+<span class="source-line-no">286</span><span id="line-286">     *</span>
+<span class="source-line-no">287</span><span id="line-287">     * @param ast the {@link TokenTypes#IDENT} node</span>
+<span class="source-line-no">288</span><span id="line-288">     */</span>
+<span class="source-line-no">289</span><span id="line-289">    private void processIdent(DetailAST ast) {</span>
+<span class="source-line-no">290</span><span id="line-290">        final DetailAST parent = ast.getParent();</span>
+<span class="source-line-no">291</span><span id="line-291">        if (TokenUtil.isOfType(parent, TYPE_CONTEXT_PARENTS)) {</span>
+<span class="source-line-no">292</span><span id="line-292">            simpleReferences.add(ast.getText());</span>
+<span class="source-line-no">293</span><span id="line-293">        }</span>
+<span class="source-line-no">294</span><span id="line-294">        else if (TokenUtil.isOfType(parent, TYPE_DECLARATION_PARENTS)) {</span>
+<span class="source-line-no">295</span><span id="line-295">            declaredTypes.add(ast.getText());</span>
+<span class="source-line-no">296</span><span id="line-296">        }</span>
+<span class="source-line-no">297</span><span id="line-297">    }</span>
+<span class="source-line-no">298</span><span id="line-298"></span>
+<span class="source-line-no">299</span><span id="line-299">    /**</span>
+<span class="source-line-no">300</span><span id="line-300">     * Determines whether a type reference with the given simple name is unnecessary.</span>
+<span class="source-line-no">301</span><span id="line-301">     * It is unnecessary when this fully qualified reference is the only type with</span>
+<span class="source-line-no">302</span><span id="line-302">     * that simple name used in the file, so it could be imported and referenced by</span>
+<span class="source-line-no">303</span><span id="line-303">     * its simple name without introducing ambiguity.</span>
+<span class="source-line-no">304</span><span id="line-304">     *</span>
+<span class="source-line-no">305</span><span id="line-305">     * @param simpleName the simple name of the type</span>
+<span class="source-line-no">306</span><span id="line-306">     * @return {@code true} if the fully qualified reference is unnecessary</span>
+<span class="source-line-no">307</span><span id="line-307">     */</span>
+<span class="source-line-no">308</span><span id="line-308">    private boolean isUnnecessary(String simpleName) {</span>
+<span class="source-line-no">309</span><span id="line-309">        return collectIdentities(simpleName).size() == 1;</span>
+<span class="source-line-no">310</span><span id="line-310">    }</span>
+<span class="source-line-no">311</span><span id="line-311"></span>
+<span class="source-line-no">312</span><span id="line-312">    /**</span>
+<span class="source-line-no">313</span><span id="line-313">     * Collects every distinct identity claiming the given simple name in the file:</span>
+<span class="source-line-no">314</span><span id="line-314">     * a direct import, each fully qualified reference sharing that simple name, a</span>
+<span class="source-line-no">315</span><span id="line-315">     * locally declared type, an unqualified reference resolving elsewhere, and a</span>
+<span class="source-line-no">316</span><span id="line-316">     * type reachable via an on-demand import. A simple name is unambiguous, and</span>
+<span class="source-line-no">317</span><span id="line-317">     * therefore its fully qualified reference unnecessary, exactly when this set</span>
+<span class="source-line-no">318</span><span id="line-318">     * has a single member.</span>
+<span class="source-line-no">319</span><span id="line-319">     *</span>
+<span class="source-line-no">320</span><span id="line-320">     * @param simpleName the simple name to collect identities for</span>
+<span class="source-line-no">321</span><span id="line-321">     * @return the set of distinct identities claiming this simple name</span>
+<span class="source-line-no">322</span><span id="line-322">     */</span>
+<span class="source-line-no">323</span><span id="line-323">    private Set&lt;String&gt; collectIdentities(String simpleName) {</span>
+<span class="source-line-no">324</span><span id="line-324">        final Set&lt;String&gt; identities = new HashSet&lt;&gt;();</span>
+<span class="source-line-no">325</span><span id="line-325">        final String imported = importedTypes.get(simpleName);</span>
+<span class="source-line-no">326</span><span id="line-326">        if (imported != null) {</span>
+<span class="source-line-no">327</span><span id="line-327">            identities.add(imported);</span>
+<span class="source-line-no">328</span><span id="line-328">        }</span>
+<span class="source-line-no">329</span><span id="line-329">        if (declaredTypes.contains(simpleName)) {</span>
+<span class="source-line-no">330</span><span id="line-330">            identities.add(DECLARED_MARKER + simpleName);</span>
+<span class="source-line-no">331</span><span id="line-331">        }</span>
+<span class="source-line-no">332</span><span id="line-332">        addQualifiedReferenceIdentities(simpleName, identities);</span>
+<span class="source-line-no">333</span><span id="line-333">        if (imported == null) {</span>
+<span class="source-line-no">334</span><span id="line-334">            final boolean unqualifiedResolvedToReference =</span>
+<span class="source-line-no">335</span><span id="line-335">                    resolvesToQualifiedReference(simpleName);</span>
+<span class="source-line-no">336</span><span id="line-336">            addImplicitIdentities(simpleName, unqualifiedResolvedToReference, identities);</span>
+<span class="source-line-no">337</span><span id="line-337">        }</span>
+<span class="source-line-no">338</span><span id="line-338">        return identities;</span>
+<span class="source-line-no">339</span><span id="line-339">    }</span>
+<span class="source-line-no">340</span><span id="line-340"></span>
+<span class="source-line-no">341</span><span id="line-341">    /**</span>
+<span class="source-line-no">342</span><span id="line-342">     * Adds an identity for each fully qualified reference sharing the given simple name.</span>
+<span class="source-line-no">343</span><span id="line-343">     *</span>
+<span class="source-line-no">344</span><span id="line-344">     * @param simpleName the simple name to match references against</span>
+<span class="source-line-no">345</span><span id="line-345">     * @param identities the identity set to add to</span>
+<span class="source-line-no">346</span><span id="line-346">     */</span>
+<span class="source-line-no">347</span><span id="line-347">    private void addQualifiedReferenceIdentities(String simpleName, Set&lt;String&gt; identities) {</span>
+<span class="source-line-no">348</span><span id="line-348">        for (QualifiedTypeReference reference : qualifiedReferences) {</span>
+<span class="source-line-no">349</span><span id="line-349">            if (reference.simpleName().equals(simpleName)) {</span>
+<span class="source-line-no">350</span><span id="line-350">                identities.add(reference.fullName());</span>
+<span class="source-line-no">351</span><span id="line-351">            }</span>
+<span class="source-line-no">352</span><span id="line-352">        }</span>
+<span class="source-line-no">353</span><span id="line-353">    }</span>
+<span class="source-line-no">354</span><span id="line-354"></span>
+<span class="source-line-no">355</span><span id="line-355">    /**</span>
+<span class="source-line-no">356</span><span id="line-356">     * Checks whether any fully qualified reference with the given simple name</span>
+<span class="source-line-no">357</span><span id="line-357">     * resolves to the same type as an unqualified reference would.</span>
+<span class="source-line-no">358</span><span id="line-358">     *</span>
+<span class="source-line-no">359</span><span id="line-359">     * @param simpleName the simple name to check</span>
+<span class="source-line-no">360</span><span id="line-360">     * @return {@code true} if an unqualified reference resolves to a matching qualified type</span>
+<span class="source-line-no">361</span><span id="line-361">     */</span>
+<span class="source-line-no">362</span><span id="line-362">    private boolean resolvesToQualifiedReference(String simpleName) {</span>
+<span class="source-line-no">363</span><span id="line-363">        boolean resolved = false;</span>
+<span class="source-line-no">364</span><span id="line-364">        for (QualifiedTypeReference reference : qualifiedReferences) {</span>
+<span class="source-line-no">365</span><span id="line-365">            if (reference.simpleName().equals(simpleName)</span>
+<span class="source-line-no">366</span><span id="line-366">                    &amp;&amp; resolvesUnqualified(reference.fullName())) {</span>
+<span class="source-line-no">367</span><span id="line-367">                resolved = true;</span>
+<span class="source-line-no">368</span><span id="line-368">                break;</span>
+<span class="source-line-no">369</span><span id="line-369">            }</span>
+<span class="source-line-no">370</span><span id="line-370">        }</span>
+<span class="source-line-no">371</span><span id="line-371">        return resolved;</span>
+<span class="source-line-no">372</span><span id="line-372">    }</span>
+<span class="source-line-no">373</span><span id="line-373"></span>
+<span class="source-line-no">374</span><span id="line-374">    /**</span>
+<span class="source-line-no">375</span><span id="line-375">     * Adds identities that are not established by an explicit import: an</span>
+<span class="source-line-no">376</span><span id="line-376">     * unqualified reference resolving to a same-package or {@code java.lang} type,</span>
+<span class="source-line-no">377</span><span id="line-377">     * and a type reachable via an on-demand import. Only relevant when no direct</span>
+<span class="source-line-no">378</span><span id="line-378">     * import of this simple name exists, since a direct import always takes</span>
+<span class="source-line-no">379</span><span id="line-379">     * priority over an on-demand import.</span>
+<span class="source-line-no">380</span><span id="line-380">     *</span>
+<span class="source-line-no">381</span><span id="line-381">     * @param simpleName the simple name to check</span>
+<span class="source-line-no">382</span><span id="line-382">     * @param unqualifiedResolvedToReference whether a same-simple-name qualified</span>
+<span class="source-line-no">383</span><span id="line-383">     *     reference already resolves to what an unqualified use would mean</span>
+<span class="source-line-no">384</span><span id="line-384">     * @param identities the identity set to add to</span>
+<span class="source-line-no">385</span><span id="line-385">     */</span>
+<span class="source-line-no">386</span><span id="line-386">    private void addImplicitIdentities(String simpleName,</span>
+<span class="source-line-no">387</span><span id="line-387">                                       boolean unqualifiedResolvedToReference,</span>
+<span class="source-line-no">388</span><span id="line-388">                                       Set&lt;String&gt; identities) {</span>
+<span class="source-line-no">389</span><span id="line-389">        if (!unqualifiedResolvedToReference &amp;&amp; simpleReferences.contains(simpleName)) {</span>
+<span class="source-line-no">390</span><span id="line-390">            identities.add(UNQUALIFIED_MARKER + simpleName);</span>
+<span class="source-line-no">391</span><span id="line-391">        }</span>
+<span class="source-line-no">392</span><span id="line-392">        final String onDemandFullName = resolveViaOnDemandImport(simpleName);</span>
+<span class="source-line-no">393</span><span id="line-393">        if (onDemandFullName != null) {</span>
+<span class="source-line-no">394</span><span id="line-394">            identities.add(onDemandFullName);</span>
 <span class="source-line-no">395</span><span id="line-395">        }</span>
-<span class="source-line-no">396</span><span id="line-396">        final String onDemandFullName = resolveViaOnDemandImport(simpleName);</span>
-<span class="source-line-no">397</span><span id="line-397">        if (onDemandFullName != null) {</span>
-<span class="source-line-no">398</span><span id="line-398">            identities.add(onDemandFullName);</span>
-<span class="source-line-no">399</span><span id="line-399">        }</span>
-<span class="source-line-no">400</span><span id="line-400">    }</span>
-<span class="source-line-no">401</span><span id="line-401"></span>
-<span class="source-line-no">402</span><span id="line-402">    /**</span>
-<span class="source-line-no">403</span><span id="line-403">     * Determines whether a reference by simple name (without import or local</span>
-<span class="source-line-no">404</span><span id="line-404">     * declaration) would resolve to the type denoted by the given fully qualified</span>
-<span class="source-line-no">405</span><span id="line-405">     * name. This is the case when that name belongs to the {@code java.lang}</span>
-<span class="source-line-no">406</span><span id="line-406">     * package or to the package the file itself belongs to.</span>
-<span class="source-line-no">407</span><span id="line-407">     *</span>
-<span class="source-line-no">408</span><span id="line-408">     * @param fullName a fully qualified type name</span>
-<span class="source-line-no">409</span><span id="line-409">     * @return {@code true} if an unqualified reference would resolve to it</span>
-<span class="source-line-no">410</span><span id="line-410">     */</span>
-<span class="source-line-no">411</span><span id="line-411">    private boolean resolvesUnqualified(String fullName) {</span>
-<span class="source-line-no">412</span><span id="line-412">        final String qualifier = fullName.substring(0, fullName.lastIndexOf('.'));</span>
-<span class="source-line-no">413</span><span id="line-413">        return JAVA_LANG_PACKAGE.equals(qualifier) || qualifier.equals(packageName);</span>
-<span class="source-line-no">414</span><span id="line-414">    }</span>
-<span class="source-line-no">415</span><span id="line-415"></span>
-<span class="source-line-no">416</span><span id="line-416">    /**</span>
-<span class="source-line-no">417</span><span id="line-417">     * Resolves a simple name against the file's on-demand imports, returning the</span>
-<span class="source-line-no">418</span><span id="line-418">     * fully qualified name of the class it resolves to, if any. Resolution is</span>
-<span class="source-line-no">419</span><span id="line-419">     * attempted only against classes reachable on this check's own class loader,</span>
-<span class="source-line-no">420</span><span id="line-420">     * so it is reliable for JDK packages but cannot detect collisions caused by</span>
-<span class="source-line-no">421</span><span id="line-421">     * third-party or project-local on-demand imports.</span>
-<span class="source-line-no">422</span><span id="line-422">     *</span>
-<span class="source-line-no">423</span><span id="line-423">     * @param simpleName the simple name to look for</span>
-<span class="source-line-no">424</span><span id="line-424">     * @return the fully qualified name the simple name resolves to via an</span>
-<span class="source-line-no">425</span><span id="line-425">     *     on-demand import, or {@code null} if none of the on-demand imported</span>
-<span class="source-line-no">426</span><span id="line-426">     *     packages contain a class of that name</span>
-<span class="source-line-no">427</span><span id="line-427">     */</span>
-<span class="source-line-no">428</span><span id="line-428">    @Nullable</span>
-<span class="source-line-no">429</span><span id="line-429">    private String resolveViaOnDemandImport(String simpleName) {</span>
-<span class="source-line-no">430</span><span id="line-430">        String resolved = null;</span>
-<span class="source-line-no">431</span><span id="line-431">        for (String onDemandPackage : onDemandImportPackages) {</span>
-<span class="source-line-no">432</span><span id="line-432">            try {</span>
-<span class="source-line-no">433</span><span id="line-433">                final String candidate = onDemandPackage + DOT + simpleName;</span>
-<span class="source-line-no">434</span><span id="line-434">                Class.forName(candidate, false, null);</span>
-<span class="source-line-no">435</span><span id="line-435">                resolved = candidate;</span>
-<span class="source-line-no">436</span><span id="line-436">                break;</span>
-<span class="source-line-no">437</span><span id="line-437">            }</span>
-<span class="source-line-no">438</span><span id="line-438">            catch (ClassNotFoundException | LinkageError ignored) {</span>
-<span class="source-line-no">439</span><span id="line-439">                // this package does not contain a class of this name; keep checking</span>
-<span class="source-line-no">440</span><span id="line-440">            }</span>
-<span class="source-line-no">441</span><span id="line-441">        }</span>
-<span class="source-line-no">442</span><span id="line-442">        return resolved;</span>
-<span class="source-line-no">443</span><span id="line-443">    }</span>
-<span class="source-line-no">444</span><span id="line-444"></span>
-<span class="source-line-no">445</span><span id="line-445">    /**</span>
-<span class="source-line-no">446</span><span id="line-446">     * Checks whether the given node is a direct child of a type context token.</span>
-<span class="source-line-no">447</span><span id="line-447">     *</span>
-<span class="source-line-no">448</span><span id="line-448">     * @param ast the node to check</span>
-<span class="source-line-no">449</span><span id="line-449">     * @return {@code true} if the node is in type context</span>
-<span class="source-line-no">450</span><span id="line-450">     */</span>
-<span class="source-line-no">451</span><span id="line-451">    private static boolean isInTypeContext(DetailAST ast) {</span>
-<span class="source-line-no">452</span><span id="line-452">        return TokenUtil.isOfType(ast.getParent(), TYPE_CONTEXT_PARENTS);</span>
-<span class="source-line-no">453</span><span id="line-453">    }</span>
-<span class="source-line-no">454</span><span id="line-454"></span>
-<span class="source-line-no">455</span><span id="line-455">    /**</span>
-<span class="source-line-no">456</span><span id="line-456">     * Determines whether the given qualified name is a package qualified (fully</span>
-<span class="source-line-no">457</span><span id="line-457">     * qualified) type reference, as opposed to a reference to a nested type. The</span>
-<span class="source-line-no">458</span><span id="line-458">     * check relies on the convention that package names start with a lowercase</span>
-<span class="source-line-no">459</span><span id="line-459">     * letter, so the name is treated as fully qualified when the identifier</span>
-<span class="source-line-no">460</span><span id="line-460">     * preceding the simple name starts with a lowercase letter.</span>
-<span class="source-line-no">461</span><span id="line-461">     *</span>
-<span class="source-line-no">462</span><span id="line-462">     * @param name a qualified name containing at least one dot, as produced from</span>
-<span class="source-line-no">463</span><span id="line-463">     *     a {@link TokenTypes#DOT} node</span>
-<span class="source-line-no">464</span><span id="line-464">     * @return {@code true} if the name is a fully qualified type reference</span>
-<span class="source-line-no">465</span><span id="line-465">     */</span>
-<span class="source-line-no">466</span><span id="line-466">    private static boolean isFullyQualified(String name) {</span>
-<span class="source-line-no">467</span><span id="line-467">        final int simpleNameStart = name.lastIndexOf('.');</span>
-<span class="source-line-no">468</span><span id="line-468">        final int qualifierStart = name.lastIndexOf('.', simpleNameStart - 1);</span>
-<span class="source-line-no">469</span><span id="line-469">        final char firstQualifierChar = name.charAt(qualifierStart + 1);</span>
-<span class="source-line-no">470</span><span id="line-470">        return Character.isLowerCase(firstQualifierChar);</span>
-<span class="source-line-no">471</span><span id="line-471">    }</span>
-<span class="source-line-no">472</span><span id="line-472"></span>
-<span class="source-line-no">473</span><span id="line-473">    /**</span>
-<span class="source-line-no">474</span><span id="line-474">     * Extracts the simple name from a qualified name.</span>
-<span class="source-line-no">475</span><span id="line-475">     *</span>
-<span class="source-line-no">476</span><span id="line-476">     * @param name a qualified name</span>
-<span class="source-line-no">477</span><span id="line-477">     * @return the part of the name after the last dot</span>
-<span class="source-line-no">478</span><span id="line-478">     */</span>
-<span class="source-line-no">479</span><span id="line-479">    private static String extractSimpleName(String name) {</span>
-<span class="source-line-no">480</span><span id="line-480">        return name.substring(name.lastIndexOf('.') + 1);</span>
-<span class="source-line-no">481</span><span id="line-481">    }</span>
-<span class="source-line-no">482</span><span id="line-482"></span>
-<span class="source-line-no">483</span><span id="line-483">    /**</span>
-<span class="source-line-no">484</span><span id="line-484">     * Holds the details of a fully qualified type reference.</span>
-<span class="source-line-no">485</span><span id="line-485">     *</span>
-<span class="source-line-no">486</span><span id="line-486">     * @param detailAst the node where the reference starts, used for logging</span>
-<span class="source-line-no">487</span><span id="line-487">     * @param fullName the fully qualified name of the referenced type</span>
-<span class="source-line-no">488</span><span id="line-488">     * @param simpleName the simple name of the referenced type</span>
-<span class="source-line-no">489</span><span id="line-489">     */</span>
-<span class="source-line-no">490</span><span id="line-490">    private record QualifiedTypeReference(DetailAST detailAst, String fullName, String simpleName) {</span>
-<span class="source-line-no">491</span><span id="line-491">    }</span>
-<span class="source-line-no">492</span><span id="line-492"></span>
-<span class="source-line-no">493</span><span id="line-493">}</span>
+<span class="source-line-no">396</span><span id="line-396">    }</span>
+<span class="source-line-no">397</span><span id="line-397"></span>
+<span class="source-line-no">398</span><span id="line-398">    /**</span>
+<span class="source-line-no">399</span><span id="line-399">     * Determines whether a reference by simple name (without import or local</span>
+<span class="source-line-no">400</span><span id="line-400">     * declaration) would resolve to the type denoted by the given fully qualified</span>
+<span class="source-line-no">401</span><span id="line-401">     * name. This is the case when that name belongs to the {@code java.lang}</span>
+<span class="source-line-no">402</span><span id="line-402">     * package or to the package the file itself belongs to.</span>
+<span class="source-line-no">403</span><span id="line-403">     *</span>
+<span class="source-line-no">404</span><span id="line-404">     * @param fullName a fully qualified type name</span>
+<span class="source-line-no">405</span><span id="line-405">     * @return {@code true} if an unqualified reference would resolve to it</span>
+<span class="source-line-no">406</span><span id="line-406">     */</span>
+<span class="source-line-no">407</span><span id="line-407">    private boolean resolvesUnqualified(String fullName) {</span>
+<span class="source-line-no">408</span><span id="line-408">        final String qualifier = fullName.substring(0, fullName.lastIndexOf('.'));</span>
+<span class="source-line-no">409</span><span id="line-409">        return JAVA_LANG_PACKAGE.equals(qualifier) || qualifier.equals(packageName);</span>
+<span class="source-line-no">410</span><span id="line-410">    }</span>
+<span class="source-line-no">411</span><span id="line-411"></span>
+<span class="source-line-no">412</span><span id="line-412">    /**</span>
+<span class="source-line-no">413</span><span id="line-413">     * Resolves a simple name against the file's on-demand imports, returning the</span>
+<span class="source-line-no">414</span><span id="line-414">     * fully qualified name of the class it resolves to, if any. Resolution is</span>
+<span class="source-line-no">415</span><span id="line-415">     * attempted only against classes reachable on this check's own class loader,</span>
+<span class="source-line-no">416</span><span id="line-416">     * so it is reliable for JDK packages but cannot detect collisions caused by</span>
+<span class="source-line-no">417</span><span id="line-417">     * third-party or project-local on-demand imports.</span>
+<span class="source-line-no">418</span><span id="line-418">     *</span>
+<span class="source-line-no">419</span><span id="line-419">     * @param simpleName the simple name to look for</span>
+<span class="source-line-no">420</span><span id="line-420">     * @return the fully qualified name the simple name resolves to via an</span>
+<span class="source-line-no">421</span><span id="line-421">     *     on-demand import, or {@code null} if none of the on-demand imported</span>
+<span class="source-line-no">422</span><span id="line-422">     *     packages contain a class of that name</span>
+<span class="source-line-no">423</span><span id="line-423">     */</span>
+<span class="source-line-no">424</span><span id="line-424">    @Nullable</span>
+<span class="source-line-no">425</span><span id="line-425">    private String resolveViaOnDemandImport(String simpleName) {</span>
+<span class="source-line-no">426</span><span id="line-426">        String resolved = null;</span>
+<span class="source-line-no">427</span><span id="line-427">        for (String onDemandPackage : onDemandImportPackages) {</span>
+<span class="source-line-no">428</span><span id="line-428">            try {</span>
+<span class="source-line-no">429</span><span id="line-429">                final String candidate = onDemandPackage + DOT + simpleName;</span>
+<span class="source-line-no">430</span><span id="line-430">                Class.forName(candidate, false, null);</span>
+<span class="source-line-no">431</span><span id="line-431">                resolved = candidate;</span>
+<span class="source-line-no">432</span><span id="line-432">                break;</span>
+<span class="source-line-no">433</span><span id="line-433">            }</span>
+<span class="source-line-no">434</span><span id="line-434">            catch (ClassNotFoundException | LinkageError ignored) {</span>
+<span class="source-line-no">435</span><span id="line-435">                // this package does not contain a class of this name; keep checking</span>
+<span class="source-line-no">436</span><span id="line-436">            }</span>
+<span class="source-line-no">437</span><span id="line-437">        }</span>
+<span class="source-line-no">438</span><span id="line-438">        return resolved;</span>
+<span class="source-line-no">439</span><span id="line-439">    }</span>
+<span class="source-line-no">440</span><span id="line-440"></span>
+<span class="source-line-no">441</span><span id="line-441">    /**</span>
+<span class="source-line-no">442</span><span id="line-442">     * Checks whether the given node is a direct child of a type context token.</span>
+<span class="source-line-no">443</span><span id="line-443">     *</span>
+<span class="source-line-no">444</span><span id="line-444">     * @param ast the node to check</span>
+<span class="source-line-no">445</span><span id="line-445">     * @return {@code true} if the node is in type context</span>
+<span class="source-line-no">446</span><span id="line-446">     */</span>
+<span class="source-line-no">447</span><span id="line-447">    private static boolean isInTypeContext(DetailAST ast) {</span>
+<span class="source-line-no">448</span><span id="line-448">        return TokenUtil.isOfType(ast.getParent(), TYPE_CONTEXT_PARENTS);</span>
+<span class="source-line-no">449</span><span id="line-449">    }</span>
+<span class="source-line-no">450</span><span id="line-450"></span>
+<span class="source-line-no">451</span><span id="line-451">    /**</span>
+<span class="source-line-no">452</span><span id="line-452">     * Determines whether the given qualified name is a package qualified (fully</span>
+<span class="source-line-no">453</span><span id="line-453">     * qualified) type reference, as opposed to a reference to a nested type. The</span>
+<span class="source-line-no">454</span><span id="line-454">     * check relies on the convention that package names start with a lowercase</span>
+<span class="source-line-no">455</span><span id="line-455">     * letter, so the name is treated as fully qualified when the identifier</span>
+<span class="source-line-no">456</span><span id="line-456">     * preceding the simple name starts with a lowercase letter.</span>
+<span class="source-line-no">457</span><span id="line-457">     *</span>
+<span class="source-line-no">458</span><span id="line-458">     * @param name a qualified name containing at least one dot, as produced from</span>
+<span class="source-line-no">459</span><span id="line-459">     *     a {@link TokenTypes#DOT} node</span>
+<span class="source-line-no">460</span><span id="line-460">     * @return {@code true} if the name is a fully qualified type reference</span>
+<span class="source-line-no">461</span><span id="line-461">     */</span>
+<span class="source-line-no">462</span><span id="line-462">    private static boolean isFullyQualified(String name) {</span>
+<span class="source-line-no">463</span><span id="line-463">        final int simpleNameStart = name.lastIndexOf('.');</span>
+<span class="source-line-no">464</span><span id="line-464">        final int qualifierStart = name.lastIndexOf('.', simpleNameStart - 1);</span>
+<span class="source-line-no">465</span><span id="line-465">        final char firstQualifierChar = name.charAt(qualifierStart + 1);</span>
+<span class="source-line-no">466</span><span id="line-466">        return Character.isLowerCase(firstQualifierChar);</span>
+<span class="source-line-no">467</span><span id="line-467">    }</span>
+<span class="source-line-no">468</span><span id="line-468"></span>
+<span class="source-line-no">469</span><span id="line-469">    /**</span>
+<span class="source-line-no">470</span><span id="line-470">     * Extracts the simple name from a qualified name.</span>
+<span class="source-line-no">471</span><span id="line-471">     *</span>
+<span class="source-line-no">472</span><span id="line-472">     * @param name a qualified name</span>
+<span class="source-line-no">473</span><span id="line-473">     * @return the part of the name after the last dot</span>
+<span class="source-line-no">474</span><span id="line-474">     */</span>
+<span class="source-line-no">475</span><span id="line-475">    private static String extractSimpleName(String name) {</span>
+<span class="source-line-no">476</span><span id="line-476">        return name.substring(name.lastIndexOf('.') + 1);</span>
+<span class="source-line-no">477</span><span id="line-477">    }</span>
+<span class="source-line-no">478</span><span id="line-478"></span>
+<span class="source-line-no">479</span><span id="line-479">    /**</span>
+<span class="source-line-no">480</span><span id="line-480">     * Holds the details of a fully qualified type reference.</span>
+<span class="source-line-no">481</span><span id="line-481">     *</span>
+<span class="source-line-no">482</span><span id="line-482">     * @param detailAst the node where the reference starts, used for logging</span>
+<span class="source-line-no">483</span><span id="line-483">     * @param fullName the fully qualified name of the referenced type</span>
+<span class="source-line-no">484</span><span id="line-484">     * @param simpleName the simple name of the referenced type</span>
+<span class="source-line-no">485</span><span id="line-485">     */</span>
+<span class="source-line-no">486</span><span id="line-486">    private record QualifiedTypeReference(DetailAST detailAst, String fullName, String simpleName) {</span>
+<span class="source-line-no">487</span><span id="line-487">    }</span>
+<span class="source-line-no">488</span><span id="line-488"></span>
+<span class="source-line-no">489</span><span id="line-489">}</span>
 
 
 
